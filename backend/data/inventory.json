@@ -1,0 +1,58 @@
+[
+  {
+    "id": "1732394756048",
+    "slot": "weapon",
+    "mainStat": {
+      "name": "attack",
+      "value": 200,
+      "type": "flat"
+    },
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 500,
+        "type": "flat"
+      },
+      {
+        "name": "attack",
+        "value": 10,
+        "type": "percentage"
+      },
+      {
+        "name": "critDamage",
+        "value": 20,
+        "type": "percentage"
+      },
+      {
+        "name": "hp",
+        "value": 10,
+        "type": "percentage"
+      }
+    ],
+    "rarity": "legendary",
+    "stars": 6
+  },
+  {
+    "id": "1732396986907",
+    "slot": "software",
+    "mainStat": {
+      "name": "hacking",
+      "value": 60,
+      "type": "flat"
+    },
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 10,
+        "type": "flat"
+      },
+      {
+        "name": "attack",
+        "value": 500,
+        "type": "flat"
+      }
+    ],
+    "rarity": "rare",
+    "stars": 3
+  }
+]
