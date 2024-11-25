@@ -13,6 +13,8 @@ const initialBaseStats: BaseStats = {
     critDamage: 0,
     hacking: 0,
     speed: 0,
+    security: 0,
+    healModifier: 0,
 };
 
 export const ShipForm: React.FC<Props> = ({ onSubmit }) => {

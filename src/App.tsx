@@ -83,7 +83,7 @@ const App: React.FC = () => {
                     equipment: newEquipment,
                     stats: totalStats
                 };
-            }
+            }   
             return ship;
         }));
     };

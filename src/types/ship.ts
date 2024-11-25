@@ -7,7 +7,9 @@ export interface BaseStats {
     crit: number;
     critDamage: number;
     hacking: number;
+    security: number;
     speed: number;
+    healModifier: number;
 }
 
 export interface Ship {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { GearPiece, Stat, GearSlot, StatName, Rarity, StatType, GearSetName } from '../types/gear';
+import { GearPiece, Stat, GearSlot, StatName, Rarity, StatType } from '../types/gear';
+import { GearSetName } from '../constants/gearSets';
 import { GEAR_SETS } from '../constants/gearSets';
 
 interface Props {
@@ -8,11 +9,11 @@ interface Props {
 
 export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
     const [slot, setSlot] = useState<GearSlot>('weapon');
-    const [mainStat, setMainStat] = useState<Stat>({ name: 'attack', value: 0, type: 'flat' });
+    const [mainStat, setMainStat] = useState<Stat>({ name: 'attack', value: 0, type: 'flat' } as Stat);
     const [subStats, setSubStats] = useState<Stat[]>([]);
     const [rarity, setRarity] = useState<Rarity>('rare');
     const [stars, setStars] = useState<number>(1);
-    const [setBonus, setSetBonus] = useState<GearSetName>('STEALTH');
+    const [setBonus, setSetBonus] = useState<GearSetName>('FORTITUDE');
 
     // Get available main stats based on slot
     const getAvailableMainStats = (slot: GearSlot): StatName[] => {
@@ -34,10 +35,21 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
         }
     };
 
+    // Add this helper function
+    const getAvailableStatTypes = (statName: StatName): StatType[] => {
+        if (['crit', 'critDamage', 'healModifier'].includes(statName)) {
+            return ['percentage'];
+        }
+        if (['speed', 'hacking', 'security'].includes(statName)) {
+            return ['flat'];
+        }
+        return ['flat', 'percentage'];
+    };
+
     // Update main stat when slot changes
     useEffect(() => {
         const availableStats = getAvailableMainStats(slot);
-        setMainStat({ name: availableStats[0], value: 0, type: 'flat' });
+        setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
     }, [slot]);
 
     const handleAddSubStat = () => {
@@ -46,10 +58,38 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
         }
     };
 
-    const handleSubStatChange = (index: number, stat: Stat) => {
+    const handleSubStatChange = (index: number, newStat: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         const newSubStats = [...subStats];
-        newSubStats[index] = stat;
+        const currentStat = subStats[index];
+        
+        // Determine correct type based on stat name
+        let type: StatType = currentStat.type;
+        if (newStat.name) {
+            if (['crit', 'critDamage', 'healModifier'].includes(newStat.name)) type = 'percentage';
+            if (['speed', 'hacking', 'security'].includes(newStat.name)) type = 'flat';
+        }
+
+        newSubStats[index] = {
+            ...currentStat,
+            ...newStat,
+            type: newStat.type || type
+        } as Stat;
+        
         setSubStats(newSubStats);
+    };
+
+    const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
+        let type: StatType = mainStat.type;
+        if (changes.name) {
+            if (['crit', 'critDamage', 'healModifier'].includes(changes.name)) type = 'percentage';
+            if (['speed', 'hacking', 'security'].includes(changes.name)) type = 'flat';
+        }
+
+        setMainStat({
+            ...mainStat,
+            ...changes,
+            type: changes.type || type
+        } as Stat);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -59,7 +99,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
             slot,
             mainStat,
             subStats,
-            setBonus
+            setBonus,
+            stars,
+            rarity
         };
         onSubmit(piece);
         // Reset form
@@ -75,6 +117,25 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Set Bonus Section */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Set Bonus
+                    </label>
+                    <select
+                        value={setBonus}
+                        onChange={(e) => setSetBonus(e.target.value as GearSetName)}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        {setOptions.map(option => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 {/* Slot and Rarity in first row */}
                 <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
@@ -93,6 +154,22 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                         <option value="thrusters">Thrusters</option>
                     </select>
                 </div>
+
+                {/* Stars Section */}
+            <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">
+                    Stars
+                </label>
+                <select 
+                    value={stars} 
+                    onChange={(e) => setStars(Number(e.target.value))}
+                    className="w-full md:w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                    {[1, 2, 3, 4, 5, 6].map(num => (
+                        <option key={num} value={num}>{num} ⭐</option>
+                    ))}
+                </select>
+            </div>
 
                 <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
@@ -118,7 +195,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                 <div className="flex gap-4">
                     <select 
                         value={mainStat.name}
-                        onChange={(e) => setMainStat({ ...mainStat, name: e.target.value as StatName })}
+                        onChange={(e) => handleMainStatChange({ name: e.target.value as StatName })}
                         className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                         {getAvailableMainStats(slot).map(stat => (
@@ -128,17 +205,25 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                     <input
                         type="number"
                         value={mainStat.value}
-                        onChange={(e) => setMainStat({ ...mainStat, value: Number(e.target.value) })}
+                        onChange={(e) => handleMainStatChange({ value: Number(e.target.value) })}
                         className="w-32 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                     {(slot === 'sensor' || slot === 'software' || slot === 'thrusters') && (
                         <select
                             value={mainStat.type}
-                            onChange={(e) => setMainStat({ ...mainStat, type: e.target.value as StatType })}
+                            onChange={(e) => handleMainStatChange({ type: e.target.value as StatType })}
                             className="w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                            <option value="flat">Flat</option>
-                            <option value="percentage">Percentage</option>
+                            {['crit', 'critDamage'].includes(mainStat.name) ? (
+                                <option value="percentage">Percentage</option>
+                            ) : ['speed', 'hacking', 'security'].includes(mainStat.name) ? (
+                                <option value="flat">Flat</option>
+                            ) : (
+                                <>
+                                    <option value="flat">Flat</option>
+                                    <option value="percentage">Percentage</option>
+                                </>
+                            )}
                         </select>
                     )}
                 </div>
@@ -181,46 +266,13 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                                 onChange={(e) => handleSubStatChange(index, { ...stat, type: e.target.value as StatType })}
                                 className="w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             >
-                                <option value="flat">Flat</option>
-                                <option value="percentage">Percentage</option>
+                                {getAvailableStatTypes(stat.name).map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
                             </select>
                         </div>
                     ))}
                 </div>
-            </div>
-
-            {/* Stars Section */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                    Stars
-                </label>
-                <select 
-                    value={stars} 
-                    onChange={(e) => setStars(Number(e.target.value))}
-                    className="w-full md:w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                        <option key={num} value={num}>{num} ⭐</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Set Bonus Section */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                    Set Bonus
-                </label>
-                <select
-                    value={setBonus}
-                    onChange={(e) => setSetBonus(e.target.value as GearSetName)}
-                    className="form-select"
-                >
-                    {setOptions.map(option => (
-                        <option key={option.value} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
             </div>
 
             {/* Submit Button */}

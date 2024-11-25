@@ -1,4 +1,4 @@
-import { GearSetBonus, Stat } from '../types/gear';
+import { GearSetBonus } from '../types/gear';
 
 export const GEAR_SETS: Record<string, GearSetBonus> = {
     FORTITUDE: {
@@ -21,8 +21,8 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
     SPEED: {
         name: 'Speed',
-            stats: [
-            { name: 'speed', value: 15, type: 'percentage' },
+        stats: [
+            { name: 'speed', value: 15, type: 'flat' },
         ]
     },
     HACKING: {
@@ -86,6 +86,6 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
             { name: 'crit', value: 5, type: 'percentage' },
         ]
     }
-} as const;
+} satisfies Record<string, GearSetBonus>;
 
 export type GearSetName = keyof typeof GEAR_SETS; 
