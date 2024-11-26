@@ -5,15 +5,29 @@ import { GEAR_SETS } from '../constants/gearSets';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
+    editingPiece?: GearPiece;
 }
 
-export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
-    const [slot, setSlot] = useState<GearSlot>('weapon');
-    const [mainStat, setMainStat] = useState<Stat>({ name: 'attack', value: 0, type: 'flat' } as Stat);
-    const [subStats, setSubStats] = useState<Stat[]>([]);
-    const [rarity, setRarity] = useState<Rarity>('rare');
-    const [stars, setStars] = useState<number>(1);
-    const [setBonus, setSetBonus] = useState<GearSetName>('FORTITUDE');
+export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
+    const [slot, setSlot] = useState<GearSlot>(editingPiece?.slot || 'weapon');
+    const [mainStat, setMainStat] = useState<Stat>(editingPiece?.mainStat || { name: 'attack', value: 0, type: 'flat' } as Stat);
+    const [subStats, setSubStats] = useState<Stat[]>(editingPiece?.subStats || []);
+    const [rarity, setRarity] = useState<Rarity>(editingPiece?.rarity || 'rare');
+    const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
+    const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
+    const [level, setLevel] = useState<number>(editingPiece?.level || 0);
+
+    useEffect(() => {
+        if (editingPiece) {
+            setSlot(editingPiece.slot);
+            setMainStat(editingPiece.mainStat);
+            setSubStats(editingPiece.subStats);
+            setRarity(editingPiece.rarity);
+            setStars(editingPiece.stars);
+            setSetBonus(editingPiece.setBonus);
+            setLevel(editingPiece.level);
+        }
+    }, [editingPiece]);
 
     // Get available main stats based on slot
     const getAvailableMainStats = (slot: GearSlot): StatName[] => {
@@ -81,8 +95,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
     const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         let type: StatType = mainStat.type;
         if (changes.name) {
-            if (['crit', 'critDamage', 'healModifier'].includes(changes.name)) type = 'percentage';
-            if (['speed', 'hacking', 'security'].includes(changes.name)) type = 'flat';
+            if (['crit'].includes(changes.name) && changes.value && changes.value > 100) changes.value = 100;
         }
 
         setMainStat({
@@ -95,18 +108,23 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const piece: GearPiece = {
-            id: Date.now().toString(),
+            id: editingPiece?.id || Date.now().toString(),
             slot,
             mainStat,
             subStats,
             setBonus,
             stars,
-            rarity
+            rarity,
+            level
         };
         onSubmit(piece);
-        // Reset form
         setSubStats([]);
         setStars(1);
+        setLevel(0);
+        setSlot('weapon');
+        setMainStat({ name: 'attack', value: 0, type: 'flat' } as Stat);
+        setRarity('rare');
+        setSetBonus('FORTITUDE');
     };
 
     const setOptions = Object.entries(GEAR_SETS).map(([key, set]) => ({
@@ -115,7 +133,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-lg shadow-md p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {/* Set Bonus Section */}
@@ -156,20 +174,35 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                 </div>
 
                 {/* Stars Section */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                    Stars
-                </label>
-                <select 
-                    value={stars} 
-                    onChange={(e) => setStars(Number(e.target.value))}
-                    className="w-full md:w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                    {[1, 2, 3, 4, 5, 6].map(num => (
-                        <option key={num} value={num}>{num} ⭐</option>
-                    ))}
-                </select>
-            </div>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Stars
+                    </label>
+                    <select 
+                        value={stars} 
+                        onChange={(e) => setStars(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                        {[1, 2, 3, 4, 5, 6].map(num => (
+                            <option key={num} value={num}>{num} ⭐</option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Level Section */}
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                        Level
+                    </label>
+                    <input
+                        type="number"
+                        value={level}
+                        max={16}
+                        onChange={(e) => setLevel(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                </div>
+
 
                 <div className="space-y-2">
                     <label className="block text-sm font-medium text-gray-700">
@@ -281,7 +314,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit }) => {
                     type="submit"
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                 >
-                    Add Gear Piece
+                    {editingPiece ? 'Save Gear Piece' : 'Add Gear Piece'}
                 </button>
             </div>
         </form>

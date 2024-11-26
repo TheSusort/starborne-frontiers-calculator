@@ -4,9 +4,10 @@ import { GearPiece } from '../types/gear';
 interface Props {
     inventory: GearPiece[];
     onRemove: (id: string) => void;
+    onEdit: (piece: GearPiece) => void;
 }
 
-export const GearInventory: React.FC<Props> = ({ inventory, onRemove }) => {
+export const GearInventory: React.FC<Props> = ({ inventory, onRemove, onEdit }) => {
     // Helper function to get rarity color
     const getRarityColor = (rarity: string) => {
         switch (rarity) {
@@ -44,6 +45,10 @@ export const GearInventory: React.FC<Props> = ({ inventory, onRemove }) => {
                                 <div className="flex items-center gap-1">
                                     <span className="text-sm">{piece.stars}</span>
                                     <span className="text-yellow-400">★</span>
+
+                                    <div className="text-sm ps-3">
+                                        Lvl {piece.level}
+                                    </div>
                                 </div>
                             </div>
 
@@ -78,13 +83,20 @@ export const GearInventory: React.FC<Props> = ({ inventory, onRemove }) => {
                                     </div>
                                 )}
 
-                                {/* Remove Button */}
-                                <button 
-                                    onClick={() => onRemove(piece.id)}
-                                    className="w-full mt-2 px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200 flex items-center justify-center gap-2"
-                                >
-                                    Remove
-                                </button>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => onEdit(piece)}
+                                        className="w-full mt-2 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors duration-200"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button 
+                                        onClick={() => onRemove(piece.id)}
+                                        className="w-full mt-2 px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}

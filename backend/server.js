@@ -7,6 +7,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const INVENTORY_FILE = path.join(__dirname, 'data', 'inventory.json');
+const SHIPS_FILE = path.join(__dirname, 'data', 'ships.json');
 
 // Ensure data directory exists
 const ensureDataDirectory = async () => {
@@ -46,6 +47,27 @@ app.post('/api/inventory', async (req, res) => {
     } catch (error) {
         console.error('Error saving inventory:', error);
         res.status(500).json({ error: 'Failed to save inventory' });
+    }
+});
+
+app.get('/api/ships', async (req, res) => {
+    try {
+        const data = await fs.readFile(SHIPS_FILE, 'utf8');
+        res.json(JSON.parse(data));
+    } catch (error) {
+        console.error('Error loading ships:', error);
+        res.status(500).json({ error: 'Failed to load ships' });
+    }
+});
+
+app.post('/api/ships', async (req, res) => {
+    try {
+        await ensureDataDirectory();
+        await fs.writeFile(SHIPS_FILE, JSON.stringify(req.body, null, 2));
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error saving ships:', error);
+        res.status(500).json({ error: 'Failed to save ships' });
     }
 });
 

@@ -35,6 +35,7 @@ export type Stat = PercentageStat | FlatStat;
 export interface GearPiece {
     id: string;
     slot: GearSlot;
+    level: number;
     stars: number;
     rarity: Rarity;
     mainStat: Stat;

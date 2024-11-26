@@ -1,190 +1,213 @@
 [
-    {
-        "id": "1732546639094",
-        "slot": "weapon",
-        "mainStat": {
-            "name": "attack",
-            "value": 1000,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "hp",
-                "value": 500,
-                "type": "flat"
-            },
-            {
-                "name": "attack",
-                "value": 10,
-                "type": "percentage"
-            }
-        ],
-        "setBonus": "FORTITUDE",
-        "stars": 6,
-        "rarity": "legendary"
+  {
+    "id": "1732546639094",
+    "slot": "weapon",
+    "mainStat": {
+      "name": "attack",
+      "value": 1000,
+      "type": "flat"
     },
-    {
-        "id": "1732546666660",
-        "slot": "hull",
-        "mainStat": {
-            "name": "hp",
-            "value": 4000,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "defence",
-                "value": 15,
-                "type": "percentage"
-            },
-            {
-                "name": "defence",
-                "value": 500,
-                "type": "flat"
-            }
-        ],
-        "setBonus": "FORTITUDE",
-        "stars": 5,
-        "rarity": "epic"
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 500,
+        "type": "flat"
+      },
+      {
+        "name": "crit",
+        "value": 15,
+        "type": "percentage"
+      },
+      {
+        "name": "critDamage",
+        "value": 25,
+        "type": "percentage"
+      }
+    ],
+    "setBonus": "CRITICAL",
+    "stars": 6,
+    "rarity": "legendary",
+    "level": 16
+  },
+  {
+    "id": "1732546666660",
+    "slot": "hull",
+    "mainStat": {
+      "name": "hp",
+      "value": 4000,
+      "type": "flat"
     },
-    {
-        "id": "1732546786301",
-        "slot": "generator",
-        "mainStat": {
-            "name": "defence",
-            "value": 1000,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "crit",
-                "value": 10,
-                "type": "percentage"
-            },
-            {
-                "name": "critDamage",
-                "value": 50,
-                "type": "percentage"
-            },
-            {
-                "name": "speed",
-                "value": 10,
-                "type": "flat"
-            },
-            {
-                "name": "attack",
-                "value": 500,
-                "type": "flat"
-            }
-        ],
-        "setBonus": "FORTITUDE",
-        "stars": 6,
-        "rarity": "epic"
+    "subStats": [
+      {
+        "name": "defence",
+        "value": 15,
+        "type": "percentage"
+      },
+      {
+        "name": "speed",
+        "value": 10,
+        "type": "flat"
+      }
+    ],
+    "setBonus": "PROTECTION",
+    "stars": 5,
+    "rarity": "epic"
+  },
+  {
+    "id": "1732546786301",
+    "slot": "software",
+    "mainStat": {
+      "name": "hacking",
+      "value": 30,
+      "type": "flat"
     },
-    {
-        "id": "1732546639094",
-        "slot": "weapon",
-        "mainStat": {
-            "name": "attack",
-            "value": 1000,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "hp",
-                "value": 500,
-                "type": "flat"
-            },
-            {
-                "name": "crit",
-                "value": 10,
-                "type": "percentage"
-            },
-            {
-                "name": "critDamage",
-                "value": 25,
-                "type": "percentage"
-            }
-        ],
-        "setBonus": "CRITICAL",
-        "stars": 6,
-        "rarity": "legendary"
+    "subStats": [
+      {
+        "name": "crit",
+        "value": 8,
+        "type": "percentage"
+      },
+      {
+        "name": "speed",
+        "value": 5,
+        "type": "flat"
+      },
+      {
+        "name": "security",
+        "value": 15,
+        "type": "flat"
+      }
+    ],
+    "setBonus": "ABYSSAL_BREACH",
+    "stars": 6,
+    "rarity": "epic"
+  },
+  {
+    "id": "1732546786302",
+    "slot": "sensor",
+    "mainStat": {
+      "name": "critDamage",
+      "value": 65,
+      "type": "percentage"
     },
-    {
-        "id": "1732546666660",
-        "slot": "hull",
-        "mainStat": {
-            "name": "hp",
-            "value": 4000,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "defence",
-                "value": 15,
-                "type": "percentage"
-            },
-            {
-                "name": "speed",
-                "value": 10,
-                "type": "flat"
-            }
-        ],
-        "setBonus": "PROTECTION",
-        "stars": 5,
-        "rarity": "epic"
+    "subStats": [
+      {
+        "name": "attack",
+        "value": 12,
+        "type": "percentage"
+      },
+      {
+        "name": "crit",
+        "value": 5,
+        "type": "percentage"
+      }
+    ],
+    "setBonus": "CRITICAL",
+    "stars": 5,
+    "rarity": "legendary"
+  },
+  {
+    "id": "1732611355647",
+    "slot": "weapon",
+    "mainStat": {
+      "name": "attack",
+      "value": 500,
+      "type": "flat"
     },
-    {
-        "id": "1732546786301",
-        "slot": "software",
-        "mainStat": {
-            "name": "hacking",
-            "value": 30,
-            "type": "flat"
-        },
-        "subStats": [
-            {
-                "name": "crit",
-                "value": 8,
-                "type": "percentage"
-            },
-            {
-                "name": "speed",
-                "value": 5,
-                "type": "flat"
-            },
-            {
-                "name": "security",
-                "value": 15,
-                "type": "flat"
-            }
-        ],
-        "setBonus": "ABYSSAL_BREACH",
-        "stars": 6,
-        "rarity": "epic"
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 10,
+        "type": "percentage"
+      },
+      {
+        "name": "crit",
+        "value": 20,
+        "type": "flat"
+      },
+      {
+        "name": "attack",
+        "value": 1000,
+        "type": "flat"
+      }
+    ],
+    "setBonus": "ATTACK",
+    "stars": 6,
+    "rarity": "legendary"
+  },
+  {
+    "id": "1732636226343",
+    "slot": "weapon",
+    "mainStat": {
+      "name": "attack",
+      "value": 1000,
+      "type": "flat"
     },
-    {
-        "id": "1732546786302",
-        "slot": "sensor",
-        "mainStat": {
-            "name": "critDamage",
-            "value": 65,
-            "type": "percentage"
-        },
-        "subStats": [
-            {
-                "name": "attack",
-                "value": 12,
-                "type": "percentage"
-            },
-            {
-                "name": "crit",
-                "value": 5,
-                "type": "percentage"
-            }
-        ],
-        "setBonus": "CRITICAL",
-        "stars": 5,
-        "rarity": "legendary"
-    }
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 500,
+        "type": "flat"
+      },
+      {
+        "name": "crit",
+        "value": 15,
+        "type": "percentage"
+      },
+      {
+        "name": "critDamage",
+        "value": 25,
+        "type": "percentage"
+      }
+    ],
+    "setBonus": "CRITICAL",
+    "stars": 6,
+    "rarity": "legendary",
+    "level": 16
+  },
+  {
+    "id": "1732636263921",
+    "slot": "software",
+    "mainStat": {
+      "name": "attack",
+      "value": 50,
+      "type": "percentage"
+    },
+    "subStats": [
+      {
+        "name": "crit",
+        "value": 20,
+        "type": "flat"
+      },
+      {
+        "name": "critDamage",
+        "value": 20,
+        "type": "flat"
+      }
+    ],
+    "setBonus": "CRITICAL",
+    "stars": 6,
+    "rarity": "legendary",
+    "level": 16
+  },
+  {
+    "id": "1732636445048",
+    "slot": "thrusters",
+    "mainStat": {
+      "name": "attack",
+      "value": 40,
+      "type": "percentage"
+    },
+    "subStats": [
+      {
+        "name": "speed",
+        "value": 10,
+        "type": "flat"
+      }
+    ],
+    "setBonus": "ABYSSAL_ASSAULT",
+    "stars": 6,
+    "rarity": "legendary",
+    "level": 16
+  }
 ]
