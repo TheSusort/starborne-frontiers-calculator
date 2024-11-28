@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "1732708577436",
+    "name": "Asphyxiator",
+    "baseStats": {
+      "hp": 1000,
+      "attack": 30000,
+      "defence": 100,
+      "crit": 11,
+      "critDamage": 20,
+      "hacking": 0,
+      "speed": 0,
+      "security": 0,
+      "healModifier": 0
+    },
+    "equipment": {}
+  }
+]

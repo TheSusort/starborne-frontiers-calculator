@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship, BaseStats } from '../types/ship';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
+    editingShip?: Ship;
 }
 
 const initialBaseStats: BaseStats = {
@@ -17,27 +18,38 @@ const initialBaseStats: BaseStats = {
     healModifier: 0,
 };
 
-export const ShipForm: React.FC<Props> = ({ onSubmit }) => {
-    const [name, setName] = useState('');
-    const [baseStats, setBaseStats] = useState<BaseStats>(initialBaseStats);
+export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
+    const [name, setName] = useState(editingShip?.name || '');
+    const [baseStats, setBaseStats] = useState<BaseStats>(editingShip?.baseStats || initialBaseStats);
+
+    useEffect(() => {
+        if (editingShip) {
+            setName(editingShip.name);
+            setBaseStats(editingShip.baseStats);
+        }
+    }, [editingShip]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const ship: Ship = {
-            id: Date.now().toString(),
+            id: editingShip?.id || Date.now().toString(),
             name,
             baseStats,
-            equipment: {},
+            stats: { ...baseStats },
+            equipment: editingShip?.equipment || {}
         };
         onSubmit(ship);
-        // Reset form
-        setName('');
-        setBaseStats(initialBaseStats);
+        if (!editingShip) {
+            setName('');
+            setBaseStats(initialBaseStats);
+        }
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-bold text-gray-800">Create New Ship</h2>
+            <h2 className="text-2xl font-bold text-gray-800">
+                {editingShip ? 'Edit Ship' : 'Create New Ship'}
+            </h2>
             
             {/* Ship Name */}
             <div className="space-y-2">
@@ -84,7 +96,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit }) => {
                     type="submit"
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                 >
-                    Create Ship
+                    {editingShip ? 'Save Changes' : 'Create Ship'}
                 </button>
             </div>
         </form>

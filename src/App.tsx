@@ -14,6 +14,7 @@ const App: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [ships, setShips] = useState<Ship[]>([]);
+    const [editingShip, setEditingShip] = useState<Ship | undefined>();
 
     useEffect(() => {
         loadInventory();
@@ -85,21 +86,10 @@ const App: React.FC = () => {
         }
     }
 
-    const handleAddPiece = async (piece: GearPiece) => {
-        const newInventory = [...inventory, piece];
-        setInventory(newInventory);
-        await saveInventory(newInventory);
-    };
-
     const handleRemovePiece = async (id: string) => {
         const newInventory = inventory.filter(piece => piece.id !== id);
         setInventory(newInventory);
         await saveInventory(newInventory);
-    };
-
-    const handleAddShip = async (ship: Ship) => {
-        setShips(prev => [...prev, ship]);
-        await saveShips(ships);
     };
 
     const handleRemoveShip = async (id: string) => {
@@ -147,7 +137,7 @@ const App: React.FC = () => {
             // Round to prevent floating point issues
             totalStats[stat] = Math.round(totalStats[stat] * 100) / 100;
         });
-
+        
         return totalStats;
 
         // Helper function to process each stat
@@ -181,6 +171,27 @@ const App: React.FC = () => {
         setEditingPiece(undefined); // Clear editing state
     };
 
+    const handleEditShip = (ship: Ship) => {
+        setEditingShip(ship);
+    };
+
+    const handleSaveShip = async (ship: Ship) => {
+        let newShips;
+        if (editingShip) {
+            // Update existing ship
+            newShips = ships.map(s => 
+                s.id === ship.id ? ship : s
+            );
+        } else {
+            // Add new ship
+            newShips = [...ships, ship];
+        }
+        
+        setShips(newShips);
+        await saveShips(newShips);
+        setEditingShip(undefined); // Clear editing state
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-100">
@@ -204,7 +215,10 @@ const App: React.FC = () => {
                 )}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <ShipForm onSubmit={handleAddShip} />
+                    <ShipForm 
+                        onSubmit={handleSaveShip}
+                        editingShip={editingShip}
+                    />
                     <GearPieceForm 
                         onSubmit={handleSavePiece}
                         editingPiece={editingPiece}
@@ -216,6 +230,7 @@ const App: React.FC = () => {
                         ships={ships}
                         onRemove={handleRemoveShip}
                         onEquipGear={handleEquipGear}
+                        onEdit={handleEditShip}
                         availableGear={inventory}
                     />
                     <GearInventory 

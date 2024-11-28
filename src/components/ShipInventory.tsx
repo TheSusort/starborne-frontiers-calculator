@@ -6,10 +6,11 @@ interface Props {
     ships: Ship[];
     onRemove: (id: string) => void;
     onEquipGear: (shipId: string, slot: GearSlot, gear: GearPiece) => void;
+    onEdit: (ship: Ship) => void;
     availableGear: GearPiece[];
 }
 
-export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, availableGear }) => {
+export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, onEdit, availableGear }) => {
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-800">Ships</h2>
@@ -43,6 +44,22 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, a
                                 </div>
                             </div>
 
+                            {/* Total Stats (with equipment) */}
+                            <div className="p-6 border-b border-gray-200 bg-gray-50">
+                                <h4 className="text-sm font-medium text-gray-500 mb-4">Total Stats</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => (
+                                        <div key={stat} className="text-sm">
+                                            <span className="text-gray-500 capitalize">{stat}:</span>
+                                            <span className="ml-2 font-medium text-blue-600">
+                                                {Math.round(value * 100) / 100}
+                                                {['crit', 'critDamage', 'healModifier'].includes(stat) ? '%' : ''}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Equipment */}
                             <div className="p-6">
                                 <h4 className="text-sm font-medium text-gray-500 mb-4">Equipment</h4>
@@ -52,7 +69,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, a
                                             <span className="capitalize text-sm text-gray-700">{slot}</span>
                                             {ship.equipment[slot] ? (
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    {ship.equipment[slot]?.mainStat.name}: {ship.equipment[slot]?.mainStat.value}
+                                                    {ship.equipment[slot]?.rarity} {ship.equipment[slot]?.setBonus} {ship.equipment[slot]?.level} {ship.equipment[slot]?.mainStat.name} {ship.equipment[slot]?.mainStat.value}
                                                     {ship.equipment[slot]?.mainStat.type === 'percentage' ? '%' : ''}
                                                 </div>
                                             ) : (
@@ -69,7 +86,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, a
                                                         .filter(gear => gear.slot === slot)
                                                         .map(gear => (
                                                             <option key={gear.id} value={gear.id}>
-                                                                {gear.mainStat.name} {gear.mainStat.value}
+                                                                {gear.rarity} {gear.setBonus} {gear.level} {gear.mainStat.name} {gear.mainStat.value}
                                                                 {gear.mainStat.type === 'percentage' ? '%' : ''}
                                                             </option>
                                                         ))
@@ -83,12 +100,20 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEquipGear, a
 
                             {/* Remove Button */}
                             <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                                <button
-                                    onClick={() => onRemove(ship.id)}
-                                    className="w-full px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
-                                >
-                                    Remove Ship
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => onEdit(ship)}
+                                        className="w-full px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors duration-200"
+                                    >
+                                        Edit Ship
+                                    </button>
+                                    <button
+                                        onClick={() => onRemove(ship.id)}
+                                        className="w-full px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                                    >
+                                        Remove Ship
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}

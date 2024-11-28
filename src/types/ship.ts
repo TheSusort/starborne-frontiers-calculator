@@ -16,5 +16,6 @@ export interface Ship {
     id: string;
     name: string;
     baseStats: BaseStats;
+    stats: BaseStats;
     equipment: Partial<Record<GearSlot, GearPiece>>;
 } 
