@@ -39,22 +39,6 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                 <h3 className="text-xl font-bold text-gray-800">{ship.name}</h3>
                             </div>
 
-                            {/* Total Stats (with equipment) */}
-                            <div className="p-6 border-b border-gray-200 bg-gray-50">
-                                <h4 className="text-sm font-medium text-gray-500 mb-4">Total Stats</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => (
-                                        <div key={stat} className="text-sm">
-                                            <span className="text-gray-500 capitalize">{stat}:</span>
-                                            <span className="ml-2 font-medium text-blue-600">
-                                                {Math.round(value * 100) / 100}
-                                                {['crit', 'critDamage', 'healModifier'].includes(stat) ? '%' : ''}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
                             {/* Equipment */}
                             <div className="p-6">
                                 <h4 className="text-sm font-medium text-gray-500 mb-4">Equipment</h4>
@@ -99,6 +83,24 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                                 </select>
                                             )}
                                         </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Total Stats (with equipment) */}
+                            <div className="p-6 border-b border-gray-200 bg-gray-50">
+                                <h4 className="text-sm font-medium text-gray-500 mb-4">Total Stats</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => (
+                                        (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
+                                            <div key={stat} className="text-sm">
+                                                <span className="text-gray-500 capitalize">{stat}:</span>
+                                                <span className="ml-2 font-medium text-blue-600">
+                                                    {Math.round(value * 100) / 100}
+                                                    {['crit', 'critDamage', 'healModifier'].includes(stat) ? '%' : ''}
+                                                </span>
+                                            </div>
+                                        )
                                     ))}
                                 </div>
                             </div>

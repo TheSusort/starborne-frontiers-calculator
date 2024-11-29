@@ -4,10 +4,10 @@ export interface BaseStats {
     hp: number;
     attack: number;
     defence: number;
-    crit: number;
-    critDamage: number;
     hacking: number;
     security: number;
+    crit: number;
+    critDamage: number;
     speed: number;
     healModifier: number;
 }

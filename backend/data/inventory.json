@@ -24,6 +24,7 @@
         "type": "percentage"
       }
     ],
+    "setBonus": "ATTACK",
     "stars": 6,
     "rarity": "legendary",
     "level": 16
@@ -206,6 +207,31 @@
     ],
     "setBonus": "ABYSSAL_ASSAULT",
     "stars": 6,
+    "rarity": "legendary",
+    "level": 16
+  },
+  {
+    "id": "1732882069280",
+    "slot": "generator",
+    "mainStat": {
+      "name": "defence",
+      "value": 800,
+      "type": "flat"
+    },
+    "subStats": [
+      {
+        "name": "hp",
+        "value": 1000,
+        "type": "flat"
+      },
+      {
+        "name": "attack",
+        "value": 20,
+        "type": "percentage"
+      }
+    ],
+    "setBonus": "SPEED",
+    "stars": 5,
     "rarity": "legendary",
     "level": 16
   }

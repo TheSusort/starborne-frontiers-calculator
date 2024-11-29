@@ -10,11 +10,11 @@ const initialBaseStats: BaseStats = {
     hp: 0,
     attack: 0,
     defence: 0,
+    hacking: 0,
+    security: 0,
     crit: 0,
     critDamage: 0,
-    hacking: 0,
     speed: 0,
-    security: 0,
     healModifier: 0,
 };
 
@@ -71,21 +71,23 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <h3 className="text-lg font-medium text-gray-700">Base Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(baseStats).map(([stat, value]) => (
-                        <div key={stat} className="space-y-2">
-                            <label className="block text-sm font-medium text-gray-700 capitalize">
-                                {stat}
-                            </label>
-                            <input
-                                type="number"
-                                value={value}
-                                onChange={(e) => setBaseStats(prev => ({
-                                    ...prev,
-                                    [stat]: Number(e.target.value)
-                                }))}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                min="0"
-                            />
-                        </div>
+                        stat !== 'healModifier' && (
+                            <div key={stat} className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700 capitalize">
+                                    {stat}
+                                </label>
+                                <input
+                                    type="number"
+                                    value={value}
+                                    onChange={(e) => setBaseStats(prev => ({
+                                        ...prev,
+                                        [stat]: Number(e.target.value)
+                                    }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    min="0"
+                                />
+                            </div>
+                        )
                     ))}
                 </div>
             </div>
