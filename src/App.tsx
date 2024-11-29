@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GearPieceForm } from './components/GearPieceForm';
 import { GearInventory } from './components/GearInventory';
-import { GearPiece, GearSlot, StatName, Stat } from './types/gear';
+import { GearPiece, GearSlot, Stat } from './types/gear';
 import { Ship, BaseStats } from './types/ship';
 import { ShipForm } from './components/ShipForm';
 import { ShipInventory } from './components/ShipInventory';
@@ -114,10 +114,20 @@ const App: React.FC = () => {
         }));
     };
 
+    const handleRemoveGear = (shipId: string, slot: GearSlot) => {
+        setShips(prev => prev.map(ship => {
+            if (ship.id === shipId) {
+                const newEquipment = { ...ship.equipment, [slot]: undefined };
+                const totalStats = calculateTotalStats(ship.baseStats, newEquipment);
+                return { ...ship, equipment: newEquipment, stats: totalStats };
+            }
+            return ship;
+        }));
+    };
+
     const calculateTotalStats = (baseStats: BaseStats, equipment: Partial<Record<GearSlot, GearPiece>>): BaseStats => {
         // Start with base stats
         const totalStats = { ...baseStats };
-        const percentageModifiers: Partial<Record<StatName, number>> = {};
 
         // Process all equipped gear
         Object.values(equipment).forEach(gear => {
@@ -129,23 +139,24 @@ const App: React.FC = () => {
             // Process sub stats
             gear.subStats.forEach(addStatModifier);
         });
-
-        // Apply percentage modifiers after all flat values
-        Object.entries(percentageModifiers).forEach(([statName, percentage]) => {
-            const stat = statName as StatName;
-            totalStats[stat] *= (1 + percentage / 100);
-            // Round to prevent floating point issues
-            totalStats[stat] = Math.round(totalStats[stat] * 100) / 100;
-        });
         
         return totalStats;
 
         // Helper function to process each stat
         function addStatModifier(stat: Stat) {
-            if (stat.type === 'flat') {
+            const isPercentageOnlyStat = ['crit', 'critDamage', 'healModifier'].includes(stat.name);
+            
+            if (isPercentageOnlyStat) {
+                // For percentage-only stats, we simply add the percentages
                 totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
-            } else { // percentage
-                percentageModifiers[stat.name] = (percentageModifiers[stat.name] || 0) + stat.value;
+            } else if (stat.type === 'percentage') {
+                // For flexible stats with percentage type, multiply the base value
+                totalStats[stat.name] *= (1 + stat.value / 100);
+                // Round to prevent floating point issues
+                totalStats[stat.name] = Math.round(totalStats[stat.name] * 100) / 100;
+            } else {
+                // For flat stats, simply add the value
+                totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
             }
         }
     };
@@ -229,8 +240,9 @@ const App: React.FC = () => {
                     <ShipInventory 
                         ships={ships}
                         onRemove={handleRemoveShip}
-                        onEquipGear={handleEquipGear}
                         onEdit={handleEditShip}
+                        onEquipGear={handleEquipGear}
+                        onRemoveGear={handleRemoveGear}
                         availableGear={inventory}
                     />
                     <GearInventory 

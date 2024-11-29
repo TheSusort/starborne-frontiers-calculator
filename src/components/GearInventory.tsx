@@ -1,5 +1,6 @@
 import React from 'react';
 import { GearPiece } from '../types/gear';
+import { GEAR_SETS } from '../constants/gearSets';
 
 interface Props {
     inventory: GearPiece[];
@@ -40,7 +41,7 @@ export const GearInventory: React.FC<Props> = ({ inventory, onRemove, onEdit }) 
                             {/* Header */}
                             <div className={`px-4 py-2 border-b ${getRarityColor(piece.rarity)} flex justify-between items-center`}>
                                 <div className="font-semibold capitalize">
-                                    {piece.slot}
+                                    {GEAR_SETS[piece.setBonus]?.name} {piece.slot}
                                 </div>
                                 <div className="flex items-center gap-1">
                                     <span className="text-sm">{piece.stars}</span>

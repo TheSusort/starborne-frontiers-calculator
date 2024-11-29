@@ -112,7 +112,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             slot,
             mainStat,
             subStats,
-            setBonus,
+            setBonus: setBonus,
             stars,
             rarity,
             level
