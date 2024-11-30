@@ -9,8 +9,8 @@ const App: React.FC = () => {
         <Router>
             <div className="flex">
                 <Sidebar />
-                <div className="flex-1 ml-64">
-                    <div className="min-h-screen bg-gray-100 py-8 px-4">
+                <div className="flex-1 lg:ml-64">
+                    <div className="min-h-screen bg-gray-100 py-8 px-4 mt-14 lg:mt-0">
                         <div className="max-w-7xl mx-auto">
                             <Routes>
                                 <Route path="/ships" element={<ShipsPage />} />
