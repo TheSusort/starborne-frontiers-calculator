@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece, GearSlot } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
+import { Modal } from './Modal';
+import { GearInventory } from './GearInventory';
+import { Tooltip } from './Tooltip';
 
 interface Props {
     ships: Ship[];
@@ -12,19 +15,29 @@ interface Props {
     availableGear: GearPiece[];
 }
 
-const formatGearDisplay = (gear: GearPiece | undefined) => {
-    if (!gear) return '';
-    const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name || 'Unknown Set' : '';
-    return `${gear.stars}★ lvl ${gear.level ? gear.level : '??'} ${gear.rarity} ${setName} ${gear.mainStat.name} ${gear.mainStat.value}${gear.mainStat.type === 'percentage' ? '%' : ''}`;
+const getRarityColor = (rarity: string) => {
+    switch (rarity) {
+        case 'rare':
+            return 'border-blue-200';
+        case 'epic':
+            return 'border-purple-200';
+        case 'legendary':
+            return 'border-yellow-200';
+        default:
+            return 'border-gray-200';
+    }
 };
 
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
+    const [selectedSlot, setSelectedSlot] = useState<GearSlot | null>(null);
+    const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
+    
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Ships</h2>
+            <h2 className="text-2xl font-bold text-gray-200">Ships</h2>
             
             {ships.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed">
+                <div className="text-center py-8 text-gray-400 bg-gray-800 rounded-lg border-2 border-dashed">
                     No ships created yet
                 </div>
             ) : (
@@ -32,96 +45,122 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                     {ships.map(ship => (
                         <div 
                             key={ship.id}
-                            className="bg-white rounded-lg shadow-md overflow-hidden"
+                            className="bg-gray-900 rounded-lg border border-gray-700"
                         >
                             {/* Ship Header */}
-                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                                <h3 className="text-xl font-bold text-gray-800">{ship.name}</h3>
-                            </div>
-
-                            {/* Equipment */}
-                            <div className="p-6">
-                                <h4 className="text-sm font-medium text-gray-500 mb-4">Equipment</h4>
-                                <div className="space-y-4">
-                                    {(['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as GearSlot[]).map(slot => (
-                                        <div key={slot} className="flex items-center justify-between">
-                                            <span className="capitalize text-sm text-gray-700">{slot}</span>
-                                            {ship.equipment[slot] ? (
-                                                <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                                    {formatGearDisplay(ship.equipment[slot])}
-                                                    {ship.equipment[slot]?.subStats.map(stat => 
-                                                        `${stat.name}: ${stat.value}${stat.type === 'percentage' ? '%' : ''}`
-                                                    ).join(' ')}
-
-                                                    <button
-                                                        onClick={() => onRemoveGear(ship.id, slot)}
-                                                        className="text-sm text-red-600 hover:text-red-700"
-                                                    >
-                                                        <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <select
-                                                    className="text-sm px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    onChange={(e) => {
-                                                        const gear = availableGear.find(g => g.id === e.target.value);
-                                                        if (gear) onEquipGear(ship.id, slot, gear);
-                                                    }}
-                                                    value=""
-                                                >
-                                                    <option value="">Empty</option>
-                                                    {availableGear
-                                                        .filter(gear => gear.slot === slot)
-                                                        .map(gear => (
-                                                            <option key={gear.id} value={gear.id}>
-                                                                {formatGearDisplay(gear)}
-                                                            </option>
-                                                        ))
-                                                    }
-                                                </select>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Total Stats (with equipment) */}
-                            <div className="p-6 border-b border-gray-200 bg-gray-50">
-                                <h4 className="text-sm font-medium text-gray-500 mb-4">Total Stats</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => (
-                                        (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
-                                            <div key={stat} className="text-sm">
-                                                <span className="text-gray-500 capitalize">{stat}:</span>
-                                                <span className="ml-2 font-medium text-blue-600">
-                                                    {Math.round(value * 100) / 100}
-                                                    {['crit', 'critDamage', 'healModifier'].includes(stat) ? '%' : ''}
-                                                </span>
-                                            </div>
-                                        )
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Remove Button */}
-                            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                            <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
+                                <h3 className="text-lg font-bold text-gray-200">{ship.name}</h3>
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => onEdit(ship)}
-                                        className="w-full px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors duration-200"
+                                        className="text-blue-400 hover:text-blue-300"
                                     >
-                                        Edit Ship
+                                        Edit
                                     </button>
                                     <button
                                         onClick={() => onRemove(ship.id)}
-                                        className="w-full px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors duration-200"
+                                        className="text-red-400 hover:text-red-300"
                                     >
-                                        Remove Ship
+                                        Remove
                                     </button>
                                 </div>
                             </div>
+
+                            <div className="p-4 grid grid-cols-2 gap-4">
+                                {/* Equipment Grid */}
+                                <div className="grid grid-cols-3 gap-2">
+                                    {(['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as GearSlot[]).map(slot => (
+                                        <div key={slot} className="relative flex flex-col items-center">
+                                            {ship.equipment[slot] ? (
+                                                <div className="relative">
+                                                    <div 
+                                                        className={`w-16 h-16 bg-gray-800 border ${getRarityColor(ship.equipment[slot]?.rarity || 'common')} relative group cursor-pointer`}
+                                                        onClick={() => setSelectedSlot(slot)}
+                                                        onMouseEnter={() => setHoveredGear(ship.equipment[slot] || null)}
+                                                        onMouseLeave={() => setHoveredGear(null)}
+                                                    >
+                                                        {/* gear set icon */}
+                                                        <div className="absolute top-1 left-1 text-xs text-white font-bold">
+                                                            <img src={GEAR_SETS[ship.equipment[slot]?.setBonus || '']?.iconUrl} alt={GEAR_SETS[ship.equipment[slot]?.setBonus || '']?.name} className="w-5" />
+                                                        </div>
+
+                                                        {/* Level and Stars */}
+                                                        <div className="absolute top-1 right-1 text-xs text-white font-bold">
+                                                            {ship.equipment[slot]?.level}
+                                                        </div>
+                                                        
+                                                        <div className="absolute bottom-1 left-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">
+                                                            {ship.equipment[slot]?.stars}
+                                                            <span className="text-yellow-400">★</span>
+                                                        </div>
+
+                                                        {/* Remove Button */}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onRemoveGear(ship.id, slot);
+                                                            }}
+                                                            className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 hidden group-hover:block"
+                                                        >
+                                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <Tooltip 
+                                                        gear={ship.equipment[slot]!}
+                                                        isVisible={hoveredGear === ship.equipment[slot]}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setSelectedSlot(slot)}
+                                                    className="w-16 h-16 bg-gray-800 border border-gray-700 flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                                >
+                                                    <span className="text-xs text-gray-400 capitalize">equip</span>
+                                                </button>
+                                            )}
+                                            <div className="text-xs text-gray-400 capitalize text-center text-xs">
+                                                {slot}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Stats */}
+                                <div className="space-y-1 text-sm">
+                                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => {
+                                        return (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
+                                            <div key={stat} className="flex justify-between text-gray-300">
+                                                <span className="capitalize">{stat}:</span>
+                                                <div>
+                                                    <span>{Math.round(value * 100) / 100}</span>
+                                                    {['crit', 'critDamage'].includes(stat) ? "%" : ""}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <Modal
+                                isOpen={selectedSlot !== null}
+                                onClose={() => setSelectedSlot(null)}
+                                title={`Select ${selectedSlot} for ${ship.name}`}
+                            >
+                                <GearInventory
+                                    inventory={availableGear.filter(gear => gear.slot === selectedSlot)}
+                                    mode="select"
+                                    onEquip={(gear) => {
+                                        if (selectedSlot) {
+                                            onEquipGear(ship.id, selectedSlot, gear);
+                                            setSelectedSlot(null);
+                                        }
+                                    }}
+                                    onRemove={() => {}}
+                                    onEdit={() => {}}
+                                />
+                            </Modal>
                         </div>
                     ))}
                 </div>

@@ -46,6 +46,7 @@ export interface GearPiece {
 export interface GearSetBonus {
     name: GearSetName;
     stats: Stat[];
+    iconUrl: string;
 }
 
 export interface GearLoadout {
