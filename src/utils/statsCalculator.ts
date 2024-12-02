@@ -1,12 +1,18 @@
 import { BaseStats } from '../types/ship';
-import { GearPiece, GearSlot, Stat } from '../types/gear';
+import { GearSlot, Stat, GearPiece } from '../types/gear';
 
-export const calculateTotalStats = (baseStats: BaseStats, equipment: Partial<Record<GearSlot, GearPiece>>): BaseStats => {
+export const calculateTotalStats = (
+    baseStats: BaseStats, 
+    equipment: Partial<Record<GearSlot, string>>,
+    getGearPiece: (id: string) => GearPiece | undefined
+): BaseStats => {
     // Start with base stats
     const totalStats = { ...baseStats };
 
     // Process all equipped gear
-    Object.values(equipment).forEach(gear => {
+    Object.values(equipment).forEach(gearId => {
+        if (!gearId) return;
+        const gear = getGearPiece(gearId);
         if (!gear) return;
 
         // Process main stat

@@ -1,5 +1,5 @@
 import { FactionName } from '../constants/factions';
-import { GearPiece, GearSlot } from './gear';
+import { GearSlot } from './gear';
 import { ShipTypeName } from '../constants/shipTypes';
 
 export interface BaseStats {
@@ -21,8 +21,8 @@ export interface Ship {
     type: ShipTypeName;
     baseStats: BaseStats;
     stats: BaseStats;
-    equipment: Partial<Record<GearSlot, GearPiece>>;
-} 
+    equipment: Partial<Record<GearSlot, string>>;
+}
 
 export interface Faction {
     name: FactionName;

@@ -8,12 +8,13 @@ import { GearInventory } from './GearInventory';
 import { Tooltip } from './Tooltip';
 import { FACTIONS } from '../constants/factions';
 import { Button } from './ui/Button';
+import { useInventory } from '../hooks/useInventory';
 
 interface Props {
     ships: Ship[];
     onRemove: (id: string) => void;
     onEdit: (ship: Ship) => void;
-    onEquipGear: (shipId: string, slot: GearSlot, gear: GearPiece) => void;
+    onEquipGear: (shipId: string, slot: GearSlot, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlot) => void;
     availableGear: GearPiece[];
 }
@@ -34,7 +35,7 @@ const getRarityColor = (rarity: string) => {
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlot | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
-
+    const { getGearPiece } = useInventory();
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-200">Ships</h2>
@@ -44,7 +45,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                     No ships created yet
                 </div>
             ) : (
-                <div className="grid grid-cols-1 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {ships.map(ship => (
                         <div 
                             key={ship.id}
@@ -84,7 +85,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                 </div>
                             </div>
 
-                            <div className="p-4 grid grid-cols-2 gap-4">
+                            <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
                                 {/* Equipment Grid */}
                                 <div className="grid grid-cols-3 gap-2">
                                     {(['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as GearSlot[]).map(slot => (
@@ -92,42 +93,43 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                             {ship.equipment[slot] ? (
                                                 <div className="relative">
                                                     <div 
-                                                        className={`w-16 h-16 bg-dark-lighter border ${getRarityColor(ship.equipment[slot]?.rarity || 'common')} relative group cursor-pointer`}
+                                                        className={`w-16 h-16 bg-dark-lighter border ${getRarityColor(getGearPiece(ship.equipment[slot]!)?.rarity || 'common')} relative group cursor-pointer`}
                                                         onClick={() => setSelectedSlot(slot)}
-                                                        onMouseEnter={() => setHoveredGear(ship.equipment[slot] || null)}
+                                                        onMouseEnter={() => setHoveredGear(getGearPiece(ship.equipment[slot]!) || null)}
                                                         onMouseLeave={() => setHoveredGear(null)}
                                                     >
                                                         {/* gear set icon */}
                                                         <div className="absolute top-1 left-1 text-xs text-white font-bold">
-                                                            <img src={GEAR_SETS[ship.equipment[slot]?.setBonus || '']?.iconUrl} alt={GEAR_SETS[ship.equipment[slot]?.setBonus || '']?.name} className="w-5" />
+                                                            <img src={GEAR_SETS[getGearPiece(ship.equipment[slot]!)?.setBonus || '']?.iconUrl} alt={GEAR_SETS[getGearPiece(ship.equipment[slot]!)?.setBonus || '']?.name} className="w-5" />
                                                         </div>
 
                                                         {/* Level and Stars */}
                                                         <div className="absolute top-1 right-1 text-xs text-white font-bold">
-                                                            {ship.equipment[slot]?.level}
+                                                            {getGearPiece(ship.equipment[slot]!)?.level}
                                                         </div>
                                                         
                                                         <div className="absolute bottom-1 left-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">
-                                                            {ship.equipment[slot]?.stars}
+                                                            {getGearPiece(ship.equipment[slot]!)?.stars}
                                                             <span className="text-yellow-400">★</span>
                                                         </div>
 
                                                         {/* Remove Button */}
-                                                        <button
+                                                        <Button
+                                                            variant="danger"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 onRemoveGear(ship.id, slot);
                                                             }}
-                                                            className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 hidden group-hover:block"
+                                                            className="absolute -top-2 -right-2 rounded-full px-1 py-1 hidden group-hover:block"
                                                         >
                                                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                                             </svg>
-                                                        </button>
+                                                        </Button>
                                                     </div>
                                                     <Tooltip 
-                                                        gear={ship.equipment[slot]!}
-                                                        isVisible={hoveredGear === ship.equipment[slot]}
+                                                        gear={getGearPiece(ship.equipment[slot]!)!}
+                                                        isVisible={hoveredGear === getGearPiece(ship.equipment[slot]!)}
                                                     />
                                                 </div>
                                             ) : (
@@ -171,7 +173,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                     mode="select"
                                     onEquip={(gear) => {
                                         if (selectedSlot) {
-                                            onEquipGear(ship.id, selectedSlot, gear);
+                                            onEquipGear(ship.id, selectedSlot, gear.id);
                                             setSelectedSlot(null);
                                         }
                                     }}

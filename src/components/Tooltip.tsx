@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { GearPiece } from '../types/gear';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
@@ -8,10 +8,51 @@ interface Props {
 }
 
 export const Tooltip: React.FC<Props> = ({ gear, isVisible }) => {
+    const [position, setPosition] = useState<'top' | 'bottom'>('bottom');
+    const [xOffset, setXOffset] = useState(0);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isVisible || !tooltipRef.current) return;
+
+        const tooltip = tooltipRef.current;
+        const rect = tooltip.getBoundingClientRect();
+        const parentRect = tooltip.parentElement?.getBoundingClientRect();
+
+        if (!parentRect) return;
+
+        // Check vertical position
+        const spaceBelow = window.innerHeight - parentRect.bottom;
+        const spaceAbove = parentRect.top;
+        setPosition(spaceBelow < rect.height && spaceAbove > rect.height ? 'top' : 'bottom');
+
+        // Check horizontal position
+        const leftOverflow = rect.left < 0;
+        const rightOverflow = rect.right > window.innerWidth;
+
+        if (leftOverflow) {
+            setXOffset(Math.abs(rect.left));
+        } else if (rightOverflow) {
+            setXOffset(window.innerWidth - rect.right);
+        } else {
+            setXOffset(0);
+        }
+    }, [isVisible]);
+
     if (!isVisible) return null;
 
     return (
-        <div className="absolute z-50 w-64 -translate-x-1/2 left-1/2 mt-2">
+        <div 
+            ref={tooltipRef}
+            className={`
+                absolute z-50 w-64
+                ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
+                left-1/2 -translate-x-1/2
+            `}
+            style={{ 
+                transform: `translateX(calc(-50% + ${xOffset}px))` 
+            }}
+        >
             <GearPieceDisplay gear={gear} />
         </div>
     );

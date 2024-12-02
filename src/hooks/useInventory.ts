@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { GearPiece } from '../types/gear';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const STORAGE_KEY = 'gear-inventory';
 
 export const useInventory = () => {
     const [inventory, setInventory] = useState<GearPiece[]>([]);
@@ -10,42 +10,40 @@ export const useInventory = () => {
 
     const loadInventory = async () => {
         try {
-            setLoading(true);
-            setError(null);
-            const response = await fetch(`${API_URL}/inventory`);
-            if (!response.ok) throw new Error('Failed to load inventory');
-            const data = await response.json();
-            setInventory(data);
+            const stored = localStorage.getItem(STORAGE_KEY);
+            setInventory(stored ? JSON.parse(stored) : []);
         } catch (error) {
             console.error('Error loading inventory:', error);
-            setError('Failed to load inventory. Please try again later.');
+            setError('Failed to load inventory');
         } finally {
             setLoading(false);
         }
     };
 
-    const saveInventory = async (newInventory: GearPiece[]) => {
+    const saveInventory = useCallback(async (newInventory: GearPiece[]) => {
         try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newInventory));
             setError(null);
-            const response = await fetch(`${API_URL}/inventory`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newInventory),
-            });
-            if (!response.ok) throw new Error('Failed to save inventory');
             setInventory(newInventory);
         } catch (error) {
             console.error('Error saving inventory:', error);
-            setError('Failed to save inventory. Please try again later.');
-            throw error; // Re-throw to allow handling in components if needed
+            setError('Failed to save inventory');
         }
+    }, []);
+
+    const getGearPiece = (gearId: string): GearPiece | undefined => {
+        return inventory.find(gear => gear.id === gearId);
     };
 
     useEffect(() => {
         loadInventory();
     }, []);
+
+    useEffect(() => {
+        if (!loading) {
+            saveInventory(inventory);
+        }
+    }, [inventory, loading, saveInventory]);
 
     return { 
         inventory, 
@@ -53,6 +51,7 @@ export const useInventory = () => {
         error, 
         setInventory,
         saveInventory,
-        loadInventory 
+        loadInventory,
+        getGearPiece
     };
 };
