@@ -35,6 +35,8 @@ export const useInventory = () => {
         return inventory.find(gear => gear.id === gearId);
     };
 
+    
+
     useEffect(() => {
         loadInventory();
     }, []);
