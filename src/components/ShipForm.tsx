@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ship, BaseStats } from '../types/ship';
 import { Button, Input, Select } from './ui';
-import { FACTIONS } from '../constants/factions';
-import { SHIP_TYPES } from '../constants/shipTypes';
+import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../constants';
 import { useInventory } from '../hooks/useInventory';
 import { calculateTotalStats } from '../utils/statsCalculator';
-import { RARITIES, RarityName } from '../constants/rarities';
 
 interface Props {
     onSubmit: (ship: Ship) => void;

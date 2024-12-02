@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GearPiece, Stat, StatName, StatType } from '../types/gear';
-import { GearSetName } from '../constants/gearSets';
-import { GEAR_SETS } from '../constants/gearSets';
+import { GearSetName, GEAR_SETS, RARITIES, RarityName, GEAR_SLOTS, GearSlotName } from '../constants';
 import { Button, Input, Select } from './ui';
-import { RARITIES, RarityName } from '../constants/rarities';
-import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;

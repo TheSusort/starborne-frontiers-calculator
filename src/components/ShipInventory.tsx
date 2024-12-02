@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
-import { GEAR_SETS } from '../constants/gearSets';
-import { SHIP_TYPES } from '../constants/shipTypes';
-import { FACTIONS } from '../constants/factions';
-import { RARITIES } from '../constants/rarities';
+import { GEAR_SETS, SHIP_TYPES, FACTIONS, RARITIES } from '../constants';
 import { Modal } from './Modal';
 import { GearInventory } from './GearInventory';
 import { Tooltip } from './Tooltip';
