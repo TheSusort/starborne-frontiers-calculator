@@ -31,7 +31,7 @@ export const Sidebar: React.FC = () => {
                         </svg>
                     </button>
                     <h1 className="text-white text-xl font-bold">
-                        Starborne Frontiers
+                        Starborne Planner
                     </h1>
                 </div>
             </div>
