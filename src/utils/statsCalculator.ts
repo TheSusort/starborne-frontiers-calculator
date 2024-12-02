@@ -20,6 +20,8 @@ export const calculateTotalStats = (
         
         // Process sub stats
         gear.subStats.forEach(addStatModifier);
+
+        
     });
     
     return totalStats;

@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Ship, BaseStats } from '../types/ship';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { FACTIONS } from '../constants/factions';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import { Select } from './ui/Select';
-
+import { useInventory } from '../hooks/useInventory';
+import { calculateTotalStats } from '../utils/statsCalculator';
 interface Props {
     onSubmit: (ship: Ship) => void;
     editingShip?: Ship;
@@ -28,6 +29,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [baseStats, setBaseStats] = useState<BaseStats>(editingShip?.baseStats || initialBaseStats);
     const [faction, setFaction] = useState(editingShip?.faction || FACTIONS['ATLAS'].name);
     const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
+    const { getGearPiece } = useInventory();
 
     useEffect(() => {
         if (editingShip) {
@@ -38,6 +40,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         }
     }, [editingShip]);
 
+    const totalStats = useMemo(() => calculateTotalStats(baseStats, editingShip?.equipment || {}, getGearPiece), [baseStats, editingShip?.equipment, getGearPiece]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const ship: Ship = {
@@ -46,7 +50,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             faction,
             type,
             baseStats,
-            stats: { ...baseStats },
+            stats: totalStats,
             equipment: editingShip?.equipment || {}
         };
         onSubmit(ship);
