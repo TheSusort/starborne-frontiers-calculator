@@ -3,6 +3,7 @@ import { GearPieceForm } from '../components/GearPieceForm';
 import { GearInventory } from '../components/GearInventory';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
+import { Button } from '../components/ui/Button';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -41,7 +42,7 @@ export const GearPage: React.FC = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl text-gray-600">
+                <div className="animate-pulse text-xl text-white">
                     Loading inventory...
                 </div>
             </div>
@@ -51,18 +52,17 @@ export const GearPage: React.FC = () => {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold">Gear Management</h1>
-                <button
+                <h1 className="text-2xl font-bold text-white">Gear Management</h1>
+                <Button
                     onClick={() => {
                         if (editingPiece) {
                             setEditingPiece(undefined);
                         }
                         setIsFormVisible(!isFormVisible);
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                 >
                     {isFormVisible ? 'Hide Form' : 'Create New Gear'}
-                </button>
+                </Button>
             </div>
 
             {error && (

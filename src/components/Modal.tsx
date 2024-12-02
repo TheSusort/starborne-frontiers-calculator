@@ -19,12 +19,12 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
             <div className="fixed inset-0 z-50 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div 
-                        className="relative transform overflow-hidden rounded-lg bg-white shadow-xl transition-all w-full max-w-4xl"
+                        className="relative transform overflow-hidden rounded-lg bg-dark-lighter shadow-xl transition-all w-full max-w-4xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                            <h3 className="text-xl font-semibold text-gray-900">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                            <h3 className="text-xl font-semibold text-white">
                                 {title}
                             </h3>
                             <button

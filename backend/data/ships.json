@@ -2,6 +2,8 @@
   {
     "id": "1732708577436",
     "name": "Asphyxiator",
+    "faction": "MAURAUDERS",
+    "type": "ATTACKER",
     "baseStats": {
       "hp": 1000,
       "attack": 3000,
@@ -24,6 +26,37 @@
       "security": 0,
       "healModifier": 0
     },
-    "equipment": {}
+    "equipment": {
+      "weapon": {
+        "id": "1732546639094",
+        "slot": "weapon",
+        "mainStat": {
+          "name": "attack",
+          "value": 1000,
+          "type": "flat"
+        },
+        "subStats": [
+          {
+            "name": "hp",
+            "value": 500,
+            "type": "flat"
+          },
+          {
+            "name": "crit",
+            "value": 15,
+            "type": "percentage"
+          },
+          {
+            "name": "critDamage",
+            "value": 25,
+            "type": "percentage"
+          }
+        ],
+        "setBonus": "ATTACK",
+        "stars": 6,
+        "rarity": "legendary",
+        "level": 16
+      }
+    }
   }
 ]

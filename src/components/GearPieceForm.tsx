@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { GearPiece, Stat, GearSlot, StatName, Rarity, StatType } from '../types/gear';
 import { GearSetName } from '../constants/gearSets';
 import { GEAR_SETS } from '../constants/gearSets';
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
+import { Select } from './ui/Select';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -133,131 +136,87 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-lg shadow-md p-6">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-dark p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Select
+                    label="Set Bonus"
+                    value={setBonus}
+                    onChange={(e) => setSetBonus(e.target.value as GearSetName)}
+                    options={setOptions}
+                />
 
-                {/* Set Bonus Section */}
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                        Set Bonus
-                    </label>
-                    <select
-                        value={setBonus}
-                        onChange={(e) => setSetBonus(e.target.value as GearSetName)}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        {setOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                                {option.label}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+                <Select
+                    label="Slot"
+                    value={slot}
+                    onChange={(e) => setSlot(e.target.value as GearSlot)}
+                    options={[
+                        { value: 'weapon', label: 'Weapon' },
+                        { value: 'hull', label: 'Hull' },
+                        { value: 'generator', label: 'Generator' },
+                        { value: 'sensor', label: 'Sensor' },
+                        { value: 'software', label: 'Software' },
+                        { value: 'thrusters', label: 'Thrusters' },
+                    ]}
+                />
 
-                {/* Slot and Rarity in first row */}
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                        Slot
-                    </label>
-                    <select 
-                        value={slot} 
-                        onChange={(e) => setSlot(e.target.value as GearSlot)}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        <option value="weapon">Weapon</option>
-                        <option value="hull">Hull</option>
-                        <option value="generator">Generator</option>
-                        <option value="sensor">Sensor</option>
-                        <option value="software">Software</option>
-                        <option value="thrusters">Thrusters</option>
-                    </select>
-                </div>
+                <Select
+                    label="Stars"
+                    value={stars.toString()}
+                    onChange={(e) => setStars(Number(e.target.value))}
+                    options={[1, 2, 3, 4, 5, 6].map(num => ({
+                        value: num.toString(),
+                        label: `${num} ⭐`
+                    }))}
+                />
 
-                {/* Stars Section */}
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                        Stars
-                    </label>
-                    <select 
-                        value={stars} 
-                        onChange={(e) => setStars(Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        {[1, 2, 3, 4, 5, 6].map(num => (
-                            <option key={num} value={num}>{num} ⭐</option>
-                        ))}
-                    </select>
-                </div>
+                <Input
+                    type="number"
+                    label="Level"
+                    value={level}
+                    max={16}
+                    onChange={(e) => setLevel(Number(e.target.value))}
+                />
 
-                {/* Level Section */}
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                        Level
-                    </label>
-                    <input
-                        type="number"
-                        value={level}
-                        max={16}
-                        onChange={(e) => setLevel(Number(e.target.value))}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                </div>
+                <Select
+                    label="Rarity"
+                    value={rarity}
+                    onChange={(e) => setRarity(e.target.value as Rarity)}
+                    options={[
+                        { value: 'rare', label: 'Rare' },
+                        { value: 'epic', label: 'Epic' },
+                        { value: 'legendary', label: 'Legendary' },
+                    ]}
+                />
 
-
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                        Rarity
-                    </label>
-                    <select 
-                        value={rarity} 
-                        onChange={(e) => setRarity(e.target.value as Rarity)}
-                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        <option value="rare" className="text-blue-600">Rare</option>
-                        <option value="epic" className="text-purple-600">Epic</option>
-                        <option value="legendary" className="text-yellow-600">Legendary</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Main Stat Section */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                    Main Stat
-                </label>
-                <div className="flex gap-4">
-                    <select 
+                {/* Main Stat Section */}
+                <div className="grid grid-cols-2 gap-4">
+                    <Select
+                        label="Main Stat"
                         value={mainStat.name}
                         onChange={(e) => handleMainStatChange({ name: e.target.value as StatName })}
-                        className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                        {getAvailableMainStats(slot).map(stat => (
-                            <option key={stat} value={stat}>{stat}</option>
-                        ))}
-                    </select>
-                    <input
+                        options={getAvailableMainStats(slot).map(stat => ({
+                            value: stat,
+                            label: stat
+                        }))}
+                    />
+                    <Input
+                        label="Main Stat Value"
                         type="number"
                         value={mainStat.value}
                         onChange={(e) => handleMainStatChange({ value: Number(e.target.value) })}
-                        className="w-32 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-32"
+                        labelClassName="invisible"
                     />
                     {(slot === 'sensor' || slot === 'software' || slot === 'thrusters') && (
-                        <select
+                        <Select
                             value={mainStat.type}
                             onChange={(e) => handleMainStatChange({ type: e.target.value as StatType })}
-                            className="w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                            {['crit', 'critDamage'].includes(mainStat.name) ? (
-                                <option value="percentage">Percentage</option>
-                            ) : ['speed', 'hacking', 'security'].includes(mainStat.name) ? (
-                                <option value="flat">Flat</option>
-                            ) : (
-                                <>
-                                    <option value="flat">Flat</option>
-                                    <option value="percentage">Percentage</option>
-                                </>
-                            )}
-                        </select>
+                            options={getAvailableStatTypes(mainStat.name).map(type => ({
+                                value: type,
+                                label: type
+                            }))}
+                            className="w-32"
+                        />
                     )}
                 </div>
             </div>
@@ -265,44 +224,43 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             {/* Sub Stats Section */}
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium text-gray-700">Sub Stats</h4>
+                    <h4 className="text-sm font-medium text-gray-200">Sub Stats</h4>
                     {subStats.length < 4 && (
-                        <button 
-                            type="button" 
+                        <Button
+                            type="button"
+                            variant="secondary"
                             onClick={handleAddSubStat}
-                            className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
                         >
                             Add Sub Stat
-                        </button>
+                        </Button>
                     )}
                 </div>
                 <div className="space-y-3">
                     {subStats.map((stat, index) => (
                         <div key={index} className="flex gap-4">
-                            <select
+                            <Select
                                 value={stat.name}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, name: e.target.value as StatName })}
-                                className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                {Object.values(['hp', 'attack', 'defence', 'crit', 'critDamage', 'hacking', 'speed']).map(statName => (
-                                    <option key={statName} value={statName}>{statName}</option>
-                                ))}
-                            </select>
-                            <input
+                                options={Object.values(['hp', 'attack', 'defence', 'crit', 'critDamage', 'hacking', 'speed']).map(statName => ({
+                                    value: statName,
+                                    label: statName
+                                }))}
+                            />
+                            <Input
                                 type="number"
                                 value={stat.value}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, value: Number(e.target.value) })}
-                                className="w-32 px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="w-32"
                             />
-                            <select
+                            <Select
                                 value={stat.type}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, type: e.target.value as StatType })}
-                                className="w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                                {getAvailableStatTypes(stat.name).map(type => (
-                                    <option key={type} value={type}>{type}</option>
-                                ))}
-                            </select>
+                                options={getAvailableStatTypes(stat.name).map(type => ({
+                                    value: type,
+                                    label: type
+                                }))}
+                                className="w-32"
+                            />
                         </div>
                     ))}
                 </div>
@@ -310,12 +268,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
             {/* Submit Button */}
             <div className="flex justify-end pt-4">
-                <button 
-                    type="submit"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                >
+                <Button type="submit">
                     {editingPiece ? 'Save Gear Piece' : 'Add Gear Piece'}
-                </button>
+                </Button>
             </div>
         </form>
     );

@@ -15,7 +15,7 @@ export const Sidebar: React.FC = () => {
     return (
         <>
             {/* Mobile Menu Button */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 bg-gray-800 px-4 py-3 z-20">
+            <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark px-4 py-3 z-20">
                 <div className="flex justify-between items-center">
                     <button
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -38,7 +38,7 @@ export const Sidebar: React.FC = () => {
             {/* Sidebar for desktop */}
             <div 
                 className={`
-                    fixed top-10 lg:top-0 left-0 h-full bg-gray-800 z-20
+                    fixed top-10 lg:top-0 left-0 h-full bg-dark z-20
                     w-64
                     transform transition-all duration-300 ease-in-out
                     lg:translate-x-0
@@ -61,11 +61,11 @@ export const Sidebar: React.FC = () => {
                                 to={path}
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className={`
-                                    block px-4 py-2 rounded-lg 
+                                    block px-4 py-2
                                     transition-all duration-200 ease-in-out
                                     transform hover:scale-105
                                     ${isActive(path)
-                                        ? 'bg-blue-600 text-white'
+                                        ? 'bg-orange-500 hover:bg-orange-400'
                                         : 'text-gray-300 hover:bg-gray-700'
                                     }
                                 `}

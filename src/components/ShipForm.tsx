@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Ship, BaseStats } from '../types/ship';
+import { Input } from './ui/Input';
+import { Button } from './ui/Button';
+import { FACTIONS } from '../constants/factions';
+import { SHIP_TYPES } from '../constants/shipTypes';
+import { Select } from './ui/Select';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -21,11 +26,15 @@ const initialBaseStats: BaseStats = {
 export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [name, setName] = useState(editingShip?.name || '');
     const [baseStats, setBaseStats] = useState<BaseStats>(editingShip?.baseStats || initialBaseStats);
+    const [faction, setFaction] = useState(editingShip?.faction || FACTIONS['ATLAS'].name);
+    const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
 
     useEffect(() => {
         if (editingShip) {
             setName(editingShip.name);
             setBaseStats(editingShip.baseStats);
+            setFaction(editingShip.faction);
+            setType(editingShip.type);
         }
     }, [editingShip]);
 
@@ -34,59 +43,81 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         const ship: Ship = {
             id: editingShip?.id || Date.now().toString(),
             name,
+            faction,
+            type,
             baseStats,
             stats: { ...baseStats },
             equipment: editingShip?.equipment || {}
         };
         onSubmit(ship);
-        if (!editingShip) {
-            setName('');
-            setBaseStats(initialBaseStats);
-        }
+
+        setName('');
+        setBaseStats(initialBaseStats);
+        setFaction(FACTIONS['ATLAS'].name);
+        setType(SHIP_TYPES['ATTACKER'].name);
     };
 
+    const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
+        value: key,
+        label: type.name
+    }));
+
+    const factionOptions = Object.entries(FACTIONS).map(([key, faction]) => ({
+        value: key,
+        label: faction.name
+    }));
+
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-2xl font-bold text-gray-800">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-dark p-6">
+            <h2 className="text-2xl font-bold text-gray-200">
                 {editingShip ? 'Edit Ship' : 'Create New Ship'}
             </h2>
             
             {/* Ship Name */}
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                    Ship Name
-                </label>
-                <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+            <Input
+                label="Ship Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                placeholder="Enter ship name"
+            />
+
+            {/* Type and Faction section */}
+            <div className="flex flex-row gap-4">
+                <Select
+                    label="Faction"
+                    value={faction}
+                    onChange={(e) => setFaction(e.target.value)}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter ship name"
+                    options={factionOptions}
+                />
+
+                <Select
+                    label="Type"
+                    value={type}
+                    onChange={(e) => setType(e.target.value)}
+                    required
+                    options={shipTypeOptions}
                 />
             </div>
 
             {/* Base Stats */}
             <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-700">Base Stats</h3>
+                <h3 className="text-lg font-medium text-gray-200">Base Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(baseStats).map(([stat, value]) => (
                         stat !== 'healModifier' && (
-                            <div key={stat} className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-700 capitalize">
-                                    {stat}
-                                </label>
-                                <input
-                                    type="number"
-                                    value={value}
-                                    onChange={(e) => setBaseStats(prev => ({
-                                        ...prev,
-                                        [stat]: Number(e.target.value)
-                                    }))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    min="0"
-                                />
-                            </div>
+                            <Input
+                                key={stat}
+                                type="number"
+                                label={stat.charAt(0).toUpperCase() + stat.slice(1)}
+                                value={value}
+                                onChange={(e) => setBaseStats(prev => ({
+                                    ...prev,
+                                    [stat]: Number(e.target.value)
+                                }))}
+                                min="0"
+                            />
                         )
                     ))}
                 </div>
@@ -94,12 +125,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
             {/* Submit Button */}
             <div className="flex justify-end pt-4">
-                <button 
-                    type="submit"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-                >
+                <Button type="submit">
                     {editingShip ? 'Save Changes' : 'Create Ship'}
-                </button>
+                </Button>
             </div>
         </form>
     );

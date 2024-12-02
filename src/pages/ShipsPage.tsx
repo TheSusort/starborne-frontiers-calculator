@@ -3,6 +3,7 @@ import { ShipForm } from '../components/ShipForm';
 import { ShipInventory } from '../components/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
+import { Button } from '../components/ui/Button';
 
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
@@ -22,7 +23,7 @@ export const ShipsPage: React.FC = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl text-gray-600">
+                <div className="animate-pulse text-xl text-white">
                     Loading ships...
                 </div>
             </div>
@@ -32,18 +33,18 @@ export const ShipsPage: React.FC = () => {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold">Ship Management</h1>
-                <button
+                <h1 className="text-2xl font-bold text-white">Ship Management</h1>
+                <Button
+                    variant="primary"
                     onClick={() => {
                         if (editingShip) {
                             setEditingShip(undefined);
                         }
                         setIsFormVisible(!isFormVisible);
                     }}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
                 >
                     {isFormVisible ? 'Hide Form' : 'Create New Ship'}
-                </button>
+                </Button>
             </div>
 
             {error && (
