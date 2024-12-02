@@ -3,7 +3,7 @@ import { GearPieceForm } from '../components/GearPieceForm';
 import { GearInventory } from '../components/GearInventory';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -24,14 +24,14 @@ export const GearPage: React.FC = () => {
         let newInventory;
         if (editingPiece) {
             // Update existing piece
-            newInventory = inventory.map(p => 
+            newInventory = inventory.map(p =>
                 p.id === piece.id ? piece : p
             );
         } else {
             // Add new piece
             newInventory = [...inventory, piece];
         }
-        
+
         await saveInventory(newInventory);
         setEditingPiece(undefined); // Clear editing state
         if (!editingPiece) {
@@ -72,17 +72,17 @@ export const GearPage: React.FC = () => {
             )}
 
             <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingPiece ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-                <GearPieceForm 
+                <GearPieceForm
                     onSubmit={handleSavePiece}
                     editingPiece={editingPiece}
                 />
             </div>
 
-            <GearInventory 
-                inventory={inventory} 
+            <GearInventory
+                inventory={inventory}
                 onRemove={handleRemovePiece}
                 onEdit={handleEditPiece}
             />
         </div>
     );
-}; 
+};

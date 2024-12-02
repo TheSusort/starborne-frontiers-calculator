@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Ship } from '../types/ship';
-import { GearSlot } from '../types/gear';
+import { GearSlotName } from '../constants/gearTypes';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from './useInventory';
 const STORAGE_KEY = 'ships';
@@ -47,7 +47,7 @@ export const useShips = () => {
         }
     }, [ships, loading, saveShips]);
 
-    const handleEquipGear = (shipId: string, slot: GearSlot, gearId: string) => {
+    const handleEquipGear = (shipId: string, slot: GearSlotName, gearId: string) => {
         setShips(prev => prev.map(ship => {
             if (ship.id === shipId) {
                 return {
@@ -63,7 +63,7 @@ export const useShips = () => {
         }));
     };
 
-    const handleRemoveGear = (shipId: string, slot: GearSlot) => {
+    const handleRemoveGear = (shipId: string, slot: GearSlotName) => {
         setShips(prev => prev.map(ship => {
             if (ship.id === shipId) {
                 const newEquipment = { ...ship.equipment };
@@ -90,9 +90,13 @@ export const useShips = () => {
         } else {
             newShips = [...ships, ship];
         }
-        
+
         await saveShips(newShips);
         setEditingShip(undefined);
+    };
+
+    const getShipById = (id: string) => {
+        return ships.find(ship => ship.id === id);
     };
 
     return {
@@ -105,5 +109,6 @@ export const useShips = () => {
         handleRemoveGear,
         handleRemoveShip,
         handleSaveShip,
+        getShipById,
     };
-}; 
+};

@@ -1,10 +1,10 @@
 import { BaseStats } from '../types/ship';
-import { GearSlot, Stat, GearPiece } from '../types/gear';
+import { Stat, GearPiece } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
-
+import { GearSlotName } from '../constants/gearTypes';
 export const calculateTotalStats = (
-    baseStats: BaseStats, 
-    equipment: Partial<Record<GearSlot, string>>,
+    baseStats: BaseStats,
+    equipment: Partial<Record<GearSlotName, string>>,
     getGearPiece: (id: string) => GearPiece | undefined
 ): BaseStats => {
     // Start with base stats
@@ -18,35 +18,35 @@ export const calculateTotalStats = (
 
         // Process main stat
         addStatModifier(gear.mainStat);
-        
+
         // Process sub stats
         gear.subStats.forEach(addStatModifier);
     });
 
     // Process set bonuses
     applySetBonuses();
-    
+
     return totalStats;
 
     // Helper function to count set pieces
     function countSetPieces(): Record<string, number> {
         const setCounts: Record<string, number> = {};
-        
+
         Object.values(equipment).forEach(gearId => {
             if (!gearId) return;
             const gear = getGearPiece(gearId);
             if (!gear?.setBonus || !GEAR_SETS[gear.setBonus].name) return;
-            
+
             setCounts[GEAR_SETS[gear.setBonus].name] = (setCounts[GEAR_SETS[gear.setBonus].name] || 0) + 1;
         });
-        
+
         return setCounts;
     }
 
     // Helper function to apply set bonuses
     function applySetBonuses() {
         const setCounts = countSetPieces();
-        
+
         Object.entries(setCounts).forEach(([setType, count]) => {
             // Calculate how many times the set bonus should apply (2-piece sets)
             const bonusCount = Math.floor(count / 2);
@@ -69,7 +69,7 @@ export const calculateTotalStats = (
     // Helper function to process each stat
     function addStatModifier(stat: Stat) {
         const isPercentageOnlyStat = ['crit', 'critDamage', 'healModifier'].includes(stat.name);
-        
+
         if (isPercentageOnlyStat) {
             // For percentage-only stats, we simply add the percentages
             totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
@@ -85,4 +85,4 @@ export const calculateTotalStats = (
             totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
         }
     }
-}; 
+};

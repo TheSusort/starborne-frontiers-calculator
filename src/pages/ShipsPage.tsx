@@ -3,14 +3,14 @@ import { ShipForm } from '../components/ShipForm';
 import { ShipInventory } from '../components/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
-import { Button } from '../components/ui/Button';
+import { Button } from '../components/ui';
 
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
-    const { 
-        ships, 
-        loading, 
-        error, 
+    const {
+        ships,
+        loading,
+        error,
         editingShip,
         handleRemoveShip,
         handleEquipGear,
@@ -54,7 +54,7 @@ export const ShipsPage: React.FC = () => {
             )}
 
             <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingShip ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-                <ShipForm 
+                <ShipForm
                     onSubmit={(ship) => {
                         handleSaveShip(ship);
                         if (!editingShip) {
@@ -65,7 +65,7 @@ export const ShipsPage: React.FC = () => {
                 />
             </div>
 
-            <ShipInventory 
+            <ShipInventory
                 ships={ships}
                 onRemove={handleRemoveShip}
                 onEdit={(ship) => {
@@ -78,4 +78,4 @@ export const ShipsPage: React.FC = () => {
             />
         </div>
     );
-}; 
+};

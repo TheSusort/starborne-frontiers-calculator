@@ -1,45 +1,34 @@
 import React, { useState } from 'react';
 import { Ship } from '../types/ship';
-import { GearPiece, GearSlot } from '../types/gear';
+import { GearPiece } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
 import { SHIP_TYPES } from '../constants/shipTypes';
+import { FACTIONS } from '../constants/factions';
+import { RARITIES } from '../constants/rarities';
 import { Modal } from './Modal';
 import { GearInventory } from './GearInventory';
 import { Tooltip } from './Tooltip';
-import { FACTIONS } from '../constants/factions';
-import { Button } from './ui/Button';
+import { Button } from './ui';
 import { useInventory } from '../hooks/useInventory';
+import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
 
 interface Props {
     ships: Ship[];
     onRemove: (id: string) => void;
     onEdit: (ship: Ship) => void;
-    onEquipGear: (shipId: string, slot: GearSlot, gearId: string) => void;
-    onRemoveGear: (shipId: string, slot: GearSlot) => void;
+    onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
+    onRemoveGear: (shipId: string, slot: GearSlotName) => void;
     availableGear: GearPiece[];
 }
 
-const getRarityColor = (rarity: string) => {
-    switch (rarity) {
-        case 'rare':
-            return 'border-blue-200';
-        case 'epic':
-            return 'border-purple-200';
-        case 'legendary':
-            return 'border-yellow-200';
-        default:
-            return 'border-gray-200';
-    }
-};
-
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
-    const [selectedSlot, setSelectedSlot] = useState<GearSlot | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { getGearPiece } = useInventory();
     return (
         <div className="space-y-6">
             <h2 className="text-2xl font-bold text-gray-200">Ships</h2>
-            
+
             {ships.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed">
                     No ships created yet
@@ -47,12 +36,12 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {ships.map(ship => (
-                        <div 
+                        <div
                             key={ship.id}
-                            className="bg-dark rounded-lg border border-gray-700"
+                            className={`bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor}`}
                         >
                             {/* Ship Header */}
-                            <div className="px-4 py-2 bg-dark-lighter border-b border-gray-700 flex justify-between items-center">
+                            <div className={`px-4 py-2 bg-dark-lighter border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}>
                                 <h3 className="text-lg font-bold text-gray-200 flex items-center gap-2">
                                     {ship.type && SHIP_TYPES[ship.type] && (
                                         <>
@@ -88,28 +77,28 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                             <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
                                 {/* Equipment Grid */}
                                 <div className="grid grid-cols-3 gap-2">
-                                    {(['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as GearSlot[]).map(slot => (
-                                        <div key={slot} className="relative flex flex-col items-center">
-                                            {ship.equipment[slot] ? (
+                                    {Object.entries(GEAR_SLOTS).map(([key, slot]) => (
+                                        <div key={key} className="relative flex flex-col items-center">
+                                            {ship.equipment[key as GearSlotName] ? (
                                                 <div className="relative">
-                                                    <div 
-                                                        className={`w-16 h-16 bg-dark-lighter border ${getRarityColor(getGearPiece(ship.equipment[slot]!)?.rarity || 'common')} relative group cursor-pointer`}
-                                                        onClick={() => setSelectedSlot(slot)}
-                                                        onMouseEnter={() => setHoveredGear(getGearPiece(ship.equipment[slot]!) || null)}
+                                                    <div
+                                                        className={`w-16 h-16 bg-dark-lighter border ${RARITIES[getGearPiece(ship.equipment[key as GearSlotName]!)?.rarity || 'common'].borderColor} relative group cursor-pointer`}
+                                                        onClick={() => setSelectedSlot(key)}
+                                                        onMouseEnter={() => setHoveredGear(getGearPiece(ship.equipment[key as GearSlotName]!) || null)}
                                                         onMouseLeave={() => setHoveredGear(null)}
                                                     >
                                                         {/* gear set icon */}
                                                         <div className="absolute top-1 left-1 text-xs text-white font-bold">
-                                                            <img src={GEAR_SETS[getGearPiece(ship.equipment[slot]!)?.setBonus || '']?.iconUrl} alt={GEAR_SETS[getGearPiece(ship.equipment[slot]!)?.setBonus || '']?.name} className="w-5" />
+                                                            <img src={GEAR_SETS[getGearPiece(ship.equipment[key as GearSlotName]!)?.setBonus || '']?.iconUrl} alt={GEAR_SETS[getGearPiece(ship.equipment[key as GearSlotName]!)?.setBonus || '']?.name} className="w-5" />
                                                         </div>
 
                                                         {/* Level and Stars */}
                                                         <div className="absolute top-1 right-1 text-xs text-white font-bold">
-                                                            {getGearPiece(ship.equipment[slot]!)?.level}
+                                                            {getGearPiece(ship.equipment[key as GearSlotName]!)?.level}
                                                         </div>
-                                                        
+
                                                         <div className="absolute bottom-1 left-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">
-                                                            {getGearPiece(ship.equipment[slot]!)?.stars}
+                                                            {getGearPiece(ship.equipment[key as GearSlotName]!)?.stars}
                                                             <span className="text-yellow-400">★</span>
                                                         </div>
 
@@ -118,7 +107,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                                             variant="danger"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                onRemoveGear(ship.id, slot);
+                                                                onRemoveGear(ship.id, key);
                                                             }}
                                                             className="absolute -top-2 -right-2 rounded-full px-1 py-1 hidden group-hover:block"
                                                         >
@@ -127,21 +116,21 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                                                             </svg>
                                                         </Button>
                                                     </div>
-                                                    <Tooltip 
-                                                        gear={getGearPiece(ship.equipment[slot]!)!}
-                                                        isVisible={hoveredGear === getGearPiece(ship.equipment[slot]!)}
+                                                    <Tooltip
+                                                        gear={getGearPiece(ship.equipment[key as GearSlotName]!)!}
+                                                        isVisible={hoveredGear === getGearPiece(ship.equipment[key as GearSlotName]!)}
                                                     />
                                                 </div>
                                             ) : (
                                                 <button
-                                                    onClick={() => setSelectedSlot(slot)}
-                                                    className="w-16 h-16 bg-dark-lighter border border-gray-700 flex items-center justify-center hover:bg-gray-700 transition-colors"
+                                                    onClick={() => setSelectedSlot(key)}
+                                                    className="w-16 h-16 bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors"
                                                 >
                                                     <span className="text-xs text-gray-400 capitalize">equip</span>
                                                 </button>
                                             )}
                                             <div className="text-xs text-gray-400 capitalize text-center text-xs">
-                                                {slot}
+                                                {slot.label}
                                             </div>
                                         </div>
                                     ))}
@@ -187,4 +176,4 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
             )}
         </div>
     );
-}; 
+};

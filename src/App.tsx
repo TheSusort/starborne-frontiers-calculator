@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Sidebar } from './components/Sidebar';
 import { ShipsPage } from './pages/ShipsPage';
 import { GearPage } from './pages/GearPage';
+import { SimulationPage } from './pages/SimulationPage';
 
 const App: React.FC = () => {
     return (
@@ -15,6 +16,7 @@ const App: React.FC = () => {
                             <Routes>
                                 <Route path="/ships" element={<ShipsPage />} />
                                 <Route path="/gear" element={<GearPage />} />
+                                <Route path="/simulation" element={<SimulationPage />} />
                                 <Route path="/" element={<Navigate to="/ships" replace />} />
                             </Routes>
                         </div>

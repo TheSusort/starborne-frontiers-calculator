@@ -1,5 +1,6 @@
 import { GearSetName } from "../constants/gearSets";
-
+import { GearSlotName } from "../constants/gearTypes";
+import { RarityName } from '../constants/rarities';
 // Stats that can only be percentage-based
 export type PercentageOnlyStats = 'crit' | 'critDamage' | 'healModifier';
 
@@ -13,9 +14,6 @@ export type FlexibleStats = 'hp' | 'attack' | 'defence' | 'speed';
 export type StatName = PercentageOnlyStats | FlatOnlyStats | FlexibleStats;
 
 export type StatType = 'flat' | 'percentage';
-export type GearSlot = 'weapon' | 'hull' | 'generator' | 'sensor' | 'software' | 'thrusters';
-export type Rarity = 'rare' | 'epic' | 'legendary';
-
 
 export interface PercentageStat {
     name: PercentageOnlyStats | FlexibleStats;
@@ -34,10 +32,10 @@ export type Stat = PercentageStat | FlatStat;
 
 export interface GearPiece {
     id: string;
-    slot: GearSlot;
+    slot: GearSlotName;
     level: number;
     stars: number;
-    rarity: Rarity;
+    rarity: RarityName;
     mainStat: Stat;
     subStats: Stat[];
     setBonus: GearSetName;
@@ -56,4 +54,9 @@ export interface GearLoadout {
     sensor?: GearPiece;
     software?: GearPiece;
     thrusters?: GearPiece;
-} 
+}
+
+export type GearSlot = {
+    label: GearSlotName;
+    availableMainStats: StatName[];
+}

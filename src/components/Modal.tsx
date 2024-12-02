@@ -1,5 +1,5 @@
 import React from 'react';
-
+import { Button } from './ui';
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -12,13 +12,13 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
 
     return (
         <>
-            <div 
+            <div
                 className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
                 onClick={onClose}
             />
             <div className="fixed inset-0 z-50 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
-                    <div 
+                    <div
                         className="relative transform overflow-hidden rounded-lg bg-dark-lighter shadow-xl transition-all w-full max-w-4xl"
                         onClick={(e) => e.stopPropagation()}
                     >
@@ -27,14 +27,14 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
                             <h3 className="text-xl font-semibold text-white">
                                 {title}
                             </h3>
-                            <button
+                            <Button
+                                variant="secondary"
                                 onClick={onClose}
-                                className="text-gray-400 hover:text-gray-500 focus:outline-none"
                             >
                                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
-                            </button>
+                            </Button>
                         </div>
 
                         {/* Content */}
@@ -46,4 +46,4 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
             </div>
         </>
     );
-}; 
+};

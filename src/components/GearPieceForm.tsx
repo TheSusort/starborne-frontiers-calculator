@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { GearPiece, Stat, GearSlot, StatName, Rarity, StatType } from '../types/gear';
+import { GearPiece, Stat, StatName, StatType } from '../types/gear';
 import { GearSetName } from '../constants/gearSets';
 import { GEAR_SETS } from '../constants/gearSets';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
-import { Select } from './ui/Select';
+import { Button, Input, Select } from './ui';
+import { RARITIES, RarityName } from '../constants/rarities';
+import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -12,10 +12,10 @@ interface Props {
 }
 
 export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
-    const [slot, setSlot] = useState<GearSlot>(editingPiece?.slot || 'weapon');
+    const [slot, setSlot] = useState<GearSlotName>(editingPiece?.slot || 'weapon');
     const [mainStat, setMainStat] = useState<Stat>(editingPiece?.mainStat || { name: 'attack', value: 0, type: 'flat' } as Stat);
     const [subStats, setSubStats] = useState<Stat[]>(editingPiece?.subStats || []);
-    const [rarity, setRarity] = useState<Rarity>(editingPiece?.rarity || 'rare');
+    const [rarity, setRarity] = useState<RarityName>(editingPiece?.rarity || 'rare');
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
     const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
@@ -33,7 +33,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     }, [editingPiece]);
 
     // Get available main stats based on slot
-    const getAvailableMainStats = (slot: GearSlot): StatName[] => {
+    const getAvailableMainStats = (slot: GearSlotName): StatName[] => {
         switch (slot) {
             case 'weapon':
                 return ['attack'];
@@ -78,7 +78,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const handleSubStatChange = (index: number, newStat: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         const newSubStats = [...subStats];
         const currentStat = subStats[index];
-        
+
         // Determine correct type based on stat name
         let type: StatType = currentStat.type;
         if (newStat.name) {
@@ -91,7 +91,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             ...newStat,
             type: newStat.type || type
         } as Stat;
-        
+
         setSubStats(newSubStats);
     };
 
@@ -135,6 +135,16 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         label: set.name
     }));
 
+    const rarityOptions = Object.entries(RARITIES).map(([key, rarity]) => ({
+        value: key,
+        label: rarity.label
+    }));
+
+    const gearTypeOptions = Object.entries(GEAR_SLOTS).map(([key, slot]) => ({
+        value: key,
+        label: slot.label
+    }));
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-dark p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -148,15 +158,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Slot"
                     value={slot}
-                    onChange={(e) => setSlot(e.target.value as GearSlot)}
-                    options={[
-                        { value: 'weapon', label: 'Weapon' },
-                        { value: 'hull', label: 'Hull' },
-                        { value: 'generator', label: 'Generator' },
-                        { value: 'sensor', label: 'Sensor' },
-                        { value: 'software', label: 'Software' },
-                        { value: 'thrusters', label: 'Thrusters' },
-                    ]}
+                    onChange={(e) => setSlot(e.target.value as GearSlotName)}
+                    options={gearTypeOptions}
                 />
 
                 <Select
@@ -180,12 +183,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Rarity"
                     value={rarity}
-                    onChange={(e) => setRarity(e.target.value as Rarity)}
-                    options={[
-                        { value: 'rare', label: 'Rare' },
-                        { value: 'epic', label: 'Epic' },
-                        { value: 'legendary', label: 'Legendary' },
-                    ]}
+                    onChange={(e) => setRarity(e.target.value as RarityName)}
+                    options={rarityOptions}
                 />
 
                 {/* Main Stat Section */}

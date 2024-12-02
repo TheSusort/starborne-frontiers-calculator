@@ -1,6 +1,7 @@
 import { FactionName } from '../constants/factions';
-import { GearSlot } from './gear';
+import { GearSlotName } from '../constants/gearTypes';
 import { ShipTypeName } from '../constants/shipTypes';
+import { RarityName } from '../constants/rarities';
 
 export interface BaseStats {
     hp: number;
@@ -17,11 +18,12 @@ export interface BaseStats {
 export interface Ship {
     id: string;
     name: string;
+    rarity: RarityName;
     faction: FactionName;
     type: ShipTypeName;
     baseStats: BaseStats;
     stats: BaseStats;
-    equipment: Partial<Record<GearSlot, string>>;
+    equipment: Partial<Record<GearSlotName, string>>;
 }
 
 export interface Faction {

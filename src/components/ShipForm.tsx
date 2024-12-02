@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Ship, BaseStats } from '../types/ship';
-import { Input } from './ui/Input';
-import { Button } from './ui/Button';
+import { Button, Input, Select } from './ui';
 import { FACTIONS } from '../constants/factions';
 import { SHIP_TYPES } from '../constants/shipTypes';
-import { Select } from './ui/Select';
 import { useInventory } from '../hooks/useInventory';
 import { calculateTotalStats } from '../utils/statsCalculator';
+import { RARITIES, RarityName } from '../constants/rarities';
+
 interface Props {
     onSubmit: (ship: Ship) => void;
     editingShip?: Ship;
@@ -29,6 +29,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [baseStats, setBaseStats] = useState<BaseStats>(editingShip?.baseStats || initialBaseStats);
     const [faction, setFaction] = useState(editingShip?.faction || FACTIONS['ATLAS'].name);
     const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
+    const [rarity, setRarity] = useState(editingShip?.rarity || 'common');
     const { getGearPiece } = useInventory();
 
     useEffect(() => {
@@ -37,6 +38,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setBaseStats(editingShip.baseStats);
             setFaction(editingShip.faction);
             setType(editingShip.type);
+            setRarity(editingShip.rarity);
         }
     }, [editingShip]);
 
@@ -49,6 +51,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             name,
             faction,
             type,
+            rarity,
             baseStats,
             stats: totalStats,
             equipment: editingShip?.equipment || {}
@@ -59,6 +62,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         setBaseStats(initialBaseStats);
         setFaction(FACTIONS['ATLAS'].name);
         setType(SHIP_TYPES['ATTACKER'].name);
+        setRarity('legendary');
     };
 
     const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
@@ -71,12 +75,17 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         label: faction.name
     }));
 
+    const rarityOptions = Object.entries(RARITIES).map(([key, rarity]) => ({
+        value: rarity.value,
+        label: rarity.label
+    }));
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-dark p-6">
             <h2 className="text-2xl font-bold text-gray-200">
                 {editingShip ? 'Edit Ship' : 'Create New Ship'}
             </h2>
-            
+
             {/* Ship Name */}
             <Input
                 label="Ship Name"
@@ -104,6 +113,15 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     options={shipTypeOptions}
                 />
             </div>
+
+            {/* Rarity */}
+            <Select
+                label="Rarity"
+                value={rarity}
+                onChange={(e) => setRarity(e.target.value as RarityName)}
+                required
+                options={rarityOptions}
+            />
 
             {/* Base Stats */}
             <div className="space-y-4">
@@ -135,4 +153,4 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             </div>
         </form>
     );
-}; 
+};

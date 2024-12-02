@@ -1,7 +1,7 @@
 import React from 'react';
 import { GearPiece } from '../types/gear';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button } from './ui/Button';
+import { Button } from './ui';
 
 interface Props {
     inventory: GearPiece[];
@@ -11,19 +11,19 @@ interface Props {
     mode?: 'manage' | 'select';
 }
 
-export const GearInventory: React.FC<Props> = ({ 
-    inventory, 
-    onRemove, 
-    onEdit, 
+export const GearInventory: React.FC<Props> = ({
+    inventory,
+    onRemove,
+    onEdit,
     onEquip,
-    mode = 'manage' 
+    mode = 'manage'
 }) => {
     return (
         <div className="space-y-6">
             <h3 className="text-2xl font-bold text-gray-200">Inventory</h3>
-            
+
             {inventory.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed border-gray-700">
+                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed border-dark-border">
                     No gear pieces added yet
                 </div>
             ) : (
@@ -35,17 +35,17 @@ export const GearInventory: React.FC<Props> = ({
                                 {mode === 'manage' ? (
                                     <div className="flex gap-2">
                                         {onEdit && (
-                                            <Button 
-                                                variant="primary" 
-                                                fullWidth 
+                                            <Button
+                                                variant="primary"
+                                                fullWidth
                                                 onClick={() => onEdit(piece)}
                                             >
                                                 Edit
                                             </Button>
                                         )}
                                         {onRemove && (
-                                            <Button 
-                                                variant="danger" 
+                                            <Button
+                                                variant="danger"
                                                 onClick={() => onRemove(piece.id)}
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -56,9 +56,9 @@ export const GearInventory: React.FC<Props> = ({
                                     </div>
                                 ) : (
                                     onEquip && (
-                                        <Button 
-                                            variant="primary" 
-                                            fullWidth 
+                                        <Button
+                                            variant="primary"
+                                            fullWidth
                                             onClick={() => onEquip(piece)}
                                         >
                                             Equip
@@ -72,4 +72,4 @@ export const GearInventory: React.FC<Props> = ({
             )}
         </div>
     );
-}; 
+};

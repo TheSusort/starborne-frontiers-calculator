@@ -10,6 +10,7 @@ export const Sidebar: React.FC = () => {
     const navigationLinks = [
         { path: '/ships', label: 'Ships' },
         { path: '/gear', label: 'Gear' },
+        { path: '/simulation', label: 'Simulation' },
     ];
 
     return (
@@ -36,7 +37,7 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* Sidebar for desktop */}
-            <div 
+            <div
                 className={`
                     fixed top-10 lg:top-0 left-0 h-full bg-dark z-20
                     w-64
@@ -47,7 +48,7 @@ export const Sidebar: React.FC = () => {
                 `}
             >
                 <div className={`
-                    p-4 
+                    p-4
                     transition-opacity duration-300 ease-in-out
                     ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
                 `}>
@@ -65,8 +66,8 @@ export const Sidebar: React.FC = () => {
                                     transition-all duration-200 ease-in-out
                                     transform hover:scale-105
                                     ${isActive(path)
-                                        ? 'bg-orange-500 hover:bg-orange-400'
-                                        : 'text-gray-300 hover:bg-gray-700'
+                                        ? 'bg-primary hover:bg-primary-hover'
+                                        : 'text-gray-300 hover:bg-dark-border'
                                     }
                                 `}
                             >
@@ -78,17 +79,17 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* Overlay for mobile */}
-            <div 
+            <div
                 onClick={() => setIsMobileMenuOpen(false)}
                 className={`
                     fixed inset-0 bg-black lg:hidden
                     transition-opacity duration-300 ease-in-out z-10
-                    ${isMobileMenuOpen 
-                        ? 'opacity-50 pointer-events-auto' 
+                    ${isMobileMenuOpen
+                        ? 'opacity-50 pointer-events-auto'
                         : 'opacity-0 pointer-events-none'
                     }
                 `}
             />
         </>
     );
-}; 
+};
