@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Ship } from '../types/ship';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import { FACTIONS } from '../constants/factions';
@@ -15,7 +15,29 @@ interface Props {
     children?: React.ReactNode;
 }
 
-export const ShipDisplay: React.FC<Props> = ({
+const ShipImage = memo(({ iconUrl, name }: { iconUrl: string, name: string }) => (
+    <img src={iconUrl} alt={name} className="w-5" />
+));
+
+const Header = memo(({ ship }: { ship: Ship }) => (
+    <div className="flex items-center gap-2">
+        {ship.type && SHIP_TYPES[ship.type] && (
+            <ShipImage
+                iconUrl={SHIP_TYPES[ship.type].iconUrl}
+                name={SHIP_TYPES[ship.type].name}
+            />
+        )}
+        {ship.faction && FACTIONS[ship.faction] && (
+            <ShipImage
+                iconUrl={FACTIONS[ship.faction].iconUrl}
+                name={FACTIONS[ship.faction].name}
+            />
+        )}
+        <span className="font-bold text-gray-200">{ship.name}</span>
+    </div>
+));
+
+export const ShipDisplay: React.FC<Props> = memo(({
     ship,
     variant = 'full',
     onEdit,
@@ -24,18 +46,6 @@ export const ShipDisplay: React.FC<Props> = ({
     onClick,
     children
 }) => {
-    const Header = () => (
-        <div className="flex items-center gap-2">
-            {ship.type && SHIP_TYPES[ship.type] && (
-                <img src={SHIP_TYPES[ship.type].iconUrl} alt={SHIP_TYPES[ship.type].name} className="w-5" />
-            )}
-            {ship.faction && FACTIONS[ship.faction] && (
-                <img src={FACTIONS[ship.faction].iconUrl} alt={FACTIONS[ship.faction].name} className="w-5" />
-            )}
-            <span className="font-bold text-gray-200">{ship.name}</span>
-        </div>
-    );
-
     if (variant === 'compact') {
         return (
             <div
@@ -44,7 +54,7 @@ export const ShipDisplay: React.FC<Props> = ({
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                 onClick={onClick}
             >
-                <Header />
+                <Header ship={ship} />
             </div>
         );
     }
@@ -58,7 +68,7 @@ export const ShipDisplay: React.FC<Props> = ({
         >
             {/* Ship Header */}
             <div className={`px-4 py-2 bg-dark-lighter border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}>
-                <Header />
+                <Header ship={ship} />
                 {(onEdit || onRemove) && (
                     <div className="flex gap-2">
                         {onEdit && (
@@ -109,4 +119,4 @@ export const ShipDisplay: React.FC<Props> = ({
             </div>
         </div>
     );
-};
+});

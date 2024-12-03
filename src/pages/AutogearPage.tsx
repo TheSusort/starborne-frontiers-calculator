@@ -7,8 +7,9 @@ import { ShipDisplay } from '../components/ShipDisplay';
 import { StatPriorityForm } from '../components/StatPriorityForm';
 import { GearSuggestion, StatPriority } from '../types/autogear';
 import { findOptimalGear } from '../utils/autogearCalculator';
-import { GearPieceDisplay } from '../components/GearPieceDisplay';
-import { GearSlotName } from '../constants';
+import { GearSlot } from '../components/GearSlot';
+import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
+import { GearPiece } from '../types/gear';
 
 export const AutogearPage: React.FC = () => {
     const { ships, getShipById, updateShip } = useShips();
@@ -17,6 +18,7 @@ export const AutogearPage: React.FC = () => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const [priorities, setPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
+    const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -58,12 +60,17 @@ export const AutogearPage: React.FC = () => {
         setSuggestions([]);
     };
 
+    const getSuggestionForSlot = (slotName: GearSlotName) => {
+        return suggestions.find(s => s.slotName === slotName);
+    };
+
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-bold text-white">Autogear</h1>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-gray-200">Settings</h3>
                     <Button
                         variant="secondary"
                         onClick={() => setIsShipModalOpen(true)}
@@ -82,7 +89,7 @@ export const AutogearPage: React.FC = () => {
                     />
 
                     {priorities.length > 0 && (
-                        <div className="bg-dark-lighter p-4 rounded space-y-2">
+                        <div className="bg-dark p-4 rounded space-y-2">
                             <h3 className="text-lg font-semibold text-white">Priority List</h3>
                             {priorities.map((priority, index) => (
                                 <div key={index} className="flex justify-between items-center">
@@ -112,25 +119,33 @@ export const AutogearPage: React.FC = () => {
                 </div>
 
                 {suggestions.length > 0 && (
-                    <div className="bg-dark-lighter p-4 rounded">
+                    <div className="bg-dark-lighter p-4 pt-0 rounded">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold text-white">Suggested Gear</h3>
+                            <h3 className="text-xl font-semibold text-white">Suggested Gear</h3>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 bg-dark p-4">
+                            {GEAR_SLOT_ORDER.map((slotName) => {
+                                const suggestion = getSuggestionForSlot(slotName);
+                                return (
+                                    <div key={slotName} className="flex items-center justify-center">
+                                        <GearSlot
+                                            slotKey={slotName}
+                                            slotData={GEAR_SLOTS[slotName]}
+                                            gear={suggestion ? getGearPiece(suggestion.gearId) : undefined}
+                                            hoveredGear={hoveredGear}
+                                            onHover={setHoveredGear}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <div className="flex justify-end pt-4">
                             <Button
                                 variant="primary"
                                 onClick={handleEquipSuggestions}
                             >
                                 Equip All Suggestions
                             </Button>
-                        </div>
-                        <div className="space-y-2">
-                            {suggestions.map((suggestion, index) => (
-                                <div key={index} className="flex justify-between items-center">
-                                    <span className="text-gray-300">{suggestion.slotName}</span>
-                                    {getGearPiece(suggestion.gearId) && (
-                                        <GearPieceDisplay gear={getGearPiece(suggestion.gearId)!} />
-                                    )}
-                                </div>
-                            ))}
                         </div>
                     </div>
                 )}

@@ -54,9 +54,10 @@ export const SimulationPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-white">Combat Simulation</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
+                <h3 className="text-xl font-bold text-gray-200">Settings</h3>
                     <div>
                         <Button
-                            variant="secondary"
+                            variant="link"
                             onClick={() => setIsShipModalOpen(true)}
                             fullWidth
                         >
@@ -93,16 +94,18 @@ export const SimulationPage: React.FC = () => {
                         variant="primary"
                         onClick={runSimulation}
                         disabled={!selectedShipId}
+                        fullWidth
                     >
                         Run 100 Simulations
                     </Button>
                 </div>
 
                 {results.length > 0 && (
-                    <div className="space-y-4 bg-dark-lighter p-4 rounded">
+                    <div className="space-y-4 bg-dark-lighter p-4 pt-0 rounded">
+                        <h3 className="text-xl font-bold text-gray-200">Results</h3>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-dark p-4 rounded">
-                                <div className="text-sm text-gray-400">Avg. Damage</div>
+                                <div className="text-sm text-gray-400">Avg. Hit</div>
                                 <div className="text-xl text-white">{averageDamage}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
@@ -124,7 +127,7 @@ export const SimulationPage: React.FC = () => {
                             </Button>
 
                             {isResultsExpanded && (
-                                <div className="mt-2 max-h-60 overflow-y-auto">
+                                <div className="mt-2 max-h-80 overflow-y-auto bg-dark">
                                     <table className="w-full text-sm text-gray-300">
                                         <thead>
                                             <tr className="text-left">

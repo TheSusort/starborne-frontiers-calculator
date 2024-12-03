@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'secondary' | 'danger';
+    variant?: 'primary' | 'secondary' | 'danger' | 'link';
     fullWidth?: boolean;
 }
 
@@ -15,8 +15,9 @@ export const Button: React.FC<Props> = ({
     const baseStyles = "px-4 py-2 transition-colors font-medium";
     const variants = {
         primary: "bg-gradient-to-r from-primary to-primary-hover hover:bg-gradient-to-r hover:from-primary-hover hover:to-primary",
-        secondary: "bg-gradient-to-r from-dark-lighter to-dark-lighter text-gray-200 hover:bg-gradient-to-r hover:from-dark-border hover:to-dark-border",
-        danger: "bg-gradient-to-r from-red-600 to-red-500 text-white hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500"
+        secondary: "bg-dark border border-dark-lighter text-gray-200 hover:bg-dark-border",
+        danger: "bg-gradient-to-r from-red-600 to-red-500 text-white hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500",
+        link: "text-gray-200 hover:text-white !p-0"
     };
 
     return (

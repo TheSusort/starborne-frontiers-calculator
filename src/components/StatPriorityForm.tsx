@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from './ui';
+import { Button, Input, Select } from './ui';
 import { StatName } from '../types/gear';
 import { StatPriority } from '../types/autogear';
 
@@ -37,27 +37,25 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 bg-dark-lighter p-4 rounded">
+        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded">
             <div className="space-y-2">
                 <label className="block text-sm text-gray-300">Stat</label>
-                <select
+                <Select
                     value={selectedStat}
                     onChange={(e) => setSelectedStat(e.target.value as StatName)}
                     className="w-full bg-dark border border-dark-border rounded p-2 text-white"
-                >
-                    {AVAILABLE_STATS.map(stat => (
-                        <option key={stat} value={stat}>
-                            {stat.charAt(0).toUpperCase() + stat.slice(1)}
-                        </option>
-                    ))}
-                </select>
+                    options={AVAILABLE_STATS.map(stat => ({
+                        value: stat,
+                        label: stat.charAt(0).toUpperCase() + stat.slice(1)
+                    }))}
+                />
             </div>
 
             <div className="space-y-2">
                 <label className="block text-sm text-gray-300">
                     Max Limit (Optional)
                 </label>
-                <input
+                <Input
                     type="number"
                     value={maxLimit}
                     onChange={(e) => setMaxLimit(e.target.value)}
