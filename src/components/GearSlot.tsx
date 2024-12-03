@@ -1,0 +1,80 @@
+import { GearPiece } from '../types/gear';
+import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../constants';
+import { memo } from 'react';
+import { Button } from './ui/Button';
+import { Tooltip } from './Tooltip';
+
+interface GearSlotProps {
+    slotKey: GearSlotName;
+    slotData: typeof GEAR_SLOTS[GearSlotName];
+    gear?: GearPiece;
+    hoveredGear: GearPiece | null;
+    onSelect: (slot: GearSlotName) => void;
+    onRemove: (slot: GearSlotName) => void;
+    onHover: (gear: GearPiece | null) => void;
+}
+
+export const GearSlot: React.FC<GearSlotProps> = memo(({
+    slotKey,
+    slotData,
+    gear,
+    hoveredGear,
+    onSelect,
+    onRemove,
+    onHover
+}) => {
+    if (gear) {
+        return (
+            <div className="relative">
+                <div
+                    className="w-16 h-16 bg-dark-lighter border border-dark-border relative group cursor-pointer flex items-end justify-center"
+                    onClick={() => onSelect(slotKey)}
+                    onMouseEnter={() => onHover(gear)}
+                    onMouseLeave={() => onHover(null)}
+                >
+                    {/* Gear display logic */}
+                    <div className="absolute top-1 left-1">
+                        <img
+                            src={GEAR_SETS[gear.setBonus]?.iconUrl}
+                            alt={gear.setBonus}
+                            className="w-5"
+                        />
+                    </div>
+                    {/* main stat and stars */}
+                    <div className="text-xs text-white font-bold">
+                        {gear.mainStat.name}
+                        {gear.mainStat.type === 'percentage' ? "%" : ""}
+                    </div>
+                    <div className="absolute top-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">
+                        <span className="text-xs text-yellow-400">★ {gear.stars}</span>
+                    </div>
+
+                    {/* Remove Button */}
+                    <Button
+                        variant="danger"
+                        onClick={() => onRemove(slotKey)}
+                        className="absolute -top-2 -right-2 rounded-full px-1 py-1 hidden group-hover:block"
+                    >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </Button>
+                </div>
+
+                <Tooltip
+                    gear={gear}
+                    isVisible={hoveredGear === gear}
+                />
+            </div>
+        );
+    }
+
+    return (
+        <button
+            onClick={() => onSelect(slotKey)}
+            className="w-16 h-16 bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors"
+        >
+            <span className="text-xs text-gray-400 capitalize">equip</span>
+        </button>
+    );
+});

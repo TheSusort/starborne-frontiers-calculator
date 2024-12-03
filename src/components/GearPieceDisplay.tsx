@@ -18,9 +18,7 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
                     <span>{gear.slot}</span>
                 </div>
                 <div className="flex items-center">
-                    {Array.from({ length: gear.stars }).map((_, index) => (
-                        <span key={index} className="text-yellow-400">★</span>
-                    ))}
+                    <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
                     <div className="text-sm ps-3">
                         Lvl {gear.level}
                     </div>
