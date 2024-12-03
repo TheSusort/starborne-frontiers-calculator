@@ -99,6 +99,15 @@ export const useShips = () => {
         return ships.find(ship => ship.id === id);
     };
 
+    const updateShip = useCallback((updatedShip: Ship) => {
+        setShips(prev => prev.map(ship =>
+            ship.id === updatedShip.id ? {
+                ...updatedShip,
+                stats: calculateTotalStats(updatedShip.baseStats, updatedShip.equipment, getGearPiece)
+            } : ship
+        ));
+    }, [getGearPiece]);
+
     return {
         ships,
         loading,
@@ -110,5 +119,6 @@ export const useShips = () => {
         handleRemoveShip,
         handleSaveShip,
         getShipById,
+        updateShip,
     };
 };

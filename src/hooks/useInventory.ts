@@ -32,10 +32,10 @@ export const useInventory = () => {
     }, []);
 
     const getGearPiece = (gearId: string): GearPiece | undefined => {
-        return inventory.find(gear => gear.id === gearId);
+        return gearId ? inventory.find(gear => gear.id === gearId) : undefined;
     };
 
-    
+
 
     useEffect(() => {
         loadInventory();
@@ -47,10 +47,10 @@ export const useInventory = () => {
         }
     }, [inventory, loading, saveInventory]);
 
-    return { 
-        inventory, 
-        loading, 
-        error, 
+    return {
+        inventory,
+        loading,
+        error,
         setInventory,
         saveInventory,
         loadInventory,
