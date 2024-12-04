@@ -4,6 +4,7 @@ import { Button, Input, Select } from './ui';
 import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../constants';
 import { useInventory } from '../hooks/useInventory';
 import { calculateTotalStats } from '../utils/statsCalculator';
+import { fetchShipData } from '../utils/shipDataFetcher';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -63,6 +64,22 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         setRarity('legendary');
     };
 
+    const handleFetchData = async () => {
+        if (!name) return;
+
+        const data = await fetchShipData(name);
+        if (!data) {
+            // You might want to add proper error handling/notification here
+            console.error('Failed to fetch ship data');
+            return;
+        }
+
+        setBaseStats(data.baseStats);
+        setFaction(data.faction);
+        setType(data.type);
+        setRarity(data.rarity as RarityName);
+    };
+
     const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
         value: key,
         label: type.name
@@ -84,14 +101,27 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 {editingShip ? 'Edit Ship' : 'Create New Ship'}
             </h2>
 
-            {/* Ship Name */}
-            <Input
-                label="Ship Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                placeholder="Enter ship name"
-            />
+            {/* Ship Name with Fetch button */}
+            <div className="flex gap-4">
+                <div className="flex-1">
+                    <Input
+                        label="Ship Name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        placeholder="Enter ship name"
+                    />
+                </div>
+                <div className="flex items-end">
+                    <Button
+                        type="button"
+                        onClick={handleFetchData}
+                        disabled={!name}
+                    >
+                        Fetch Data
+                    </Button>
+                </div>
+            </div>
 
             {/* Type and Faction section */}
             <div className="flex flex-row gap-4">

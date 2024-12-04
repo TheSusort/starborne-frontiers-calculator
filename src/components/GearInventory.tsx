@@ -23,7 +23,7 @@ export const GearInventory: React.FC<Props> = ({
             <h3 className="text-2xl font-bold text-gray-200">Inventory</h3>
 
             {inventory.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed border-dark-border">
+                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed">
                     No gear pieces added yet
                 </div>
             ) : (
