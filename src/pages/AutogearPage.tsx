@@ -9,7 +9,8 @@ import { GearSuggestion, StatPriority } from '../types/autogear';
 import { findOptimalGear } from '../utils/autogearCalculator';
 import { GearSlot } from '../components/GearSlot';
 import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
-import { GearPiece } from '../types/gear';
+import { GearPiece, StatName } from '../types/gear';
+import { calculateTotalStats } from '../utils/statsCalculator';
 
 export const AutogearPage: React.FC = () => {
     const { ships, getShipById, updateShip } = useShips();
@@ -64,9 +65,72 @@ export const AutogearPage: React.FC = () => {
         return suggestions.find(s => s.slotName === slotName);
     };
 
+    const getCurrentStats = () => {
+        if (!selectedShip) return null;
+        return calculateTotalStats(
+            selectedShip.baseStats,
+            selectedShip.equipment,
+            getGearPiece
+        );
+    };
+
+    const getSuggestedStats = () => {
+        if (!selectedShip) return null;
+
+        // Create equipment object with suggested gear
+        const suggestedEquipment = { ...selectedShip.equipment };
+        suggestions.forEach(suggestion => {
+            suggestedEquipment[suggestion.slotName] = suggestion.gearId;
+        });
+
+        return calculateTotalStats(
+            selectedShip.baseStats,
+            suggestedEquipment,
+            getGearPiece
+        );
+    };
+
+    const currentStats = getCurrentStats();
+    const suggestedStats = getSuggestedStats();
+
     return (
         <div className="space-y-8">
             <h1 className="text-2xl font-bold text-white">Autogear</h1>
+
+            {currentStats && suggestedStats && suggestions.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-dark p-4 rounded space-y-2">
+                        <h3 className="text-lg font-semibold text-white">Current Stats</h3>
+                        {Object.entries(currentStats).map(([statName, value]) => (
+                            <div key={statName} className="flex justify-between items-center">
+                                <span className="text-gray-300">{statName}</span>
+                                <span className="text-gray-300">{Math.round(value)}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-dark p-4 rounded space-y-2">
+                        <h3 className="text-lg font-semibold text-white">Stats with Suggested Gear</h3>
+                        {Object.entries(suggestedStats).map(([statName, value]) => {
+                            const currentValue = currentStats[statName as StatName] || 0;
+                            const difference = value - currentValue;
+                            return (
+                                <div key={statName} className="flex justify-between items-center">
+                                    <span className="text-gray-300">{statName}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-300">{Math.round(value)}</span>
+                                        {difference !== 0 && (
+                                            <span className={difference > 0 ? "text-green-500" : "text-red-500"}>
+                                                ({difference > 0 ? '+' : ''}{Math.round(difference)})
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
@@ -139,6 +203,7 @@ export const AutogearPage: React.FC = () => {
                                 );
                             })}
                         </div>
+
                         <div className="flex justify-end pt-4">
                             <Button
                                 variant="primary"

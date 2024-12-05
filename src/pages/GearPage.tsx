@@ -16,6 +16,7 @@ export const GearPage: React.FC = () => {
     };
 
     const handleEditPiece = (piece: GearPiece) => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         setEditingPiece(piece);
         setIsFormVisible(true);
     };

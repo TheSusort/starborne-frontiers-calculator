@@ -8,7 +8,6 @@ interface Props {
 
 export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) => {
 
-
     return (
         <div className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow`}>
             {/* Header */}

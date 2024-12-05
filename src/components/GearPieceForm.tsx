@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GearPiece, Stat, StatName, StatType } from '../types/gear';
 import { GearSetName, GEAR_SETS, RARITIES, RarityName, GEAR_SLOTS, GearSlotName } from '../constants';
 import { Button, Input, Select } from './ui';
+import { STATS, SLOT_MAIN_STATS, ALL_STAT_NAMES } from '../constants/stats';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -29,35 +30,14 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         }
     }, [editingPiece]);
 
-    // Get available main stats based on slot
+    // Remove getAvailableMainStats function and use SLOT_MAIN_STATS instead
     const getAvailableMainStats = (slot: GearSlotName): StatName[] => {
-        switch (slot) {
-            case 'weapon':
-                return ['attack'];
-            case 'hull':
-                return ['hp'];
-            case 'generator':
-                return ['defence'];
-            case 'sensor':
-                return ['hp', 'attack', 'defence', 'crit', 'critDamage',]
-            case 'software':
-                return ['hp', 'attack', 'defence', 'hacking', 'speed'];
-            case 'thrusters':
-                return ['hp', 'attack', 'defence'];
-            default:
-                return [];
-        }
+        return SLOT_MAIN_STATS[slot];
     };
 
-    // Add this helper function
+    // Remove getAvailableStatTypes function and use STATS instead
     const getAvailableStatTypes = (statName: StatName): StatType[] => {
-        if (['crit', 'critDamage', 'healModifier'].includes(statName)) {
-            return ['percentage'];
-        }
-        if (['speed', 'hacking', 'security'].includes(statName)) {
-            return ['flat'];
-        }
-        return ['flat', 'percentage'];
+        return STATS[statName].allowedTypes;
     };
 
     // Update main stat when slot changes
@@ -76,40 +56,46 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         const newSubStats = [...subStats];
         const currentStat = subStats[index];
 
-        // Determine correct type based on stat name
-        let type: StatType = currentStat.type;
-        console.log(newStat);
-        if (newStat.name) {
-            if (['crit', 'critDamage', 'healModifier'].includes(newStat.name)) type = 'percentage';
-            if (['speed', 'hacking', 'security'].includes(newStat.name)) type = 'flat';
-        }
+        // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
+        const allowedTypes = STATS[newStat.name || currentStat.name]?.allowedTypes;
+        newStat.type = allowedTypes?.includes(newStat.type || currentStat.type)
+            ? newStat.type
+            : allowedTypes[0];
 
-        if (newStat.type === 'percentage') {
-            if (newStat.value && newStat.value > 50) newStat.value = 50; // Cap percentage stats at 50
-        } else if (newStat.type === 'flat') {
-            if (newStat.value && newStat.value > 5000) newStat.value = 5000; // Cap flat stats at 5000
+        // Validate and cap the value based on STATS configuration
+        if (newStat.value !== undefined) {
+            const statConfig = STATS[newStat.name || currentStat.name];
+            const type = newStat.type || currentStat.type;
+            newStat.value = Math.min(newStat.value, statConfig.maxValue[type]);
         }
 
         newSubStats[index] = {
             ...currentStat,
             ...newStat,
-            type: newStat.type || type
         } as Stat;
 
         setSubStats(newSubStats);
     };
 
     const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
-        let type: StatType = mainStat.type;
+        // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
+        if (changes.name) {
+            const allowedTypes = STATS[changes.name].allowedTypes;
+            changes.type = allowedTypes.includes(mainStat.type)
+                ? mainStat.type
+                : allowedTypes[0];
+        }
 
-        if (mainStat.type === 'percentage' || changes.type === 'percentage') {
-            if (changes.value && changes.value > 50) changes.value = 50;
+        // Validate and cap the value based on STATS configuration
+        if (changes.value !== undefined) {
+            const statConfig = STATS[changes.name || mainStat.name];
+            const type = changes.type || mainStat.type;
+            changes.value = Math.min(changes.value, statConfig.maxValue[type]);
         }
 
         setMainStat({
             ...mainStat,
             ...changes,
-            type: changes.type || type
         } as Stat);
     };
 
@@ -206,7 +192,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Input
                         label="Main Stat Value"
                         type="number"
-                        max={mainStat.type === 'percentage' ? 50 : 5000}
                         value={mainStat.value}
                         onChange={(e) => handleMainStatChange({ value: Number(e.target.value) })}
                         className="w-32"
@@ -246,7 +231,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <Select
                                 value={stat.name}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, name: e.target.value as StatName })}
-                                options={Object.values(['hp', 'attack', 'defence', 'crit', 'critDamage', 'hacking', 'speed']).map(statName => ({
+                                options={ALL_STAT_NAMES.map(statName => ({
                                     value: statName,
                                     label: statName
                                 }))}
@@ -254,7 +239,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <Input
                                 type="number"
                                 value={stat.value}
-                                max={stat.type === 'percentage' ? 50 : 5000}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, value: Number(e.target.value) })}
                                 className="w-32"
                             />

@@ -64,6 +64,8 @@ export const ShipCard: React.FC<Props> = ({
                                 className="w-5"
                             />
                         ))}
+
+
                     </div>
                 </div>
             </ShipDisplay>
