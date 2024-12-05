@@ -17,7 +17,6 @@ interface ParsedShipData {
 
 export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
     try {
-        // Using a CORS proxy service
         const corsProxy = 'https://corsproxy.io/?';
         const targetUrl = `https://www.rockyfrontiers.com/units/${shipName.toLowerCase()}`;
 
@@ -27,34 +26,51 @@ export async function fetchShipData(shipName: string): Promise<ParsedShipData | 
             },
         });
 
-        const html = await response.text();
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
+        const html = await response.text();
 
         // Create a DOM parser
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-        console.log(doc);
-        // Extract stats from Level 60 tab
+
+        // Check if the page contains ship data
         const statsDiv = doc.querySelector('.w-tab-pane[data-w-tab="Level 60"]');
+        if (!statsDiv) {
+            console.error('Could not find stats div in the response');
+            return null;
+        }
+
+        // Extract stats with error checking
+        const statElements = statsDiv.querySelectorAll('.base-stat-number');
+        if (statElements.length < 8) {
+            console.error('Incomplete stat data found');
+            return null;
+        }
+
         const baseStats = {
-            hp: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[0]?.textContent?.replace(/,/g, '') || '0'),
-            attack: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[1]?.textContent?.replace(/,/g, '') || '0'),
-            defence: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[2]?.textContent?.replace(/,/g, '') || '0'),
-            hacking: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[3]?.textContent?.replace(/,/g, '') || '0'),
-            security: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[4]?.textContent?.replace(/,/g, '') || '0'),
-            crit: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[5]?.textContent?.replace(/,/g, '').replace('%', '') || '0'),
-            critDamage: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[6]?.textContent?.replace(/,/g, '').replace('%', '') || '0'),
-            speed: parseFloat(statsDiv?.querySelectorAll('.base-stat-number')?.[7]?.textContent?.replace(/,/g, '') || '0'),
+            hp: parseFloat(statElements[0]?.textContent?.replace(/,/g, '') || '0'),
+            attack: parseFloat(statElements[1]?.textContent?.replace(/,/g, '') || '0'),
+            defence: parseFloat(statElements[2]?.textContent?.replace(/,/g, '') || '0'),
+            hacking: parseFloat(statElements[3]?.textContent?.replace(/,/g, '') || '0'),
+            security: parseFloat(statElements[4]?.textContent?.replace(/,/g, '') || '0'),
+            crit: parseFloat(statElements[5]?.textContent?.replace(/,/g, '').replace('%', '') || '0'),
+            critDamage: parseFloat(statElements[6]?.textContent?.replace(/,/g, '').replace('%', '') || '0'),
+            speed: parseFloat(statElements[7]?.textContent?.replace(/,/g, '') || '0'),
             healModifier: 0
         };
-        console.log(baseStats);
 
-        // Extract faction, type and rarity
-        const faction = doc.querySelector('.database-page-item-faction')?.textContent?.trim().toUpperCase().replace(' ', '_') || '';
-        const type = doc.querySelector('.database-page-item-faction ~ .database-overview-stat')?.textContent?.trim().toUpperCase() || '';
-        const rarity = doc.querySelector('.database-page-item-rarity')?.textContent?.trim().toLowerCase() || '';
+        const faction = doc.querySelector('.database-page-item-faction')?.textContent?.trim().toUpperCase().replace(' ', '_');
+        const type = doc.querySelector('.database-page-item-faction ~ .database-overview-stat')?.textContent?.trim().toUpperCase();
+        const rarity = doc.querySelector('.database-page-item-rarity')?.textContent?.trim().toLowerCase();
 
-        console.log(faction, type, rarity);
+        if (!faction || !type || !rarity) {
+            console.error('Missing required ship data (faction, type, or rarity)');
+            return null;
+        }
+
         return {
             baseStats,
             faction,
@@ -63,6 +79,6 @@ export async function fetchShipData(shipName: string): Promise<ParsedShipData | 
         };
     } catch (error) {
         console.error('Error fetching ship data:', error);
-        return null;
+        throw error; // Re-throw to handle in the component
     }
 }

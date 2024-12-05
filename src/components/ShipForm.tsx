@@ -30,6 +30,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
     const [rarity, setRarity] = useState(editingShip?.rarity || 'common');
     const { getGearPiece } = useInventory();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (editingShip) {
@@ -67,17 +69,26 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const handleFetchData = async () => {
         if (!name) return;
 
-        const data = await fetchShipData(name);
-        if (!data) {
-            // You might want to add proper error handling/notification here
-            console.error('Failed to fetch ship data');
-            return;
-        }
+        setIsLoading(true);
+        setError(null);
 
-        setBaseStats(data.baseStats);
-        setFaction(data.faction);
-        setType(data.type);
-        setRarity(data.rarity as RarityName);
+        try {
+            const data = await fetchShipData(name);
+            if (!data) {
+                setError('Could not find ship data. Please check the ship name and try again.');
+                return;
+            }
+
+            setBaseStats(data.baseStats);
+            setFaction(data.faction);
+            setType(data.type);
+            setRarity(data.rarity as RarityName);
+        } catch (err) {
+            setError('Failed to fetch ship data. Please try again later.');
+            console.error('Error fetching ship data:', err);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
@@ -102,25 +113,48 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             </h2>
 
             {/* Ship Name with Fetch button */}
-            <div className="flex gap-4">
-                <div className="flex-1">
-                    <Input
-                        label="Ship Name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        required
-                        placeholder="Enter ship name"
-                    />
+            <div className="space-y-2">
+                <div className="flex gap-4">
+                    <div className="flex-1">
+                        <Input
+                            label="Ship Name"
+                            value={name}
+                            onChange={(e) => {
+                                setName(e.target.value);
+                                setError(null); // Clear error when input changes
+                            }}
+                            required
+                            placeholder="Enter ship name"
+                            error={error ? ' ' : ''}
+                        />
+                    </div>
+                    <div className="flex items-end">
+                        <Button
+                            variant="primary"
+                            onClick={handleFetchData}
+                            disabled={!name || isLoading}
+                            className="relative"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <span className="opacity-0">Fetch Data</span>
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    </div>
+                                </>
+                            ) : (
+                                'Fetch Data'
+                            )}
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex items-end">
-                    <Button
-                        type="button"
-                        onClick={handleFetchData}
-                        disabled={!name}
-                    >
-                        Fetch Data
-                    </Button>
-                </div>
+
+                {/* Error message */}
+                {error && (
+                    <div className="text-red-500 text-sm mt-1">
+                        {error}
+                    </div>
+                )}
             </div>
 
             {/* Type and Faction section */}

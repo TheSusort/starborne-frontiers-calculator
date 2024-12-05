@@ -1,5 +1,5 @@
 import { GearPiece } from '../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../constants';
+import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../constants';
 import { memo } from 'react';
 import { Button } from './ui/Button';
 import { Tooltip } from './Tooltip';
@@ -27,7 +27,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
         return (
             <div className="relative">
                 <div
-                    className={`w-16 h-16 bg-dark-lighter border border-dark-border relative group ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
+                    className={`w-16 h-16 bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
                     onClick={() => onSelect && onSelect(slotKey)}
                     onMouseEnter={() => onHover(gear)}
                     onMouseLeave={() => onHover(null)}

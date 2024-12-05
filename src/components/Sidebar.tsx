@@ -34,6 +34,7 @@ export const Sidebar: React.FC = () => {
                     <h1 className="text-white text-xl font-bold">
                         Starborne Planner
                     </h1>
+                    <span className="text-xs text-gray-400">v0.1</span>
                 </div>
             </div>
 
@@ -53,9 +54,11 @@ export const Sidebar: React.FC = () => {
                     transition-opacity duration-300 ease-in-out
                     ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
                 `}>
+                    <span className="text-xs text-gray-400">v0.1</span>
                     <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
-                        Starborne Frontiers
+                        Starborne Planner
                     </h1>
+
                     <nav className="space-y-2">
                         {navigationLinks.map(({ path, label }) => (
                             <Link

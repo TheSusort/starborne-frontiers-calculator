@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../constants';
@@ -11,30 +11,27 @@ import { useGearLookup, useGearSets } from '../hooks/useGear';
 interface Props {
     ship: Ship;
     hoveredGear: GearPiece | null;
-    selectedSlot: GearSlotName | null;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
     onEdit: (ship: Ship) => void;
     onRemove: (id: string) => void;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlotName) => void;
-    onSelectSlot: (slot: GearSlotName | null) => void;
     onHoverGear: (gear: GearPiece | null) => void;
 }
 
 export const ShipCard: React.FC<Props> = ({
     ship,
     hoveredGear,
-    selectedSlot,
     availableGear,
     getGearPiece,
     onEdit,
     onRemove,
     onEquipGear,
     onRemoveGear,
-    onSelectSlot,
     onHoverGear,
 }) => {
+    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
 
@@ -42,7 +39,7 @@ export const ShipCard: React.FC<Props> = ({
         <div>
             <ShipDisplay ship={ship} onEdit={onEdit} onRemove={onRemove}>
                 <div className="p-4 bg-dark">
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, slot]) => (
                             <GearSlot
                                 key={key}
@@ -50,7 +47,7 @@ export const ShipCard: React.FC<Props> = ({
                                 slotData={slot}
                                 gear={gearLookup[ship.equipment[key as GearSlotName] || '']}
                                 hoveredGear={hoveredGear}
-                                onSelect={onSelectSlot}
+                                onSelect={setSelectedSlot}
                                 onRemove={(slot) => onRemoveGear(ship.id, slot)}
                                 onHover={onHoverGear}
                             />
@@ -73,7 +70,7 @@ export const ShipCard: React.FC<Props> = ({
 
             <Modal
                 isOpen={selectedSlot !== null}
-                onClose={() => onSelectSlot(null)}
+                onClose={() => setSelectedSlot(null)}
                 title={`Select ${selectedSlot} for ${ship.name}`}
             >
                 <GearInventory
@@ -82,7 +79,7 @@ export const ShipCard: React.FC<Props> = ({
                     onEquip={(gear) => {
                         if (selectedSlot) {
                             onEquipGear(ship.id, selectedSlot, gear.id);
-                            onSelectSlot(null);
+                            setSelectedSlot(null);
                         }
                     }}
                     onRemove={() => { }}

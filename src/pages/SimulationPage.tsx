@@ -50,8 +50,8 @@ export const SimulationPage: React.FC = () => {
     const bottomHit = results.length ? Math.min(...results.map(r => r.damage)) : 0;
 
     return (
-        <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-white">Combat Simulation</h1>
+        <div className="space-y-8">
+            <h1 className="text-2xl font-bold text-white">Attack Simulation</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
                 <h3 className="text-xl font-bold text-gray-200">Settings</h3>

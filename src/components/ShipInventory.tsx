@@ -14,7 +14,6 @@ interface Props {
 }
 
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
-    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { getGearPiece } = useInventory();
 
@@ -33,14 +32,12 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                             key={ship.id}
                             ship={ship}
                             hoveredGear={hoveredGear}
-                            selectedSlot={selectedSlot}
                             availableGear={availableGear}
                             getGearPiece={getGearPiece}
                             onEdit={onEdit}
                             onRemove={onRemove}
                             onEquipGear={onEquipGear}
                             onRemoveGear={onRemoveGear}
-                            onSelectSlot={setSelectedSlot}
                             onHoverGear={setHoveredGear}
                         />
                     ))}

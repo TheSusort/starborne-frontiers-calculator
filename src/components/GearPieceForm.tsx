@@ -78,9 +78,16 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
         // Determine correct type based on stat name
         let type: StatType = currentStat.type;
+        console.log(newStat);
         if (newStat.name) {
             if (['crit', 'critDamage', 'healModifier'].includes(newStat.name)) type = 'percentage';
             if (['speed', 'hacking', 'security'].includes(newStat.name)) type = 'flat';
+        }
+
+        if (newStat.type === 'percentage') {
+            if (newStat.value && newStat.value > 50) newStat.value = 50; // Cap percentage stats at 50
+        } else if (newStat.type === 'flat') {
+            if (newStat.value && newStat.value > 5000) newStat.value = 5000; // Cap flat stats at 5000
         }
 
         newSubStats[index] = {
@@ -94,8 +101,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
     const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         let type: StatType = mainStat.type;
-        if (changes.name) {
-            if (['crit'].includes(changes.name) && changes.value && changes.value > 100) changes.value = 100;
+
+        if (mainStat.type === 'percentage' || changes.type === 'percentage') {
+            if (changes.value && changes.value > 50) changes.value = 50;
         }
 
         setMainStat({
@@ -198,6 +206,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Input
                         label="Main Stat Value"
                         type="number"
+                        max={mainStat.type === 'percentage' ? 50 : 5000}
                         value={mainStat.value}
                         onChange={(e) => handleMainStatChange({ value: Number(e.target.value) })}
                         className="w-32"
@@ -245,6 +254,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <Input
                                 type="number"
                                 value={stat.value}
+                                max={stat.type === 'percentage' ? 50 : 5000}
                                 onChange={(e) => handleSubStatChange(index, { ...stat, value: Number(e.target.value) })}
                                 className="w-32"
                             />

@@ -48,6 +48,7 @@ export const useShips = () => {
     }, [ships, loading, saveShips]);
 
     const handleEquipGear = (shipId: string, slot: GearSlotName, gearId: string) => {
+        console.log('handleEquipGear', shipId, slot, gearId);
         setShips(prev => prev.map(ship => {
             if (ship.id === shipId) {
                 return {
