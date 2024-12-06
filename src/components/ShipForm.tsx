@@ -62,8 +62,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             baseStats,
             stats: totalStats,
             equipment: editingShip?.equipment || {},
-            refits: editingShip?.refits || [],
-            implants: editingShip?.implants || []
+            refits: editingShip?.refits || refits,
+            implants: editingShip?.implants || implants
         };
         onSubmit(ship);
 
@@ -72,6 +72,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         setFaction(FACTIONS['ATLAS'].name);
         setType(SHIP_TYPES['ATTACKER'].name);
         setRarity('legendary');
+        setRefits([]);
+        setImplants([]);
+
     };
 
     const handleFetchData = async () => {
@@ -241,6 +244,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 ))}
                 {refits.length < 6 && (
                     <Button
+                        type="button"
                         variant="primary"
                         onClick={() => setRefits([...refits, { name: '', stats: [] }])}
                     >
@@ -275,6 +279,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 ))}
                 {implants.length < 5 && (
                     <Button
+                        type="button"
                         variant="primary"
                         onClick={() => setImplants([...implants, { name: '', stats: [] }])}
                     >

@@ -55,7 +55,7 @@ export const Sidebar: React.FC = () => {
                     transition-opacity duration-300 ease-in-out
                     ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
                 `}>
-                    <span className="text-xs text-gray-400">{APP_VERSION}</span>
+                    <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
                     <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
                         {APP_NAME}
                     </h1>

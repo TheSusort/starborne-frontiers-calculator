@@ -76,6 +76,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats }
         <Button
           variant="secondary"
           onClick={addStat}
+          type="button"
         >
           Add Stat
         </Button>
