@@ -70,7 +70,9 @@ export const AutogearPage: React.FC = () => {
         return calculateTotalStats(
             selectedShip.baseStats,
             selectedShip.equipment,
-            getGearPiece
+            getGearPiece,
+            selectedShip.refits,
+            selectedShip.implants
         );
     };
 
@@ -86,7 +88,9 @@ export const AutogearPage: React.FC = () => {
         return calculateTotalStats(
             selectedShip.baseStats,
             suggestedEquipment,
-            getGearPiece
+            getGearPiece,
+            selectedShip.refits,
+            selectedShip.implants
         );
     };
 

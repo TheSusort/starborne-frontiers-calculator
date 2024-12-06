@@ -25,7 +25,7 @@ export const SimulationPage: React.FC = () => {
         const ship = getShipById(selectedShipId);
         if (!ship) return;
 
-        const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece);
+        const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants);
         const results: SimulationResult[] = [];
 
         for (let i = 0; i < 100; i++) {

@@ -34,7 +34,7 @@ export const findOptimalGear = (
                 };
 
                 // Calculate total stats with this gear
-                const totalStats = calculateTotalStats(ship.baseStats, testEquipment, getGearPiece);
+                const totalStats = calculateTotalStats(ship.baseStats, testEquipment, getGearPiece, ship.refits, ship.implants);
 
                 // Calculate score based on priorities
                 let score = calculatePriorityScore(totalStats, priorities);
