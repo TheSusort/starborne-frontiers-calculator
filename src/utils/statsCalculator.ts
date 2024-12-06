@@ -1,14 +1,17 @@
-import { BaseStats } from '../types/ship';
+import { BaseStats, Implant, Refit } from '../types/ship';
 import { Stat, GearPiece } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
 import { GearSlotName } from '../constants/gearTypes';
 export const calculateTotalStats = (
     baseStats: BaseStats,
     equipment: Partial<Record<GearSlotName, string>>,
-    getGearPiece: (id: string) => GearPiece | undefined
+    getGearPiece: (id: string) => GearPiece | undefined,
+    refits: Refit[] = [],
+    implants: Implant[] = []
 ): BaseStats => {
     // Start with base stats
     const totalStats = { ...baseStats };
+    const statsAfterGear = { ...baseStats };
 
     // Process all equipped gear
     Object.values(equipment).forEach(gearId => {
@@ -17,14 +20,27 @@ export const calculateTotalStats = (
         if (!gear) return;
 
         // Process main stat
-        addStatModifier(gear.mainStat);
+        addStatModifier(gear.mainStat, totalStats, baseStats);
 
         // Process sub stats
-        gear.subStats.forEach(addStatModifier);
+        gear.subStats.forEach(stat => addStatModifier(stat, totalStats, baseStats));
     });
+
+    // Store stats after gear for implant calculations
+    Object.assign(statsAfterGear, totalStats);
 
     // Process set bonuses
     applySetBonuses();
+
+    // Process refits (calculated from base stats)
+    refits.forEach(refit => {
+        refit.stats.forEach(stat => addStatModifier(stat, totalStats, baseStats));
+    });
+
+    // Process implants (calculated from stats after gear)
+    implants.forEach(implant => {
+        implant.stats.forEach(stat => addStatModifier(stat, totalStats, statsAfterGear));
+    });
 
     return totalStats;
 
@@ -61,28 +77,26 @@ export const calculateTotalStats = (
 
             // Apply the set bonus multiple times if applicable
             for (let i = 0; i < bonusCount; i++) {
-                GEAR_SETS[gearWithBonus.setBonus].stats.forEach(addStatModifier);
+                GEAR_SETS[gearWithBonus.setBonus].stats.forEach(stat =>
+                    addStatModifier(stat, totalStats, baseStats)
+                );
             }
         });
     }
 
-    // Helper function to process each stat
-    function addStatModifier(stat: Stat) {
+    // Updated addStatModifier to take baseStats parameter
+    function addStatModifier(stat: Stat, target: BaseStats, base: BaseStats) {
         const isPercentageOnlyStat = ['crit', 'critDamage', 'healModifier'].includes(stat.name);
 
         if (isPercentageOnlyStat) {
-            // For percentage-only stats, we simply add the percentages
-            totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
+            target[stat.name] = (target[stat.name] || 0) + stat.value;
         } else if (stat.type === 'percentage') {
-            // For percentage stats, calculate bonus based on base stat and add it
-            const baseValue = baseStats[stat.name];
+            const baseValue = base[stat.name];
             const bonus = baseValue * (stat.value / 100);
-            totalStats[stat.name] += bonus;
-            // Round to prevent floating point issues
-            totalStats[stat.name] = Math.round(totalStats[stat.name] * 100) / 100;
+            target[stat.name] += bonus;
+            target[stat.name] = Math.round(target[stat.name] * 100) / 100;
         } else {
-            // For flat stats, simply add the value
-            totalStats[stat.name] = (totalStats[stat.name] || 0) + stat.value;
+            target[stat.name] = (target[stat.name] || 0) + stat.value;
         }
     }
 };

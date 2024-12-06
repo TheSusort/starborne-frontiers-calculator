@@ -3,6 +3,7 @@ import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../constants';
 import { memo } from 'react';
 import { Button } from './ui/Button';
 import { Tooltip } from './Tooltip';
+import { CloseIcon } from './ui/CloseIcon';
 
 interface GearSlotProps {
     slotKey: GearSlotName;
@@ -56,9 +57,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
                             onClick={() => onRemove && onRemove(slotKey)}
                             className="absolute -top-2 -right-2 rounded-full px-1 py-1 hidden group-hover:block"
                         >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            <CloseIcon />
                         </Button>
                     )}
                 </div>

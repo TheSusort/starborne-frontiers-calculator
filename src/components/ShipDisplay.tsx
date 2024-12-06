@@ -4,6 +4,7 @@ import { SHIP_TYPES } from '../constants/shipTypes';
 import { FACTIONS } from '../constants/factions';
 import { Button } from './ui';
 import { RARITIES } from '../constants';
+import { CloseIcon } from './ui/CloseIcon';
 
 interface Props {
     ship: Ship;
@@ -90,9 +91,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                                     onRemove(ship.id);
                                 }}
                             >
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <CloseIcon />
                             </Button>
                         )}
                     </div>

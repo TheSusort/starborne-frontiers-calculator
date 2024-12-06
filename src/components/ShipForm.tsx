@@ -5,6 +5,8 @@ import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../constants';
 import { useInventory } from '../hooks/useInventory';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { fetchShipData } from '../utils/shipDataFetcher';
+import { StatModifierInput } from './StatModifierInput';
+import { CloseIcon } from './ui/CloseIcon';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -29,6 +31,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [faction, setFaction] = useState(editingShip?.faction || FACTIONS['ATLAS'].name);
     const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
     const [rarity, setRarity] = useState(editingShip?.rarity || 'common');
+    const [refits, setRefits] = useState(editingShip?.refits || []);
+    const [implants, setImplants] = useState(editingShip?.implants || []);
     const { getGearPiece } = useInventory();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -40,10 +44,12 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setFaction(editingShip.faction);
             setType(editingShip.type);
             setRarity(editingShip.rarity);
+            setRefits(editingShip.refits);
+            setImplants(editingShip.implants);
         }
     }, [editingShip]);
 
-    const totalStats = useMemo(() => calculateTotalStats(baseStats, editingShip?.equipment || {}, getGearPiece), [baseStats, editingShip?.equipment, getGearPiece]);
+    const totalStats = useMemo(() => calculateTotalStats(baseStats, editingShip?.equipment || {}, getGearPiece, refits, implants), [baseStats, editingShip?.equipment, getGearPiece, refits, implants]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -55,7 +61,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             rarity,
             baseStats,
             stats: totalStats,
-            equipment: editingShip?.equipment || {}
+            equipment: editingShip?.equipment || {},
+            refits: editingShip?.refits || [],
+            implants: editingShip?.implants || []
         };
         onSubmit(ship);
 
@@ -205,6 +213,74 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         )
                     ))}
                 </div>
+            </div>
+
+            {/* Refits Section */}
+            <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-200">Refits</h3>
+                {refits.map((refit, index) => (
+                    <div key={index} className="p-4 border border-gray-700 rounded-lg space-y-4 relative">
+                        <div className="absolute top-2 right-4">
+                            <Button
+                                variant="danger"
+                                onClick={() => setRefits(refits.filter((_, i) => i !== index))}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        </div>
+                        <StatModifierInput
+                            stats={refit.stats}
+                            onChange={(newStats) => {
+                                const newRefits = [...refits];
+                                newRefits[index] = { ...refit, stats: newStats };
+                                setRefits(newRefits);
+                            }}
+                            maxStats={2}
+                        />
+                    </div>
+                ))}
+                {refits.length < 6 && (
+                    <Button
+                        variant="primary"
+                        onClick={() => setRefits([...refits, { name: '', stats: [] }])}
+                    >
+                        Add Refit
+                    </Button>
+                )}
+            </div>
+
+            {/* Implants Section */}
+            <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-200">Implants</h3>
+                {implants.map((implant, index) => (
+                    <div key={index} className="p-4 border border-gray-700 rounded-lg space-y-4 relative">
+                        <div className="absolute top-2 right-4">
+                            <Button
+                                variant="danger"
+                                onClick={() => setImplants(implants.filter((_, i) => i !== index))}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        </div>
+                        <StatModifierInput
+                            stats={implant.stats}
+                            onChange={(newStats) => {
+                                const newImplants = [...implants];
+                                newImplants[index] = { ...implant, stats: newStats };
+                                setImplants(newImplants);
+                            }}
+                            maxStats={2}
+                        />
+                    </div>
+                ))}
+                {implants.length < 5 && (
+                    <Button
+                        variant="primary"
+                        onClick={() => setImplants([...implants, { name: '', stats: [] }])}
+                    >
+                        Add Implant
+                    </Button>
+                )}
             </div>
 
             {/* Submit Button */}

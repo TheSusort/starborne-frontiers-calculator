@@ -53,7 +53,7 @@ export const ShipsPage: React.FC = () => {
                 </div>
             )}
 
-            <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingShip ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+            <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingShip ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
                 <ShipForm
                     onSubmit={(ship) => {
                         handleSaveShip(ship);

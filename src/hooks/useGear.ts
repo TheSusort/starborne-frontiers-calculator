@@ -25,7 +25,7 @@ export const useGearLookup = (
 
 /**
  * Calculates active gear set bonuses based on equipped gear
- * Returns an array of set names that have 2 or more pieces equipped
+ * Returns an array of set names, with each name repeated for every complete set (2 pieces)
  */
 export const useGearSets = (
     equipment: Ship['equipment'],
@@ -41,8 +41,10 @@ export const useGearSets = (
             return acc;
         }, {} as Record<string, number>);
 
-        return Object.entries(setCount)
-            .filter(([_, count]) => count >= 2)
-            .map(([setName]) => setName);
+        // For each set, add the set name multiple times based on complete sets
+        return Object.entries(setCount).flatMap(([setName, count]) => {
+            const completeSets = Math.floor(count / 2);
+            return Array(completeSets).fill(setName);
+        });
     }, [equipment, gearLookup]);
 };

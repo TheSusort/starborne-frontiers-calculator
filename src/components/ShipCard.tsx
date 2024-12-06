@@ -56,9 +56,9 @@ export const ShipCard: React.FC<Props> = ({
 
                     <div className="flex items-center gap-2 pt-3">
                         <span className="text-xs text-gray-400">Gear Sets:</span>
-                        {activeSets.map(setName => (
+                        {activeSets.map((setName, index) => (
                             <img
-                                key={setName}
+                                key={`${setName}-${index}`}
                                 src={GEAR_SETS[setName].iconUrl}
                                 alt={setName}
                                 className="w-5"

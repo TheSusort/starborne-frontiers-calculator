@@ -12,7 +12,7 @@ export const Button: React.FC<Props> = ({
     className = '',
     ...props
 }) => {
-    const baseStyles = "px-4 py-2 transition-colors font-medium";
+    const baseStyles = "px-4 py-2 transition-colors font-medium h-10";
     const variants = {
         primary: "bg-gradient-to-r from-primary to-primary-hover hover:bg-gradient-to-r hover:from-primary-hover hover:to-primary",
         secondary: "bg-dark border border-dark-lighter text-gray-200 hover:bg-dark-border",
