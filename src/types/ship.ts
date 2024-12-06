@@ -23,7 +23,6 @@ export interface Ship {
     faction: FactionName;
     type: ShipTypeName;
     baseStats: BaseStats;
-    stats: BaseStats;
     equipment: Partial<Record<GearSlotName, string>>;
     refits: Refit[];
     implants: Implant[];

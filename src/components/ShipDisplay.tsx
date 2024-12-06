@@ -1,11 +1,12 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Ship } from '../types/ship';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import { FACTIONS } from '../constants/factions';
 import { Button } from './ui';
 import { RARITIES } from '../constants';
 import { CloseIcon } from './ui/CloseIcon';
-
+import { calculateTotalStats } from '../utils/statsCalculator';
+import { useInventory } from '../hooks/useInventory';
 interface Props {
     ship: Ship;
     variant?: 'full' | 'compact';
@@ -47,6 +48,9 @@ export const ShipDisplay: React.FC<Props> = memo(({
     onClick,
     children
 }) => {
+    const { getGearPiece } = useInventory();
+    const totalStats = useMemo(() => calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants), [ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants]);
+
     if (variant === 'compact') {
         return (
             <div
@@ -103,7 +107,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
             <div className="p-4">
                 {/* Stats */}
                 <div className="space-y-1 text-sm">
-                    {Object.entries(ship.stats || ship.baseStats).map(([stat, value]) => {
+                    {Object.entries(totalStats).map(([stat, value]) => {
                         return (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
                             <div key={stat} className="flex justify-between text-gray-300">
                                 <span className="capitalize">{stat}:</span>

@@ -1,9 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship, BaseStats } from '../types/ship';
 import { Button, Input, Select } from './ui';
 import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../constants';
-import { useInventory } from '../hooks/useInventory';
-import { calculateTotalStats } from '../utils/statsCalculator';
 import { fetchShipData } from '../utils/shipDataFetcher';
 import { StatModifierInput } from './StatModifierInput';
 import { CloseIcon } from './ui/CloseIcon';
@@ -33,7 +31,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [rarity, setRarity] = useState(editingShip?.rarity || 'common');
     const [refits, setRefits] = useState(editingShip?.refits || []);
     const [implants, setImplants] = useState(editingShip?.implants || []);
-    const { getGearPiece } = useInventory();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -49,8 +46,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         }
     }, [editingShip]);
 
-    const totalStats = useMemo(() => calculateTotalStats(baseStats, editingShip?.equipment || {}, getGearPiece, refits, implants), [baseStats, editingShip?.equipment, getGearPiece, refits, implants]);
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const ship: Ship = {
@@ -60,7 +55,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             type,
             rarity,
             baseStats,
-            stats: totalStats,
             equipment: editingShip?.equipment || {},
             refits: editingShip?.refits || refits,
             implants: editingShip?.implants || implants

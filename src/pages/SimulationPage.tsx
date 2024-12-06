@@ -54,19 +54,23 @@ export const SimulationPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-white">Attack Simulation</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
-                <h3 className="text-xl font-bold text-gray-200">Settings</h3>
-                    <div>
+                    <h3 className="text-xl font-bold text-gray-200">Settings</h3>
+                    <div className="space-y-4">
                         <Button
                             variant="link"
                             onClick={() => setIsShipModalOpen(true)}
                             fullWidth
                         >
                             {selectedShip ? (
-                                <ShipDisplay ship={selectedShip} />
+                                'Select another Ship'
                             ) : (
                                 'Select a Ship'
                             )}
                         </Button>
+
+                        {selectedShip && (
+                            <ShipDisplay ship={selectedShip} />
+                        )}
 
                         <Modal
                             isOpen={isShipModalOpen}
@@ -98,6 +102,10 @@ export const SimulationPage: React.FC = () => {
                     >
                         Run 100 Simulations
                     </Button>
+
+                    <p className="text-gray-400 text-sm">
+                        This simulates 100 attacks with the selected ship and gear. It will only use 100% damage hits, no ship specific attacks are used.
+                    </p>
                 </div>
 
                 {results.length > 0 && (

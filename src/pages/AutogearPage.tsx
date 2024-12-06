@@ -145,11 +145,15 @@ export const AutogearPage: React.FC = () => {
                         fullWidth
                     >
                         {selectedShip ? (
-                            <ShipDisplay ship={selectedShip} />
+                            'Select another Ship'
                         ) : (
                             'Select a Ship'
                         )}
                     </Button>
+
+                    {selectedShip && (
+                        <ShipDisplay ship={selectedShip} />
+                    )}
 
                     <StatPriorityForm
                         onAdd={handleAddPriority}
