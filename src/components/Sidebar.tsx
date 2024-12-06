@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { APP_NAME, APP_VERSION } from '../constants/config';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();
@@ -32,9 +33,9 @@ export const Sidebar: React.FC = () => {
                         </svg>
                     </button>
                     <h1 className="text-white text-xl font-bold">
-                        Starborne Planner
+                        {APP_NAME}
                     </h1>
-                    <span className="text-xs text-gray-400">v0.1</span>
+                    <span className="text-xs text-gray-400">{APP_VERSION}</span>
                 </div>
             </div>
 
@@ -54,9 +55,9 @@ export const Sidebar: React.FC = () => {
                     transition-opacity duration-300 ease-in-out
                     ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
                 `}>
-                    <span className="text-xs text-gray-400">v0.1</span>
+                    <span className="text-xs text-gray-400">{APP_VERSION}</span>
                     <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
-                        Starborne Planner
+                        {APP_NAME}
                     </h1>
 
                     <nav className="space-y-2">
