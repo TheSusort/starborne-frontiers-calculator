@@ -5,6 +5,7 @@ import { ShipsPage } from './pages/ShipsPage';
 import { GearPage } from './pages/GearPage';
 import { SimulationPage } from './pages/SimulationPage';
 import { AutogearPage } from './pages/AutogearPage';
+import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
 
 const App: React.FC = () => {
     return (
@@ -19,6 +20,7 @@ const App: React.FC = () => {
                                 <Route path="/gear" element={<GearPage />} />
                                 <Route path="/simulation" element={<SimulationPage />} />
                                 <Route path="/autogear" element={<AutogearPage />} />
+                                <Route path="/engineering" element={<EngineeringStatsPage />} />
                                 <Route path="/" element={<Navigate to="/ships" replace />} />
                             </Routes>
                         </div>

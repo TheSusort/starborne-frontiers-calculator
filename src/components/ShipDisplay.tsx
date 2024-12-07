@@ -1,12 +1,11 @@
 import React, { memo, useMemo } from 'react';
 import { Ship } from '../types/ship';
-import { SHIP_TYPES } from '../constants/shipTypes';
-import { FACTIONS } from '../constants/factions';
+import { SHIP_TYPES, FACTIONS, RARITIES } from '../constants';
 import { Button } from './ui';
-import { RARITIES } from '../constants';
 import { CloseIcon } from './ui/CloseIcon';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
+
 interface Props {
     ship: Ship;
     variant?: 'full' | 'compact';
@@ -112,7 +111,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                             <div key={stat} className="flex justify-between text-gray-300">
                                 <span className="capitalize">{stat}:</span>
                                 <div>
-                                    <span>{Math.round(value * 100) / 100}</span>
+                                    <span>{Math.round((value) * 100) / 100}</span>
                                     {['crit', 'critDamage'].includes(stat) ? "%" : ""}
                                 </div>
                             </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { GearPiece, Stat, StatName, StatType } from '../types/gear';
+import { GearPiece } from '../types/gear';
+import { StatName, StatType, Stat } from '../types/stats';
 import { GearSetName, GEAR_SETS, RARITIES, RarityName, GEAR_SLOTS, GearSlotName } from '../constants';
 import { Button, Input, Select } from './ui';
-import { STATS, SLOT_MAIN_STATS, ALL_STAT_NAMES } from '../constants/stats';
+import { STATS, SLOT_MAIN_STATS } from '../constants/stats';
+import { StatModifierInput } from './StatModifierInput';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -45,37 +47,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         const availableStats = getAvailableMainStats(slot);
         setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
     }, [slot]);
-
-    const handleAddSubStat = () => {
-        if (subStats.length < 4) {
-            setSubStats([...subStats, { name: 'hp', value: 0, type: 'flat' }]);
-        }
-    };
-
-    const handleSubStatChange = (index: number, newStat: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
-        const newSubStats = [...subStats];
-        const currentStat = subStats[index];
-
-        // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
-        const allowedTypes = STATS[newStat.name || currentStat.name]?.allowedTypes;
-        newStat.type = allowedTypes?.includes(newStat.type || currentStat.type)
-            ? newStat.type
-            : allowedTypes[0];
-
-        // Validate and cap the value based on STATS configuration
-        if (newStat.value !== undefined) {
-            const statConfig = STATS[newStat.name || currentStat.name];
-            const type = newStat.type || currentStat.type;
-            newStat.value = Math.min(newStat.value, statConfig.maxValue[type]);
-        }
-
-        newSubStats[index] = {
-            ...currentStat,
-            ...newStat,
-        } as Stat;
-
-        setSubStats(newSubStats);
-    };
 
     const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
@@ -213,47 +184,14 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
             {/* Sub Stats Section */}
             <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-medium text-gray-200">Sub Stats</h4>
-                    {subStats.length < 4 && (
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={handleAddSubStat}
-                        >
-                            Add Sub Stat
-                        </Button>
-                    )}
-                </div>
-                <div className="space-y-3">
-                    {subStats.map((stat, index) => (
-                        <div key={index} className="flex gap-4">
-                            <Select
-                                value={stat.name}
-                                onChange={(e) => handleSubStatChange(index, { ...stat, name: e.target.value as StatName })}
-                                options={ALL_STAT_NAMES.map(statName => ({
-                                    value: statName,
-                                    label: statName
-                                }))}
-                            />
-                            <Input
-                                type="number"
-                                value={stat.value}
-                                onChange={(e) => handleSubStatChange(index, { ...stat, value: Number(e.target.value) })}
-                                className="w-32"
-                            />
-                            <Select
-                                value={stat.type}
-                                onChange={(e) => handleSubStatChange(index, { ...stat, type: e.target.value as StatType })}
-                                options={getAvailableStatTypes(stat.name).map(type => ({
-                                    value: type,
-                                    label: type
-                                }))}
-                                className="w-32"
-                            />
-                        </div>
-                    ))}
-                </div>
+                <h4 className="text-sm font-medium text-gray-200">Sub Stats</h4>
+                <StatModifierInput
+                    stats={subStats}
+                    onChange={setSubStats}
+                    maxStats={4}
+                    defaultStatType="flat"
+                    excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
+                />
             </div>
 
             {/* Submit Button */}

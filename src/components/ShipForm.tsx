@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Ship, BaseStats } from '../types/ship';
-import { Button, Input, Select } from './ui';
+import { Ship } from '../types/ship';
+import { BaseStats } from '../types/stats';
+import { Button, Input, Select, CloseIcon } from './ui';
 import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../constants';
 import { fetchShipData } from '../utils/shipDataFetcher';
 import { StatModifierInput } from './StatModifierInput';
-import { CloseIcon } from './ui/CloseIcon';
 
 interface Props {
     onSubmit: (ship: Ship) => void;

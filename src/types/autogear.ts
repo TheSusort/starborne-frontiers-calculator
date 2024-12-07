@@ -1,4 +1,4 @@
-import { StatName } from './gear';
+import { StatName } from './stats';
 
 export interface StatPriority {
     stat: StatName;

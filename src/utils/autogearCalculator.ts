@@ -1,4 +1,5 @@
-import { BaseStats, Ship } from '../types/ship';
+import { BaseStats } from '../types/stats';
+import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { StatPriority, GearSuggestion } from '../types/autogear';
 import { GEAR_SLOTS, GearSlotName } from '../constants';

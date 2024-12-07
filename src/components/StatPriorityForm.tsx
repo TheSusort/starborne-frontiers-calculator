@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Select } from './ui';
-import { StatName } from '../types/gear';
+import { StatName } from '../types/stats';
 import { StatPriority } from '../types/autogear';
 
 const AVAILABLE_STATS: StatName[] = [

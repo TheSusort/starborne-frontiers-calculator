@@ -1,4 +1,4 @@
-import { StatName, StatType } from '../types/gear';
+import { StatName, StatType } from '../types/stats';
 import { GearSlotName } from './gearTypes';
 
 const MAX_FLAT_VALUE = 5000;
@@ -7,41 +7,51 @@ const MAX_PERCENTAGE_VALUE = 50;
 export const STATS: Record<StatName, {
     allowedTypes: StatType[];
     maxValue: Record<StatType, number>;
+    engineeringAllowedTypes?: StatType[];
 }> = {
     attack: {
         allowedTypes: ['flat', 'percentage'],
+        engineeringAllowedTypes: ['percentage'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: MAX_PERCENTAGE_VALUE }
     },
     hp: {
         allowedTypes: ['flat', 'percentage'],
+        engineeringAllowedTypes: ['percentage'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: MAX_PERCENTAGE_VALUE }
     },
     defence: {
         allowedTypes: ['flat', 'percentage'],
+        engineeringAllowedTypes: ['percentage'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: MAX_PERCENTAGE_VALUE }
     },
     crit: {
         allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
         maxValue: { percentage: MAX_PERCENTAGE_VALUE, flat: 0 }
     },
     critDamage: {
         allowedTypes: ['percentage'],
+        engineeringAllowedTypes: ['percentage'],
         maxValue: { percentage: MAX_PERCENTAGE_VALUE, flat: 0 }
     },
     healModifier: {
         allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
         maxValue: { percentage: MAX_PERCENTAGE_VALUE, flat: 0 }
     },
     speed: {
         allowedTypes: ['flat'],
+        engineeringAllowedTypes: [],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 }
     },
     hacking: {
         allowedTypes: ['flat'],
+        engineeringAllowedTypes: ['flat'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 }
     },
     security: {
         allowedTypes: ['flat'],
+        engineeringAllowedTypes: ['flat'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 }
     }
 };

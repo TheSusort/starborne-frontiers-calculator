@@ -1,5 +1,6 @@
-import { BaseStats, Implant, Refit } from '../types/ship';
-import { Stat, GearPiece } from '../types/gear';
+import { BaseStats, Stat } from '../types/stats';
+import { Implant, Refit } from '../types/ship';
+import { GearPiece } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
 import { GearSlotName } from '../constants/gearTypes';
 export const calculateTotalStats = (

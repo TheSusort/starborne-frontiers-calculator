@@ -9,7 +9,8 @@ import { GearSuggestion, StatPriority } from '../types/autogear';
 import { findOptimalGear } from '../utils/autogearCalculator';
 import { GearSlot } from '../components/GearSlot';
 import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
-import { GearPiece, StatName } from '../types/gear';
+import { GearPiece } from '../types/gear';
+import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/statsCalculator';
 
 export const AutogearPage: React.FC = () => {
