@@ -3,7 +3,8 @@ import { ShipForm } from '../components/ShipForm';
 import { ShipInventory } from '../components/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
-import { Button } from '../components/ui';
+import { PageLayout } from '../components/layout/PageLayout';
+import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
@@ -23,7 +24,7 @@ export const ShipsPage: React.FC = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl text-white">
+                <div className="animate-pulse text-xl text-gray-200">
                     Loading ships...
                 </div>
             </div>
@@ -31,21 +32,18 @@ export const ShipsPage: React.FC = () => {
     }
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-white">Ship Management</h1>
-                <Button
-                    variant="primary"
-                    onClick={() => {
-                        if (editingShip) {
+        <PageLayout
+            title="Ship Management"
+            action={{
+                label: isFormVisible ? 'Hide Form' : 'Create New Ship',
+                onClick: () => {
+                    if (editingShip) {
                             setEditingShip(undefined);
                         }
-                        setIsFormVisible(!isFormVisible);
-                    }}
-                >
-                    {isFormVisible ? 'Hide Form' : 'Create New Ship'}
-                </Button>
-            </div>
+                    setIsFormVisible(!isFormVisible);
+                }
+            }}
+        >
 
             {error && (
                 <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
@@ -53,7 +51,7 @@ export const ShipsPage: React.FC = () => {
                 </div>
             )}
 
-            <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingShip ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+            <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                 <ShipForm
                     onSubmit={(ship) => {
                         handleSaveShip(ship);
@@ -63,7 +61,7 @@ export const ShipsPage: React.FC = () => {
                     }}
                     editingShip={editingShip}
                 />
-            </div>
+            </CollapsibleForm>
 
             <ShipInventory
                 ships={ships}
@@ -76,6 +74,6 @@ export const ShipsPage: React.FC = () => {
                 onRemoveGear={handleRemoveGear}
                 availableGear={inventory}
             />
-        </div>
+        </PageLayout>
     );
 };

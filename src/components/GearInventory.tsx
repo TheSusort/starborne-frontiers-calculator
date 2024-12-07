@@ -21,7 +21,7 @@ export const GearInventory: React.FC<Props> = ({
 }) => {
     return (
         <div className="space-y-6">
-            <h3 className="text-2xl font-bold text-gray-200">Inventory</h3>
+            <h3 className="text-xl font-semibold text-gray-200">Inventory</h3>
 
             {inventory.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed">

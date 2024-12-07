@@ -12,6 +12,7 @@ import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
 import { GearPiece } from '../types/gear';
 import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/statsCalculator';
+import { PageLayout } from '../components/layout/PageLayout';
 
 export const AutogearPage: React.FC = () => {
     const { ships, getShipById, updateShip } = useShips();
@@ -99,13 +100,14 @@ export const AutogearPage: React.FC = () => {
     const suggestedStats = getSuggestedStats();
 
     return (
-        <div className="space-y-8">
-            <h1 className="text-2xl font-bold text-white">Autogear</h1>
+        <PageLayout
+            title="Autogear"
+        >
 
             {currentStats && suggestedStats && suggestions.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-200">
                     <div className="bg-dark p-4 rounded space-y-2">
-                        <h3 className="text-lg font-semibold text-white">Current Stats</h3>
+                        <h3 className="text-lg font-semibold">Current Stats</h3>
                         {Object.entries(currentStats).map(([statName, value]) => (
                             <div key={statName} className="flex justify-between items-center">
                                 <span className="text-gray-300">{statName}</span>
@@ -115,7 +117,7 @@ export const AutogearPage: React.FC = () => {
                     </div>
 
                     <div className="bg-dark p-4 rounded space-y-2">
-                        <h3 className="text-lg font-semibold text-white">Stats with Suggested Gear</h3>
+                        <h3 className="text-lg font-semibold">Stats with Suggested Gear</h3>
                         {Object.entries(suggestedStats).map(([statName, value]) => {
                             const currentValue = currentStats[statName as StatName] || 0;
                             const difference = value - currentValue;
@@ -163,7 +165,7 @@ export const AutogearPage: React.FC = () => {
 
                     {priorities.length > 0 && (
                         <div className="bg-dark p-4 rounded space-y-2">
-                            <h3 className="text-lg font-semibold text-white">Priority List</h3>
+                            <h3 className="text-lg font-semibold text-gray-200">Priority List</h3>
                             {priorities.map((priority, index) => (
                                 <div key={index} className="flex justify-between items-center">
                                     <span className="text-gray-300">
@@ -194,7 +196,7 @@ export const AutogearPage: React.FC = () => {
                 {suggestions.length > 0 && (
                     <div className="bg-dark-lighter p-4 pt-0 rounded">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-white">Suggested Gear</h3>
+                            <h3 className="text-xl font-semibold text-gray-200">Suggested Gear</h3>
                         </div>
                         <div className="grid grid-cols-3 gap-2 bg-dark p-4">
                             {GEAR_SLOT_ORDER.map((slotName) => {
@@ -245,6 +247,6 @@ export const AutogearPage: React.FC = () => {
                     ))}
                 </div>
             </Modal>
-        </div>
+        </PageLayout>
     );
 };

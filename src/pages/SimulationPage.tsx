@@ -5,6 +5,7 @@ import { useInventory } from '../hooks/useInventory';
 import { Button } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { ShipDisplay } from '../components/ShipDisplay';
+import { PageLayout } from '../components/layout/PageLayout';
 
 interface SimulationResult {
     damage: number;
@@ -50,10 +51,11 @@ export const SimulationPage: React.FC = () => {
     const bottomHit = results.length ? Math.min(...results.map(r => r.damage)) : 0;
 
     return (
-        <div className="space-y-8">
-            <h1 className="text-2xl font-bold text-white">Attack Simulation</h1>
+        <PageLayout
+            title="Attack Simulation"
+        >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-4">
+                <div className="space-y-6">
                     <h3 className="text-xl font-bold text-gray-200">Settings</h3>
                     <div className="space-y-4">
                         <Button
@@ -109,20 +111,20 @@ export const SimulationPage: React.FC = () => {
                 </div>
 
                 {results.length > 0 && (
-                    <div className="space-y-4 bg-dark-lighter p-4 pt-0 rounded">
-                        <h3 className="text-xl font-bold text-gray-200">Results</h3>
+                    <div className="space-y-4 bg-dark-lighter p-4 pt-0 rounded ">
+                        <h3 className="text-xl font-semibold text-gray-200">Results</h3>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Avg. Hit</div>
-                                <div className="text-xl text-white">{averageDamage}</div>
+                                <div className="text-xl text-gray-200">{averageDamage}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Highest Hit</div>
-                                <div className="text-xl text-white">{topHit}</div>
+                                <div className="text-xl text-gray-200">{topHit}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Lowest Hit</div>
-                                <div className="text-xl text-white">{bottomHit}</div>
+                                <div className="text-xl text-gray-200">{bottomHit}</div>
                             </div>
                         </div>
 
@@ -164,6 +166,6 @@ export const SimulationPage: React.FC = () => {
                     </div>
                 )}
             </div>
-        </div>
+        </PageLayout>
     );
 };

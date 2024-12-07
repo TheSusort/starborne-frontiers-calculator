@@ -4,6 +4,8 @@ import { EngineeringStatsForm } from '../components/EngineeringStatsForm';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { Button, CloseIcon } from '../components/ui';
 import { SHIP_TYPES } from '../constants/shipTypes';
+import { PageLayout } from '../components/layout/PageLayout';
+import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 
 export const EngineeringStatsPage: React.FC = () => {
     const { engineeringStats, saveEngineeringStats } = useEngineeringStats();
@@ -31,30 +33,28 @@ export const EngineeringStatsPage: React.FC = () => {
     };
 
     return (
-        <div className="max-w-4xl space-y-8 text-white">
-            <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold mb-6">Engineering Stats Management</h1>
-            <Button
-                    onClick={() => {
-                        if (editingStats) {
-                            setEditingStats(undefined);
-                        }
-                        setIsFormVisible(!isFormVisible);
-                    }}
-                >
-                    {isFormVisible ? 'Hide Form' : 'Create New Engineering Stats'}
-                </Button>
-            </div>
+        <PageLayout
+            title="Engineering Stats Management"
+            action={{
+                label: isFormVisible ? 'Hide Form' : 'Create New Engineering Stats',
+                onClick: () => {
+                    if (editingStats) {
+                        setEditingStats(undefined);
+                    }
+                    setIsFormVisible(!isFormVisible);
+                }
+            }}
+        >
 
-            <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingStats ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+            <CollapsibleForm isVisible={isFormVisible || !!editingStats}>
                 <EngineeringStatsForm
                     initialStats={editingStats}
                     onSubmit={handleSubmit}
                 />
-            </div>
+            </CollapsibleForm>
 
-            <div className="mt-8">
-                <h2 className="text-xl font-semibold mb-4">Existing Engineering Stats</h2>
+            <div className="space-y-6 text-gray-200">
+                <h3 className="text-xl font-semibold mb-4">Existing Engineering Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {engineeringStats.stats.map((stat) => (
                         <div key={stat.shipType} className="bg-dark mb-4 p-4">
@@ -85,6 +85,6 @@ export const EngineeringStatsPage: React.FC = () => {
                     ))}
                 </div>
             </div>
-        </div>
+        </PageLayout>
     );
 };

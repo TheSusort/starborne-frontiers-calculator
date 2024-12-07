@@ -25,7 +25,7 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
                     >
                         {/* Header */}
                         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                            <h3 className="text-xl font-semibold text-white">
+                            <h3 className="text-xl font-semibold text-gray-200">
                                 {title}
                             </h3>
                             <Button

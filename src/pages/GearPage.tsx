@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { PageLayout } from '../components/layout/PageLayout';
+import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 import { GearPieceForm } from '../components/GearPieceForm';
 import { GearInventory } from '../components/GearInventory';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
-import { Button } from '../components/ui';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -42,48 +43,47 @@ export const GearPage: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl text-white">
-                    Loading inventory...
+            <PageLayout title="Gear Management">
+                <div className="flex items-center justify-center">
+                    <div className="animate-pulse text-xl text-gray-200">
+                        Loading inventory...
+                    </div>
                 </div>
-            </div>
+            </PageLayout>
         );
     }
 
     return (
-        <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-white">Gear Management</h1>
-                <Button
-                    onClick={() => {
-                        if (editingPiece) {
-                            setEditingPiece(undefined);
-                        }
-                        setIsFormVisible(!isFormVisible);
-                    }}
-                >
-                    {isFormVisible ? 'Hide Form' : 'Create New Gear'}
-                </Button>
-            </div>
-
+        <PageLayout
+            title="Gear Management"
+            action={{
+                label: isFormVisible ? 'Hide Form' : 'Create New Gear',
+                onClick: () => {
+                    if (editingPiece) {
+                        setEditingPiece(undefined);
+                    }
+                    setIsFormVisible(!isFormVisible);
+                }
+            }}
+        >
             {error && (
                 <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
                     {error}
                 </div>
             )}
 
-            <div className={`transition-all duration-300 ease-in-out ${isFormVisible || editingPiece ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+            <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
                 <GearPieceForm
                     onSubmit={handleSavePiece}
                     editingPiece={editingPiece}
                 />
-            </div>
+            </CollapsibleForm>
 
             <GearInventory
                 inventory={inventory}
                 onRemove={handleRemovePiece}
                 onEdit={handleEditPiece}
             />
-        </div>
+        </PageLayout>
     );
 };
