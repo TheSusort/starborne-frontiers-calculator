@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { APP_NAME, APP_VERSION } from '../constants/config';
+import { APP_NAME, APP_VERSION } from '../../constants/config';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();
@@ -23,7 +23,7 @@ export const Sidebar: React.FC = () => {
                 <div className="flex justify-between items-center">
                     <button
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        className="text-gray-300 hover:text-gray-200 focus:outline-none focus:text-gray-200 transition-colors duration-200"
+                        className="text-gray-300 hover:text-white focus:outline-none focus:text-white transition-colors duration-200"
                     >
                         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             {isMobileMenuOpen ? (
@@ -33,7 +33,7 @@ export const Sidebar: React.FC = () => {
                             )}
                         </svg>
                     </button>
-                    <h1 className="text-gray-200 text-xl font-bold">
+                    <h1 className="text-white text-xl font-bold">
                         {APP_NAME}
                     </h1>
                     <span className="text-xs text-gray-400">{APP_VERSION}</span>
@@ -57,7 +57,7 @@ export const Sidebar: React.FC = () => {
                     ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
                 `}>
                     <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
-                    <h1 className="text-gray-200 text-xl font-bold mb-8 hidden lg:block">
+                    <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
                         {APP_NAME}
                     </h1>
 

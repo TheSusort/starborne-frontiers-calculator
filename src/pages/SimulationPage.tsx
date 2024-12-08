@@ -3,7 +3,7 @@ import { useShips } from '../hooks/useShips';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
 import { Button } from '../components/ui';
-import { Modal } from '../components/Modal';
+import { Modal } from '../components/layout/Modal';
 import { ShipDisplay } from '../components/ShipDisplay';
 import { PageLayout } from '../components/layout/PageLayout';
 
@@ -59,7 +59,7 @@ export const SimulationPage: React.FC = () => {
                     <h3 className="text-xl font-bold text-gray-200">Settings</h3>
                     <div className="space-y-4">
                         <Button
-                            variant="link"
+                            variant="secondary"
                             onClick={() => setIsShipModalOpen(true)}
                             fullWidth
                         >
@@ -116,15 +116,15 @@ export const SimulationPage: React.FC = () => {
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Avg. Hit</div>
-                                <div className="text-xl text-gray-200">{averageDamage}</div>
+                                <div className="text-xl text-white">{averageDamage}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Highest Hit</div>
-                                <div className="text-xl text-gray-200">{topHit}</div>
+                                <div className="text-xl text-white">{topHit}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Lowest Hit</div>
-                                <div className="text-xl text-gray-200">{bottomHit}</div>
+                                <div className="text-xl text-white">{bottomHit}</div>
                             </div>
                         </div>
 

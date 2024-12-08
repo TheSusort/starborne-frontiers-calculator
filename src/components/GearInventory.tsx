@@ -24,7 +24,7 @@ export const GearInventory: React.FC<Props> = ({
             <h3 className="text-xl font-semibold text-gray-200">Inventory</h3>
 
             {inventory.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed">
+                <div className="text-center py-8 text-gray-400 bg-dark-lighter  border-2 border-dashed">
                     No gear pieces added yet
                 </div>
             ) : (
@@ -32,12 +32,13 @@ export const GearInventory: React.FC<Props> = ({
                     {inventory.map(piece => (
                         <div key={piece.id} className="relative flex flex-col">
                             <GearPieceDisplay gear={piece} />
-                            <div className="p-4">
+                            <div className="py-4">
                                 {mode === 'manage' ? (
                                     <div className="flex gap-2">
                                         {onEdit && (
                                             <Button
-                                                variant="primary"
+                                                className="border-dark"
+                                                variant="secondary"
                                                 fullWidth
                                                 onClick={() => onEdit(piece)}
                                             >

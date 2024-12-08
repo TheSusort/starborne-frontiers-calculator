@@ -8,7 +8,7 @@ import { useInventory } from '../hooks/useInventory';
 
 interface Props {
     ship: Ship;
-    variant?: 'full' | 'compact';
+    variant?: 'full' | 'compact' | 'extended';
     onEdit?: (ship: Ship) => void;
     onRemove?: (id: string) => void;
     selected?: boolean;
@@ -53,9 +53,8 @@ export const ShipDisplay: React.FC<Props> = memo(({
     if (variant === 'compact') {
         return (
             <div
-                className={`p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
-                    selected ? 'border-2' : ''
-                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
+                className={`p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
+                    } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                 onClick={onClick}
             >
                 <Header ship={ship} />
@@ -65,9 +64,8 @@ export const ShipDisplay: React.FC<Props> = memo(({
 
     return (
         <div
-            className={`bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
-                selected ? 'border-2' : ''
-            } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
+            className={`bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
+                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
             onClick={onClick}
         >
             {/* Ship Header */}
@@ -106,6 +104,22 @@ export const ShipDisplay: React.FC<Props> = memo(({
             <div className="p-4">
                 {/* Stats */}
                 <div className="space-y-1 text-sm">
+                    {variant === 'extended' && (
+                        <>
+                            {ship.refits && (
+                                <div className="flex justify-between text-gray-300">
+                                    <span>Refits:</span>
+                                    <span>{ship.refits?.length}</span>
+                                </div>
+                            )}
+                            {ship.implants && (
+                                <div className="flex justify-between text-gray-300 border-b pb-1 border-dark-lighter">
+                                    <span>Implants:</span>
+                                    <span>{ship.implants?.length}</span>
+                                </div>
+                            )}
+                        </>
+                    )}
                     {Object.entries(totalStats).map(([stat, value]) => {
                         return (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
                             <div key={stat} className="flex justify-between text-gray-300">

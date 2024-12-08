@@ -57,9 +57,17 @@ export const EngineeringStatsPage: React.FC = () => {
                 <h3 className="text-xl font-semibold mb-4">Existing Engineering Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {engineeringStats.stats.map((stat) => (
-                        <div key={stat.shipType} className="bg-dark mb-4 p-4">
-                            <h3 className="text-lg font-medium mb-3 ">{SHIP_TYPES[stat.shipType].name}</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        <div key={stat.shipType} className="bg-dark mb-4 border border-gray-600">
+                            <div className="flex justify-between items-center px-4 py-2 border-b border-gray-600">
+                                <h3 className="text-lg font-medium">{SHIP_TYPES[stat.shipType].name}</h3>
+                                <Button
+                                    variant="danger"
+                                    onClick={() => handleDelete(stat.shipType)}
+                                >
+                                    <CloseIcon />
+                                </Button>
+                            </div>
+                            <div className="grid grid-cols-1 px-4 py-2">
                                 {stat.stats.map((s) => (
                                     <div key={`${s.name}-${s.type}`} className="text-sm">
                                         {s.name}: +{s.value}
@@ -67,18 +75,12 @@ export const EngineeringStatsPage: React.FC = () => {
                                     </div>
                                 ))}
                             </div>
-                            <div className="flex gap-2 mt-4">
+                            <div className="flex gap-2 p-4">
                                 <Button
                                     variant="secondary"
                                     onClick={() => setEditingStats(stat)}
                                 >
                                     Edit
-                                </Button>
-                                <Button
-                                    variant="danger"
-                                    onClick={() => handleDelete(stat.shipType)}
-                                >
-                                    <CloseIcon />
                                 </Button>
                             </div>
                         </div>

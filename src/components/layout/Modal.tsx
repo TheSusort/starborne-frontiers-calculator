@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button } from './ui';
-import { CloseIcon } from './ui/CloseIcon';
+import { Button } from '../ui';
+import { CloseIcon } from '../ui/CloseIcon';
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -20,11 +20,11 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
             <div className="fixed inset-0 z-50 overflow-y-auto">
                 <div className="flex min-h-full items-center justify-center p-4">
                     <div
-                        className="relative transform overflow-hidden rounded-lg bg-dark-lighter shadow-xl transition-all w-full max-w-4xl"
+                        className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header */}
-                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <div className="px-6 py-4 border-b border-gray-600 flex justify-between items-center">
                             <h3 className="text-xl font-semibold text-gray-200">
                                 {title}
                             </h3>

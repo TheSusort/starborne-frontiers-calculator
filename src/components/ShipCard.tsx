@@ -4,9 +4,10 @@ import { GearPiece } from '../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../constants';
 import { ShipDisplay } from './ShipDisplay';
 import { GearSlot } from './GearSlot';
-import { Modal } from './Modal';
+import { Modal } from './layout/Modal';
 import { GearInventory } from './GearInventory';
 import { useGearLookup, useGearSets } from '../hooks/useGear';
+import { Button } from './ui/Button';
 
 interface Props {
     ship: Ship;
@@ -35,9 +36,15 @@ export const ShipCard: React.FC<Props> = ({
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
 
+    const handleUnequipAll = () => {
+        Object.entries(GEAR_SLOTS).forEach(([key]) => {
+            onRemoveGear(ship.id, key as GearSlotName);
+        });
+    };
+
     return (
         <div>
-            <ShipDisplay ship={ship} onEdit={onEdit} onRemove={onRemove}>
+            <ShipDisplay ship={ship} onEdit={onEdit} onRemove={onRemove} variant='extended'>
                 <div className="p-4 bg-dark">
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, slot]) => (
@@ -65,7 +72,13 @@ export const ShipCard: React.FC<Props> = ({
                             />
                         ))}
 
-
+                        <Button
+                            className='ml-auto'
+                            variant="secondary"
+                            onClick={handleUnequipAll}
+                        >
+                            Unequip All
+                        </Button>
                     </div>
                 </div>
             </ShipDisplay>

@@ -112,7 +112,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg bg-dark p-6">
+        <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
             <h2 className="text-2xl font-bold text-gray-200">
                 {editingShip ? 'Edit Ship' : 'Create New Ship'}
             </h2>
@@ -216,7 +216,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-200">Refits</h3>
                 {refits.map((refit, index) => (
-                    <div key={index} className="p-4 border border-gray-700 rounded-lg space-y-4 relative">
+                    <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
                                 variant="danger"
@@ -240,7 +240,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     <Button
                         type="button"
                         variant="primary"
-                        onClick={() => setRefits([...refits, { name: '', stats: [] }])}
+                        onClick={() => setRefits([...refits, { stats: [] }])}
                     >
                         Add Refit
                     </Button>
@@ -251,7 +251,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-200">Implants</h3>
                 {implants.map((implant, index) => (
-                    <div key={index} className="p-4 border border-gray-700 rounded-lg space-y-4 relative">
+                    <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
                                 variant="danger"
@@ -275,7 +275,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     <Button
                         type="button"
                         variant="primary"
-                        onClick={() => setImplants([...implants, { name: '', stats: [] }])}
+                        onClick={() => setImplants([...implants, { stats: [] }])}
                     >
                         Add Implant
                     </Button>

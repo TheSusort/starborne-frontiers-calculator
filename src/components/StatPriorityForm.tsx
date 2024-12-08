@@ -43,7 +43,6 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                 <Select
                     value={selectedStat}
                     onChange={(e) => setSelectedStat(e.target.value as StatName)}
-                    className="w-full bg-dark border border-dark-border rounded p-2 text-gray-200"
                     options={AVAILABLE_STATS.map(stat => ({
                         value: stat,
                         label: stat.charAt(0).toUpperCase() + stat.slice(1)
@@ -59,7 +58,6 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                     type="number"
                     value={maxLimit}
                     onChange={(e) => setMaxLimit(e.target.value)}
-                    className="w-full bg-dark border border-dark-border rounded p-2 text-gray-200"
                     placeholder="Enter maximum value"
                 />
             </div>

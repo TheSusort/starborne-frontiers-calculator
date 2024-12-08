@@ -27,11 +27,9 @@ export interface ShipType {
 }
 
 export interface Refit {
-    name: string;
     stats: Stat[];
 }
 
 export interface Implant {
-    name: string;
     stats: Stat[];
 }

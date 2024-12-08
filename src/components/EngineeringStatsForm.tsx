@@ -52,7 +52,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-dark rounded-lg p-6">
+        <form onSubmit={handleSubmit} className="bg-dark  p-6">
             <div className="mb-4">
                 <Select
                     label="Ship Type"

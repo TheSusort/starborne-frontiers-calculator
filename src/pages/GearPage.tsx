@@ -45,7 +45,7 @@ export const GearPage: React.FC = () => {
         return (
             <PageLayout title="Gear Management">
                 <div className="flex items-center justify-center">
-                    <div className="animate-pulse text-xl text-gray-200">
+                    <div className="animate-pulse text-xl text-white">
                         Loading inventory...
                     </div>
                 </div>
@@ -67,7 +67,7 @@ export const GearPage: React.FC = () => {
             }}
         >
             {error && (
-                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 ">
                     {error}
                 </div>
             )}

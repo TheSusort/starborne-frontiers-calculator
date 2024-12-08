@@ -22,7 +22,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
             <h3 className="text-xl font-semibold text-gray-200">Ships</h3>
 
             {ships.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-dark-lighter rounded-lg border-2 border-dashed">
+                <div className="text-center py-8 text-gray-400 bg-dark-lighter  border-2 border-dashed">
                     No ships created yet
                 </div>
             ) : (
