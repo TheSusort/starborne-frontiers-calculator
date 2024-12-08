@@ -215,7 +215,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             {/* Refits Section */}
             <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-200">Refits</h3>
-                {refits.map((refit, index) => (
+                {refits?.map((refit, index) => (
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
@@ -236,7 +236,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         />
                     </div>
                 ))}
-                {refits.length < 6 && (
+                {refits?.length < 6 && (
                     <Button
                         type="button"
                         variant="primary"
@@ -250,7 +250,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             {/* Implants Section */}
             <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-200">Implants</h3>
-                {implants.map((implant, index) => (
+                {implants?.map((implant, index) => (
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
@@ -271,7 +271,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         />
                     </div>
                 ))}
-                {implants.length < 5 && (
+                {implants?.length < 5 && (
                     <Button
                         type="button"
                         variant="primary"

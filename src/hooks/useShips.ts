@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Ship } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
-import { calculateTotalStats } from '../utils/statsCalculator';
-import { useInventory } from './useInventory';
 const STORAGE_KEY = 'ships';
 
 export const useShips = () => {
@@ -10,7 +8,6 @@ export const useShips = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
-    const { getGearPiece } = useInventory();
 
     // Load ships from localStorage on mount
     useEffect(() => {
@@ -55,8 +52,7 @@ export const useShips = () => {
                     equipment: {
                         ...ship.equipment,
                         [slot]: gearId
-                    },
-                    stats: calculateTotalStats(ship.baseStats, { ...ship.equipment, [slot]: gearId }, getGearPiece)
+                    }
                 };
             }
             return ship;
@@ -70,8 +66,7 @@ export const useShips = () => {
                 delete newEquipment[slot];
                 return {
                     ...ship,
-                    equipment: newEquipment,
-                    stats: calculateTotalStats(ship.baseStats, newEquipment, getGearPiece)
+                    equipment: newEquipment
                 };
             }
             return ship;
@@ -102,11 +97,10 @@ export const useShips = () => {
     const updateShip = useCallback((updatedShip: Ship) => {
         setShips(prev => prev.map(ship =>
             ship.id === updatedShip.id ? {
-                ...updatedShip,
-                stats: calculateTotalStats(updatedShip.baseStats, updatedShip.equipment, getGearPiece)
+                ...updatedShip
             } : ship
         ));
-    }, [getGearPiece]);
+    }, []);
 
     return {
         ships,

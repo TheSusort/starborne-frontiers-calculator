@@ -6,15 +6,16 @@ import { GearPage } from './pages/GearPage';
 import { SimulationPage } from './pages/SimulationPage';
 import { AutogearPage } from './pages/AutogearPage';
 import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
+import { AUTHOR } from './constants/config';
 
 const App: React.FC = () => {
     return (
         <Router>
             <div className="flex">
                 <Sidebar />
-                <div className="flex-1 lg:ml-64 bg-dark-lighter ">
-                    <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0">
-                        <div className="max-w-7xl mx-auto">
+                <div className="flex-1 lg:ml-64 bg-dark-lighter">
+                    <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
+                        <div className="max-w-7xl mx-auto w-full flex-grow">
                             <Routes>
                                 <Route path="/ships" element={<ShipsPage />} />
                                 <Route path="/gear" element={<GearPage />} />
@@ -24,6 +25,10 @@ const App: React.FC = () => {
                                 <Route path="/" element={<Navigate to="/ships" replace />} />
                             </Routes>
                         </div>
+
+                        <footer className="text-center text-xs text-gray-400 mt-auto">
+                            Made with ❤️ by {AUTHOR}
+                        </footer>
                     </div>
                 </div>
             </div>

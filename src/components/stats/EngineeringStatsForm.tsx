@@ -68,7 +68,6 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
                 onChange={handleStatChange}
                 maxStats={5}
                 allowedStats={getAllAllowedStats()}
-                defaultStatType="flat"
             />
 
             <Button

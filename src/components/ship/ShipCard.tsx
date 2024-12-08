@@ -62,23 +62,28 @@ export const ShipCard: React.FC<Props> = ({
                     </div>
 
                     <div className="flex items-center gap-2 pt-3">
-                        <span className="text-xs text-gray-400">Gear Sets:</span>
-                        {activeSets.map((setName, index) => (
-                            <img
-                                key={`${setName}-${index}`}
-                                src={GEAR_SETS[setName].iconUrl}
-                                alt={setName}
-                                className="w-5"
-                            />
-                        ))}
-
-                        <Button
-                            className='ml-auto'
-                            variant="secondary"
-                            onClick={handleUnequipAll}
-                        >
-                            Unequip All
-                        </Button>
+                        {activeSets && (
+                            <>
+                                <span className="text-xs text-gray-400">Gear Sets:</span>
+                                {activeSets.map((setName, index) => (
+                                    <img
+                                        key={`${setName}-${index}`}
+                                        src={GEAR_SETS[setName].iconUrl}
+                                        alt={setName}
+                                        className="w-5"
+                                    />
+                                ))}
+                            </>
+                        )}
+                        {Object.values(ship.equipment) && (
+                            <Button
+                                className='ml-auto'
+                                variant="secondary"
+                                onClick={handleUnequipAll}
+                            >
+                                Unequip All
+                            </Button>
+                        )}
                     </div>
                 </div>
             </ShipDisplay>

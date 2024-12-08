@@ -13,6 +13,7 @@ import { GearPiece } from '../types/gear';
 import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { PageLayout } from '../components/layout/PageLayout';
+import { useEngineeringStats } from '../hooks/useEngineeringStats';
 
 export const AutogearPage: React.FC = () => {
     const { ships, getShipById, updateShip } = useShips();
@@ -22,6 +23,7 @@ export const AutogearPage: React.FC = () => {
     const [priorities, setPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -40,7 +42,8 @@ export const AutogearPage: React.FC = () => {
             selectedShip,
             priorities,
             inventory,
-            getGearPiece
+            getGearPiece,
+            getEngineeringStatsForShipType
         );
 
         setSuggestions(suggestions);
@@ -74,7 +77,8 @@ export const AutogearPage: React.FC = () => {
             selectedShip.equipment,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants
+            selectedShip.implants,
+            getEngineeringStatsForShipType(selectedShip.type)
         );
     };
 
@@ -92,7 +96,8 @@ export const AutogearPage: React.FC = () => {
             suggestedEquipment,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants
+            selectedShip.implants,
+            getEngineeringStatsForShipType(selectedShip.type)
         );
     };
 

@@ -21,14 +21,12 @@ export const EngineeringStatsPage: React.FC = () => {
     };
 
     const handleDelete = (shipType: string) => {
-        if (window.confirm('Are you sure you want to delete these engineering stats?')) {
-            const newEngStats: EngineeringStats = {
-                stats: engineeringStats.stats.filter(s => s.shipType !== shipType)
-            };
-            saveEngineeringStats(newEngStats);
-            if (editingStats?.shipType === shipType) {
-                setEditingStats(undefined);
-            }
+        const newEngStats: EngineeringStats = {
+            stats: engineeringStats.stats.filter(s => s.shipType !== shipType)
+        };
+        saveEngineeringStats(newEngStats);
+        if (editingStats?.shipType === shipType) {
+            setEditingStats(undefined);
         }
     };
 

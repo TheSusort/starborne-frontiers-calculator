@@ -189,7 +189,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     stats={subStats}
                     onChange={setSubStats}
                     maxStats={4}
-                    defaultStatType="flat"
                     excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
                 />
             </div>

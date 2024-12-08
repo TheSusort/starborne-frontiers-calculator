@@ -5,6 +5,7 @@ import { Button } from '../ui';
 import { CloseIcon } from '../ui/CloseIcon';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 
 interface Props {
     ship: Ship;
@@ -48,7 +49,8 @@ export const ShipDisplay: React.FC<Props> = memo(({
     children
 }) => {
     const { getGearPiece } = useInventory();
-    const totalStats = useMemo(() => calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants), [ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants]);
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const totalStats = useMemo(() => calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants, getEngineeringStatsForShipType(ship.type)), [ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants, getEngineeringStatsForShipType, ship.type]);
 
     if (variant === 'compact') {
         return (

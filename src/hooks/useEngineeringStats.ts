@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { EngineeringStats, StatName, StatType } from '../types/stats';
 import { STATS } from '../constants/stats';
+import { ShipTypeName } from '../constants/shipTypes';
 
 const STORAGE_KEY = 'engineeringStats';
 
@@ -46,10 +47,15 @@ export const useEngineeringStats = () => {
         return Object.fromEntries(statsEntries) as Record<StatName, { allowedTypes: StatType[] | undefined }>;
     };
 
+    const getEngineeringStatsForShipType = (shipType: ShipTypeName) => {
+        return engineeringStats.stats.find(stat => stat.shipType === shipType);
+    };
+
     return {
         engineeringStats,
         saveEngineeringStats,
         deleteEngineeringStats,
-        getAllAllowedStats
+        getAllAllowedStats,
+        getEngineeringStatsForShipType
     };
 };

@@ -6,7 +6,7 @@ import { Button } from '../components/ui';
 import { Modal } from '../components/layout/Modal';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { PageLayout } from '../components/layout/PageLayout';
-
+import { useEngineeringStats } from '../hooks/useEngineeringStats';
 interface SimulationResult {
     damage: number;
     isCrit: boolean;
@@ -19,6 +19,7 @@ export const SimulationPage: React.FC = () => {
     const [isResultsExpanded, setIsResultsExpanded] = useState(false);
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -26,7 +27,7 @@ export const SimulationPage: React.FC = () => {
         const ship = getShipById(selectedShipId);
         if (!ship) return;
 
-        const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants);
+        const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants, getEngineeringStatsForShipType(ship.type));
         const results: SimulationResult[] = [];
 
         for (let i = 0; i < 100; i++) {
