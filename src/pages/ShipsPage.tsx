@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ShipForm } from '../components/ShipForm';
-import { ShipInventory } from '../components/ShipInventory';
+import { ShipForm } from '../components/ship/ShipForm';
+import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/layout/PageLayout';

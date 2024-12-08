@@ -4,7 +4,7 @@ import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
 import { Button } from '../components/ui';
 import { Modal } from '../components/layout/Modal';
-import { ShipDisplay } from '../components/ShipDisplay';
+import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { PageLayout } from '../components/layout/PageLayout';
 
 interface SimulationResult {

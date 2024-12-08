@@ -1,8 +1,8 @@
 import React from 'react';
-import { GearPiece } from '../types/gear';
+import { GearPiece } from '../../types/gear';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button } from './ui';
-import { CloseIcon } from './ui/CloseIcon';
+import { Button } from '../ui';
+import { CloseIcon } from '../ui/CloseIcon';
 
 interface Props {
     inventory: GearPiece[];

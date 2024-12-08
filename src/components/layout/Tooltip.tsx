@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { GearPiece } from '../types/gear';
-import { GearPieceDisplay } from './GearPieceDisplay';
 
 interface Props {
-    gear: GearPiece;
     isVisible: boolean;
+    children: React.ReactNode;
 }
 
-export const Tooltip: React.FC<Props> = ({ gear, isVisible }) => {
+export const Tooltip: React.FC<Props> = ({ isVisible, children }) => {
     const [position, setPosition] = useState<'top' | 'bottom'>('bottom');
     const [xOffset, setXOffset] = useState(0);
     const tooltipRef = useRef<HTMLDivElement>(null);
@@ -42,18 +40,18 @@ export const Tooltip: React.FC<Props> = ({ gear, isVisible }) => {
     if (!isVisible) return null;
 
     return (
-        <div 
+        <div
             ref={tooltipRef}
             className={`
                 absolute z-50 w-64
                 ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
                 left-1/2 -translate-x-1/2
             `}
-            style={{ 
-                transform: `translateX(calc(-50% + ${xOffset}px))` 
+            style={{
+                transform: `translateX(calc(-50% + ${xOffset}px))`
             }}
         >
-            <GearPieceDisplay gear={gear} />
+            {children}
         </div>
     );
-}; 
+};

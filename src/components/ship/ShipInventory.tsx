@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Ship } from '../types/ship';
-import { GearPiece } from '../types/gear';
-import { useInventory } from '../hooks/useInventory';
+import { Ship } from '../../types/ship';
+import { GearPiece } from '../../types/gear';
+import { useInventory } from '../../hooks/useInventory';
 import { ShipCard } from './ShipCard';
-import { GearSlotName } from '../constants';
+import { GearSlotName } from '../../constants';
 interface Props {
     ships: Ship[];
     onRemove: (id: string) => void;

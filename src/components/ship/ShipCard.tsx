@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Ship } from '../types/ship';
-import { GearPiece } from '../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../constants';
+import { Ship } from '../../types/ship';
+import { GearPiece } from '../../types/gear';
+import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../../constants';
 import { ShipDisplay } from './ShipDisplay';
-import { GearSlot } from './GearSlot';
-import { Modal } from './layout/Modal';
-import { GearInventory } from './GearInventory';
-import { useGearLookup, useGearSets } from '../hooks/useGear';
-import { Button } from './ui/Button';
+import { GearSlot } from '../gear/GearSlot';
+import { Modal } from '../layout/Modal';
+import { GearInventory } from '../gear/GearInventory';
+import { useGearLookup, useGearSets } from '../../hooks/useGear';
+import { Button } from '../ui/Button';
 
 interface Props {
     ship: Ship;

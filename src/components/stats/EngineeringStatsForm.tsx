@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { EngineeringStat, Stat } from '../types/stats';
-import { ShipTypeName, SHIP_TYPES } from '../constants';
+import { EngineeringStat, Stat } from '../../types/stats';
+import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { StatModifierInput } from './StatModifierInput';
-import { Button, Select } from './ui';
-import { useEngineeringStats } from '../hooks/useEngineeringStats';
+import { Button, Select } from '../ui';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 
 interface EngineeringStatsFormProps {
     initialStats?: EngineeringStat;

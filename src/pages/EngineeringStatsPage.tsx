@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { EngineeringStats, EngineeringStat } from '../types/stats';
-import { EngineeringStatsForm } from '../components/EngineeringStatsForm';
+import { EngineeringStatsForm } from '../components/stats/EngineeringStatsForm';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { Button, CloseIcon } from '../components/ui';
 import { SHIP_TYPES } from '../constants/shipTypes';
@@ -69,9 +69,11 @@ export const EngineeringStatsPage: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-1 px-4 py-2">
                                 {stat.stats.map((s) => (
-                                    <div key={`${s.name}-${s.type}`} className="text-sm">
-                                        {s.name}: +{s.value}
-                                        {s.type === 'percentage' ? '%' : ''}
+                                    <div key={`${s.name}-${s.type}`} className="text-sm flex justify-between">
+                                        <span>{s.name}:</span>
+                                        <span>
+                                            +{s.value}{s.type === 'percentage' ? '%' : ''}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

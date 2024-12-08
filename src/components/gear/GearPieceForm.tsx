@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { GearPiece } from '../types/gear';
-import { StatName, StatType, Stat } from '../types/stats';
-import { GearSetName, GEAR_SETS, RARITIES, RarityName, GEAR_SLOTS, GearSlotName } from '../constants';
-import { Button, Input, Select } from './ui';
-import { STATS, SLOT_MAIN_STATS } from '../constants/stats';
-import { StatModifierInput } from './StatModifierInput';
+import { GearPiece } from '../../types/gear';
+import { StatName, StatType, Stat } from '../../types/stats';
+import { GearSetName, GEAR_SETS, RARITIES, RarityName, GEAR_SLOTS, GearSlotName } from '../../constants';
+import { Button, Input, Select } from '../ui';
+import { STATS, SLOT_MAIN_STATS } from '../../constants/stats';
+import { StatModifierInput } from '../stats/StatModifierInput';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
