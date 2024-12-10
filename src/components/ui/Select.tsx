@@ -4,6 +4,9 @@ interface Props extends React.SelectHTMLAttributes<HTMLSelectElement> {
     label?: string;
     error?: string;
     options: { value: string; label: string }[];
+    className?: string;
+    noDefaultSelection?: boolean;
+    defaultOption?: string;
 }
 
 export const Select: React.FC<Props> = ({
@@ -11,6 +14,8 @@ export const Select: React.FC<Props> = ({
     error,
     options,
     className = '',
+    noDefaultSelection = false,
+    defaultOption = 'Select',
     ...props
 }) => {
     return (
@@ -30,6 +35,9 @@ export const Select: React.FC<Props> = ({
                 `}
                 {...props}
             >
+                {noDefaultSelection && (
+                    <option value="">{defaultOption}</option>
+                )}
                 {options.map(option => (
                     <option key={option.value} value={option.value}>
                         {option.label}

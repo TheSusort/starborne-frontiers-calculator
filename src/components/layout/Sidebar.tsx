@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { APP_NAME, APP_VERSION } from '../../constants/config';
+import { Offcanvas } from '../ui/Offcanvas';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();
@@ -15,6 +16,36 @@ export const Sidebar: React.FC = () => {
         { path: '/simulation', label: 'Simulation' },
         { path: '/autogear', label: 'Autogear' },
     ];
+
+    const SidebarContent = () => (
+        <div className="space-y-2">
+            <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
+            <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
+                {APP_NAME}
+            </h1>
+
+            <nav className="space-y-2">
+                {navigationLinks.map(({ path, label }) => (
+                    <Link
+                        key={path}
+                        to={path}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`
+                            block px-4 py-2
+                            transition-all duration-200 ease-in-out
+                            transform hover:scale-105
+                            ${isActive(path)
+                                ? 'bg-primary hover:bg-primary-hover'
+                                : 'text-gray-300 hover:bg-dark-border'
+                            }
+                        `}
+                    >
+                        {label}
+                    </Link>
+                ))}
+            </nav>
+        </div>
+    );
 
     return (
         <>
@@ -40,62 +71,23 @@ export const Sidebar: React.FC = () => {
                 </div>
             </div>
 
-            {/* Sidebar for desktop */}
-            <div
-                className={`
-                    fixed top-10 lg:top-0 left-0 h-full bg-dark z-20
-                    w-64
-                    transform transition-all duration-300 ease-in-out
-                    lg:translate-x-0
-                    ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-                    lg:block
-                `}
-            >
-                <div className={`
-                    p-4
-                    transition-opacity duration-300 ease-in-out
-                    ${isMobileMenuOpen ? 'opacity-100' : 'lg:opacity-100 opacity-0'}
-                `}>
-                    <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
-                    <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
-                        {APP_NAME}
-                    </h1>
-
-                    <nav className="space-y-2">
-                        {navigationLinks.map(({ path, label }) => (
-                            <Link
-                                key={path}
-                                to={path}
-                                onClick={() => setIsMobileMenuOpen(false)}
-                                className={`
-                                    block px-4 py-2
-                                    transition-all duration-200 ease-in-out
-                                    transform hover:scale-105
-                                    ${isActive(path)
-                                        ? 'bg-primary hover:bg-primary-hover'
-                                        : 'text-gray-300 hover:bg-dark-border'
-                                    }
-                                `}
-                            >
-                                {label}
-                            </Link>
-                        ))}
-                    </nav>
+            {/* Desktop Sidebar */}
+            <div className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20">
+                <div className="p-4">
+                    <SidebarContent />
                 </div>
             </div>
 
-            {/* Overlay for mobile */}
-            <div
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`
-                    fixed inset-0 bg-black lg:hidden
-                    transition-opacity duration-300 ease-in-out z-10
-                    ${isMobileMenuOpen
-                        ? 'opacity-50 pointer-events-auto'
-                        : 'opacity-0 pointer-events-none'
-                    }
-                `}
-            />
+            {/* Mobile Offcanvas */}
+            <Offcanvas
+                isOpen={isMobileMenuOpen}
+                onClose={() => setIsMobileMenuOpen(false)}
+                title={APP_NAME}
+                position="left"
+                width="w-64"
+            >
+                <SidebarContent />
+            </Offcanvas>
         </>
     );
 };

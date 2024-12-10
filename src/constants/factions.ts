@@ -1,8 +1,8 @@
 import { Faction } from "../types/ship";
 
 export const FACTIONS: Record<string, Faction> = {
-    ATLAS: {
-        name: 'Atlas',
+    ATLAS_SYNDICATE: {
+        name: 'Atlas Syndicate',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426145023492116.webp'
     },
     BINDERBURG: {
@@ -42,5 +42,5 @@ export const FACTIONS: Record<string, Faction> = {
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426142423031818.webp'
     }
 } satisfies Record<string, Faction>;
- 
+
 export type FactionName = keyof typeof FACTIONS;

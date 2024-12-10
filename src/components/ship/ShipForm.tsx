@@ -26,9 +26,9 @@ const initialBaseStats: BaseStats = {
 export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [name, setName] = useState(editingShip?.name || '');
     const [baseStats, setBaseStats] = useState<BaseStats>(editingShip?.baseStats || initialBaseStats);
-    const [faction, setFaction] = useState(editingShip?.faction || FACTIONS['ATLAS'].name);
-    const [type, setType] = useState(editingShip?.type || SHIP_TYPES.ATTACKER.name);
-    const [rarity, setRarity] = useState(editingShip?.rarity || 'common');
+    const [faction, setFaction] = useState(editingShip?.faction || '');
+    const [type, setType] = useState(editingShip?.type || '');
+    const [rarity, setRarity] = useState(editingShip?.rarity || '');
     const [refits, setRefits] = useState(editingShip?.refits || []);
     const [implants, setImplants] = useState(editingShip?.implants || []);
     const [isLoading, setIsLoading] = useState(false);
@@ -170,6 +170,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     onChange={(e) => setFaction(e.target.value)}
                     required
                     options={factionOptions}
+                    noDefaultSelection
+                    defaultOption="Select Faction"
                 />
 
                 <Select
@@ -178,6 +180,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     onChange={(e) => setType(e.target.value)}
                     required
                     options={shipTypeOptions}
+                    noDefaultSelection
+                    defaultOption="Select Type"
                 />
             </div>
 
@@ -188,6 +192,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 onChange={(e) => setRarity(e.target.value as RarityName)}
                 required
                 options={rarityOptions}
+                noDefaultSelection
+                defaultOption="Select Rarity"
             />
 
             {/* Base Stats */}
