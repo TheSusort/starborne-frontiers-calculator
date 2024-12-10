@@ -56,6 +56,7 @@ export const GearPage: React.FC = () => {
     return (
         <PageLayout
             title="Gear Management"
+            description="Manage your gear and its stats."
             action={{
                 label: isFormVisible ? 'Hide Form' : 'Create New Gear',
                 onClick: () => {

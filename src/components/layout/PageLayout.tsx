@@ -3,6 +3,7 @@ import { Button } from '../ui';
 
 interface PageLayoutProps {
     title: string;
+    description?: string;
     children: React.ReactNode;
     action?: {
         label: string;
@@ -13,13 +14,17 @@ interface PageLayoutProps {
 
 export const PageLayout: React.FC<PageLayoutProps> = ({
     title,
+    description,
     children,
     action
 }) => {
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-gray-200">{title}</h1>
+                <div className="">
+                    <h1 className="text-2xl font-bold text-gray-200">{title}</h1>
+                    {description && <p className="text-sm text-gray-400">{description}</p>}
+                </div>
                 {action && (
                     <Button
                         variant={action.variant || 'primary'}

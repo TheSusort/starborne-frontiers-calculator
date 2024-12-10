@@ -6,7 +6,6 @@ import { Modal } from '../components/layout/Modal';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { StatPriorityForm } from '../components/stats/StatPriorityForm';
 import { GearSuggestion, StatPriority } from '../types/autogear';
-import { findOptimalGear } from '../utils/autogearCalculator';
 import { GearSlot } from '../components/gear/GearSlot';
 import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
 import { GearPiece } from '../types/gear';
@@ -14,6 +13,8 @@ import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { PageLayout } from '../components/layout/PageLayout';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
+import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../utils/autogear/AutogearStrategy';
+import { getAutogearStrategy } from '../utils/autogear/getStrategy';
 
 export const AutogearPage: React.FC = () => {
     const { ships, getShipById, updateShip } = useShips();
@@ -24,6 +25,7 @@ export const AutogearPage: React.FC = () => {
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const [selectedAlgorithm, setSelectedAlgorithm] = useState<AutogearAlgorithm>(AutogearAlgorithm.BeamSearch);
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -38,7 +40,8 @@ export const AutogearPage: React.FC = () => {
     const handleAutogear = () => {
         if (!selectedShip) return;
 
-        const suggestions = findOptimalGear(
+        const strategy = getAutogearStrategy(selectedAlgorithm);
+        const suggestions = strategy.findOptimalGear(
             selectedShip,
             priorities,
             inventory,
@@ -107,6 +110,7 @@ export const AutogearPage: React.FC = () => {
     return (
         <PageLayout
             title="Autogear"
+            description="Find the best gear for your ship."
         >
 
             {currentStats && suggestedStats && suggestions.length > 0 && (
@@ -187,6 +191,24 @@ export const AutogearPage: React.FC = () => {
                             ))}
                         </div>
                     )}
+
+                    <div className="space-y-2 p-4 bg-dark">
+                        <span className="text-gray-300 text-sm">Algorithm</span>
+                        <select
+                            className="w-full p-2 bg-dark border border-gray-700 rounded text-gray-200"
+                            value={selectedAlgorithm}
+                            onChange={(e) => setSelectedAlgorithm(e.target.value as AutogearAlgorithm)}
+                    >
+                        {Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name, description }]) => (
+                            <option key={key} value={key}>
+                                {name}
+                            </option>
+                            ))}
+                        </select>
+                        <p className="text-sm text-gray-400">
+                            {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
+                        </p>
+                    </div>
 
                     <Button
                         variant="primary"

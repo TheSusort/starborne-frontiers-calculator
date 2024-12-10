@@ -34,6 +34,7 @@ export const ShipsPage: React.FC = () => {
     return (
         <PageLayout
             title="Ship Management"
+            description="Manage your ships and their equipment."
             action={{
                 label: isFormVisible ? 'Hide Form' : 'Create New Ship',
                 onClick: () => {

@@ -12,6 +12,8 @@ interface SimulationResult {
     isCrit: boolean;
 }
 
+const SIMULATION_ITERATIONS = 500;
+
 export const SimulationPage: React.FC = () => {
     const { ships, getShipById } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
@@ -30,7 +32,7 @@ export const SimulationPage: React.FC = () => {
         const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants, getEngineeringStatsForShipType(ship.type));
         const results: SimulationResult[] = [];
 
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < SIMULATION_ITERATIONS; i++) {
             const isCrit = Math.random() * 100 < (stats.crit || 0);
             let damage = stats.attack;
 
@@ -54,6 +56,7 @@ export const SimulationPage: React.FC = () => {
     return (
         <PageLayout
             title="Attack Simulation"
+            description="Simulate attacks with your ships and gear."
         >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-6">
@@ -103,11 +106,11 @@ export const SimulationPage: React.FC = () => {
                         disabled={!selectedShipId}
                         fullWidth
                     >
-                        Run 100 Simulations
+                        Run {SIMULATION_ITERATIONS} Simulation Attacks
                     </Button>
 
                     <p className="text-gray-400 text-sm">
-                        This simulates 100 attacks with the selected ship and gear. It will only use 100% damage hits, no ship specific attacks are used.
+                        This simulates {SIMULATION_ITERATIONS} attacks with the selected ship and gear. It will only use 100% damage hits, no ship specific attacks are used.
                     </p>
                 </div>
 
