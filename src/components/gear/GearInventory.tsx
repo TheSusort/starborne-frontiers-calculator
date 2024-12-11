@@ -3,8 +3,9 @@ import { GearPiece } from '../../types/gear';
 import { GearSetName, GearSlotName, GEAR_SETS, GEAR_SLOTS } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button, Select } from '../ui';
-import { CloseIcon } from '../ui/CloseIcon';
-import { Offcanvas } from '../ui/Offcanvas';
+import { CloseIcon } from '../ui/icons/CloseIcon';
+import { Offcanvas } from '../layout/Offcanvas';
+import { FilterIcon } from '../ui/icons/FilterIcon';
 
 interface Props {
     inventory: GearPiece[];
@@ -51,7 +52,7 @@ export const GearInventory: React.FC<Props> = ({
                         Inventory ({filteredInventory.length})
                     </h3>
                     <Button variant="secondary" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-filter"><path d="M21 21H3" /><path d="M10 6H21" /><path d="M15 12H21" /><path d="M8 18H21" /></svg>
+                        <FilterIcon />
                     </Button>
                 </div>
             </div>

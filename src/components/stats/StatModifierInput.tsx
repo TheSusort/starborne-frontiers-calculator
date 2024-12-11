@@ -1,7 +1,7 @@
 import React from 'react';
 import { Select, Input, Button } from '../ui';
 import { Stat, StatName, StatType } from '../../types/stats';
-import { CloseIcon } from '../ui/CloseIcon';
+import { CloseIcon } from '../ui/icons/CloseIcon';
 import { STATS } from '../../constants/stats';
 
 interface Props {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from './Button';
-import { CloseIcon } from './CloseIcon';
+import { Button } from '../ui/Button';
+import { CloseIcon } from '../ui/icons/CloseIcon';
 
 interface Props {
     isOpen: boolean;
@@ -26,10 +26,15 @@ export const Offcanvas: React.FC<Props> = ({
     useEffect(() => {
         if (isOpen) {
             setShouldRender(true);
-            setIsAnimating(true);
+            // Small delay to ensure DOM is ready before animation
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    setIsAnimating(true);
+                });
+            });
         } else {
             setIsAnimating(false);
-            const timer = setTimeout(() => setShouldRender(false), 300); // Match transition duration
+            const timer = setTimeout(() => setShouldRender(false), 300);
             return () => clearTimeout(timer);
         }
     }, [isOpen]);
@@ -62,6 +67,7 @@ export const Offcanvas: React.FC<Props> = ({
                     transform transition-transform duration-300 ease-in-out
                     ${translateClass}
                 `}
+                onClick={e => e.stopPropagation()}
             >
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-semibold text-gray-200">{title}</h3>

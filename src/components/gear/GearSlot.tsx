@@ -3,7 +3,7 @@ import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { memo } from 'react';
 import { Button } from '../ui/Button';
 import { Tooltip } from '../layout/Tooltip';
-import { CloseIcon } from '../ui/CloseIcon';
+import { CloseIcon } from '../ui/icons/CloseIcon';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
 interface GearSlotProps {
