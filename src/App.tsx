@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar';
 import { ShipsPage } from './pages/ShipsPage';
@@ -7,8 +7,33 @@ import { SimulationPage } from './pages/SimulationPage';
 import { AutogearPage } from './pages/AutogearPage';
 import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
 import { AUTHOR } from './constants/config';
+import { ChangelogModal } from './components/changelog/ChangelogModal';
+import { CHANGELOG, CURRENT_VERSION } from './constants/changelog';
+import { ChangelogState } from './types/changelog';
 
 const App: React.FC = () => {
+    const [showChangelog, setShowChangelog] = useState(false);
+    const [lastSeenVersion, setLastSeenVersion] = useState(CURRENT_VERSION);
+
+    useEffect(() => {
+        const savedState = localStorage.getItem('changelogState');
+        const currentState: ChangelogState = savedState
+            ? JSON.parse(savedState)
+            : { lastSeenVersion: '0.0.0' };
+
+        if (currentState.lastSeenVersion !== CURRENT_VERSION) {
+            setShowChangelog(true);
+            setLastSeenVersion(currentState.lastSeenVersion);
+        }
+    }, []);
+
+    const handleCloseChangelog = () => {
+        setShowChangelog(false);
+        localStorage.setItem('changelogState', JSON.stringify({
+            lastSeenVersion: CURRENT_VERSION
+        }));
+    };
+
     return (
         <Router>
             <div className="flex">
@@ -31,6 +56,12 @@ const App: React.FC = () => {
                         </footer>
                     </div>
                 </div>
+                <ChangelogModal
+                    isOpen={showChangelog}
+                    onClose={handleCloseChangelog}
+                    entries={CHANGELOG}
+                    lastSeenVersion={lastSeenVersion}
+                />
             </div>
         </Router>
     );
