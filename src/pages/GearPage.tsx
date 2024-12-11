@@ -58,7 +58,7 @@ export const GearPage: React.FC = () => {
             title="Gear Management"
             description="Manage your gear and its stats."
             action={{
-                label: isFormVisible ? 'Hide Form' : 'Create New Gear',
+                label: isFormVisible ? 'Hide Form' : 'Create',
                 onClick: () => {
                     if (editingPiece) {
                         setEditingPiece(undefined);

@@ -2,10 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
 import { GearSetName, GearSlotName, GEAR_SETS, GEAR_SLOTS } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button, Select } from '../ui';
+import { Button } from '../ui';
 import { CloseIcon } from '../ui/icons/CloseIcon';
-import { Offcanvas } from '../layout/Offcanvas';
-import { FilterIcon } from '../ui/icons/FilterIcon';
+import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 
 interface Props {
     inventory: GearPiece[];
@@ -26,6 +25,13 @@ export const GearInventory: React.FC<Props> = ({
     const [selectedType, setSelectedType] = useState<GearSlotName | ''>('');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+    const hasActiveFilters = Boolean(selectedSet || selectedType);
+
+    const clearFilters = () => {
+        setSelectedSet('');
+        setSelectedType('');
+    };
+
     const filteredInventory = useMemo(() => {
         return inventory.filter(piece => {
             const matchesSet = !selectedSet || piece.setBonus === selectedSet;
@@ -44,67 +50,38 @@ export const GearInventory: React.FC<Props> = ({
         return Array.from(types);
     }, [inventory]);
 
+    const filters: FilterConfig[] = [
+        {
+            id: 'set',
+            label: 'Set',
+            value: selectedSet,
+            onChange: (value) => setSelectedSet(value as GearSetName),
+            options: uniqueSets.map(set => ({
+                value: set,
+                label: GEAR_SETS[set].name
+            }))
+        },
+        {
+            id: 'type',
+            label: 'Type',
+            value: selectedType,
+            onChange: (value) => setSelectedType(value as GearSlotName),
+            options: uniqueTypes.map(type => ({
+                value: type,
+                label: GEAR_SLOTS[type].label
+            }))
+        }
+    ];
+
     return (
         <div className="space-y-6">
-            <div className="flex flex-col space-y-4">
-                <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-semibold text-gray-200">
-                        Inventory ({filteredInventory.length})
-                    </h3>
-                    <Button variant="secondary" onClick={() => setIsFilterOpen(!isFilterOpen)}>
-                        <FilterIcon />
-                    </Button>
-                </div>
-            </div>
-
-            <Offcanvas
+            <FilterPanel
+                filters={filters}
                 isOpen={isFilterOpen}
-                onClose={() => setIsFilterOpen(false)}
-                title="Filters"
-            >
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Set
-                        </label>
-                        <Select
-                            value={selectedSet}
-                            onChange={(e) => setSelectedSet(e.target.value as GearSetName)}
-                            className="w-full"
-                            options={uniqueSets.map(set => ({ value: set, label: GEAR_SETS[set].name }))}
-                            noDefaultSelection
-                            defaultOption="All Sets"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Type
-                        </label>
-                        <Select
-                            value={selectedType}
-                            onChange={(e) => setSelectedType(e.target.value as GearSlotName)}
-                            className="w-full"
-                            options={uniqueTypes.map(type => ({ value: type, label: GEAR_SLOTS[type].label }))}
-                            noDefaultSelection
-                            defaultOption="All Types"
-                        />
-                    </div>
-
-                    <div className="pt-4">
-                        <Button
-                            variant="secondary"
-                            fullWidth
-                            onClick={() => {
-                                setSelectedSet('');
-                                setSelectedType('');
-                            }}
-                        >
-                            Clear Filters
-                        </Button>
-                    </div>
-                </div>
-            </Offcanvas>
+                onToggle={() => setIsFilterOpen(!isFilterOpen)}
+                onClear={clearFilters}
+                hasActiveFilters={hasActiveFilters}
+            />
 
             {
                 filteredInventory.length === 0 ? (

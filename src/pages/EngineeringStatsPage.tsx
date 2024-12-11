@@ -35,7 +35,7 @@ export const EngineeringStatsPage: React.FC = () => {
             title="Engineering Stats Management"
             description="Manage your engineering stats."
             action={{
-                label: isFormVisible ? 'Hide Form' : 'Create New Engineering Stats',
+                label: isFormVisible ? 'Hide Form' : 'Create',
                 onClick: () => {
                     if (editingStats) {
                         setEditingStats(undefined);

@@ -36,7 +36,7 @@ export const ShipsPage: React.FC = () => {
             title="Ship Management"
             description="Manage your ships and their equipment."
             action={{
-                label: isFormVisible ? 'Hide Form' : 'Create New Ship',
+                label: isFormVisible ? 'Hide Form' : 'Create',
                 onClick: () => {
                     if (editingShip) {
                             setEditingShip(undefined);
