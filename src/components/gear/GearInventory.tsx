@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GearSetName, GearSlotName, GEAR_SETS, GEAR_SLOTS } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button } from '../ui';
 import { CloseIcon } from '../ui/icons/CloseIcon';
@@ -21,24 +21,19 @@ export const GearInventory: React.FC<Props> = ({
     onEquip,
     mode = 'manage'
 }) => {
-    const [selectedSet, setSelectedSet] = useState<GearSetName | ''>('');
-    const [selectedType, setSelectedType] = useState<GearSlotName | ''>('');
+    const [selectedSets, setSelectedSets] = useState<string[]>([]);
+    const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const hasActiveFilters = Boolean(selectedSet || selectedType);
-
-    const clearFilters = () => {
-        setSelectedSet('');
-        setSelectedType('');
-    };
+    const hasActiveFilters = Boolean(selectedSets.length || selectedTypes.length);
 
     const filteredInventory = useMemo(() => {
         return inventory.filter(piece => {
-            const matchesSet = !selectedSet || piece.setBonus === selectedSet;
-            const matchesType = !selectedType || piece.slot === selectedType;
+            const matchesSet = selectedSets.length === 0 || selectedSets.includes(piece.setBonus);
+            const matchesType = selectedTypes.length === 0 || selectedTypes.includes(piece.slot);
             return matchesSet && matchesType;
         });
-    }, [inventory, selectedSet, selectedType]);
+    }, [inventory, selectedSets, selectedTypes]);
 
     const uniqueSets = useMemo(() => {
         const sets = new Set(inventory.map(piece => piece.setBonus));
@@ -53,9 +48,9 @@ export const GearInventory: React.FC<Props> = ({
     const filters: FilterConfig[] = [
         {
             id: 'set',
-            label: 'Set',
-            value: selectedSet,
-            onChange: (value) => setSelectedSet(value as GearSetName),
+            label: 'Sets',
+            values: selectedSets,
+            onChange: setSelectedSets,
             options: uniqueSets.map(set => ({
                 value: set,
                 label: GEAR_SETS[set].name
@@ -63,15 +58,20 @@ export const GearInventory: React.FC<Props> = ({
         },
         {
             id: 'type',
-            label: 'Type',
-            value: selectedType,
-            onChange: (value) => setSelectedType(value as GearSlotName),
+            label: 'Types',
+            values: selectedTypes,
+            onChange: setSelectedTypes,
             options: uniqueTypes.map(type => ({
                 value: type,
                 label: GEAR_SLOTS[type].label
             }))
         }
     ];
+
+    const clearFilters = () => {
+        setSelectedSets([]);
+        setSelectedTypes([]);
+    };
 
     return (
         <div className="space-y-6">

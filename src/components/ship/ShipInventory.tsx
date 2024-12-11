@@ -3,7 +3,7 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../hooks/useInventory';
 import { ShipCard } from './ShipCard';
-import { FactionName, FACTIONS, GearSlotName } from '../../constants';
+import { FACTIONS, GearSlotName } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 
 interface Props {
@@ -17,15 +17,17 @@ interface Props {
 
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
+    const [selectedFactions, setSelectedFactions] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [selectedFaction, setSelectedFaction] = useState<FactionName | ''>('');
+
+    const hasActiveFilters = selectedFactions.length > 0;
 
     const filteredInventory = useMemo(() => {
         return ships.filter(ship => {
-            const matchesFaction = !selectedFaction || ship.faction === selectedFaction;
+            const matchesFaction = selectedFactions.length === 0 || selectedFactions.includes(ship.faction);
             return matchesFaction;
         });
-    }, [ships, selectedFaction]);
+    }, [ships, selectedFactions]);
 
     const uniqueFactions = useMemo(() => {
         const factions = new Set(ships.map(ship => ship.faction));
@@ -34,14 +36,12 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
 
     const { getGearPiece } = useInventory();
 
-    const hasActiveFilters = Boolean(selectedFaction);
-
     const filters: FilterConfig[] = [
         {
             id: 'faction',
-            label: 'Faction',
-            value: selectedFaction,
-            onChange: (value) => setSelectedFaction(value as FactionName),
+            label: 'Factions',
+            values: selectedFactions,
+            onChange: setSelectedFactions,
             options: uniqueFactions.map(faction => ({
                 value: faction,
                 label: FACTIONS[faction].name
@@ -50,7 +50,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
     ];
 
     const clearFilters = () => {
-        setSelectedFaction('');
+        setSelectedFactions([]);
     };
 
     return (

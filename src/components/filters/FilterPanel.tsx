@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { FilterIcon } from '../ui/icons/FilterIcon';
 import { Offcanvas } from '../layout/Offcanvas';
-import { Select } from '../ui/Select';
+import { RadioGroup } from '../ui/RadioGroup';
 
 export interface FilterOption {
     label: string;
@@ -13,8 +13,8 @@ export interface FilterConfig {
     id: string;
     label: string;
     options: FilterOption[];
-    value: string;
-    onChange: (value: string) => void;
+    values: string[];
+    onChange: (values: string[]) => void;
 }
 
 interface Props {
@@ -54,19 +54,13 @@ export const FilterPanel: React.FC<Props> = ({
             >
                 <div className="space-y-4">
                     {filters.map((filter) => (
-                        <div key={filter.id}>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                {filter.label}
-                            </label>
-                            <Select
-                                value={filter.value}
-                                onChange={(e) => filter.onChange(e.target.value)}
-                                className="w-full"
-                                options={filter.options}
-                                noDefaultSelection
-                                defaultOption={`All ${filter.label}s`}
-                            />
-                        </div>
+                        <RadioGroup
+                            key={filter.id}
+                            label={filter.label}
+                            values={filter.values}
+                            onChange={filter.onChange}
+                            options={filter.options}
+                        />
                     ))}
 
                     {hasActiveFilters && (
