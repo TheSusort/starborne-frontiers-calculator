@@ -5,6 +5,14 @@ export const CURRENT_VERSION = APP_VERSION;
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: 'v0.2.1',
+        date: '2024-12-11',
+        changes: [
+            'Bugfix ship form',
+            'Modal closes on click outside',
+        ]
+    },
+    {
         version: 'v0.2.0',
         date: '2024-03-20',
         changes: [

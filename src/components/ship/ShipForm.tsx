@@ -63,9 +63,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
         setName('');
         setBaseStats(initialBaseStats);
-        setFaction(FACTIONS['ATLAS'].name);
-        setType(SHIP_TYPES['ATTACKER'].name);
-        setRarity('legendary');
+        setFaction('');
+        setType('');
+        setRarity('');
         setRefits([]);
         setImplants([]);
 

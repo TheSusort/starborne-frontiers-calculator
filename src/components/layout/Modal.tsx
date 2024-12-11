@@ -15,10 +15,9 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
         <>
             <div
                 className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
-                onClick={onClose}
             />
             <div className="fixed inset-0 z-50 overflow-y-auto">
-                <div className="flex min-h-full items-center justify-center p-4">
+                <div className="flex min-h-full items-center justify-center p-4" onClick={onClose}>
                     <div
                         className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl"
                         onClick={(e) => e.stopPropagation()}

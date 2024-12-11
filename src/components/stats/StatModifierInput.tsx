@@ -48,7 +48,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
                 type: firstType,
                 value: 0
             } as Stat; // Type assertion to Stat
-            console.log(newStat);
+
             onChange([...stats, newStat]);
         }
     };

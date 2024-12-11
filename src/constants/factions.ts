@@ -25,7 +25,7 @@ export const FACTIONS: Record<string, Faction> = {
         name: 'MPL',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426156201316462.webp'
     },
-    MAURAUDERS: {
+    MARAUDERS: {
         name: 'Marauders',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426154888495114.webp'
     },

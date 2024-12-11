@@ -89,7 +89,7 @@ export const GearInventory: React.FC<Props> = ({
                         {inventory.length === 0 ? 'No gear pieces added yet' : 'No matching gear pieces found'}
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${mode === 'manage' ? 'xl:grid-cols-4' : ''} gap-4`}>
                         {filteredInventory.map(piece => (
                             <div key={piece.id} className="relative flex flex-col">
                                 <GearPieceDisplay gear={piece} />
