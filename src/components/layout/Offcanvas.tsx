@@ -10,6 +10,7 @@ interface Props {
     children: React.ReactNode;
     position?: 'left' | 'right';
     width?: string;
+    hideCloseButton?: boolean;
 }
 
 export const Offcanvas: React.FC<Props> = ({
@@ -18,7 +19,8 @@ export const Offcanvas: React.FC<Props> = ({
     title,
     children,
     position = 'right',
-    width = 'w-80'
+    width = 'w-80',
+    hideCloseButton = false
 }) => {
     const [isAnimating, setIsAnimating] = useState(false);
     const [shouldRender, setShouldRender] = useState(false);
@@ -71,9 +73,11 @@ export const Offcanvas: React.FC<Props> = ({
             >
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-semibold text-gray-200">{title}</h3>
-                    <Button variant="secondary" onClick={onClose}>
-                        <CloseIcon />
-                    </Button>
+                    {!hideCloseButton && (
+                        <Button variant="secondary" onClick={onClose}>
+                            <CloseIcon />
+                        </Button>
+                    )}
                 </div>
                 <div className={`
                     transition-opacity duration-200 ease-in-out delay-150

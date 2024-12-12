@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { APP_NAME, APP_VERSION } from '../../constants/config';
+import { APP_NAME } from '../../constants/config';
 import { Offcanvas } from './Offcanvas';
+import { CURRENT_VERSION } from '../../constants/changelog';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();
@@ -19,7 +20,7 @@ export const Sidebar: React.FC = () => {
 
     const SidebarContent = () => (
         <div className="space-y-2">
-            <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
+            <span className="text-xs text-gray-400 hidden lg:block">{CURRENT_VERSION}</span>
             <h1 className="text-gray-200 text-xl font-bold mb-8 hidden lg:block">
                 {APP_NAME}
             </h1>
@@ -67,7 +68,7 @@ export const Sidebar: React.FC = () => {
                     <h1 className="text-white text-xl font-bold">
                         {APP_NAME}
                     </h1>
-                    <span className="text-xs text-gray-400">{APP_VERSION}</span>
+                    <span className="text-xs text-gray-400">{CURRENT_VERSION}</span>
                 </div>
             </div>
 
@@ -85,6 +86,7 @@ export const Sidebar: React.FC = () => {
                 title={APP_NAME}
                 position="left"
                 width="w-64"
+                hideCloseButton
             >
                 <SidebarContent />
             </Offcanvas>

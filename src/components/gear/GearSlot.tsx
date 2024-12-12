@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Tooltip } from '../layout/Tooltip';
 import { CloseIcon } from '../ui/icons/CloseIcon';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { STATS } from '../../constants/stats';
 
 interface GearSlotProps {
     slotKey: GearSlotName;
@@ -44,7 +45,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
                     </div>
                     {/* main stat and stars */}
                     <div className="text-xs text-gray-200 font-bold">
-                        {gear.mainStat.name}
+                        {STATS[gear.mainStat.name].shortLabel}
                         {gear.mainStat.type === 'percentage' ? "%" : ""}
                     </div>
                     <div className="absolute top-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">

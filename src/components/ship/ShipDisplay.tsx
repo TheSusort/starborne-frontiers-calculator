@@ -6,6 +6,7 @@ import { CloseIcon } from '../ui/icons/CloseIcon';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { StatList } from '../stats/StatList';
 
 interface Props {
     ship: Ship;
@@ -122,17 +123,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                             )}
                         </>
                     )}
-                    {Object.entries(totalStats).map(([stat, value]) => {
-                        return (stat !== 'healModifier' || (stat === 'healModifier' && value !== 0)) && (
-                            <div key={stat} className="flex justify-between text-gray-300">
-                                <span className="capitalize">{stat}:</span>
-                                <div>
-                                    <span>{Math.round((value) * 100) / 100}</span>
-                                    {['crit', 'critDamage'].includes(stat) ? "%" : ""}
-                                </div>
-                            </div>
-                        );
-                    })}
+                    <StatList stats={totalStats} />
                 </div>
             </div>
         </div>

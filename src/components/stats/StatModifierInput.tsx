@@ -71,7 +71,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
 
             return {
                 value: key,
-                label: key.charAt(0).toUpperCase() + key.slice(1),
+                label: STATS[key as StatName].label,
                 allowedTypes: allowedTypesForStat?.map((type) => ({
                     value: type,
                     label: type.charAt(0).toUpperCase() + type.slice(1)

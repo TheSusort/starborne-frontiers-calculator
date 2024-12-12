@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Ship } from '../../types/ship';
-import { BaseStats } from '../../types/stats';
+import { BaseStats, StatName } from '../../types/stats';
 import { Button, Input, Select, CloseIcon } from '../ui';
 import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../../constants';
 import { fetchShipData } from '../../utils/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
+import { STATS } from '../../constants/stats';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -205,7 +206,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                             <Input
                                 key={stat}
                                 type="number"
-                                label={stat.charAt(0).toUpperCase() + stat.slice(1)}
+                                label={STATS[stat as StatName].label}
                                 value={value}
                                 onChange={(e) => setBaseStats(prev => ({
                                     ...prev,

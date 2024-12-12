@@ -7,21 +7,18 @@ import { Modal } from '../components/layout/Modal';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { PageLayout } from '../components/layout/PageLayout';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-interface SimulationResult {
-    damage: number;
-    isCrit: boolean;
-}
+import { runDamageSimulation, SimulationSummary } from '../utils/simulationCalculator';
 
 const SIMULATION_ITERATIONS = 500;
 
 export const SimulationPage: React.FC = () => {
     const { ships, getShipById } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [results, setResults] = useState<SimulationResult[]>([]);
     const [isResultsExpanded, setIsResultsExpanded] = useState(false);
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const [simulation, setSimulation] = useState<SimulationSummary | null>(null);
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -29,29 +26,18 @@ export const SimulationPage: React.FC = () => {
         const ship = getShipById(selectedShipId);
         if (!ship) return;
 
-        const stats = calculateTotalStats(ship.baseStats, ship.equipment, getGearPiece, ship.refits, ship.implants, getEngineeringStatsForShipType(ship.type));
-        const results: SimulationResult[] = [];
+        const stats = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment,
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            getEngineeringStatsForShipType(ship.type)
+        );
 
-        for (let i = 0; i < SIMULATION_ITERATIONS; i++) {
-            const isCrit = Math.random() * 100 < (stats.crit || 0);
-            let damage = stats.attack;
-
-            if (isCrit) {
-                const critMultiplier = 1 + ((stats.critDamage || 0) / 100);
-                damage *= critMultiplier;
-            }
-
-            results.push({ damage: Math.round(damage), isCrit });
-        }
-
-        setResults(results);
+        const simulationResults = runDamageSimulation(stats, SIMULATION_ITERATIONS);
+        setSimulation(simulationResults);
     };
-
-    const averageDamage = results.length
-        ? Math.round(results.reduce((sum, r) => sum + r.damage, 0) / results.length)
-        : 0;
-    const topHit = results.length ? Math.max(...results.map(r => r.damage)) : 0;
-    const bottomHit = results.length ? Math.min(...results.map(r => r.damage)) : 0;
 
     return (
         <PageLayout
@@ -67,15 +53,11 @@ export const SimulationPage: React.FC = () => {
                             onClick={() => setIsShipModalOpen(true)}
                             fullWidth
                         >
-                            {selectedShip ? (
-                                'Select another Ship'
-                            ) : (
-                                'Select a Ship'
-                            )}
+                            {selectedShip ? 'Select another Ship' : 'Select a Ship'}
                         </Button>
 
                         {selectedShip && (
-                            <ShipDisplay ship={selectedShip} />
+                            <ShipDisplay ship={selectedShip} variant="compact" />
                         )}
 
                         <Modal
@@ -110,25 +92,26 @@ export const SimulationPage: React.FC = () => {
                     </Button>
 
                     <p className="text-gray-400 text-sm">
-                        This simulates {SIMULATION_ITERATIONS} attacks with the selected ship and gear. It will only use 100% damage hits, no ship specific attacks are used.
+                        This simulates {SIMULATION_ITERATIONS} attacks with the selected ship and gear.
+                        It will only use 100% damage hits, no ship specific attacks are used.
                     </p>
                 </div>
 
-                {results.length > 0 && (
-                    <div className="space-y-4 bg-dark-lighter p-4 pt-0 rounded ">
+                {simulation && (
+                    <div className="space-y-4 bg-dark-lighter p-4 rounded">
                         <h3 className="text-xl font-semibold text-gray-200">Results</h3>
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Avg. Hit</div>
-                                <div className="text-xl text-gray-200">{averageDamage}</div>
+                                <div className="text-xl text-gray-200">{simulation.averageDamage}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Highest Hit</div>
-                                <div className="text-xl text-gray-200">{topHit}</div>
+                                <div className="text-xl text-gray-200">{simulation.highestHit}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Lowest Hit</div>
-                                <div className="text-xl text-gray-200">{bottomHit}</div>
+                                <div className="text-xl text-gray-200">{simulation.lowestHit}</div>
                             </div>
                         </div>
 
@@ -151,7 +134,7 @@ export const SimulationPage: React.FC = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {results.map((result, index) => (
+                                            {simulation.results.map((result, index) => (
                                                 <tr key={index} className="border-t border-dark-border">
                                                     <td className="p-2">{index + 1}</td>
                                                     <td className="p-2">{result.damage}</td>

@@ -1,7 +1,13 @@
 import { ShipTypeName } from "../constants";
 
 // Stats that can only be percentage-based
-export type PercentageOnlyStats = 'crit' | 'critDamage' | 'healModifier';
+export const PERCENTAGE_ONLY_STATS = [
+    'crit',
+    'critDamage',
+    'healModifier',
+] as const;
+
+export type PercentageOnlyStats = typeof PERCENTAGE_ONLY_STATS[number];
 
 // Stats that can only be flat values
 export type FlatOnlyStats = 'hacking' | 'security';

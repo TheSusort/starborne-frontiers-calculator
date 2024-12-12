@@ -53,78 +53,62 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063621723586580.webp'
     },
-    /*
     BOOST: {
         name: 'Boost',
-        stats: [
-            { name: 'buffDuration', value: 1, type: 'flat' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063630842011678.webp'
     },
     BURNER: {
         name: 'Burner',
         stats: [
-            { name: 'attack', value: 15, type: 'percentage' },
-            { name: 'inferno', value: 1, type: 'flat' },
+            { name: 'attack', value: 15, type: 'percentage' }
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034712268832808.webp'
     },
     DECIMATION: {
         name: 'Decimation',
-        stats: [
-            { name: 'dotDamage', value: 10, type: 'percentage' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063643328577546.webp'
-    },*/
+    },
     HACKING: {
         name: 'Hacking',
         stats: [
             { name: 'hacking', value: 30, type: 'flat' },
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063646541152276.webp'
-    },/*
+    },
     LEECH: {
         name: 'Leech',
-        stats: [
-            { name: 'lifeSteal', value: 15, type: 'percentage' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063612789858395.webp'
-    },*/
+    },
     REPAIR: {
         name: 'Repair',
         stats: [
             { name: 'healModifier', value: 20, type: 'percentage' },
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063614698127410.webp'
-    },/*
+    },
     REFLECT: {
         name: 'Reflect',
-        stats: [
-            { name: 'reflect', value: 10, type: 'percentage' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063615918546985.webp'
     },
     REVENGE: {
         name: 'Revenge',
-        stats: [
-            { name: 'revenge', value: 25, type: 'percentage' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063617839800361.webp'
     },
     SHIELD: {
         name: 'Shield',
-        stats: [
-            { name: 'shield', value: 4, type: 'percentage' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063619739816037.webp'
     },
     CLOAKING: {
         name: 'Cloaking',
-        stats: [
-            { name: 'stealth', value: 2, type: 'flat' },
-        ],
+        stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063623661486090.webp'
-    },*/
+    },
     ABYSSAL_ASSAULT: {
         name: 'Abyssal Assault',
         stats: [
@@ -159,4 +143,4 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     }
 } satisfies Record<string, GearSetBonus>;
 
-export type GearSetName = keyof typeof GEAR_SETS; 
+export type GearSetName = keyof typeof GEAR_SETS;

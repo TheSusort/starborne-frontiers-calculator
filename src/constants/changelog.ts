@@ -4,6 +4,16 @@ export const CURRENT_VERSION = 'v0.3';
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: 'v0.4',
+        date: '2024-12-12',
+        changes: [
+            'Added the rest of the gear sets',
+            'Added stat labels',
+            'Added autogear attack simulation section',
+            'Formatting improvements',
+        ]
+    },
+    {
         version: 'v0.3',
         date: '2024-12-12',
         changes: [

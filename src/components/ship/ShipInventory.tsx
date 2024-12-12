@@ -105,22 +105,27 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                     {ships.length === 0 ? 'No ships created yet' : 'No matching ships found'}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {filteredInventory.map(ship => (
-                        <ShipCard
-                            key={ship.id}
-                            ship={ship}
-                            hoveredGear={hoveredGear}
-                            availableGear={availableGear}
-                            getGearPiece={getGearPiece}
-                            onEdit={onEdit}
-                            onRemove={onRemove}
-                            onEquipGear={onEquipGear}
-                            onRemoveGear={onRemoveGear}
-                            onHoverGear={setHoveredGear}
-                        />
-                    ))}
-                </div>
+                <>
+                    <span className="text-sm text-gray-400">
+                        Showing {filteredInventory.length} ships
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        {filteredInventory.map(ship => (
+                            <ShipCard
+                                key={ship.id}
+                                ship={ship}
+                                hoveredGear={hoveredGear}
+                                availableGear={availableGear}
+                                getGearPiece={getGearPiece}
+                                onEdit={onEdit}
+                                onRemove={onRemove}
+                                onEquipGear={onEquipGear}
+                                onRemoveGear={onRemoveGear}
+                                onHoverGear={setHoveredGear}
+                            />
+                        ))}
+                    </div>
+                </>
             )}
         </div>
     );

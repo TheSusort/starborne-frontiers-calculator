@@ -1,6 +1,8 @@
 import React from 'react';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, RARITIES } from '../../constants';
+import { StatName } from '../../types/stats';
+import { STATS } from '../../constants/stats';
 interface Props {
     gear: GearPiece;
     showDetails?: boolean;
@@ -45,7 +47,7 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
                                         key={index}
                                         className="flex justify-between items-center bg-dark-lighter px-3 py-1.5 rounded"
                                     >
-                                        <span className="capitalize text-gray-300">{stat.name}</span>
+                                        <span className="capitalize text-gray-300">{STATS[stat.name as StatName].label}</span>
                                         <span className="font-medium text-gray-200">
                                             {stat.value}{stat.type === 'percentage' ? '%' : ''}
                                         </span>

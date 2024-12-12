@@ -157,7 +157,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                         onChange={(e) => handleMainStatChange({ name: e.target.value as StatName })}
                         options={getAvailableMainStats(slot).map(stat => ({
                             value: stat,
-                            label: stat
+                            label: STATS[stat as StatName].label
                         }))}
                     />
                     <Input
@@ -174,7 +174,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             onChange={(e) => handleMainStatChange({ type: e.target.value as StatType })}
                             options={getAvailableStatTypes(mainStat.name).map(type => ({
                                 value: type,
-                                label: type
+                                label: type.charAt(0).toUpperCase() + type.slice(1)
                             }))}
                             className="w-32"
                         />

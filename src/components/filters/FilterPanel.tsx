@@ -33,7 +33,6 @@ export const FilterPanel: React.FC<Props> = ({
     onClear,
     hasActiveFilters
 }) => {
-    console.log(filters);
     return (
         <>
             <div className="flex flex-col space-y-4">
