@@ -3,8 +3,9 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../hooks/useInventory';
 import { ShipCard } from './ShipCard';
-import { FACTIONS, GearSlotName } from '../../constants';
+import { FACTIONS, GearSlotName, RARITIES, SHIP_TYPES } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
+import { sortRarities } from '../../constants/rarities';
 
 interface Props {
     ships: Ship[];
@@ -18,20 +19,34 @@ interface Props {
 export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEquipGear, onRemoveGear, availableGear }) => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const [selectedFactions, setSelectedFactions] = useState<string[]>([]);
+    const [selectedShipTypes, setSelectedShipTypes] = useState<string[]>([]);
+    const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const hasActiveFilters = selectedFactions.length > 0;
+    const hasActiveFilters = selectedFactions.length > 0 || selectedShipTypes.length > 0 || selectedRarities.length > 0;
 
     const filteredInventory = useMemo(() => {
         return ships.filter(ship => {
             const matchesFaction = selectedFactions.length === 0 || selectedFactions.includes(ship.faction);
-            return matchesFaction;
+            const matchesType = selectedShipTypes.length === 0 || selectedShipTypes.includes(ship.type);
+            const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(ship.rarity);
+            return matchesFaction && matchesType && matchesRarity;
         });
-    }, [ships, selectedFactions]);
+    }, [ships, selectedFactions, selectedShipTypes, selectedRarities]);
 
     const uniqueFactions = useMemo(() => {
         const factions = new Set(ships.map(ship => ship.faction));
-        return Array.from(factions);
+        return Array.from(factions).sort((a, b) => FACTIONS[a].name.localeCompare(FACTIONS[b].name));
+    }, [ships]);
+
+    const uniqueShipTypes = useMemo(() => {
+        const shipTypes = new Set(ships.map(ship => ship.type));
+        return Array.from(shipTypes).sort((a, b) => SHIP_TYPES[a].name.localeCompare(SHIP_TYPES[b].name));
+    }, [ships]);
+
+    const uniqueRarities = useMemo(() => {
+        const rarities = new Set(ships.map(ship => ship.rarity));
+        return sortRarities(Array.from(rarities));
     }, [ships]);
 
     const { getGearPiece } = useInventory();
@@ -46,11 +61,33 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
                 value: faction,
                 label: FACTIONS[faction].name
             }))
+        },
+        {
+            id: 'shipType',
+            label: 'Ship Type',
+            values: selectedShipTypes,
+            onChange: setSelectedShipTypes,
+            options: uniqueShipTypes.map(shipType => ({
+                value: shipType,
+                label: SHIP_TYPES[shipType].name
+            }))
+        },
+        {
+            id: 'rarity',
+            label: 'Rarity',
+            values: selectedRarities,
+            onChange: setSelectedRarities,
+            options: uniqueRarities.map(rarity => ({
+                value: rarity,
+                label: RARITIES[rarity].label
+            }))
         }
     ];
 
     const clearFilters = () => {
         setSelectedFactions([]);
+        setSelectedShipTypes([]);
+        setSelectedRarities([]);
     };
 
     return (

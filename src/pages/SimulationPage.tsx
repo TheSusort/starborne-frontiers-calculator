@@ -120,15 +120,15 @@ export const SimulationPage: React.FC = () => {
                         <div className="grid grid-cols-3 gap-4">
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Avg. Hit</div>
-                                <div className="text-xl text-white">{averageDamage}</div>
+                                <div className="text-xl text-gray-200">{averageDamage}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Highest Hit</div>
-                                <div className="text-xl text-white">{topHit}</div>
+                                <div className="text-xl text-gray-200">{topHit}</div>
                             </div>
                             <div className="bg-dark p-4 rounded">
                                 <div className="text-sm text-gray-400">Lowest Hit</div>
-                                <div className="text-xl text-white">{bottomHit}</div>
+                                <div className="text-xl text-gray-200">{bottomHit}</div>
                             </div>
                         </div>
 

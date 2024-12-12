@@ -45,7 +45,7 @@ export const GearPage: React.FC = () => {
         return (
             <PageLayout title="Gear Management">
                 <div className="flex items-center justify-center">
-                    <div className="animate-pulse text-xl text-white">
+                    <div className="animate-pulse text-xl text-gray-200">
                         Loading inventory...
                     </div>
                 </div>

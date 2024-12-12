@@ -29,6 +29,9 @@ module.exports = {
           epic: 'rgb(229 231 235)',
           legendary: 'rgb(229 231 235)',
         }
+      },
+      fontSize: {
+        xxs: '0.5rem',
       }
     },
   },

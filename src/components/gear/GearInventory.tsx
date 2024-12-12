@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS, RARITIES } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button } from '../ui';
 import { CloseIcon } from '../ui/icons/CloseIcon';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
+import { sortRarities } from '../../constants/rarities';
 
 interface Props {
     inventory: GearPiece[];
@@ -23,26 +24,33 @@ export const GearInventory: React.FC<Props> = ({
 }) => {
     const [selectedSets, setSelectedSets] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+    const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const hasActiveFilters = Boolean(selectedSets.length || selectedTypes.length);
+    const hasActiveFilters = selectedSets.length > 0 || selectedTypes.length > 0 || selectedRarities.length > 0;
 
     const filteredInventory = useMemo(() => {
         return inventory.filter(piece => {
             const matchesSet = selectedSets.length === 0 || selectedSets.includes(piece.setBonus);
             const matchesType = selectedTypes.length === 0 || selectedTypes.includes(piece.slot);
-            return matchesSet && matchesType;
+            const matchesRarity = selectedRarities.length === 0 || selectedRarities.includes(piece.rarity);
+            return matchesSet && matchesType && matchesRarity;
         });
-    }, [inventory, selectedSets, selectedTypes]);
+    }, [inventory, selectedSets, selectedTypes, selectedRarities]);
 
     const uniqueSets = useMemo(() => {
         const sets = new Set(inventory.map(piece => piece.setBonus));
-        return Array.from(sets);
+        return Array.from(sets).sort((a, b) => GEAR_SETS[a].name.localeCompare(GEAR_SETS[b].name));
     }, [inventory]);
 
     const uniqueTypes = useMemo(() => {
         const types = new Set(inventory.map(piece => piece.slot));
-        return Array.from(types);
+        return Array.from(types).sort((a, b) => GEAR_SLOTS[a].label.localeCompare(GEAR_SLOTS[b].label));
+    }, [inventory]);
+
+    const uniqueRarities = useMemo(() => {
+        const rarities = new Set(inventory.map(piece => piece.rarity));
+        return sortRarities(Array.from(rarities));
     }, [inventory]);
 
     const filters: FilterConfig[] = [
@@ -65,12 +73,23 @@ export const GearInventory: React.FC<Props> = ({
                 value: type,
                 label: GEAR_SLOTS[type].label
             }))
+        },
+        {
+            id: 'rarity',
+            label: 'Rarity',
+            values: selectedRarities,
+            onChange: setSelectedRarities,
+            options: uniqueRarities.map(rarity => ({
+                value: rarity,
+                label: RARITIES[rarity].label
+            }))
         }
     ];
 
     const clearFilters = () => {
         setSelectedSets([]);
         setSelectedTypes([]);
+        setSelectedRarities([]);
     };
 
     return (

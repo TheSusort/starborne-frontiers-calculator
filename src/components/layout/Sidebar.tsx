@@ -20,7 +20,7 @@ export const Sidebar: React.FC = () => {
     const SidebarContent = () => (
         <div className="space-y-2">
             <span className="text-xs text-gray-400 hidden lg:block">{APP_VERSION}</span>
-            <h1 className="text-white text-xl font-bold mb-8 hidden lg:block">
+            <h1 className="text-gray-200 text-xl font-bold mb-8 hidden lg:block">
                 {APP_NAME}
             </h1>
 

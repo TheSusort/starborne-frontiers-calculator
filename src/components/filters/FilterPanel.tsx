@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { FilterIcon } from '../ui/icons/FilterIcon';
 import { Offcanvas } from '../layout/Offcanvas';
 import { RadioGroup } from '../ui/RadioGroup';
+import { CloseIcon } from '../ui/icons/CloseIcon';
 
 export interface FilterOption {
     label: string;
@@ -32,14 +33,36 @@ export const FilterPanel: React.FC<Props> = ({
     onClear,
     hasActiveFilters
 }) => {
+    console.log(filters);
     return (
         <>
             <div className="flex flex-col space-y-4">
                 <div className="flex justify-between items-center">
                     {hasActiveFilters && (
-                        <Button variant="secondary" onClick={onClear}>
-                            Clear Filters
-                        </Button>
+                        <>
+                            {/* list out all the active filters, add a close button to each */}
+                            <div className="flex flex-wrap gap-2">
+                                {filters.map((filter) => (
+                                    filter.values.map((value) => (
+                                        <div key={value} className="flex justify-between items-center">
+                                            <Button
+                                                className="relative flex items-center"
+                                                variant="secondary"
+                                                onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
+                                            >
+                                                <div className="flex items-center">
+                                                    <div className="flex flex-col items-start mr-3">
+                                                        <span className="text-xxs">{filter.label}</span>
+                                                        <span className="text-xs">{filter.options.find(option => option.value === value)?.label}</span>
+                                                    </div>
+                                                    <CloseIcon />
+                                                </div>
+                                            </Button>
+                                        </div>
+                                    ))
+                                ))}
+                            </div>
+                        </>
                     )}
                     <Button variant="secondary" className="ml-auto" onClick={onToggle}>
                         <FilterIcon />

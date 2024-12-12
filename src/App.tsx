@@ -51,7 +51,7 @@ const App: React.FC = () => {
                             </Routes>
                         </div>
 
-                        <footer className="text-center text-xs text-gray-400 mt-auto">
+                        <footer className="text-center text-xs text-gray-400 mt-auto pt-5">
                             Made with ❤️ by {AUTHOR}
                         </footer>
                     </div>

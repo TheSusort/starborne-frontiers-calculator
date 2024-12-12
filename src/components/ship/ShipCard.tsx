@@ -79,6 +79,7 @@ export const ShipCard: React.FC<Props> = ({
                             <Button
                                 className='ml-auto'
                                 variant="secondary"
+                                size='xs'
                                 onClick={handleUnequipAll}
                             >
                                 Unequip All

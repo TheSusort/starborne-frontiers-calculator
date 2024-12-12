@@ -37,3 +37,12 @@ export const RARITIES: Record<string, { value: string; label: string; bgColor: s
 };
 
 export type RarityName = keyof typeof RARITIES;
+
+// Order is reversed because we want legendary first
+export const RARITY_ORDER = Object.keys(RARITIES).reverse();
+
+export const sortRarities = (rarities: string[]): string[] => {
+    return [...rarities].sort((a, b) =>
+        RARITY_ORDER.indexOf(a) - RARITY_ORDER.indexOf(b)
+    );
+};

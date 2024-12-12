@@ -1,9 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
-import { APP_VERSION } from './config';
 
-export const CURRENT_VERSION = APP_VERSION;
+export const CURRENT_VERSION = 'v0.3';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.3',
+        date: '2024-12-12',
+        changes: [
+            'Added more filters',
+            'Fixed a bug with the changelog modal',
+            'Added active filter display in the gear and ship inventories',
+        ]
+    },
     {
         version: 'v0.2.1',
         date: '2024-12-11',

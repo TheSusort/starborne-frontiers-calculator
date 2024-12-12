@@ -174,7 +174,7 @@ export const AutogearPage: React.FC = () => {
 
                     {priorities.length > 0 && (
                         <div className="bg-dark p-4 rounded space-y-2">
-                            <h3 className="text-lg font-semibold text-white">Priority List</h3>
+                            <h3 className="text-lg font-semibold text-gray-200">Priority List</h3>
                             {priorities.map((priority, index) => (
                                 <div key={index} className="flex justify-between items-center">
                                     <span className="text-gray-300">
@@ -223,7 +223,7 @@ export const AutogearPage: React.FC = () => {
                 {suggestions.length > 0 && (
                     <div className="bg-dark-lighter p-4 pt-0 rounded">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-semibold text-white">Suggested Gear</h3>
+                            <h3 className="text-xl font-semibold text-gray-200">Suggested Gear</h3>
                         </div>
                         <div className="grid grid-cols-3 gap-2 bg-dark p-4">
                             {GEAR_SLOT_ORDER.map((slotName) => {
