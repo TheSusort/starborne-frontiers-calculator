@@ -4,6 +4,7 @@ import { FilterIcon } from '../ui/icons/FilterIcon';
 import { Offcanvas } from '../layout/Offcanvas';
 import { RadioGroup } from '../ui/RadioGroup';
 import { CloseIcon } from '../ui/icons/CloseIcon';
+import { SortConfig, SortOption, SortPanel } from './SortPanel';
 
 export interface FilterOption {
     label: string;
@@ -24,6 +25,9 @@ interface Props {
     onToggle: () => void;
     onClear: () => void;
     hasActiveFilters: boolean;
+    sortOptions?: SortOption[];
+    sort?: SortConfig;
+    setSort?: (sort: SortConfig) => void;
 }
 
 export const FilterPanel: React.FC<Props> = ({
@@ -31,42 +35,43 @@ export const FilterPanel: React.FC<Props> = ({
     isOpen,
     onToggle,
     onClear,
-    hasActiveFilters
+    hasActiveFilters,
+    sortOptions,
+    sort,
+    setSort
 }) => {
     return (
         <>
-            <div className="flex flex-col space-y-4">
-                <div className="flex justify-between items-center">
-                    {hasActiveFilters && (
-                        <>
-                            {/* list out all the active filters, add a close button to each */}
-                            <div className="flex flex-wrap gap-2">
-                                {filters.map((filter) => (
-                                    filter.values.map((value) => (
-                                        <div key={value} className="flex justify-between items-center">
-                                            <Button
-                                                className="relative flex items-center"
-                                                variant="secondary"
-                                                onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
-                                            >
-                                                <div className="flex items-center">
-                                                    <div className="flex flex-col items-start mr-3">
-                                                        <span className="text-xxs">{filter.label}</span>
-                                                        <span className="text-xs">{filter.options.find(option => option.value === value)?.label}</span>
-                                                    </div>
-                                                    <CloseIcon />
+            <div className="flex justify-between items-center">
+                {hasActiveFilters && (
+                    <>
+                        {/* list out all the active filters, add a close button to each */}
+                        <div className="flex flex-wrap gap-2">
+                            {filters.map((filter) => (
+                                filter.values.map((value) => (
+                                    <div key={value} className="flex justify-between items-center">
+                                        <Button
+                                            className="relative flex items-center"
+                                            variant="secondary"
+                                            onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
+                                        >
+                                            <div className="flex items-center">
+                                                <div className="flex flex-col items-start mr-3">
+                                                    <span className="text-xxs">{filter.label}</span>
+                                                    <span className="text-xs">{filter.options.find(option => option.value === value)?.label}</span>
                                                 </div>
-                                            </Button>
-                                        </div>
-                                    ))
-                                ))}
-                            </div>
-                        </>
-                    )}
-                    <Button variant="secondary" className="ml-auto" onClick={onToggle}>
-                        <FilterIcon />
-                    </Button>
-                </div>
+                                                <CloseIcon />
+                                            </div>
+                                        </Button>
+                                    </div>
+                                ))
+                            ))}
+                        </div>
+                    </>
+                )}
+                <Button variant="secondary" className="ml-auto" onClick={onToggle}>
+                    <FilterIcon />
+                </Button>
             </div>
 
             <Offcanvas
@@ -75,6 +80,14 @@ export const FilterPanel: React.FC<Props> = ({
                 title="Filters"
             >
                 <div className="space-y-4">
+                    {sortOptions && sort && setSort && (
+                        <SortPanel
+                            options={sortOptions}
+                            currentSort={sort}
+                            onSort={setSort}
+                        />
+                    )}
+
                     {filters.map((filter) => (
                         <RadioGroup
                             key={filter.id}

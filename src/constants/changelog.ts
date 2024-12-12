@@ -4,6 +4,14 @@ export const CURRENT_VERSION = 'v0.3';
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
+        version: 'v0.5',
+        date: '2024-12-12',
+        changes: [
+            'Added sorting',
+            'Formatting improvements',
+        ]
+    },
+    {
         version: 'v0.4',
         date: '2024-12-12',
         changes: [

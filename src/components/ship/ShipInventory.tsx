@@ -5,7 +5,8 @@ import { useInventory } from '../../hooks/useInventory';
 import { ShipCard } from './ShipCard';
 import { FACTIONS, GearSlotName, RARITIES, SHIP_TYPES } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
-import { sortRarities } from '../../constants/rarities';
+import { RARITY_ORDER, sortRarities } from '../../constants/rarities';
+import { SortConfig } from '../filters/SortPanel';
 
 interface Props {
     ships: Ship[];
@@ -22,6 +23,7 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
     const [selectedShipTypes, setSelectedShipTypes] = useState<string[]>([]);
     const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [sort, setSort] = useState<SortConfig>({ field: 'id', direction: 'asc' });
 
     const hasActiveFilters = selectedFactions.length > 0 || selectedShipTypes.length > 0 || selectedRarities.length > 0;
 
@@ -84,6 +86,44 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
         }
     ];
 
+    const sortOptions = [
+        { value: 'id', label: 'ID' },
+        { value: 'type', label: 'Type' },
+        { value: 'faction', label: 'Faction' },
+        { value: 'rarity', label: 'Rarity' },
+        { value: 'gearCount', label: 'Gear' }
+    ];
+
+    const sortedAndFilteredInventory = useMemo(() => {
+        const filtered = filteredInventory;
+        return [...filtered].sort((a, b) => {
+            switch (sort.field) {
+                case 'type':
+                    return sort.direction === 'asc'
+                        ? SHIP_TYPES[a.type].name.localeCompare(SHIP_TYPES[b.type].name)
+                        : SHIP_TYPES[b.type].name.localeCompare(SHIP_TYPES[a.type].name);
+                case 'faction':
+                    return sort.direction === 'asc'
+                        ? FACTIONS[a.faction].name.localeCompare(FACTIONS[b.faction].name)
+                        : FACTIONS[b.faction].name.localeCompare(FACTIONS[a.faction].name);
+                case 'rarity':
+                    return sort.direction === 'asc'
+                        ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
+                        : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+                case 'gearCount':
+                    const aCount = Object.values(a.equipment).filter(Boolean).length;
+                    const bCount = Object.values(b.equipment).filter(Boolean).length;
+                    return sort.direction === 'asc'
+                        ? aCount - bCount
+                        : bCount - aCount;
+                default:
+                    return sort.direction === 'asc'
+                        ? a.id.localeCompare(b.id)
+                        : b.id.localeCompare(a.id);
+            }
+        });
+    }, [filteredInventory, sort]);
+
     const clearFilters = () => {
         setSelectedFactions([]);
         setSelectedShipTypes([]);
@@ -92,25 +132,32 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
 
     return (
         <div className="space-y-6">
-            <FilterPanel
-                filters={filters}
-                isOpen={isFilterOpen}
-                onToggle={() => setIsFilterOpen(!isFilterOpen)}
-                onClear={clearFilters}
-                hasActiveFilters={hasActiveFilters}
-            />
+            <div className="flex justify-between items-center">
+                {sortedAndFilteredInventory.length > 0 && (
+                    <span className="text-sm text-gray-400">
+                        Showing {sortedAndFilteredInventory.length} ships
+                    </span>
+                )}
+                <FilterPanel
+                    filters={filters}
+                    isOpen={isFilterOpen}
+                    onToggle={() => setIsFilterOpen(!isFilterOpen)}
+                    onClear={clearFilters}
+                    hasActiveFilters={hasActiveFilters}
+                    sortOptions={sortOptions}
+                    sort={sort}
+                    setSort={setSort}
+                />
+            </div>
 
-            {filteredInventory.length === 0 ? (
+            {sortedAndFilteredInventory.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 bg-dark-lighter  border-2 border-dashed">
                     {ships.length === 0 ? 'No ships created yet' : 'No matching ships found'}
                 </div>
             ) : (
                 <>
-                    <span className="text-sm text-gray-400">
-                        Showing {filteredInventory.length} ships
-                    </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {filteredInventory.map(ship => (
+                        {sortedAndFilteredInventory.map(ship => (
                             <ShipCard
                                 key={ship.id}
                                 ship={ship}
