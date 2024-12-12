@@ -1,6 +1,6 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.3';
+export const CURRENT_VERSION = 'v0.5';
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
