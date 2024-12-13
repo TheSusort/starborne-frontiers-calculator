@@ -17,10 +17,10 @@ interface ParsedShipData {
 
 export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
     try {
-        const corsProxy = 'https://corsproxy.io/?';
+        const corsProxy = 'https://thingproxy.freeboard.io/fetch/';
         const targetUrl = `https://www.rockyfrontiers.com/units/${shipName.toLowerCase()}`;
 
-        const response = await fetch(`${corsProxy}${encodeURIComponent(targetUrl)}`, {
+        const response = await fetch(`${corsProxy}${targetUrl}`, {
             headers: {
                 'Origin': window.location.origin,
             },
