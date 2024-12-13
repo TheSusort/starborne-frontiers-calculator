@@ -32,7 +32,7 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
                     <div className="bg-dark-lighter p-3 rounded-md">
                         <div className="text-sm text-gray-400 mb-1">Main Stat</div>
                         <div className="font-medium capitalize text-gray-200">
-                            {gear.mainStat.name}: {gear.mainStat.value}
+                            {STATS[gear.mainStat.name as StatName].label}: {gear.mainStat.value}
                             {gear.mainStat.type === 'percentage' ? '%' : ''}
                         </div>
                     </div>

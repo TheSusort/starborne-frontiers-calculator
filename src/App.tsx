@@ -6,6 +6,7 @@ import { GearPage } from './pages/GearPage';
 import { SimulationPage } from './pages/SimulationPage';
 import { AutogearPage } from './pages/AutogearPage';
 import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
+import { LoadoutsPage } from './pages/LoadoutsPage';
 import { AUTHOR } from './constants/config';
 import { ChangelogModal } from './components/changelog/ChangelogModal';
 import { CHANGELOG, CURRENT_VERSION } from './constants/changelog';
@@ -47,6 +48,7 @@ const App: React.FC = () => {
                                 <Route path="/simulation" element={<SimulationPage />} />
                                 <Route path="/autogear" element={<AutogearPage />} />
                                 <Route path="/engineering" element={<EngineeringStatsPage />} />
+                                <Route path="/loadouts" element={<LoadoutsPage />} />
                                 <Route path="/" element={<Navigate to="/ships" replace />} />
                             </Routes>
                         </div>

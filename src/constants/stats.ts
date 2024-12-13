@@ -56,7 +56,7 @@ export const STATS: Record<StatName, {
     speed: {
         label: 'Speed',
         shortLabel: 'SPD',
-        allowedTypes: ['flat'],
+        allowedTypes: ['flat', 'percentage'],
         engineeringAllowedTypes: [],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 }
     },
