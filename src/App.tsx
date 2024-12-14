@@ -13,6 +13,12 @@ import { CHANGELOG, CURRENT_VERSION } from './constants/changelog';
 import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { NotificationContainer } from './components/notification/NotificationContainer';
+import Hotjar from '@hotjar/browser';
+
+const siteId = 5241833;
+const hotjarVersion = 6;
+
+Hotjar.init(siteId, hotjarVersion);
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
