@@ -5,15 +5,18 @@ import { GearPieceForm } from '../components/gear/GearPieceForm';
 import { GearInventory } from '../components/gear/GearInventory';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
+import { useNotification } from '../contexts/NotificationContext';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
+    const { addNotification } = useNotification();
 
     const handleRemovePiece = async (id: string) => {
         const newInventory = inventory.filter(piece => piece.id !== id);
         await saveInventory(newInventory);
+        addNotification('success', 'Gear piece removed successfully');
     };
 
     const handleEditPiece = (piece: GearPiece) => {
@@ -39,6 +42,7 @@ export const GearPage: React.FC = () => {
         if (!editingPiece) {
             setIsFormVisible(false); // Hide form after creating new piece
         }
+        addNotification('success', 'Gear piece saved successfully');
     };
 
     if (loading) {

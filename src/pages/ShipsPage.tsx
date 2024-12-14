@@ -5,7 +5,7 @@ import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/layout/PageLayout';
 import { CollapsibleForm } from '../components/layout/CollapsibleForm';
-
+import { useNotification } from '../contexts/NotificationContext';
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
     const {
@@ -20,6 +20,7 @@ export const ShipsPage: React.FC = () => {
         setEditingShip
     } = useShips();
     const [isFormVisible, setIsFormVisible] = useState(false);
+    const { addNotification } = useNotification();
 
     if (loading) {
         return (
@@ -45,11 +46,8 @@ export const ShipsPage: React.FC = () => {
                 }
             }}
         >
-
             {error && (
-                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 ">
-                    {error}
-                </div>
+                <>{addNotification('error', error)}</>
             )}
 
             <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
@@ -59,6 +57,7 @@ export const ShipsPage: React.FC = () => {
                         if (!editingShip) {
                             setIsFormVisible(false);
                         }
+                        addNotification('success', 'Ship saved successfully');
                     }}
                     editingShip={editingShip}
                 />
@@ -66,13 +65,22 @@ export const ShipsPage: React.FC = () => {
 
             <ShipInventory
                 ships={ships}
-                onRemove={handleRemoveShip}
+                onRemove={(ship) => {
+                    handleRemoveShip(ship);
+                    addNotification('success', 'Ship removed successfully');
+                }}
                 onEdit={(ship) => {
                     setEditingShip(ship);
                     setIsFormVisible(true);
                 }}
-                onEquipGear={handleEquipGear}
-                onRemoveGear={handleRemoveGear}
+                onEquipGear={(ship, slot, gear) => {
+                    handleEquipGear(ship, slot, gear);
+                    addNotification('success', 'Gear equipped successfully');
+                }}
+                onRemoveGear={(ship, slot) => {
+                    handleRemoveGear(ship, slot);
+                    addNotification('success', 'Gear removed successfully');
+                }}
                 availableGear={inventory}
             />
         </PageLayout>

@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.6';
+export const CURRENT_VERSION = 'v0.7';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.7',
+        date: '2024-12-14',
+        changes: [
+            'Added notifications',
+        ]
+    },
     {
         version: 'v0.6',
         date: '2024-12-14',

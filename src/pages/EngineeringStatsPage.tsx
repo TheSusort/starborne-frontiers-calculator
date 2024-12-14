@@ -6,11 +6,13 @@ import { Button, CloseIcon } from '../components/ui';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import { PageLayout } from '../components/layout/PageLayout';
 import { CollapsibleForm } from '../components/layout/CollapsibleForm';
-
+import { useNotification } from '../contexts/NotificationContext';
 export const EngineeringStatsPage: React.FC = () => {
     const { engineeringStats, saveEngineeringStats } = useEngineeringStats();
     const [editingStats, setEditingStats] = useState<EngineeringStat | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
+    const { addNotification } = useNotification();
+
     const handleSubmit = (stats: EngineeringStat) => {
         const newEngStats: EngineeringStats = {
             stats: engineeringStats.stats.filter(s => s.shipType !== stats.shipType).concat(stats)
@@ -48,7 +50,10 @@ export const EngineeringStatsPage: React.FC = () => {
             <CollapsibleForm isVisible={isFormVisible || !!editingStats}>
                 <EngineeringStatsForm
                     initialStats={editingStats}
-                    onSubmit={handleSubmit}
+                    onSubmit={(stats) => {
+                        handleSubmit(stats);
+                        addNotification('success', 'Engineering stats saved successfully');
+                    }}
                 />
             </CollapsibleForm>
 
@@ -61,7 +66,10 @@ export const EngineeringStatsPage: React.FC = () => {
                                 <h3 className="text-lg font-medium">{SHIP_TYPES[stat.shipType].name}</h3>
                                 <Button
                                     variant="danger"
-                                    onClick={() => handleDelete(stat.shipType)}
+                                    onClick={() => {
+                                        handleDelete(stat.shipType);
+                                        addNotification('success', 'Engineering stats deleted successfully');
+                                    }}
                                 >
                                     <CloseIcon />
                                 </Button>

@@ -6,6 +6,7 @@ import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../../constants';
 import { fetchShipData } from '../../utils/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { STATS } from '../../constants/stats';
+import { useNotification } from '../../contexts/NotificationContext';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -34,6 +35,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [implants, setImplants] = useState(editingShip?.implants || []);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { addNotification } = useNotification();
 
     useEffect(() => {
         if (editingShip) {
@@ -89,9 +91,11 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setFaction(data.faction);
             setType(data.type);
             setRarity(data.rarity as RarityName);
+            addNotification('success', 'Ship data fetched successfully');
         } catch (err) {
             setError('Failed to fetch ship data. Please try again later.');
             console.error('Error fetching ship data:', err);
+            addNotification('error', 'Failed to fetch ship data. Please try again later.');
         } finally {
             setIsLoading(false);
         }
