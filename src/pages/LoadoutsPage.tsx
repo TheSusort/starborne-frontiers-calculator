@@ -3,8 +3,8 @@ import { PageLayout } from '../components/layout/PageLayout';
 import { useLoadouts } from '../hooks/useLoadouts';
 import { LoadoutForm } from '../components/loadout/LoadoutForm';
 import { LoadoutList } from '../components/loadout/LoadoutList';
-import { Modal } from '../components/layout/Modal';
 import { useInventory } from '../hooks/useInventory';
+import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 
 export const LoadoutsPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
@@ -15,11 +15,21 @@ export const LoadoutsPage: React.FC = () => {
             title="Loadouts"
             description="Manage your ship gear loadouts"
             action={{
-                label: "New Loadout",
-                onClick: () => setShowForm(true),
+                label: showForm ? "Hide Form" : "New Loadout",
+                onClick: () => setShowForm(!showForm),
                 variant: "primary"
             }}
         >
+
+            <CollapsibleForm isVisible={showForm}>
+                <LoadoutForm
+                    onSubmit={(loadout) => {
+                        addLoadout(loadout);
+                        setShowForm(false);
+                    }}
+                />
+            </CollapsibleForm>
+
             <LoadoutList
                 loadouts={loadouts}
                 onUpdate={updateLoadout}
@@ -27,20 +37,6 @@ export const LoadoutsPage: React.FC = () => {
                 getGearPiece={getGearPiece}
                 availableGear={inventory}
             />
-
-            <Modal
-                isOpen={showForm}
-                onClose={() => setShowForm(false)}
-                title="Create New Loadout"
-            >
-                <LoadoutForm
-                    onSubmit={(loadout) => {
-                        addLoadout(loadout);
-                        setShowForm(false);
-                    }}
-                    onCancel={() => setShowForm(false)}
-                />
-            </Modal>
         </PageLayout>
     );
 };

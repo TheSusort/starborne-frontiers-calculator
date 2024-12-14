@@ -3,6 +3,7 @@ import { Ship } from '../../types/ship';
 import { Button } from '../ui/Button';
 import { ShipSelector } from '../ship/ShipSelector';
 import { GearSlotName } from '../../constants';
+import { Input } from '../ui/Input';
 
 interface LoadoutFormProps {
     onSubmit: (loadout: {
@@ -10,10 +11,9 @@ interface LoadoutFormProps {
         shipId: string;
         equipment: Record<GearSlotName, string>;
     }) => void;
-    onCancel: () => void;
 }
 
-export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, onCancel }) => {
+export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit }) => {
     const [name, setName] = useState('');
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
 
@@ -24,21 +24,20 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, onCancel }) 
         onSubmit({
             name,
             shipId: selectedShip.id,
-            equipment: {},
+            equipment: selectedShip.equipment as Record<GearSlotName, string>,
         });
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4">
             <div>
                 <label className="block text-sm font-medium text-gray-200">
                     Loadout Name
                 </label>
-                <input
+                <Input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="mt-1 block w-full rounded-md bg-dark border-gray-600"
                     required
                 />
             </div>
@@ -54,9 +53,6 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, onCancel }) 
             </div>
 
             <div className="flex justify-end gap-2">
-                <Button variant="secondary" onClick={onCancel}>
-                    Cancel
-                </Button>
                 <Button type="submit" disabled={!selectedShip || !name}>
                     Create Loadout
                 </Button>

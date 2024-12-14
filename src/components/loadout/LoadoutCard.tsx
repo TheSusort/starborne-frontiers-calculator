@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Loadout } from '../../types/loadout';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SLOTS, GearSlotName } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
 import { Modal } from '../layout/Modal';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { Button } from '../ui/Button';
+import { useShips } from '../../hooks/useShips';
 
 interface LoadoutCardProps {
     loadout: Loadout;
@@ -31,8 +32,9 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const gearLookup = useGearLookup(loadout.equipment, getGearPiece);
     const activeSets = useGearSets(loadout.equipment, gearLookup);
+    const { handleEquipGear } = useShips();
 
-    const handleEquipGear = (slot: GearSlotName, gearId: string) => {
+    const handleEquipGearLoadout = (slot: GearSlotName, gearId: string) => {
         const newEquipment = {
             ...loadout.equipment,
             [slot]: gearId,
@@ -47,16 +49,13 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
     };
 
     const handleEquipLoadout = () => {
-        // TODO: Implement equipping loadout to ship
-        console.log('Equip loadout to ship:', loadout.equipment);
-    };
-
-    const handleUnequipAll = () => {
-        onUpdate(loadout.id, {});
+        for (const [slot, gearId] of Object.entries(loadout.equipment)) {
+            handleEquipGear(ship.id, slot as GearSlotName, gearId);
+        }
     };
 
     return (
-        <div className="bg-dark rounded-lg overflow-hidden">
+        <div className="bg-dark">
             <div className="p-4 bg-dark-lighter">
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-medium text-gray-200">{loadout.name}</h3>
@@ -80,7 +79,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
             </div>
 
             <ShipDisplay ship={ship} variant="compact">
-                <div className="p-4 bg-dark">
+                <div className={`p-4 mt-3 -mx-3 bg-dark border-t ${RARITIES[ship.rarity || 'common'].borderColor}`}>
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, slot]) => (
                             <GearSlot
@@ -97,28 +96,18 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 pt-3">
-                        {activeSets && activeSets.length > 0 && (
+                        {activeSets && (
                             <>
-                                <span className="text-xs text-gray-400">Active Sets:</span>
-                                {activeSets.map((setName) => (
-                                    <span
-                                        key={setName}
-                                        className="text-xs text-gray-200"
-                                    >
-                                        {setName}
-                                    </span>
+                                <span className="text-xs text-gray-400">Gear Sets:</span>
+                                {activeSets.map((setName, index) => (
+                                    <img
+                                        key={`${setName}-${index}`}
+                                        src={GEAR_SETS[setName].iconUrl}
+                                        alt={setName}
+                                        className="w-5"
+                                    />
                                 ))}
                             </>
-                        )}
-                        {Object.keys(loadout.equipment).length > 0 && (
-                            <Button
-                                className="ml-auto"
-                                variant="secondary"
-                                size="xs"
-                                onClick={handleUnequipAll}
-                            >
-                                Unequip All
-                            </Button>
                         )}
                     </div>
                 </div>
@@ -134,14 +123,14 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                     mode="select"
                     onEquip={(gear) => {
                         if (selectedSlot) {
-                            handleEquipGear(selectedSlot, gear.id);
+                            handleEquipGearLoadout(selectedSlot, gear.id);
                             setSelectedSlot(null);
                         }
                     }}
-                    onRemove={() => {}}
-                    onEdit={() => {}}
+                    onRemove={() => { }}
+                    onEdit={() => { }}
                 />
             </Modal>
         </div>
     );
-}; 
+};

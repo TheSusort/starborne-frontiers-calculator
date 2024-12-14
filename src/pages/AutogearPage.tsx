@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useShips } from '../hooks/useShips';
 import { useInventory } from '../hooks/useInventory';
 import { Button } from '../components/ui';
-import { Modal } from '../components/layout/Modal';
-import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { StatPriorityForm } from '../components/stats/StatPriorityForm';
 import { GearSuggestion, StatPriority } from '../types/autogear';
 import { GearSlot } from '../components/gear/GearSlot';
@@ -16,12 +14,12 @@ import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../utils/autogear/Autoge
 import { getAutogearStrategy } from '../utils/autogear/getStrategy';
 import { runDamageSimulation, SimulationSummary } from '../utils/simulationCalculator';
 import { StatList } from '../components/stats/StatList';
+import { ShipSelector } from '../components/ship/ShipSelector';
 
 export const AutogearPage: React.FC = () => {
-    const { ships, getShipById, updateShip } = useShips();
+    const { getShipById, updateShip } = useShips();
     const { getGearPiece, inventory } = useInventory();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const [priorities, setPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -195,21 +193,10 @@ export const AutogearPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
                     <h3 className="text-xl font-bold text-gray-200">Settings</h3>
-                    <Button
-                        variant="secondary"
-                        onClick={() => setIsShipModalOpen(true)}
-                        fullWidth
-                    >
-                        {selectedShip ? (
-                            'Select another Ship'
-                        ) : (
-                            'Select a Ship'
-                        )}
-                    </Button>
-
-                    {selectedShip && (
-                        <ShipDisplay ship={selectedShip} variant="compact" />
-                    )}
+                    <ShipSelector
+                        onSelect={(ship) => setSelectedShipId(ship.id)}
+                        selected={selectedShip || null}
+                    />
 
                     <StatPriorityForm
                         onAdd={handleAddPriority}
@@ -298,27 +285,6 @@ export const AutogearPage: React.FC = () => {
                     </div>
                 )}
             </div>
-
-            <Modal
-                isOpen={isShipModalOpen}
-                onClose={() => setIsShipModalOpen(false)}
-                title="Select a Ship"
-            >
-                <div className="grid grid-cols-1 gap-2">
-                    {ships.map(ship => (
-                        <ShipDisplay
-                            key={ship.id}
-                            ship={ship}
-                            variant="compact"
-                            selected={selectedShipId === ship.id}
-                            onClick={() => {
-                                setSelectedShipId(ship.id);
-                                setIsShipModalOpen(false);
-                            }}
-                        />
-                    ))}
-                </div>
-            </Modal>
         </PageLayout>
     );
 };

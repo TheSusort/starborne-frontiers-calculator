@@ -3,19 +3,17 @@ import { useShips } from '../hooks/useShips';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
 import { Button } from '../components/ui';
-import { Modal } from '../components/layout/Modal';
-import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { PageLayout } from '../components/layout/PageLayout';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { runDamageSimulation, SimulationSummary } from '../utils/simulationCalculator';
+import { ShipSelector } from '../components/ship/ShipSelector';
 
 const SIMULATION_ITERATIONS = 500;
 
 export const SimulationPage: React.FC = () => {
-    const { ships, getShipById } = useShips();
+    const { getShipById } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [isResultsExpanded, setIsResultsExpanded] = useState(false);
-    const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [simulation, setSimulation] = useState<SimulationSummary | null>(null);
@@ -47,40 +45,10 @@ export const SimulationPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-6">
                     <h3 className="text-xl font-bold text-gray-200">Settings</h3>
-                    <div className="space-y-4">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setIsShipModalOpen(true)}
-                            fullWidth
-                        >
-                            {selectedShip ? 'Select another Ship' : 'Select a Ship'}
-                        </Button>
-
-                        {selectedShip && (
-                            <ShipDisplay ship={selectedShip} variant="compact" />
-                        )}
-
-                        <Modal
-                            isOpen={isShipModalOpen}
-                            onClose={() => setIsShipModalOpen(false)}
-                            title="Select a Ship"
-                        >
-                            <div className="grid grid-cols-1 gap-2">
-                                {ships.map(ship => (
-                                    <ShipDisplay
-                                        key={ship.id}
-                                        ship={ship}
-                                        variant="compact"
-                                        selected={selectedShipId === ship.id}
-                                        onClick={() => {
-                                            setSelectedShipId(ship.id);
-                                            setIsShipModalOpen(false);
-                                        }}
-                                    />
-                                ))}
-                            </div>
-                        </Modal>
-                    </div>
+                    <ShipSelector
+                        onSelect={(ship) => setSelectedShipId(ship.id)}
+                        selected={selectedShip || null}
+                    />
 
                     <Button
                         variant="primary"

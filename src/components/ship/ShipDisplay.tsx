@@ -61,6 +61,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                 onClick={onClick}
             >
                 <Header ship={ship} />
+                {children}
             </div>
         );
     }

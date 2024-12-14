@@ -13,6 +13,7 @@ export const Sidebar: React.FC = () => {
     const navigationLinks = [
         { path: '/ships', label: 'Ships' },
         { path: '/gear', label: 'Gear' },
+        { path: '/loadouts', label: 'Loadouts' },
         { path: '/engineering', label: 'Engineering' },
         { path: '/simulation', label: 'Simulation' },
         { path: '/autogear', label: 'Autogear' },
