@@ -49,7 +49,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         }
     }, [editingShip]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const ship: Ship = {
             id: editingShip?.id || Date.now().toString(),
@@ -59,19 +59,23 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             rarity,
             baseStats,
             equipment: editingShip?.equipment || {},
-            refits: editingShip?.refits || refits,
-            implants: editingShip?.implants || implants
+            refits,
+            implants
         };
-        onSubmit(ship);
 
-        setName('');
-        setBaseStats(initialBaseStats);
-        setFaction('');
-        setType('');
-        setRarity('');
-        setRefits([]);
-        setImplants([]);
-
+        try {
+            await onSubmit(ship);
+            setName('');
+            setBaseStats(initialBaseStats);
+            setFaction('');
+            setType('');
+            setRarity('');
+            setRefits([]);
+            setImplants([]);
+        } catch (error) {
+            addNotification('error', 'Failed to save ship data');
+            console.error('Error saving ship:', error);
+        }
     };
 
     const handleFetchData = async () => {
@@ -115,6 +119,18 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         value: rarity.value,
         label: rarity.label
     }));
+
+    const handleImplantDelete = (index: number) => {
+        if (window.confirm('Are you sure you want to remove this implant?')) {
+            setImplants(implants.filter((_, i) => i !== index));
+        }
+    };
+
+    const handleRefitDelete = (index: number) => {
+        if (window.confirm('Are you sure you want to remove this refit?')) {
+            setRefits(refits.filter((_, i) => i !== index));
+        }
+    };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
@@ -231,7 +247,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         <div className="absolute top-2 right-4">
                             <Button
                                 variant="danger"
-                                onClick={() => setRefits(refits.filter((_, i) => i !== index))}
+                                onClick={() => handleRefitDelete(index)}
                             >
                                 <CloseIcon />
                             </Button>
@@ -266,7 +282,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         <div className="absolute top-2 right-4">
                             <Button
                                 variant="danger"
-                                onClick={() => setImplants(implants.filter((_, i) => i !== index))}
+                                onClick={() => handleImplantDelete(index)}
                             >
                                 <CloseIcon />
                             </Button>

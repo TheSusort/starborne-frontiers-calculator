@@ -29,6 +29,7 @@ export const LoadoutsPage: React.FC = () => {
                     onSubmit={(loadout) => {
                         addLoadout(loadout);
                         setShowForm(false);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
                         addNotification('success', 'Loadout created successfully');
                     }}
                 />

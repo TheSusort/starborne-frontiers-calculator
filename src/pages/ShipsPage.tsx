@@ -6,6 +6,7 @@ import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/layout/PageLayout';
 import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 import { useNotification } from '../contexts/NotificationContext';
+
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
     const {
@@ -52,11 +53,11 @@ export const ShipsPage: React.FC = () => {
 
             <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                 <ShipForm
-                    onSubmit={(ship) => {
-                        handleSaveShip(ship);
-                        if (!editingShip) {
-                            setIsFormVisible(false);
-                        }
+                    onSubmit={async (ship) => {
+                        await handleSaveShip(ship);
+                        setIsFormVisible(false);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        setEditingShip(undefined);
                         addNotification('success', 'Ship saved successfully');
                     }}
                     editingShip={editingShip}
@@ -72,6 +73,7 @@ export const ShipsPage: React.FC = () => {
                 onEdit={(ship) => {
                     setEditingShip(ship);
                     setIsFormVisible(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 onEquipGear={(ship, slot, gear) => {
                     handleEquipGear(ship, slot, gear);

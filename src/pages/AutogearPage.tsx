@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useShips } from '../hooks/useShips';
 import { useInventory } from '../hooks/useInventory';
-import { Button } from '../components/ui';
+import { Button, Select } from '../components/ui';
 import { StatPriorityForm } from '../components/stats/StatPriorityForm';
 import { GearSuggestion, StatPriority } from '../types/autogear';
 import { GearSlot } from '../components/gear/GearSlot';
-import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER } from '../constants';
+import { GEAR_SLOTS, GearSlotName, GEAR_SLOT_ORDER, ShipTypeName, SHIP_TYPES } from '../constants';
 import { GearPiece } from '../types/gear';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { PageLayout } from '../components/layout/PageLayout';
@@ -20,6 +20,7 @@ export const AutogearPage: React.FC = () => {
     const { getShipById, updateShip } = useShips();
     const { getGearPiece, inventory } = useInventory();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
+    const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
     const [priorities, setPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -47,7 +48,8 @@ export const AutogearPage: React.FC = () => {
             priorities,
             inventory,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            selectedShipRole
         );
 
         setSuggestions(suggestions);
@@ -196,6 +198,15 @@ export const AutogearPage: React.FC = () => {
                     <ShipSelector
                         onSelect={(ship) => setSelectedShipId(ship.id)}
                         selected={selectedShip || null}
+                    />
+
+                    <Select
+                        options={Object.values(SHIP_TYPES).map(type => ({
+                            value: type.name,
+                            label: type.name
+                        }))}
+                        value={SHIP_TYPES[selectedShipRole || '']?.name}
+                        onChange={(e) => setSelectedShipRole(e.target.value as ShipTypeName)}
                     />
 
                     <StatPriorityForm

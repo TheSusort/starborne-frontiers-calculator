@@ -12,7 +12,8 @@ export interface AutogearStrategy {
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole: ShipTypeName | null
     ): GearSuggestion[];
 }
 
@@ -43,4 +44,4 @@ export const AUTOGEAR_STRATEGIES: Record<AutogearAlgorithm, {
         name: 'Genetic Algorithm',
         description: 'Evolution-inspired approach for finding optimal gear combinations'
     }
-}; 
+};

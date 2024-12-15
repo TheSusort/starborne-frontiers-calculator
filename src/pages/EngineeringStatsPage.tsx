@@ -52,6 +52,7 @@ export const EngineeringStatsPage: React.FC = () => {
                     initialStats={editingStats}
                     onSubmit={(stats) => {
                         handleSubmit(stats);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
                         addNotification('success', 'Engineering stats saved successfully');
                     }}
                 />
@@ -87,7 +88,10 @@ export const EngineeringStatsPage: React.FC = () => {
                             <div className="flex gap-2 p-4">
                                 <Button
                                     variant="secondary"
-                                    onClick={() => setEditingStats(stat)}
+                                    onClick={() => {
+                                        setEditingStats(stat);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
                                 >
                                     Edit
                                 </Button>

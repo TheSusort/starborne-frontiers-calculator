@@ -6,6 +6,7 @@ import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../statsCalculator';
 import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
+import { STAT_NORMALIZERS } from '../constants';
 
 export class TwoPassStrategy implements AutogearStrategy {
     name = 'Two-Pass Algorithm';
@@ -203,23 +204,26 @@ export class TwoPassStrategy implements AutogearStrategy {
 
         priorities.forEach((priority, index) => {
             const statValue = stats[priority.stat] || 0;
+            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
+            const normalizedValue = statValue / normalizer;
             const orderMultiplier = Math.pow(2, priorities.length - index - 1);
 
-            if (priority.maxLimit && statValue > priority.maxLimit) {
-                totalScore -= (statValue - priority.maxLimit) * priority.weight * orderMultiplier * 100;
-                return;
-            }
-
-            let score = statValue * priority.weight * orderMultiplier;
-
             if (priority.maxLimit) {
-                const ratio = statValue / priority.maxLimit;
+                const normalizedLimit = priority.maxLimit / normalizer;
+                if (normalizedValue > normalizedLimit) {
+                    totalScore -= (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
+                    return;
+                }
+
+                let score = normalizedValue * priority.weight * orderMultiplier;
+                const ratio = normalizedValue / normalizedLimit;
                 if (ratio > 0.8) {
                     score *= (1 - (ratio - 0.8));
                 }
+                totalScore += score;
+            } else {
+                totalScore += normalizedValue * priority.weight * orderMultiplier;
             }
-
-            totalScore += score;
         });
 
         return totalScore;

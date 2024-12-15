@@ -38,10 +38,9 @@ export const GearPage: React.FC = () => {
         }
 
         await saveInventory(newInventory);
-        setEditingPiece(undefined); // Clear editing state
-        if (!editingPiece) {
-            setIsFormVisible(false); // Hide form after creating new piece
-        }
+        setEditingPiece(undefined);
+        setIsFormVisible(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         addNotification('success', 'Gear piece saved successfully');
     };
 
