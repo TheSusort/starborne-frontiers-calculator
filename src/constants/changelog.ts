@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.7.1';
+export const CURRENT_VERSION = 'v0.7.2';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.7.2',
+        date: '2024-12-16',
+        changes: [
+            'Fixed a bug with stat exclusion',
+            'Added static ship data for all ships, instead of fetching from rocky',
+        ]
+    },
     {
         version: 'v0.7.1',
         date: '2024-12-15',

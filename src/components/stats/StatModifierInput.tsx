@@ -19,15 +19,38 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
         const currentStat = newStats[index];
 
         if (field === 'name') {
-            // When changing stat name, set the first allowed type for that stat
-            const allowedTypes = allowedStats?.[value as StatName]?.allowedTypes || STATS[value as StatName].allowedTypes;
-            const defaultType = allowedTypes[0];
+            // Get allowed types for the new stat name
+            const allowedTypes = allowedStats?.[value as StatName]?.allowedTypes ||
+                               STATS[value as StatName].allowedTypes;
+
+            // Filter out excluded types for this stat name
+            const validTypes = allowedTypes.filter(type =>
+                !excludedStats?.some(excluded =>
+                    excluded.name === value && excluded.type === type
+                )
+            );
+
+            // Use the first valid type
+            const defaultType = validTypes[0];
 
             newStats[index] = {
                 ...currentStat,
                 name: value,
                 type: defaultType
             } as Stat;
+        } else if (field === 'type') {
+            // Check if the new type would create an excluded combination
+            const isExcluded = excludedStats?.some(excluded =>
+                excluded.name === currentStat.name && excluded.type === value
+            );
+
+            if (!isExcluded) {
+                newStats[index] = {
+                    ...currentStat,
+                    type: value
+                } as Stat;
+            }
+            // If excluded, don't update the type
         } else {
             newStats[index] = {
                 ...currentStat,

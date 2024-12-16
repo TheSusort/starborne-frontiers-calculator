@@ -156,8 +156,12 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     </div>
                     <div className="flex items-end">
                         <Button
+                            type="button"
                             variant="primary"
-                            onClick={handleFetchData}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleFetchData();
+                            }}
                             disabled={!name || isLoading}
                             className="relative"
                         >

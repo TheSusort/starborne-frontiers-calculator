@@ -118,8 +118,8 @@ export const GearInventory: React.FC<Props> = ({
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
                 default:
                     return sort.direction === 'asc'
-                        ? a.id.localeCompare(b.id)
-                        : b.id.localeCompare(a.id);
+                        ? b.id.localeCompare(a.id)
+                        : a.id.localeCompare(b.id);
             }
         });
     }, [filteredInventory, sort]);

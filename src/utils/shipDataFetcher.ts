@@ -1,3 +1,5 @@
+import { SHIPS } from "../constants/ships";
+
 interface ParsedShipData {
     baseStats: {
         hp: number;
@@ -15,7 +17,7 @@ interface ParsedShipData {
     rarity: string;
 }
 
-export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
+export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedShipData | null> {
     try {
         const corsProxy = 'https://thingproxy.freeboard.io/fetch/';
         const targetUrl = `https://www.rockyfrontiers.com/units/${shipName.toLowerCase()}`;
@@ -81,4 +83,31 @@ export async function fetchShipData(shipName: string): Promise<ParsedShipData | 
         console.error('Error fetching ship data:', error);
         throw error; // Re-throw to handle in the component
     }
+}
+
+export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
+    // fetch ship data from constant ships
+    const shipData = SHIPS[shipName.toUpperCase() as keyof typeof SHIPS];
+    if (!shipData) {
+        return null;
+    }
+
+    const parsedShipData: ParsedShipData = {
+        baseStats: {
+            hp: shipData.hp,
+            attack: shipData.attack,
+            defence: shipData.defense,
+            hacking: shipData.hacking,
+            security: shipData.security,
+            crit: shipData.critRate,
+            critDamage: shipData.critDamage,
+            speed: shipData.speed,
+            healModifier: 0
+        },
+        faction: shipData.faction.toUpperCase().replace(' ', '_'),
+        type: shipData.role.toUpperCase(),
+        rarity: shipData.rarity.toLowerCase()
+    };
+
+    return parsedShipData;
 }
