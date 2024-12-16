@@ -13,3 +13,4 @@ This is a tool to help you calculate the stats of your gear and ships in Starbor
 
 To run the development server, run `npm start`.
 To build the production version, run `npm build`.
+To load test data, go to url `/api/import-test-data?secret=development-secret`.

@@ -14,6 +14,7 @@ import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { NotificationContainer } from './components/notification/NotificationContainer';
 import Hotjar from '@hotjar/browser';
+import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
 
 const siteId = 5241833;
 const hotjarVersion = 6;
@@ -58,6 +59,10 @@ const App: React.FC = () => {
                                     <Route path="/autogear" element={<AutogearPage />} />
                                     <Route path="/engineering" element={<EngineeringStatsPage />} />
                                     <Route path="/loadouts" element={<LoadoutsPage />} />
+                                    <Route
+                                        path="/api/import-test-data"
+                                        element={<ImportTestDataHandler />}
+                                    />
                                     <Route path="/" element={<Navigate to="/ships" replace />} />
                                 </Routes>
                             </div>

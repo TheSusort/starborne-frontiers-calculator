@@ -114,5 +114,6 @@ export const useShips = () => {
         handleSaveShip,
         getShipById,
         updateShip,
+        saveShips
     };
 };
