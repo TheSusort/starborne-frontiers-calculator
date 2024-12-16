@@ -8,3 +8,8 @@ This is a tool to help you calculate the stats of your gear and ships in Starbor
 2. Select the gear you want to calculate the stats for
 3. Click the "Calculate" button
 4. The stats will be displayed in the "Stats" section
+
+## Development
+
+To run the development server, run `npm start`.
+To build the production version, run `npm build`.
