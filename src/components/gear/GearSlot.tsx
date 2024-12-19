@@ -26,7 +26,6 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
     onRemove,
     onHover
 }) => {
-    console.log(gear);
     if (gear) {
         return (
             <div className="relative">

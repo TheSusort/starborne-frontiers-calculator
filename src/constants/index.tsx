@@ -3,3 +3,8 @@ export * from './gearSets';
 export * from './rarities';
 export * from './shipTypes';
 export * from './gearTypes';
+export * from './testData';
+export * from './changelog';
+export * from './config';
+export * from './ships';
+export * from './stats';

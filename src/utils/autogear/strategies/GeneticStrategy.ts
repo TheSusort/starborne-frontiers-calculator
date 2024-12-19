@@ -3,10 +3,8 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
-import { calculateTotalStats } from '../../statsCalculator';
-import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
-import { STAT_NORMALIZERS } from '../constants';
+import { calculateTotalScore } from '../scoring';
 
 interface Individual {
     equipment: Partial<Record<GearSlotName, string>>;
@@ -27,7 +25,8 @@ export class GeneticStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): GearSuggestion[] {
         // Create initial population
         let population = this.initializePopulation(ship, inventory);
@@ -38,7 +37,8 @@ export class GeneticStrategy implements AutogearStrategy {
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            shipRole
         );
 
         // Evolution loop
@@ -64,7 +64,8 @@ export class GeneticStrategy implements AutogearStrategy {
                 ship,
                 priorities,
                 getGearPiece,
-                getEngineeringStatsForShipType
+                getEngineeringStatsForShipType,
+                shipRole
             );
         }
 
@@ -110,7 +111,8 @@ export class GeneticStrategy implements AutogearStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): Individual[] {
         return population
             .map(individual => ({
@@ -120,7 +122,8 @@ export class GeneticStrategy implements AutogearStrategy {
                     ship,
                     priorities,
                     getGearPiece,
-                    getEngineeringStatsForShipType
+                    getEngineeringStatsForShipType,
+                    shipRole
                 )
             }))
             .sort((a, b) => b.fitness - a.fitness);
@@ -131,55 +134,30 @@ export class GeneticStrategy implements AutogearStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): number {
-        const totalStats = calculateTotalStats(
-            ship.baseStats,
-            equipment,
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            getEngineeringStatsForShipType(ship.type)
-        );
-
-        let fitness = this.calculatePriorityScore(totalStats, priorities);
-
-        // Add set bonus consideration
-        const setCount: Record<string, number> = {};
-        Object.values(equipment).forEach(gearId => {
-            if (!gearId) return;
-            const gear = getGearPiece(gearId);
-            if (!gear?.setBonus) return;
-            setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
-        });
-
-        Object.values(setCount).forEach(count => {
-            if (count >= 2) {
-                fitness *= 1.15; // 15% bonus for completed sets
-            }
-        });
-
-        return fitness;
+        return calculateTotalScore(ship, equipment, priorities, getGearPiece, getEngineeringStatsForShipType, shipRole);
     }
 
     private selectParent(population: Individual[]): Individual {
         // Tournament selection
         const tournamentSize = 3;
-        const tournament = Array(tournamentSize).fill(null).map(() => 
+        const tournament = Array(tournamentSize).fill(null).map(() =>
             population[Math.floor(Math.random() * population.length)]
         );
-        return tournament.reduce((best, current) => 
+        return tournament.reduce((best, current) =>
             current.fitness > best.fitness ? current : best
         );
     }
 
     private crossover(parent1: Individual, parent2: Individual): Individual {
         const childEquipment: Partial<Record<GearSlotName, string>> = {};
-        
+
         Object.keys(GEAR_SLOTS).forEach(slotKey => {
             const slot = slotKey as GearSlotName;
             // Randomly choose from either parent
-            childEquipment[slot] = Math.random() < 0.5 
+            childEquipment[slot] = Math.random() < 0.5
                 ? parent1.equipment[slot]
                 : parent2.equipment[slot];
         });
@@ -202,37 +180,4 @@ export class GeneticStrategy implements AutogearStrategy {
             }
         });
     }
-
-    private calculatePriorityScore(
-        stats: BaseStats,
-        priorities: StatPriority[]
-    ): number {
-        let totalScore = 0;
-
-        priorities.forEach((priority, index) => {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-
-            if (priority.maxLimit) {
-                const normalizedLimit = priority.maxLimit / normalizer;
-                if (normalizedValue > normalizedLimit) {
-                    totalScore -= (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
-                    return;
-                }
-
-                let score = normalizedValue * priority.weight * orderMultiplier;
-                const ratio = normalizedValue / normalizedLimit;
-                if (ratio > 0.8) {
-                    score *= (1 - (ratio - 0.8));
-                }
-                totalScore += score;
-            } else {
-                totalScore += normalizedValue * priority.weight * orderMultiplier;
-            }
-        });
-
-        return totalScore;
-    }
-} 
+}

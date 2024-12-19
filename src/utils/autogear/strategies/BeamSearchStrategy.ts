@@ -6,7 +6,7 @@ import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../statsCalculator';
 import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
-import { STAT_NORMALIZERS } from '../constants';
+import { calculatePriorityScore } from '../scoring';
 
 interface GearConfiguration {
     equipment: Partial<Record<GearSlotName, string>>;
@@ -24,7 +24,8 @@ export class BeamSearchStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): GearSuggestion[] {
         let configurations: GearConfiguration[] = [{
             equipment: {},
@@ -60,7 +61,8 @@ export class BeamSearchStrategy implements AutogearStrategy {
                         totalStats,
                         priorities,
                         newEquipment,
-                        getGearPiece
+                        getGearPiece,
+                        shipRole
                     );
 
                     newConfigurations.push({
@@ -89,9 +91,10 @@ export class BeamSearchStrategy implements AutogearStrategy {
         stats: BaseStats,
         priorities: StatPriority[],
         equipment: Partial<Record<GearSlotName, string>>,
-        getGearPiece: (id: string) => GearPiece | undefined
+        getGearPiece: (id: string) => GearPiece | undefined,
+        shipRole?: ShipTypeName
     ): number {
-        let score = this.calculatePriorityScore(stats, priorities);
+        let score = calculatePriorityScore(stats, priorities, shipRole);
 
         const setCount: Record<string, number> = {};
         Object.values(equipment).forEach(gearId => {
@@ -110,40 +113,5 @@ export class BeamSearchStrategy implements AutogearStrategy {
         });
 
         return score;
-    }
-
-    private calculatePriorityScore(
-        stats: BaseStats,
-        priorities: StatPriority[]
-    ): number {
-        let totalScore = 0;
-
-        priorities.forEach((priority, index) => {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-
-            if (priority.maxLimit) {
-                const normalizedLimit = priority.maxLimit / normalizer;
-                if (normalizedValue > normalizedLimit) {
-                    totalScore -= (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
-                    return;
-                }
-
-                let score = normalizedValue * priority.weight * orderMultiplier;
-
-                const ratio = normalizedValue / normalizedLimit;
-                if (ratio > 0.8) {
-                    score *= (1 - (ratio - 0.8));
-                }
-
-                totalScore += score;
-            } else {
-                totalScore += normalizedValue * priority.weight * orderMultiplier;
-            }
-        });
-
-        return totalScore;
     }
 }

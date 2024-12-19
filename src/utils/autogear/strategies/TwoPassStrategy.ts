@@ -6,7 +6,7 @@ import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../statsCalculator';
 import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
-import { STAT_NORMALIZERS } from '../constants';
+import { calculatePriorityScore, calculateTotalScore } from '../scoring';
 
 export class TwoPassStrategy implements AutogearStrategy {
     name = 'Two-Pass Algorithm';
@@ -17,11 +17,12 @@ export class TwoPassStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): GearSuggestion[] {
         // First pass: Find best gear pieces based on individual stats
-        const firstPassEquipment = this.firstPass(ship, priorities, inventory, getGearPiece, getEngineeringStatsForShipType);
-        
+        const firstPassEquipment = this.firstPass(ship, priorities, inventory, getGearPiece, getEngineeringStatsForShipType, shipRole);
+
         // Second pass: Look for set bonus opportunities
         const finalEquipment = this.secondPass(
             ship,
@@ -29,7 +30,8 @@ export class TwoPassStrategy implements AutogearStrategy {
             inventory,
             firstPassEquipment,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            shipRole
         );
 
         // Convert to suggestions
@@ -47,7 +49,8 @@ export class TwoPassStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): Partial<Record<GearSlotName, string>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
@@ -71,7 +74,7 @@ export class TwoPassStrategy implements AutogearStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculatePriorityScore(totalStats, priorities);
+                    const score = this.calculateStatScore(totalStats, priorities, shipRole);
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;
@@ -92,7 +95,8 @@ export class TwoPassStrategy implements AutogearStrategy {
         inventory: GearPiece[],
         currentEquipment: Partial<Record<GearSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): Partial<Record<GearSlotName, string>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(inventory, currentEquipment, getGearPiece);
@@ -100,8 +104,8 @@ export class TwoPassStrategy implements AutogearStrategy {
         // Try to complete sets that are close to completion
         potentialSets.forEach(({ setName, pieces }) => {
             if (setCount[setName] === 1) { // We have one piece of this set
-                const baseScore = this.calculateTotalScore(
-                    ship, currentEquipment, priorities, getGearPiece, getEngineeringStatsForShipType
+                const baseScore = this.evaluateEquipment(
+                    ship, currentEquipment, priorities, getGearPiece, getEngineeringStatsForShipType, shipRole
                 );
 
                 // Try each possible piece that could complete the set
@@ -109,8 +113,8 @@ export class TwoPassStrategy implements AutogearStrategy {
                     const testEquipment = { ...currentEquipment };
                     testEquipment[piece.slot] = piece.id;
 
-                    const newScore = this.calculateTotalScore(
-                        ship, testEquipment, priorities, getGearPiece, getEngineeringStatsForShipType
+                    const newScore = this.evaluateEquipment(
+                        ship, testEquipment, priorities, getGearPiece, getEngineeringStatsForShipType, shipRole
                     );
 
                     // If this improves our score, keep it
@@ -167,65 +171,22 @@ export class TwoPassStrategy implements AutogearStrategy {
             });
     }
 
-    private calculateTotalScore(
+    private calculateStatScore(
+        stats: BaseStats,
+        priorities: StatPriority[],
+        shipRole?: ShipTypeName
+    ): number {
+        return calculatePriorityScore(stats, priorities, shipRole);
+    }
+
+    private evaluateEquipment(
         ship: Ship,
         equipment: Partial<Record<GearSlotName, string>>,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): number {
-        const totalStats = calculateTotalStats(
-            ship.baseStats,
-            equipment,
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            getEngineeringStatsForShipType(ship.type)
-        );
-
-        let score = this.calculatePriorityScore(totalStats, priorities);
-
-        // Add set bonus consideration
-        const setCount = this.countSets(equipment, getGearPiece);
-        Object.values(setCount).forEach(count => {
-            if (count >= 2) {
-                score *= 1.15; // 15% bonus for completed sets
-            }
-        });
-
-        return score;
+        return calculateTotalScore(ship, equipment, priorities, getGearPiece, getEngineeringStatsForShipType, shipRole);
     }
-
-    private calculatePriorityScore(
-        stats: BaseStats,
-        priorities: StatPriority[]
-    ): number {
-        let totalScore = 0;
-
-        priorities.forEach((priority, index) => {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-
-            if (priority.maxLimit) {
-                const normalizedLimit = priority.maxLimit / normalizer;
-                if (normalizedValue > normalizedLimit) {
-                    totalScore -= (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
-                    return;
-                }
-
-                let score = normalizedValue * priority.weight * orderMultiplier;
-                const ratio = normalizedValue / normalizedLimit;
-                if (ratio > 0.8) {
-                    score *= (1 - (ratio - 0.8));
-                }
-                totalScore += score;
-            } else {
-                totalScore += normalizedValue * priority.weight * orderMultiplier;
-            }
-        });
-
-        return totalScore;
-    }
-} 
+}

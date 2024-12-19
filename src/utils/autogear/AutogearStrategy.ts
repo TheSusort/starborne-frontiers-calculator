@@ -13,7 +13,7 @@ export interface AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole: ShipTypeName | null
+        shipRole?: ShipTypeName
     ): GearSuggestion[];
 }
 

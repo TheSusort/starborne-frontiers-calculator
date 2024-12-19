@@ -6,7 +6,7 @@ import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../statsCalculator';
 import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
-import { STAT_NORMALIZERS } from '../constants';
+import { calculatePriorityScore, calculateTotalScore } from '../scoring';
 
 interface SetGroup {
     setName: string;
@@ -27,7 +27,7 @@ export class SetFirstStrategy implements AutogearStrategy {
     ): GearSuggestion[] {
         // Group inventory by sets
         const setGroups = this.groupInventoryBySets(inventory, ship, priorities, getGearPiece, getEngineeringStatsForShipType);
-        
+
         // Start with empty equipment
         const equipment: Partial<Record<GearSlotName, string>> = {};
         const usedSlots = new Set<GearSlotName>();
@@ -115,7 +115,7 @@ export class SetFirstStrategy implements AutogearStrategy {
         // Find best possible combination of pieces from this set
         const slots = new Set(pieces.map(p => p.slot));
         const testEquipment: Partial<Record<GearSlotName, string>> = {};
-        
+
         slots.forEach(slot => {
             const bestPiece = pieces
                 .filter(p => p.slot === slot)
@@ -128,7 +128,7 @@ export class SetFirstStrategy implements AutogearStrategy {
                         ship.implants,
                         getEngineeringStatsForShipType(ship.type)
                     );
-                    const currentScore = this.calculatePriorityScore(currentStats, priorities);
+                    const currentScore = this.calculateStatScore(currentStats, priorities);
 
                     if (!best || currentScore > best.score) {
                         return { piece: current, score: currentScore };
@@ -141,16 +141,7 @@ export class SetFirstStrategy implements AutogearStrategy {
             }
         });
 
-        const totalStats = calculateTotalStats(
-            ship.baseStats,
-            testEquipment,
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            getEngineeringStatsForShipType(ship.type)
-        );
-
-        return this.calculatePriorityScore(totalStats, priorities) * 1.15; // Include set bonus in potential
+        return calculateTotalScore(ship, testEquipment, priorities, getGearPiece, getEngineeringStatsForShipType);
     }
 
     private findBestSetCombination(
@@ -195,7 +186,7 @@ export class SetFirstStrategy implements AutogearStrategy {
                     getEngineeringStatsForShipType(ship.type)
                 );
 
-                const score = this.calculatePriorityScore(totalStats, priorities) * 1.15;
+                const score = this.calculateStatScore(totalStats, priorities) * 1.15;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -237,7 +228,7 @@ export class SetFirstStrategy implements AutogearStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculatePriorityScore(totalStats, priorities);
+                    const score = this.calculateStatScore(totalStats, priorities);
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;
@@ -251,36 +242,10 @@ export class SetFirstStrategy implements AutogearStrategy {
         });
     }
 
-    private calculatePriorityScore(
+    private calculateStatScore(
         stats: BaseStats,
         priorities: StatPriority[]
     ): number {
-        let totalScore = 0;
-
-        priorities.forEach((priority, index) => {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-
-            if (priority.maxLimit) {
-                const normalizedLimit = priority.maxLimit / normalizer;
-                if (normalizedValue > normalizedLimit) {
-                    totalScore -= (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
-                    return;
-                }
-
-                let score = normalizedValue * priority.weight * orderMultiplier;
-                const ratio = normalizedValue / normalizedLimit;
-                if (ratio > 0.8) {
-                    score *= (1 - (ratio - 0.8));
-                }
-                totalScore += score;
-            } else {
-                totalScore += normalizedValue * priority.weight * orderMultiplier;
-            }
-        });
-
-        return totalScore;
+        return calculatePriorityScore(stats, priorities);
     }
-} 
+}

@@ -1,8 +1,19 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.7.2';
+export const CURRENT_VERSION = 'v0.8.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.8.0',
+        date: '2024-12-19',
+        changes: [
+            'Added autogear predefined modes',
+            '- Added Attacker (max damage)',
+            '- Added Defender (max HP/def combo)',
+            '- Added Debuffer (270 hacking / max damage)',
+            '- Added Supporter (max heal output)'
+        ]
+    },
     {
         version: 'v0.7.2',
         date: '2024-12-16',
