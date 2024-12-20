@@ -7,14 +7,14 @@ import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
 
 // Defense reduction curve approximation based on the graph
-function calculateDamageReduction(defense: number): number {
+export function calculateDamageReduction(defense: number): number {
     // Convert defense to thousands for easier calculation
     const x = defense / 1000;
     // Sigmoid-like function that approximates the curve
     return 87 * (1 - Math.exp(-0.15 * x)) / (1 + 0.1 * x);
 }
 
-function calculateEffectiveHP(hp: number, defense: number): number {
+export function calculateEffectiveHP(hp: number, defense: number): number {
     const damageReduction = calculateDamageReduction(defense);
     return hp * (100 / (100 - damageReduction));
 }
@@ -77,32 +77,29 @@ export function calculatePriorityScore(
 
 function calculateAttackerScore(stats: BaseStats): number {
     const dps = calculateDPS(stats);
-    const speedMultiplier = (stats.speed || 0) / 100;
-    return dps * speedMultiplier;
+    return dps;
 }
 
 function calculateDefenderScore(stats: BaseStats): number {
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    const speedMultiplier = (stats.speed || 0) / 100;
-    return effectiveHP * speedMultiplier;
+    return effectiveHP;
 }
 
 function calculateDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
     const hackingScore = hacking >= 270 ? 1000 : hacking / 270 * 1000;
     const dps = calculateDPS(stats);
-    const speedMultiplier = (stats.speed || 0) / 100;
 
-    return hackingScore + (dps * speedMultiplier * 0.5); // DPS is secondary priority
+    return hackingScore + (dps * 0.5); // DPS is secondary priority
 }
 
 function calculateSupporterScore(stats: BaseStats): number {
     const healModifier = stats.healModifier || 0;
     const baseHealing = (stats.hp || 0) * 0.15; // 15% of HP
-    const totalHealing = baseHealing * (1 + healModifier / 100);
-    const speedMultiplier = (stats.speed || 0) / 100;
+    const critMultiplier = 1 + (stats.crit || 0) / 100 * ((stats.critDamage || 0) - 100) / 100;
+    const totalHealing = baseHealing * critMultiplier * (1 + healModifier / 100);
 
-    return totalHealing * speedMultiplier;
+    return totalHealing;
 }
 
 // Update calculateTotalScore to include shipRole

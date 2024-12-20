@@ -8,12 +8,14 @@ import { PageLayout } from '../components/layout/PageLayout';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../utils/autogear/getStrategy';
-import { runDamageSimulation, SimulationSummary } from '../utils/simulationCalculator';
+import { runSimulation, SimulationSummary } from '../utils/simulationCalculator';
 import { StatList } from '../components/stats/StatList';
 import { GearSlotName, ShipTypeName } from '../constants';
 import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
-import { SimulationResults } from '../components/autogear/SimulationResults';
+import { SimulationResults } from '../components/simulation/SimulationResults';
+import { ProgressBar } from '../components/ui/ProgressBar';
+import { BruteForceStrategy } from '../utils/autogear/strategies/BruteForceStrategy';
 
 export const AutogearPage: React.FC = () => {
     const { getShipById, updateShip } = useShips();
@@ -27,6 +29,11 @@ export const AutogearPage: React.FC = () => {
     const [selectedAlgorithm, setSelectedAlgorithm] = useState<AutogearAlgorithm>(AutogearAlgorithm.BeamSearch);
     const [currentSimulation, setCurrentSimulation] = useState<SimulationSummary | null>(null);
     const [suggestedSimulation, setSuggestedSimulation] = useState<SimulationSummary | null>(null);
+    const [optimizationProgress, setOptimizationProgress] = useState<{
+        current: number;
+        total: number;
+        percentage: number;
+    } | null>(null);
 
     const selectedShip = getShipById(selectedShipId);
 
@@ -41,8 +48,16 @@ export const AutogearPage: React.FC = () => {
     const handleAutogear = () => {
         if (!selectedShip) return;
 
+        setOptimizationProgress(null);
+        setSuggestions([]);
+
         const strategy = getAutogearStrategy(selectedAlgorithm);
-        const suggestions = strategy.findOptimalGear(
+        
+        if (strategy instanceof BruteForceStrategy) {
+            strategy.setProgressCallback(setOptimizationProgress);
+        }
+
+        const newSuggestions = strategy.findOptimalGear(
             selectedShip,
             priorities,
             inventory,
@@ -51,16 +66,34 @@ export const AutogearPage: React.FC = () => {
             selectedShipRole || undefined
         );
 
-        setSuggestions(suggestions);
-
-        // Run simulations for both current and suggested gear
+        // Calculate stats using the new suggestions directly
         const currentStats = getCurrentStats();
-        const suggestedStats = getSuggestedStats();
+        const suggestedStats = calculateSuggestedStats(newSuggestions);
 
         if (currentStats && suggestedStats) {
-            setCurrentSimulation(runDamageSimulation(currentStats));
-            setSuggestedSimulation(runDamageSimulation(suggestedStats));
+            setCurrentSimulation(runSimulation(currentStats, selectedShipRole));
+            setSuggestedSimulation(runSimulation(suggestedStats, selectedShipRole));
         }
+
+        setSuggestions(newSuggestions);
+    };
+
+    const calculateSuggestedStats = (newSuggestions: GearSuggestion[]) => {
+        if (!selectedShip) return null;
+
+        const suggestedEquipment = { ...selectedShip.equipment };
+        newSuggestions.forEach(suggestion => {
+            suggestedEquipment[suggestion.slotName] = suggestion.gearId;
+        });
+
+        return calculateTotalStats(
+            selectedShip.baseStats,
+            suggestedEquipment,
+            getGearPiece,
+            selectedShip.refits,
+            selectedShip.implants,
+            getEngineeringStatsForShipType(selectedShip.type)
+        );
     };
 
     const handleEquipSuggestions = () => {
@@ -92,26 +125,14 @@ export const AutogearPage: React.FC = () => {
         );
     };
 
-    const getSuggestedStats = () => {
-        if (!selectedShip) return null;
-
-        const suggestedEquipment = { ...selectedShip.equipment };
-        suggestions.forEach(suggestion => {
-            suggestedEquipment[suggestion.slotName] = suggestion.gearId;
-        });
-
-        return calculateTotalStats(
-            selectedShip.baseStats,
-            suggestedEquipment,
-            getGearPiece,
-            selectedShip.refits,
-            selectedShip.implants,
-            getEngineeringStatsForShipType(selectedShip.type)
-        );
+    const handleRoleChange = (role: ShipTypeName) => {
+        setSelectedShipRole(role);
+        setCurrentSimulation(null);
+        setSuggestedSimulation(null);
     };
 
     const currentStats = getCurrentStats();
-    const suggestedStats = getSuggestedStats();
+    const suggestedStats = calculateSuggestedStats(suggestions);
 
     return (
         <PageLayout
@@ -138,6 +159,7 @@ export const AutogearPage: React.FC = () => {
                 <SimulationResults
                     currentSimulation={currentSimulation}
                     suggestedSimulation={suggestedSimulation}
+                    role={selectedShipRole}
                 />
             )}
 
@@ -148,7 +170,7 @@ export const AutogearPage: React.FC = () => {
                     selectedAlgorithm={selectedAlgorithm}
                     priorities={priorities}
                     onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                    onRoleSelect={setSelectedShipRole}
+                    onRoleSelect={handleRoleChange}
                     onAlgorithmSelect={setSelectedAlgorithm}
                     onAddPriority={handleAddPriority}
                     onRemovePriority={handleRemovePriority}
@@ -163,6 +185,16 @@ export const AutogearPage: React.FC = () => {
                         onHover={setHoveredGear}
                         onEquip={handleEquipSuggestions}
                     />
+                )}
+
+                {selectedAlgorithm === AutogearAlgorithm.BruteForce && optimizationProgress && (
+                    <div className="col-span-2 p-4 bg-dark rounded">
+                        <ProgressBar
+                            current={optimizationProgress.current}
+                            total={optimizationProgress.total}
+                            percentage={optimizationProgress.percentage}
+                        />
+                    </div>
                 )}
             </div>
         </PageLayout>

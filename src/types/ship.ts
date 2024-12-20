@@ -23,6 +23,7 @@ export interface Faction {
 
 export interface ShipType {
     name: ShipTypeName;
+    description: string;
     iconUrl: string;
 }
 

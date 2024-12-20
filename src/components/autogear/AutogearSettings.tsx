@@ -13,7 +13,7 @@ interface AutogearSettingsProps {
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
     onShipSelect: (ship: Ship) => void;
-    onRoleSelect: (role: ShipTypeName | null) => void;
+    onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
@@ -40,11 +40,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 selected={selectedShip}
             />
             <div className="p-4 bg-dark space-y-2">
-                <span className="text-gray-300 text-sm">Predefined Strategies</span>
+                <span className="text-gray-300 text-sm">Predefined Strategies (Experimental)</span>
                 <Select
                     options={Object.values(SHIP_TYPES).map(type => ({
                         value: type.name,
-                        label: type.name
+                        label: `${type.name} (${type.description})`
                     }))}
                     value={SHIP_TYPES[selectedShipRole || '']?.name}
                     onChange={(e) => onRoleSelect(e.target.value as ShipTypeName)}
@@ -109,4 +109,4 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </Button>
         </div>
     );
-}; 
+};

@@ -8,11 +8,13 @@ import { Modal } from '../layout/Modal';
 interface ShipSelectorProps {
     selected: Ship | null;
     onSelect: (ship: Ship) => void;
+    variant?: 'compact' | 'full';
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({
     selected,
     onSelect,
+    variant = 'compact',
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
@@ -28,7 +30,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
             </Button>
 
             {selected && (
-                <ShipDisplay ship={selected} variant="compact" />
+                <ShipDisplay ship={selected} variant={variant} />
             )}
 
             <Modal

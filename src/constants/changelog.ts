@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.8.0';
+export const CURRENT_VERSION = 'v0.9.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.9.0',
+        date: '2024-12-20',
+        changes: [
+            'Added autogear brute force mode',
+            'Improved predefined modes',
+        ]
+    },
     {
         version: 'v0.8.0',
         date: '2024-12-19',

@@ -21,7 +21,8 @@ export enum AutogearAlgorithm {
     TwoPass = 'twoPass',
     SetFirst = 'setFirst',
     BeamSearch = 'beamSearch',
-    Genetic = 'genetic'
+    Genetic = 'genetic',
+    BruteForce = 'bruteForce'
 }
 
 export const AUTOGEAR_STRATEGIES: Record<AutogearAlgorithm, {
@@ -43,5 +44,9 @@ export const AUTOGEAR_STRATEGIES: Record<AutogearAlgorithm, {
     [AutogearAlgorithm.Genetic]: {
         name: 'Genetic Algorithm',
         description: 'Evolution-inspired approach for finding optimal gear combinations'
+    },
+    [AutogearAlgorithm.BruteForce]: {
+        name: 'Brute Force',
+        description: 'Tries every possible combination to find the absolute best gear setup (slow but thorough)'
     }
 };
