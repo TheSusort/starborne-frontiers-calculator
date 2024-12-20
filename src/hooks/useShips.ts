@@ -1,14 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Ship } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
+import { GearPiece } from '../types/gear';
+import { useNotification } from '../contexts/NotificationContext';
 const STORAGE_KEY = 'ships';
 
-export const useShips = () => {
+interface UseShipsProps {
+    getGearPiece?: (id: string) => GearPiece | undefined;
+}
+
+export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const [ships, setShips] = useState<Ship[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
-
+    const { addNotification } = useNotification();
     // Load ships from localStorage on mount
     useEffect(() => {
         loadShips();
@@ -44,20 +50,40 @@ export const useShips = () => {
         }
     }, [ships, loading, saveShips]);
 
-    const handleEquipGear = (shipId: string, slot: GearSlotName, gearId: string) => {
-        setShips(prev => prev.map(ship => {
-            if (ship.id === shipId) {
-                return {
-                    ...ship,
-                    equipment: {
-                        ...ship.equipment,
-                        [slot]: gearId
-                    }
-                };
-            }
-            return ship;
-        }));
-    };
+    const handleEquipGear = useCallback((shipId: string, slot: GearSlotName, gearId: string) => {
+        setShips(prev => {
+            const newShips = prev.map(ship => {
+                // Remove the gear from any other ship that might have it equipped
+                if (ship.id !== shipId && Object.entries(ship.equipment).some(([_, id]) => id === gearId)) {
+                    const newEquipment = { ...ship.equipment };
+                    Object.entries(newEquipment).forEach(([key, id]) => {
+                        if (id === gearId) {
+                            delete newEquipment[key as GearSlotName];
+                            addNotification('success', `Unequipped ${key} from ${ship.name}`);
+                        }
+                    });
+                    return {
+                        ...ship,
+                        equipment: newEquipment
+                    };
+                }
+
+                // Equip the gear to the target ship
+                if (ship.id === shipId) {
+                    return {
+                        ...ship,
+                        equipment: {
+                            ...ship.equipment,
+                            [slot]: gearId
+                        }
+                    };
+                }
+                return ship;
+            });
+
+            return newShips;
+        });
+    }, [addNotification]);
 
     const handleRemoveGear = (shipId: string, slot: GearSlotName) => {
         setShips(prev => prev.map(ship => {
@@ -102,6 +128,35 @@ export const useShips = () => {
         ));
     }, []);
 
+    const validateGearAssignments = useCallback(() => {
+        if (!getGearPiece) return;
+
+        setShips(prev => prev.map(ship => {
+            const newEquipment = { ...ship.equipment };
+            let hasChanges = false;
+
+            // Remove any gear IDs that don't belong to this ship
+            Object.entries(newEquipment).forEach(([slot, gearId]) => {
+                if (gearId) {
+                    const gear = getGearPiece(gearId);
+                    if (!gear || (gear.shipId && gear.shipId !== ship.id)) {
+                        delete newEquipment[slot];
+                        hasChanges = true;
+                    }
+                }
+            });
+
+            return hasChanges ? { ...ship, equipment: newEquipment } : ship;
+        }));
+    }, [getGearPiece]);
+
+    // Run validation when ships change or getGearPiece is provided
+    useEffect(() => {
+        if (getGearPiece && !loading) {
+            validateGearAssignments();
+        }
+    }, [getGearPiece, loading, validateGearAssignments]);
+
     return {
         ships,
         loading,
@@ -114,6 +169,7 @@ export const useShips = () => {
         handleSaveShip,
         getShipById,
         updateShip,
-        saveShips
+        saveShips,
+        validateGearAssignments
     };
 };

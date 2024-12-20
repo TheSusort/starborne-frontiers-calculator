@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageLayout } from '../components/layout/PageLayout';
 import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 import { GearPieceForm } from '../components/gear/GearPieceForm';
@@ -6,12 +6,38 @@ import { GearInventory } from '../components/gear/GearInventory';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
 import { useNotification } from '../contexts/NotificationContext';
+import { useShips } from '../hooks/useShips';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
+    const { ships } = useShips();
+
+    useEffect(() => {
+        // Validate that all equipped gear matches ship assignments
+        const validateGearAssignments = async () => {
+            const newInventory = inventory.map(gear => {
+                if (gear.shipId) {
+                    // Check if the gear is actually equipped on the ship it claims to be equipped on
+                    const ship = ships.find(s => s.id === gear.shipId);
+                    if (!ship || !Object.values(ship.equipment).includes(gear.id)) {
+                        // If not, clear the shipId
+                        return { ...gear, shipId: '' };
+                    }
+                }
+                return gear;
+            });
+
+            // Only save if there were changes
+            if (JSON.stringify(newInventory) !== JSON.stringify(inventory)) {
+                await saveInventory(newInventory);
+            }
+        };
+
+        validateGearAssignments();
+    }, [inventory, ships, saveInventory]);
 
     const handleRemovePiece = async (id: string) => {
         const newInventory = inventory.filter(piece => piece.id !== id);

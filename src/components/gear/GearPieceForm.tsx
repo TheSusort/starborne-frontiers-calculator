@@ -19,7 +19,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
     const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
-
     useEffect(() => {
         if (editingPiece) {
             setSlot(editingPiece.slot);
@@ -80,7 +79,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             setBonus: setBonus,
             stars,
             rarity,
-            level
+            level,
+            shipId: editingPiece?.shipId || '',
         };
         onSubmit(piece);
         setSubStats([]);

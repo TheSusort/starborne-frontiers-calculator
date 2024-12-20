@@ -8,6 +8,8 @@ import { Modal } from '../layout/Modal';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { Button } from '../ui/Button';
+import { useNotification } from '../../contexts/NotificationContext';
+import { useShips } from '../../hooks/useShips';
 
 interface Props {
     ship: Ship;
@@ -33,13 +35,37 @@ export const ShipCard: React.FC<Props> = ({
     onHoverGear,
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
+    const { addNotification } = useNotification();
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
+    const { ships } = useShips();
 
     const handleUnequipAll = () => {
         Object.entries(GEAR_SLOTS).forEach(([key]) => {
             onRemoveGear(ship.id, key as GearSlotName);
         });
+    };
+
+    const handleEquipAttempt = (gear: GearPiece) => {
+        if (gear.shipId && gear.shipId !== ship.id) {
+            const currentShip = ships.find(s => s.id === gear.shipId)?.name || 'another ship';
+
+            if (window.confirm(
+                `This ${gear.slot} is currently equipped on ${currentShip}. Would you like to move it to ${ship.name} instead?`
+            )) {
+                if (selectedSlot) {
+                    onEquipGear(ship.id, selectedSlot, gear.id);
+                    setSelectedSlot(null);
+                    addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
+                }
+            }
+        } else {
+            if (selectedSlot) {
+                onEquipGear(ship.id, selectedSlot, gear.id);
+                setSelectedSlot(null);
+                addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
+            }
+        }
     };
 
     return (
@@ -97,12 +123,7 @@ export const ShipCard: React.FC<Props> = ({
                 <GearInventory
                     inventory={availableGear.filter(gear => selectedSlot && gear.slot === selectedSlot)}
                     mode="select"
-                    onEquip={(gear) => {
-                        if (selectedSlot) {
-                            onEquipGear(ship.id, selectedSlot, gear.id);
-                            setSelectedSlot(null);
-                        }
-                    }}
+                    onEquip={handleEquipAttempt}
                     onRemove={() => { }}
                     onEdit={() => { }}
                 />

@@ -83,17 +83,15 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
             <div className="space-y-2 p-4 bg-dark">
                 <span className="text-gray-300 text-sm">Algorithm</span>
-                <select
-                    className="w-full p-2 bg-dark border border-gray-700 rounded text-gray-200"
+                <Select
+                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name, description }]) => ({
+                        value: key,
+                        label: name
+                    }))}
                     value={selectedAlgorithm}
                     onChange={(e) => onAlgorithmSelect(e.target.value as AutogearAlgorithm)}
-                >
-                    {Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name, description }]) => (
-                        <option key={key} value={key}>
-                            {name}
-                        </option>
-                    ))}
-                </select>
+                    noDefaultSelection
+                />
                 <p className="text-sm text-gray-400">
                     {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
                 </p>

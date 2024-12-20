@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ShipForm } from '../components/ship/ShipForm';
 import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
@@ -9,6 +9,10 @@ import { useNotification } from '../contexts/NotificationContext';
 
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
+    const getGearPiece = useCallback((id: string) => {
+        return inventory.find(gear => gear.id === id);
+    }, [inventory]);
+
     const {
         ships,
         loading,
@@ -19,7 +23,7 @@ export const ShipsPage: React.FC = () => {
         handleRemoveGear,
         handleSaveShip,
         setEditingShip
-    } = useShips();
+    } = useShips({ getGearPiece });
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
 
@@ -77,7 +81,6 @@ export const ShipsPage: React.FC = () => {
                 }}
                 onEquipGear={(ship, slot, gear) => {
                     handleEquipGear(ship, slot, gear);
-                    addNotification('success', 'Gear equipped successfully');
                 }}
                 onRemoveGear={(ship, slot) => {
                     handleRemoveGear(ship, slot);
