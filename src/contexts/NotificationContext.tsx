@@ -17,7 +17,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, []);
 
     const addNotification = useCallback((type: NotificationType, message: string, duration = 5000) => {
-        const id = Date.now().toString();
+        const id = Date.now().toString() + Math.random().toString(36).substring(2, 15);
         const notification: Notification = { id, type, message, duration };
 
         setNotifications(prev => [...prev, notification]);

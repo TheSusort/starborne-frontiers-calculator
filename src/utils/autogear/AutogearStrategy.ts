@@ -47,6 +47,6 @@ export const AUTOGEAR_STRATEGIES: Record<AutogearAlgorithm, {
     },
     [AutogearAlgorithm.BruteForce]: {
         name: 'Brute Force',
-        description: 'Tries every possible combination to find the absolute best gear setup (slow but thorough)'
+        description: 'Tries every possible combination to find the absolute best gear setup (may crash browser)'
     }
 };

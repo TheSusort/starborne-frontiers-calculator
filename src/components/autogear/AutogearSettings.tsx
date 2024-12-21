@@ -90,7 +90,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     }))}
                     value={selectedAlgorithm}
                     onChange={(e) => onAlgorithmSelect(e.target.value as AutogearAlgorithm)}
-                    noDefaultSelection
                 />
                 <p className="text-sm text-gray-400">
                     {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}

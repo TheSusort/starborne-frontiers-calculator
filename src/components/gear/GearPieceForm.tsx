@@ -41,11 +41,13 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         return STATS[statName].allowedTypes;
     };
 
-    // Update main stat when slot changes
+    // Update main stat when slot changes, but preserve values when editing
     useEffect(() => {
-        const availableStats = getAvailableMainStats(slot);
-        setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
-    }, [slot]);
+        if (!editingPiece) {
+            const availableStats = getAvailableMainStats(slot);
+            setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
+        }
+    }, [slot, editingPiece]);
 
     const handleMainStatChange = (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
         // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
@@ -71,12 +73,33 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate and adjust substat types
+        const validatedSubStats = subStats.map(subStat => {
+            if (subStat.name === mainStat.name) {
+                return {
+                    ...subStat,
+                    type: (mainStat.type === 'flat' ? 'percentage' : 'flat') as StatType
+                };
+            }
+
+            const allowedTypes = STATS[subStat.name].allowedTypes;
+            if (!allowedTypes.includes(subStat.type)) {
+                return {
+                    ...subStat,
+                    type: allowedTypes[0] as StatType
+                };
+            }
+
+            return subStat;
+        });
+
         const piece: GearPiece = {
             id: editingPiece?.id || Date.now().toString(),
             slot,
             mainStat,
-            subStats,
-            setBonus: setBonus,
+            subStats: validatedSubStats as Stat[], // Use validated substats
+            setBonus,
             stars,
             rarity,
             level,
