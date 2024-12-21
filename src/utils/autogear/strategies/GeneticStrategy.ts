@@ -5,33 +5,49 @@ import { StatPriority, GearSuggestion } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import { calculateTotalScore } from '../scoring';
+import { BaseStrategy } from '../BaseStrategy';
 
 interface Individual {
     equipment: Partial<Record<GearSlotName, string>>;
     fitness: number;
 }
 
-export class GeneticStrategy implements AutogearStrategy {
+/**
+ * Genetic Strategy
+ *
+ * This strategy uses a genetic algorithm to find the optimal gear combinations.
+ * It is a more advanced strategy that is more likely to find the optimal gear combinations.
+ *
+ * Shortly explained:
+ * 1. Create a population of random gear combinations
+ * 2. Evaluate the fitness of each gear combination
+ * 3. Select the best gear combinations
+ * 4. Breed the best gear combinations to create a new generation
+ * 5. Repeat steps 2-4 for a number of generations
+ * 6. Return the best gear combination
+ */
+export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     name = 'Genetic Algorithm';
     description = 'Evolution-inspired approach for finding optimal gear combinations';
 
-    private readonly POPULATION_SIZE = 50;
-    private readonly GENERATIONS = 30;
-    private readonly MUTATION_RATE = 0.1;
-    private readonly ELITE_SIZE = 5;
+    private readonly POPULATION_SIZE = 1000; // Number of solutions in each generation
+    private readonly GENERATIONS = 30; // How many iterations to evolve
+    private readonly MUTATION_RATE = 0.1; // 10% chance to mutate each gear piece
+    private readonly ELITE_SIZE = 5; // Number of best solutions to keep unchanged
 
-    findOptimalGear(
+    async findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): GearSuggestion[] {
-        // Create initial population
-        let population = this.initializePopulation(ship, inventory);
+    ): Promise<GearSuggestion[]> {
+        // Initialize progress tracking (population size * generations)
+        const totalOperations = this.POPULATION_SIZE * this.GENERATIONS;
+        this.initializeProgress(totalOperations);
 
-        // Evaluate initial population
+        let population = this.initializePopulation(ship, inventory);
         population = this.evaluatePopulation(
             population,
             ship,
@@ -41,24 +57,19 @@ export class GeneticStrategy implements AutogearStrategy {
             shipRole
         );
 
-        // Evolution loop
         for (let generation = 0; generation < this.GENERATIONS; generation++) {
-            // Select parents and create new population
             const newPopulation: Individual[] = [];
-
-            // Elitism: Keep best individuals
             newPopulation.push(...population.slice(0, this.ELITE_SIZE));
 
-            // Create rest of new population
             while (newPopulation.length < this.POPULATION_SIZE) {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
                 this.mutate(child, inventory);
                 newPopulation.push(child);
+                this.incrementProgress();
             }
 
-            // Evaluate new population
             population = this.evaluatePopulation(
                 newPopulation,
                 ship,
@@ -67,9 +78,14 @@ export class GeneticStrategy implements AutogearStrategy {
                 getEngineeringStatsForShipType,
                 shipRole
             );
+
+            // Allow UI to update
+            await new Promise(resolve => setTimeout(resolve, 0));
         }
 
-        // Return best solution
+        // Ensure progress is complete
+        this.completeProgress();
+
         const bestIndividual = population[0];
         return Object.entries(bestIndividual.equipment)
             .filter((entry): entry is [string, string] => entry[1] !== undefined)

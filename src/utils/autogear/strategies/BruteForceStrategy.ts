@@ -1,4 +1,4 @@
-import { AutogearStrategy } from '../AutogearStrategy';
+import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion } from '../../../types/autogear';
@@ -11,35 +11,38 @@ interface GearConfiguration {
     score: number;
 }
 
-export class BruteForceStrategy implements AutogearStrategy {
+/**
+ * Brute Force Strategy
+ *
+ * This strategy tries every possible combination to find the absolute best gear setup.
+ * It is a very slow strategy that is not likely to find the optimal gear combinations.
+ *
+ * Shortly explained:
+ * 1. Try every possible combination
+ * 2. Return the best gear combination
+ */
+export class BruteForceStrategy extends BaseStrategy {
     name = 'Brute Force';
     description = 'Tries every possible combination to find the absolute best gear setup';
 
-    // Cache for memoization
     private scoreCache: Map<string, number> = new Map();
-    private progressCallback?: (progress: { current: number; total: number; percentage: number }) => void;
-    private totalCombinations: number = 0;
-    private combinationsTried: number = 0;
+    private readonly BATCH_SIZE = 50000;
 
-    findOptimalGear(
+    async findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): GearSuggestion[] {
-        // Reset cache and progress tracking
+    ): Promise<GearSuggestion[]> {
         this.scoreCache.clear();
-        this.combinationsTried = 0;
-
-        // Group and pre-filter inventory
         const inventoryBySlot = this.groupAndFilterInventory(inventory, shipRole);
 
-        // Calculate total combinations for progress tracking
-        this.totalCombinations = this.calculateTotalCombinations(inventoryBySlot);
-        // Start with empty configuration
-        const bestConfig = this.findBestConfiguration(
+        // Initialize progress tracking
+        this.initializeProgress(this.calculateTotalCombinations(inventoryBySlot));
+
+        const bestConfig = await this.findBestConfiguration(
             ship,
             priorities,
             inventoryBySlot,
@@ -122,78 +125,81 @@ export class BruteForceStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): GearConfiguration {
-        if (remainingSlots.length === 0) {
-            this.combinationsTried++;
+    ): Promise<GearConfiguration> {
+        return new Promise((resolve) => {
+            let batchCount = 0;
+            let bestConfig: GearConfiguration = { equipment: {}, score: -Infinity };
 
-            // Report progress
-            if (this.progressCallback && this.totalCombinations > 0) {
-                this.progressCallback({
-                    current: this.combinationsTried,
-                    total: this.totalCombinations,
-                    percentage: Math.round((this.combinationsTried / this.totalCombinations) * 100)
-                });
-            }
+            const processNextBatch = () => {
+                const processConfiguration = (
+                    equipment: Partial<Record<GearSlotName, string>>,
+                    slots: GearSlotName[]
+                ): boolean => {
+                    if (slots.length === 0) {
+                        this.incrementProgress();
+                        batchCount++;
 
-            // Use cached score if available
-            const cacheKey = this.getCacheKey(currentEquipment);
-            if (this.scoreCache.has(cacheKey)) {
-                return {
-                    equipment: { ...currentEquipment },
-                    score: this.scoreCache.get(cacheKey)!
+                        const cacheKey = this.getCacheKey(equipment);
+                        if (this.scoreCache.has(cacheKey)) {
+                            const score = this.scoreCache.get(cacheKey)!;
+                            if (score > bestConfig.score) {
+                                bestConfig = { equipment: { ...equipment }, score };
+                            }
+                            return false;
+                        }
+
+                        const score = calculateTotalScore(
+                            ship,
+                            equipment,
+                            priorities,
+                            getGearPiece,
+                            getEngineeringStatsForShipType,
+                            shipRole
+                        );
+
+                        this.scoreCache.set(cacheKey, score);
+                        if (score > bestConfig.score) {
+                            bestConfig = { equipment: { ...equipment }, score };
+                        }
+                        return false;
+                    }
+
+                    const [currentSlot, ...nextSlots] = slots;
+                    const availableGear = inventoryBySlot[currentSlot];
+
+                    for (const gear of availableGear) {
+                        if (Object.values(equipment).includes(gear.id)) {
+                            continue;
+                        }
+
+                        const newEquipment = {
+                            ...equipment,
+                            [currentSlot]: gear.id
+                        };
+
+                        if (processConfiguration(newEquipment, nextSlots)) {
+                            return true;
+                        }
+
+                        if (batchCount >= this.BATCH_SIZE) {
+                            batchCount = 0;
+                            return true;
+                        }
+                    }
+
+                    return processConfiguration(equipment, nextSlots);
                 };
-            }
 
-            const score = calculateTotalScore(
-                ship,
-                currentEquipment,
-                priorities,
-                getGearPiece,
-                getEngineeringStatsForShipType,
-                shipRole
-            );
+                const needsYield = processConfiguration(currentEquipment, remainingSlots);
 
-            // Cache the score
-            this.scoreCache.set(cacheKey, score);
-            return { equipment: { ...currentEquipment }, score };
-        }
-
-        const [currentSlot, ...nextSlots] = remainingSlots;
-        const availableGear = inventoryBySlot[currentSlot];
-        let bestConfig: GearConfiguration = { equipment: {}, score: -Infinity };
-
-        // Try each piece of gear in the current slot
-        for (const gear of availableGear) {
-            // Skip if piece is already used
-            if (Object.values(currentEquipment).includes(gear.id)) {
-                continue;
-            }
-
-            const newEquipment = {
-                ...currentEquipment,
-                [currentSlot]: gear.id
+                if (needsYield && this.currentOperation < this.totalOperations) {
+                    setTimeout(processNextBatch, 0);
+                } else {
+                    resolve(bestConfig);
+                }
             };
 
-            const result = this.findBestConfiguration(
-                ship,
-                priorities,
-                inventoryBySlot,
-                newEquipment,
-                nextSlots,
-                getGearPiece,
-                getEngineeringStatsForShipType,
-                shipRole
-            );
-
-            if (result.score > bestConfig.score) {
-                bestConfig = result;
-            }
-        }
-
-        return bestConfig;
-    }
-
-    public setProgressCallback(callback: (progress: { current: number; total: number; percentage: number }) => void) {
-        this.progressCallback = callback;
+            processNextBatch();
+        });
     }
 }

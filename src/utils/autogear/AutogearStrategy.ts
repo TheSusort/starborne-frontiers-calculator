@@ -14,7 +14,8 @@ export interface AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): GearSuggestion[];
+    ): Promise<GearSuggestion[]> | GearSuggestion[];
+    setProgressCallback(callback: (progress: { current: number; total: number; percentage: number }) => void): void;
 }
 
 export enum AutogearAlgorithm {

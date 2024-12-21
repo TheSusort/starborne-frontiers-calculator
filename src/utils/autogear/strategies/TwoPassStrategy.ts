@@ -1,4 +1,4 @@
-import { AutogearStrategy } from '../AutogearStrategy';
+import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion } from '../../../types/autogear';
@@ -8,23 +8,39 @@ import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
 
-export class TwoPassStrategy implements AutogearStrategy {
+/**
+ * Two-Pass Strategy
+ *
+ * This strategy is a fast algorithm that first optimizes stats, then looks for set opportunities.
+ * It is a more balanced strategy that is more likely to find the optimal gear combinations.
+ *
+ * Shortly explained:
+ * 1. First pass: Find best gear pieces based on individual stats
+ * 2. Second pass: Look for set bonus opportunities
+ * 3. Return the best gear combination
+ */
+export class TwoPassStrategy extends BaseStrategy {
     name = 'Two-Pass Algorithm';
     description = 'Fast algorithm that first optimizes stats, then looks for set opportunities';
 
-    findOptimalGear(
+    async findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): GearSuggestion[] {
+    ): Promise<GearSuggestion[]> {
+        // Initialize progress tracking (slots * gear + potential set combinations)
+        const totalOperations = Object.keys(GEAR_SLOTS).length * inventory.length +
+            inventory.filter(g => g.setBonus).length;
+        this.initializeProgress(totalOperations);
+
         // First pass: Find best gear pieces based on individual stats
-        const firstPassEquipment = this.firstPass(ship, priorities, inventory, getGearPiece, getEngineeringStatsForShipType, shipRole);
+        const firstPassEquipment = await this.firstPass(ship, priorities, inventory, getGearPiece, getEngineeringStatsForShipType, shipRole);
 
         // Second pass: Look for set bonus opportunities
-        const finalEquipment = this.secondPass(
+        const finalEquipment = await this.secondPass(
             ship,
             priorities,
             inventory,
@@ -33,6 +49,9 @@ export class TwoPassStrategy implements AutogearStrategy {
             getEngineeringStatsForShipType,
             shipRole
         );
+
+        // Ensure progress is complete
+        this.completeProgress();
 
         // Convert to suggestions
         return Object.entries(finalEquipment)
@@ -44,14 +63,14 @@ export class TwoPassStrategy implements AutogearStrategy {
             }));
     }
 
-    private firstPass(
+    private async firstPass(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): Partial<Record<GearSlotName, string>> {
+    ): Promise<Partial<Record<GearSlotName, string>>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
         // Process each slot independently
@@ -79,6 +98,7 @@ export class TwoPassStrategy implements AutogearStrategy {
                         bestScore = score;
                         bestGearId = gear.id;
                     }
+                    this.incrementProgress();
                 });
 
             if (bestGearId) {
@@ -89,7 +109,7 @@ export class TwoPassStrategy implements AutogearStrategy {
         return equipment;
     }
 
-    private secondPass(
+    private async secondPass(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
@@ -97,7 +117,7 @@ export class TwoPassStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName
-    ): Partial<Record<GearSlotName, string>> {
+    ): Promise<Partial<Record<GearSlotName, string>>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(inventory, currentEquipment, getGearPiece);
 
@@ -121,6 +141,7 @@ export class TwoPassStrategy implements AutogearStrategy {
                     if (newScore > baseScore) {
                         currentEquipment[piece.slot] = piece.id;
                     }
+                    this.incrementProgress();
                 });
             }
         });

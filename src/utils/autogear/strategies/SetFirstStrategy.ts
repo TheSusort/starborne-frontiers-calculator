@@ -1,4 +1,4 @@
-import { AutogearStrategy } from '../AutogearStrategy';
+import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion } from '../../../types/autogear';
@@ -14,60 +14,80 @@ interface SetGroup {
     score: number;
 }
 
-export class SetFirstStrategy implements AutogearStrategy {
+/**
+ * Set-First Strategy
+ *
+ * This strategy prioritizes completing gear sets before individual stat optimization.
+ * It is a more balanced strategy that is more likely to find the optimal gear combinations.
+ *
+ * Shortly explained:
+ * 1. Group inventory by sets
+ * 2. Try to fit complete sets
+ * 3. Fill remaining slots with best individual pieces
+ * 4. Return the best gear combination
+ */
+export class SetFirstStrategy extends BaseStrategy {
     name = 'Set-First Algorithm';
     description = 'Prioritizes completing gear sets before individual stat optimization';
 
-    findOptimalGear(
+    async findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
-    ): GearSuggestion[] {
-        // Group inventory by sets
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
+    ): Promise<GearSuggestion[]> {
         const setGroups = this.groupInventoryBySets(inventory, ship, priorities, getGearPiece, getEngineeringStatsForShipType);
+        // Initialize progress (set evaluations + remaining slots)
+        const totalOperations = setGroups.length * inventory.length + Object.keys(GEAR_SLOTS).length;
+        this.initializeProgress(totalOperations);
 
-        // Start with empty equipment
+        // Group inventory by sets
         const equipment: Partial<Record<GearSlotName, string>> = {};
         const usedSlots = new Set<GearSlotName>();
 
         // First, try to fit complete sets
-        setGroups.forEach(group => {
-            const setPieces = this.findBestSetCombination(
+        for (const group of setGroups) {
+            const setPieces = await this.findBestSetCombination(
                 group.pieces,
                 usedSlots,
                 ship,
                 priorities,
                 equipment,
                 getGearPiece,
-                getEngineeringStatsForShipType
+                getEngineeringStatsForShipType,
+                shipRole
             );
 
             setPieces.forEach(piece => {
                 equipment[piece.slot] = piece.id;
                 usedSlots.add(piece.slot);
             });
-        });
+            this.incrementProgress();
+        }
 
         // Fill remaining slots with best individual pieces
-        this.fillRemainingSlots(
+        await this.fillRemainingSlots(
             equipment,
             usedSlots,
             inventory,
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            shipRole
         );
 
-        // Convert to suggestions
+        // Ensure progress is complete
+        this.completeProgress();
+
         return Object.entries(equipment)
             .filter((entry): entry is [string, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
-                score: 0 // Score will be calculated later
+                score: 0
             }));
     }
 
@@ -151,7 +171,8 @@ export class SetFirstStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         currentEquipment: Partial<Record<GearSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
     ): GearPiece[] {
         const availableSlots = pieces
             .map(p => p.slot)
@@ -186,7 +207,7 @@ export class SetFirstStrategy implements AutogearStrategy {
                     getEngineeringStatsForShipType(ship.type)
                 );
 
-                const score = this.calculateStatScore(totalStats, priorities) * 1.15;
+                const score = this.calculateStatScore(totalStats, priorities, shipRole) * 1.15;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -199,18 +220,22 @@ export class SetFirstStrategy implements AutogearStrategy {
         return bestCombination;
     }
 
-    private fillRemainingSlots(
+    private async fillRemainingSlots(
         equipment: Partial<Record<GearSlotName, string>>,
         usedSlots: Set<GearSlotName>,
         inventory: GearPiece[],
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
-    ): void {
-        Object.keys(GEAR_SLOTS).forEach(slotKey => {
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
+    ): Promise<void> {
+        for (const slotKey of Object.keys(GEAR_SLOTS)) {
             const slot = slotKey as GearSlotName;
-            if (usedSlots.has(slot)) return;
+            if (usedSlots.has(slot)) {
+                this.incrementProgress();
+                continue;
+            }
 
             let bestScore = -Infinity;
             let bestGearId: string | undefined;
@@ -228,7 +253,7 @@ export class SetFirstStrategy implements AutogearStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculateStatScore(totalStats, priorities);
+                    const score = this.calculateStatScore(totalStats, priorities, shipRole);
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;
@@ -239,13 +264,15 @@ export class SetFirstStrategy implements AutogearStrategy {
                 equipment[slot] = bestGearId;
                 usedSlots.add(slot);
             }
-        });
+            this.incrementProgress();
+        }
     }
 
     private calculateStatScore(
         stats: BaseStats,
-        priorities: StatPriority[]
+        priorities: StatPriority[],
+        shipRole?: ShipTypeName
     ): number {
-        return calculatePriorityScore(stats, priorities);
+        return calculatePriorityScore(stats, priorities, shipRole);
     }
 }

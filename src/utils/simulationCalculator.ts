@@ -22,7 +22,7 @@ export interface SimulationSummary {
     lowestHeal?: number;
 }
 
-const SIMULATION_ITERATIONS = 100;
+const SIMULATION_ITERATIONS = 1000;
 const ENEMY_ATTACK = 15000; // For defender simulations
 const ENEMY_SECURITY = 170; // For debuffer simulations
 const BASE_HEAL_PERCENT = 0.15; // 15% of max HP
