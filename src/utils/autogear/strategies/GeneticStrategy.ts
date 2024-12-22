@@ -41,13 +41,17 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+
         // Initialize progress tracking (population size * generations)
         const totalOperations = this.POPULATION_SIZE * this.GENERATIONS;
         this.initializeProgress(totalOperations);
 
-        let population = this.initializePopulation(ship, inventory);
+        let population = this.initializePopulation(availableInventory);
         population = this.evaluatePopulation(
             population,
             ship,
@@ -65,7 +69,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
-                this.mutate(child, inventory);
+                this.mutate(child, availableInventory);
                 newPopulation.push(child);
                 this.incrementProgress();
             }
@@ -97,7 +101,6 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private initializePopulation(
-        ship: Ship,
         inventory: GearPiece[]
     ): Individual[] {
         const population: Individual[] = [];

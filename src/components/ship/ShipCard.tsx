@@ -19,7 +19,7 @@ interface Props {
     onEdit: (ship: Ship) => void;
     onRemove: (id: string) => void;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
-    onRemoveGear: (shipId: string, slot: GearSlotName) => void;
+    onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
     onHoverGear: (gear: GearPiece | null) => void;
 }
 
@@ -42,8 +42,9 @@ export const ShipCard: React.FC<Props> = ({
 
     const handleUnequipAll = () => {
         Object.entries(GEAR_SLOTS).forEach(([key]) => {
-            onRemoveGear(ship.id, key as GearSlotName);
+            onRemoveGear(ship.id, key as GearSlotName, false);
         });
+        addNotification('success', `Unequipped all gear on ${ship.name}`);
     };
 
     const handleEquipAttempt = (gear: GearPiece) => {

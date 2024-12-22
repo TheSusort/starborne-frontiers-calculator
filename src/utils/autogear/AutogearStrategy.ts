@@ -13,7 +13,8 @@ export interface AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> | GearSuggestion[];
     setProgressCallback(callback: (progress: { current: number; total: number; percentage: number }) => void): void;
 }

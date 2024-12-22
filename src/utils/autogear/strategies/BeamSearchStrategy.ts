@@ -37,8 +37,12 @@ export class BeamSearchStrategy extends BaseStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+
         // Calculate total operations:
         // For each slot:
         //   - We have BEAM_WIDTH configurations
@@ -46,7 +50,7 @@ export class BeamSearchStrategy extends BaseStrategy {
         let totalOperations = 0;
         Object.keys(GEAR_SLOTS).forEach(slotKey => {
             const slotName = slotKey as GearSlotName;
-            const slotGear = inventory.filter(gear => gear.slot === slotName);
+            const slotGear = availableInventory.filter(gear => gear.slot === slotName);
             totalOperations += slotGear.length * this.BEAM_WIDTH;
         });
 
@@ -62,7 +66,7 @@ export class BeamSearchStrategy extends BaseStrategy {
             configurations = await this.processSlot(
                 slotName,
                 configurations,
-                inventory,
+                availableInventory,
                 ship,
                 priorities,
                 getGearPiece,

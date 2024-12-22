@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
-import { Button, Select } from '../ui';
+import { Button, Select, Checkbox } from '../ui';
 import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority } from '../../types/autogear';
@@ -12,12 +12,14 @@ interface AutogearSettingsProps {
     selectedShipRole: ShipTypeName | null;
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
+    ignoreEquipped: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
     onFindOptimalGear: () => void;
+    onIgnoreEquippedChange: (value: boolean) => void;
 }
 
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
@@ -25,12 +27,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedShipRole,
     selectedAlgorithm,
     priorities,
+    ignoreEquipped,
     onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
     onAddPriority,
     onRemovePriority,
     onFindOptimalGear,
+    onIgnoreEquippedChange,
 }) => {
     return (
         <div className="space-y-4">
@@ -39,6 +43,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 onSelect={onShipSelect}
                 selected={selectedShip}
             />
+
             <div className="p-4 bg-dark space-y-2">
                 <span className="text-gray-300 text-sm">Predefined Strategies (Experimental)</span>
                 <Select
@@ -93,6 +98,17 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 />
                 <p className="text-sm text-gray-400">
                     {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
+                </p>
+            </div>
+
+            <div className="p-4 bg-dark">
+                <Checkbox
+                    label="Ignore currently equipped gear"
+                    checked={ignoreEquipped}
+                    onChange={(e) => onIgnoreEquippedChange(e.target.checked)}
+                />
+                <p className="text-sm text-gray-400 mt-1">
+                    When checked, the algorithm will ignore gear that is currently equipped on other ships
                 </p>
             </div>
 

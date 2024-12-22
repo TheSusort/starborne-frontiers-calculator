@@ -29,21 +29,25 @@ export class TwoPassStrategy extends BaseStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+
         // Initialize progress tracking (slots * gear + potential set combinations)
-        const totalOperations = Object.keys(GEAR_SLOTS).length * inventory.length +
-            inventory.filter(g => g.setBonus).length;
+        const totalOperations = Object.keys(GEAR_SLOTS).length * availableInventory.length +
+            availableInventory.filter(g => g.setBonus).length;
         this.initializeProgress(totalOperations);
 
         // First pass: Find best gear pieces based on individual stats
-        const firstPassEquipment = await this.firstPass(ship, priorities, inventory, getGearPiece, getEngineeringStatsForShipType, shipRole);
+        const firstPassEquipment = await this.firstPass(ship, priorities, availableInventory, getGearPiece, getEngineeringStatsForShipType, shipRole);
 
         // Second pass: Look for set bonus opportunities
         const finalEquipment = await this.secondPass(
             ship,
             priorities,
-            inventory,
+            availableInventory,
             firstPassEquipment,
             getGearPiece,
             getEngineeringStatsForShipType,

@@ -7,7 +7,7 @@ import { PageLayout, CollapsibleForm } from '../components/ui';
 import { useNotification } from '../contexts/NotificationContext';
 
 export const ShipsPage: React.FC = () => {
-    const { inventory } = useInventory();
+    const { inventory, saveInventory } = useInventory();
     const getGearPiece = useCallback((id: string) => {
         return inventory.find(gear => gear.id === id);
     }, [inventory]);
@@ -78,12 +78,36 @@ export const ShipsPage: React.FC = () => {
                     setIsFormVisible(true);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                onEquipGear={(ship, slot, gear) => {
-                    handleEquipGear(ship, slot, gear);
+                onEquipGear={async (shipId, slot, gearId) => {
+                    handleEquipGear(shipId, slot, gearId);
+
+                    const newInventory = inventory.map(gear => {
+                        if (gear.id === gearId) {
+                            return { ...gear, shipId };
+                        }
+                        return gear;
+                    });
+                    await saveInventory(newInventory);
                 }}
-                onRemoveGear={(ship, slot) => {
-                    handleRemoveGear(ship, slot);
-                    addNotification('success', 'Gear removed successfully');
+                onRemoveGear={async (shipId, slot, showNotification = true) => {
+                    const ship = ships.find(s => s.id === shipId);
+                    const gearId = ship?.equipment[slot];
+
+                    handleRemoveGear(shipId, slot);
+
+                    if (gearId) {
+                        const newInventory = inventory.map(gear => {
+                            if (gear.id === gearId) {
+                                return { ...gear, shipId: '' };
+                            }
+                            return gear;
+                        });
+                        await saveInventory(newInventory);
+                    }
+
+                    if (showNotification) {
+                        addNotification('success', 'Gear removed successfully');
+                    }
                 }}
                 availableGear={inventory}
             />

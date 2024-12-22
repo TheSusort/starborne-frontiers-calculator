@@ -27,7 +27,7 @@ interface SetGroup {
  * 4. Return the best gear combination
  */
 export class SetFirstStrategy extends BaseStrategy {
-    name = 'Set-First Algorithm';
+    name = 'Set-First Approach';
     description = 'Prioritizes completing gear sets before individual stat optimization';
 
     async findOptimalGear(
@@ -36,11 +36,15 @@ export class SetFirstStrategy extends BaseStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
-        const setGroups = this.groupInventoryBySets(inventory, ship, priorities, getGearPiece, getEngineeringStatsForShipType);
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+
+        const setGroups = this.groupInventoryBySets(availableInventory, ship, priorities, getGearPiece, getEngineeringStatsForShipType);
         // Initialize progress (set evaluations + remaining slots)
-        const totalOperations = setGroups.length * inventory.length + Object.keys(GEAR_SLOTS).length;
+        const totalOperations = setGroups.length * availableInventory.length + Object.keys(GEAR_SLOTS).length;
         this.initializeProgress(totalOperations);
 
         // Group inventory by sets
@@ -71,7 +75,7 @@ export class SetFirstStrategy extends BaseStrategy {
         await this.fillRemainingSlots(
             equipment,
             usedSlots,
-            inventory,
+            availableInventory,
             ship,
             priorities,
             getGearPiece,

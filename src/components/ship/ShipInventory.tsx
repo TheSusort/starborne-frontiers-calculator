@@ -12,7 +12,7 @@ interface Props {
     onRemove: (id: string) => void;
     onEdit: (ship: Ship) => void;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
-    onRemoveGear: (shipId: string, slot: GearSlotName) => void;
+    onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
     availableGear: GearPiece[];
 }
 

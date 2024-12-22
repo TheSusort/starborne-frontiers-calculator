@@ -56,6 +56,10 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
                             </ul>
                         </div>
                     )}
+                    <span className="text-xxs text-gray-500">id: {gear.id}</span>
+                    {gear.shipId && (
+                        <span className="text-xxs text-gray-500"> shipId: {gear.shipId}</span>
+                    )}
                 </div>
             )}
         </div>

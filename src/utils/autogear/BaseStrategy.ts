@@ -14,13 +14,27 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected currentOperation: number = 0;
     protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
 
+    protected filterInventory(
+        inventory: GearPiece[],
+        ignoreEquipped: boolean
+    ): GearPiece[] {
+
+        if (!ignoreEquipped) {
+            return inventory;
+        }
+
+        // Filter out items that have shipId set (meaning they're equipped)
+        return inventory.filter(item => !item.shipId);
+    }
+
     abstract findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> | GearSuggestion[];
 
     public setProgressCallback(callback: (progress: { current: number; total: number; percentage: number }) => void) {

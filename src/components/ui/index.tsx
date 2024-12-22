@@ -1,4 +1,5 @@
 export * from './Button';
+export * from './Checkbox';
 export * from './Input';
 export * from './ProgressBar';
 export * from './RadioGroup';
@@ -14,4 +15,5 @@ export * from './layout/Modal';
 export * from './layout/Offcanvas';
 export * from './layout/PageLayout';
 export * from './layout/Sidebar';
+export * from './Tabs';
 export * from './layout/Tooltip';

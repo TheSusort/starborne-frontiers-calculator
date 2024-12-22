@@ -14,10 +14,12 @@ import { GearSlotName, ShipTypeName } from '../constants';
 import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
+import { useNotification } from '../contexts/NotificationContext';
 
 export const AutogearPage: React.FC = () => {
-    const { getShipById, updateShip } = useShips();
     const { getGearPiece, inventory } = useInventory();
+    const { getShipById, updateShip } = useShips();
+    const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
     const [priorities, setPriorities] = useState<StatPriority[]>([]);
@@ -32,6 +34,7 @@ export const AutogearPage: React.FC = () => {
         total: number;
         percentage: number;
     } | null>(null);
+    const [ignoreEquipped, setIgnoreEquipped] = useState(true);
     const selectedShip = getShipById(selectedShipId);
 
     const handleAddPriority = (priority: StatPriority) => {
@@ -60,7 +63,8 @@ export const AutogearPage: React.FC = () => {
             inventory,
             getGearPiece,
             getEngineeringStatsForShipType,
-            selectedShipRole || undefined
+            selectedShipRole || undefined,
+            ignoreEquipped
         ));
 
         // Calculate stats using the new suggestions directly
@@ -99,12 +103,16 @@ export const AutogearPage: React.FC = () => {
         const updatedEquipment = { ...selectedShip.equipment };
         suggestions.forEach(suggestion => {
             updatedEquipment[suggestion.slotName as GearSlotName] = suggestion.gearId;
+
         });
 
         updateShip({
             ...selectedShip,
             equipment: updatedEquipment
         });
+
+        addNotification('success', 'Gear equipped successfully');
+
 
         // Clear suggestions after equipping
         setSuggestions([]);
@@ -143,6 +151,8 @@ export const AutogearPage: React.FC = () => {
                     selectedShipRole={selectedShipRole}
                     selectedAlgorithm={selectedAlgorithm}
                     priorities={priorities}
+                    ignoreEquipped={ignoreEquipped}
+                    onIgnoreEquippedChange={setIgnoreEquipped}
                     onShipSelect={(ship) => setSelectedShipId(ship.id)}
                     onRoleSelect={handleRoleChange}
                     onAlgorithmSelect={setSelectedAlgorithm}

@@ -34,10 +34,14 @@ export class BruteForceStrategy extends BaseStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+
         this.scoreCache.clear();
-        const inventoryBySlot = this.groupAndFilterInventory(inventory, shipRole);
+        const inventoryBySlot = this.groupAndFilterInventory(availableInventory, shipRole);
 
         // Initialize progress tracking
         this.initializeProgress(this.calculateTotalCombinations(inventoryBySlot));
@@ -103,7 +107,7 @@ export class BruteForceStrategy extends BaseStrategy {
         const relevantStats: Record<ShipTypeName, string[]> = {
             Attacker: ['attack', 'crit', 'critDamage'],
             Defender: ['hp', 'defence'],
-            Debuffer: ['hacking', 'attack'],
+            Debuffer: ['hacking', 'attack', 'crit', 'critDamage'],
             Supporter: ['hp', 'healModifier', 'crit', 'critDamage']
         };
         const stats = relevantStats[role] || [];
