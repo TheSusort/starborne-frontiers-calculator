@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChangelogEntry } from '../../types/changelog';
-import { Modal } from '../layout/Modal';
+import { Modal } from '../ui';
 
 interface ChangelogModalProps {
     isOpen: boolean;

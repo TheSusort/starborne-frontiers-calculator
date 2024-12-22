@@ -4,7 +4,7 @@ import { useInventory } from '../hooks/useInventory';
 import { GearSuggestion, StatPriority } from '../types/autogear';
 import { GearPiece } from '../types/gear';
 import { calculateTotalStats } from '../utils/statsCalculator';
-import { PageLayout } from '../components/layout/PageLayout';
+import { PageLayout, ProgressBar } from '../components/ui';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../utils/autogear/getStrategy';
@@ -14,7 +14,6 @@ import { GearSlotName, ShipTypeName } from '../constants';
 import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
-import { ProgressBar } from '../components/ui/ProgressBar';
 
 export const AutogearPage: React.FC = () => {
     const { getShipById, updateShip } = useShips();

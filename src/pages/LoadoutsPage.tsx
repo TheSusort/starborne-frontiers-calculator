@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { PageLayout } from '../components/layout/PageLayout';
+import { PageLayout, CollapsibleForm } from '../components/ui';
 import { useLoadouts } from '../hooks/useLoadouts';
 import { LoadoutForm } from '../components/loadout/LoadoutForm';
 import { LoadoutList } from '../components/loadout/LoadoutList';
 import { useInventory } from '../hooks/useInventory';
-import { CollapsibleForm } from '../components/layout/CollapsibleForm';
 import { useNotification } from '../contexts/NotificationContext';
 
 export const LoadoutsPage: React.FC = () => {

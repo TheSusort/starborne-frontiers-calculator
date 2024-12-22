@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
-import { Button } from '../ui/Button';
+import { Button, Input } from '../ui';
 import { ShipSelector } from '../ship/ShipSelector';
 import { GearSlotName } from '../../constants';
-import { Input } from '../ui/Input';
 
 interface LoadoutFormProps {
     onSubmit: (loadout: {

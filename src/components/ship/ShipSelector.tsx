@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../hooks/useShips';
-import { Button } from '../ui/Button';
+import { Button, Modal } from '../ui';
 import { ShipDisplay } from './ShipDisplay';
-import { Modal } from '../layout/Modal';
 
 interface ShipSelectorProps {
     selected: Ship | null;

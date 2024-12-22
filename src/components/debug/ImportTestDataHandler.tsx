@@ -4,10 +4,9 @@ import { useShips } from '../../hooks/useShips';
 import { useInventory } from '../../hooks/useInventory';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { testData } from '../../constants/testData';
+import { testData } from '../../constants';
+
 const IMPORT_SECRET = process.env.REACT_APP_IMPORT_SECRET || 'development-secret';
-
-
 
 export const ImportTestDataHandler: React.FC = () => {
     const navigate = useNavigate();

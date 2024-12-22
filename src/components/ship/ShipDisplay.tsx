@@ -1,8 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button } from '../ui';
-import { CloseIcon } from '../ui/icons/CloseIcon';
+import { Button, CloseIcon } from '../ui';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';

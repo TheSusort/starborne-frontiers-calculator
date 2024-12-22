@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PageLayout } from '../components/layout/PageLayout';
-import { CollapsibleForm } from '../components/layout/CollapsibleForm';
+import { PageLayout, CollapsibleForm } from '../components/ui';
 import { GearPieceForm } from '../components/gear/GearPieceForm';
 import { GearInventory } from '../components/gear/GearInventory';
 import { GearPiece } from '../types/gear';

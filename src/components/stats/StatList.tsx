@@ -1,7 +1,6 @@
 import React from 'react';
-import { BaseStats, PercentageOnlyStats, StatName } from '../../types/stats';
-import { PERCENTAGE_ONLY_STATS } from '../../types/stats';
-import { STATS } from '../../constants/stats';
+import { BaseStats, PercentageOnlyStats, StatName, PERCENTAGE_ONLY_STATS } from '../../types/stats';
+import { STATS } from '../../constants';
 
 interface StatListProps {
     stats: BaseStats;

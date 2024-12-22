@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button } from '../ui';
-import { CloseIcon } from '../ui/icons/CloseIcon';
+import { Button, CloseIcon } from '../';
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;

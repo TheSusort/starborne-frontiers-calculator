@@ -1,9 +1,5 @@
 import React from 'react';
-import { Button } from '../ui/Button';
-import { FilterIcon } from '../ui/icons/FilterIcon';
-import { Offcanvas } from '../layout/Offcanvas';
-import { RadioGroup } from '../ui/RadioGroup';
-import { CloseIcon } from '../ui/icons/CloseIcon';
+import { CloseIcon, RadioGroup, Offcanvas, FilterIcon, Button } from '../ui';
 import { SortConfig, SortOption, SortPanel } from './SortPanel';
 
 export interface FilterOption {

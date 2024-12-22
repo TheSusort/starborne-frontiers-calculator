@@ -22,7 +22,7 @@ interface Individual {
  * 1. Create a population of random gear combinations
  * 2. Evaluate the fitness of each gear combination
  * 3. Select the best gear combinations
- * 4. Breed the best gear combinations to create a new generation
+ * 4. Breed the best gear combinations to create a new generation by crossover and mutation
  * 5. Repeat steps 2-4 for a number of generations
  * 6. Return the best gear combination
  */

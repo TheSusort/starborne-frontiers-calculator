@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Ship } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
 import { Button, Input, Select, CloseIcon } from '../ui';
-import { FACTIONS, RARITIES, SHIP_TYPES, RarityName } from '../../constants';
+import { FACTIONS, RARITIES, SHIP_TYPES, RarityName, STATS } from '../../constants';
 import { fetchShipData } from '../../utils/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
-import { STATS } from '../../constants/stats';
 import { useNotification } from '../../contexts/NotificationContext';
 
 interface Props {

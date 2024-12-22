@@ -1,8 +1,8 @@
 import React from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, RARITIES } from '../../constants';
 import { StatName } from '../../types/stats';
-import { STATS } from '../../constants/stats';
+import { GEAR_SETS, RARITIES, STATS } from '../../constants';
+
 interface Props {
     gear: GearPiece;
     showDetails?: boolean;

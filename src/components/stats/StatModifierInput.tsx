@@ -1,8 +1,7 @@
 import React from 'react';
-import { Select, Input, Button } from '../ui';
+import { Select, Input, Button, CloseIcon } from '../ui';
 import { Stat, StatName, StatType } from '../../types/stats';
-import { CloseIcon } from '../ui/icons/CloseIcon';
-import { STATS } from '../../constants/stats';
+import { STATS } from '../../constants';
 
 interface Props {
     stats: Stat[];

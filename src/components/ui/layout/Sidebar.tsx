@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { APP_NAME } from '../../constants/config';
+import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
-import { CURRENT_VERSION } from '../../constants/changelog';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();

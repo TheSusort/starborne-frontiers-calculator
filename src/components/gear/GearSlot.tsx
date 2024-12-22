@@ -1,11 +1,8 @@
-import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { memo } from 'react';
-import { Button } from '../ui/Button';
-import { Tooltip } from '../layout/Tooltip';
-import { CloseIcon } from '../ui/icons/CloseIcon';
+import { GearPiece } from '../../types/gear';
+import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES, STATS } from '../../constants';
+import { Button, Tooltip, CloseIcon } from '../ui';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { STATS } from '../../constants/stats';
 
 interface GearSlotProps {
     slotKey: GearSlotName;

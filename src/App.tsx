@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Sidebar } from './components/layout/Sidebar';
+import { Sidebar } from './components/ui';
 import { ShipsPage } from './pages/ShipsPage';
 import { GearPage } from './pages/GearPage';
 import { SimulationPage } from './pages/SimulationPage';
 import { AutogearPage } from './pages/AutogearPage';
 import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
 import { LoadoutsPage } from './pages/LoadoutsPage';
-import { AUTHOR } from './constants/config';
 import { ChangelogModal } from './components/changelog/ChangelogModal';
-import { CHANGELOG, CURRENT_VERSION } from './constants/changelog';
+import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { NotificationContainer } from './components/notification/NotificationContainer';

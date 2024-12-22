@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useShips } from '../hooks/useShips';
 import { calculateTotalStats } from '../utils/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
-import { PageLayout } from '../components/layout/PageLayout';
+import { PageLayout } from '../components/ui';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../utils/simulationCalculator';
 import { ShipTypeName } from '../constants';

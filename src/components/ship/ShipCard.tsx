@@ -4,10 +4,10 @@ import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../../constants';
 import { ShipDisplay } from './ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
-import { Modal } from '../layout/Modal';
+import { Modal } from '../ui/layout/Modal';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
-import { Button } from '../ui/Button';
+import { Button } from '../ui';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useShips } from '../../hooks/useShips';
 

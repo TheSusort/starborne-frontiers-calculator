@@ -3,9 +3,8 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../hooks/useInventory';
 import { ShipCard } from './ShipCard';
-import { FACTIONS, GearSlotName, RARITIES, SHIP_TYPES } from '../../constants';
+import { FACTIONS, GearSlotName, RARITIES, SHIP_TYPES, RARITY_ORDER, sortRarities } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
-import { RARITY_ORDER, sortRarities } from '../../constants/rarities';
 import { SortConfig } from '../filters/SortPanel';
 
 interface Props {

@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { EngineeringStats, EngineeringStat } from '../types/stats';
 import { EngineeringStatsForm } from '../components/stats/EngineeringStatsForm';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { Button, CloseIcon } from '../components/ui';
-import { SHIP_TYPES } from '../constants/shipTypes';
-import { PageLayout } from '../components/layout/PageLayout';
-import { CollapsibleForm } from '../components/layout/CollapsibleForm';
+import { Button, CloseIcon, PageLayout, CollapsibleForm } from '../components/ui';
+import { SHIP_TYPES } from '../constants';
 import { useNotification } from '../contexts/NotificationContext';
+
 export const EngineeringStatsPage: React.FC = () => {
     const { engineeringStats, saveEngineeringStats } = useEngineeringStats();
     const [editingStats, setEditingStats] = useState<EngineeringStat | undefined>();

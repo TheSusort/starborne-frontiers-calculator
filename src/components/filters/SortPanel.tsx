@@ -1,7 +1,5 @@
 import React from 'react';
-import { Button, Select } from '../ui';
-import { ChevronUpIcon } from '../ui/icons/ChevronUpIcon';
-import { ChevronDownIcon } from '../ui/icons/ChevronDownIcon';
+import { Button, Select, ChevronUpIcon, ChevronDownIcon } from '../ui';
 
 export type SortOption = {
     value: string;

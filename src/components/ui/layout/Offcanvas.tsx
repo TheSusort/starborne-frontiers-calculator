@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button } from '../ui/Button';
-import { CloseIcon } from '../ui/icons/CloseIcon';
+import { Button, CloseIcon } from '../';
 
 interface Props {
     isOpen: boolean;

@@ -5,10 +5,9 @@ import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
-import { Modal } from '../layout/Modal';
+import { Modal, Button } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
-import { Button } from '../ui/Button';
 import { useShips } from '../../hooks/useShips';
 
 interface LoadoutCardProps {

@@ -3,8 +3,7 @@ import { ShipForm } from '../components/ship/ShipForm';
 import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
-import { PageLayout } from '../components/layout/PageLayout';
-import { CollapsibleForm } from '../components/layout/CollapsibleForm';
+import { PageLayout, CollapsibleForm } from '../components/ui';
 import { useNotification } from '../contexts/NotificationContext';
 
 export const ShipsPage: React.FC = () => {
