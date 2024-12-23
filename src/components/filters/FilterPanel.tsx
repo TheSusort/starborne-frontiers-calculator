@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloseIcon, RadioGroup, Offcanvas, FilterIcon, Button } from '../ui';
+import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button } from '../ui';
 import { SortConfig, SortOption, SortPanel } from './SortPanel';
 
 export interface FilterOption {
@@ -42,7 +42,7 @@ export const FilterPanel: React.FC<Props> = ({
                 {hasActiveFilters && (
                     <>
                         {/* list out all the active filters, add a close button to each */}
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 me-2">
                             {filters.map((filter) => (
                                 filter.values.map((value) => (
                                     <div key={value} className="flex justify-between items-center">
@@ -85,7 +85,7 @@ export const FilterPanel: React.FC<Props> = ({
                     )}
 
                     {filters.map((filter) => (
-                        <RadioGroup
+                        <CheckboxGroup
                             key={filter.id}
                             label={filter.label}
                             values={filter.values}

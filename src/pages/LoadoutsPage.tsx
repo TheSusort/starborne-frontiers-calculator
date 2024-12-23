@@ -20,6 +20,9 @@ export const LoadoutsPage: React.FC = () => {
     const { ships } = useShips();
     const { addNotification } = useNotification();
 
+    const existingLoadoutNames = loadouts.map(loadout => loadout.name);
+    const existingTeamNames = teamLoadouts.map(loadout => loadout.name);
+
     return (
         <PageLayout
             title="Loadouts"
@@ -52,6 +55,7 @@ export const LoadoutsPage: React.FC = () => {
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                 addNotification('success', 'Loadout created successfully');
                             }}
+                            existingNames={existingLoadoutNames}
                         />
                     </CollapsibleForm>
 
@@ -77,10 +81,11 @@ export const LoadoutsPage: React.FC = () => {
                                     addNotification('error', error instanceof Error ? error.message : 'Failed to create team loadout');
                                 }
                             }}
+                            existingNames={existingTeamNames}
                         />
                     </CollapsibleForm>
 
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-1 gap-6">
                         {teamLoadouts.map(teamLoadout => (
                             <TeamLoadoutCard
                                 key={teamLoadout.id}

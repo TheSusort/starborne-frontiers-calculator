@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Ship } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
 import { GearPiece } from '../types/gear';
-import { useNotification } from '../contexts/NotificationContext';
 const STORAGE_KEY = 'ships';
 
 interface UseShipsProps {
@@ -14,7 +13,7 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
-    const { addNotification } = useNotification();
+
     // Load ships from localStorage on mount
     useEffect(() => {
         loadShips();
@@ -59,7 +58,6 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
                     Object.entries(newEquipment).forEach(([key, id]) => {
                         if (id === gearId) {
                             delete newEquipment[key as GearSlotName];
-                            addNotification('success', `Unequipped ${key} from ${ship.name}`);
                         }
                     });
                     return {
@@ -83,7 +81,7 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
             return newShips;
         });
-    }, [addNotification]);
+    }, []);
 
     const handleRemoveGear = (shipId: string, slot: GearSlotName) => {
         setShips(prev => prev.map(ship => {

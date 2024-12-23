@@ -14,7 +14,7 @@ export const Button: React.FC<Props> = ({
     className = '',
     ...props
 }) => {
-    const baseStyles = "transition-colors";
+    const baseStyles = "transition-colors whitespace-nowrap";
     const variants = {
         primary: "text-dark bg-gradient-to-r from-primary to-primary-hover hover:bg-gradient-to-r hover:from-primary-hover hover:to-primary",
         secondary: "bg-dark border border-gray-600 text-gray-200 hover:bg-dark-border",

@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button, CloseIcon } from '../ui';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { SortConfig } from '../filters/SortPanel';
@@ -165,49 +164,18 @@ export const GearInventory: React.FC<Props> = ({
                         {inventory.length === 0 ? 'No gear pieces added yet' : 'No matching gear pieces found'}
                     </div>
                 ) : (
-                    <>
-                        <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${mode === 'manage' ? 'xl:grid-cols-4' : ''} gap-4`}>
-                            {sortedAndFilteredInventory.map(piece => (
-                                <div key={piece.id} className="relative flex flex-col">
-                                    <GearPieceDisplay gear={piece} />
-                                    <div className="py-4">
-                                        {mode === 'manage' ? (
-                                            <div className="flex gap-2">
-                                                {onEdit && (
-                                                    <Button
-                                                        className="border-dark"
-                                                        variant="secondary"
-                                                        fullWidth
-                                                        onClick={() => onEdit(piece)}
-                                                    >
-                                                        Edit
-                                                    </Button>
-                                                )}
-                                                {onRemove && (
-                                                    <Button
-                                                        variant="danger"
-                                                        onClick={() => onRemove(piece.id)}
-                                                    >
-                                                        <CloseIcon />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            onEquip && (
-                                                <Button
-                                                    variant="primary"
-                                                    fullWidth
-                                                    onClick={() => onEquip(piece)}
-                                                >
-                                                    Equip
-                                                </Button>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </>
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 ${mode === 'manage' ? 'xl:grid-cols-4' : ''} gap-4`}>
+                        {sortedAndFilteredInventory.map(piece => (
+                            <GearPieceDisplay
+                                key={piece.id}
+                                gear={piece}
+                                mode={mode}
+                                onEdit={onEdit}
+                                onRemove={onRemove}
+                                onEquip={onEquip}
+                            />
+                        ))}
+                    </div>
                 )
             }
         </div>

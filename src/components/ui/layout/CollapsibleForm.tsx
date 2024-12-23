@@ -13,7 +13,7 @@ export const CollapsibleForm: React.FC<CollapsibleFormProps> = ({
         <div
             className={`
                 transition-all duration-300 ease-in-out
-                ${isVisible ? 'max-h-[2500px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}
+                ${isVisible ? 'max-h-[2500px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden !m-0'}
             `}
         >
             {children}

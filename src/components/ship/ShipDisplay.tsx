@@ -1,7 +1,7 @@
 import React, { memo, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon } from '../ui';
+import { Button, CloseIcon, EditIcon } from '../ui';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -35,7 +35,7 @@ const Header = memo(({ ship }: { ship: Ship }) => (
                 name={FACTIONS[ship.faction].name}
             />
         )}
-        <span className="font-bold text-gray-200">{ship.name}</span>
+        <span className={`font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}>{ship.name}</span>
     </div>
 ));
 
@@ -55,7 +55,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
     if (variant === 'compact') {
         return (
             <div
-                className={`p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
+                className={`flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                 onClick={onClick}
             >
@@ -67,7 +67,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
 
     return (
         <div
-            className={`bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
+            className={`flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
             onClick={onClick}
         >
@@ -79,17 +79,19 @@ export const ShipDisplay: React.FC<Props> = memo(({
                         {onEdit && (
                             <Button
                                 variant="secondary"
+                                size="sm"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onEdit(ship);
                                 }}
                             >
-                                Edit
+                                <EditIcon />
                             </Button>
                         )}
                         {onRemove && (
                             <Button
                                 variant="danger"
+                                size="sm"
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onRemove(ship.id);

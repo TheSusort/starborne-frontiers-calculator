@@ -10,21 +10,39 @@ interface LoadoutFormProps {
         shipId: string;
         equipment: Record<GearSlotName, string>;
     }) => void;
+    existingNames: string[];
 }
 
-export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit }) => {
+export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingNames }) => {
     const [name, setName] = useState('');
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        e.stopPropagation();
+
         if (!selectedShip) return;
 
+        if (existingNames.includes(name.trim())) {
+            setError('A loadout with this name already exists');
+            return;
+        }
+
         onSubmit({
-            name,
+            name: name.trim(),
             shipId: selectedShip.id,
             equipment: selectedShip.equipment as Record<GearSlotName, string>,
         });
+
+        setName('');
+        setSelectedShip(null);
+        setError(null);
+    };
+
+    const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setName(e.target.value);
+        setError(null);
     };
 
     return (
@@ -36,9 +54,15 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit }) => {
                 <Input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={handleNameChange}
                     required
+                    error={error || undefined}
                 />
+                {error && (
+                    <p className="mt-1 text-sm text-red-500">
+                        {error}
+                    </p>
+                )}
             </div>
 
             <div>
@@ -52,7 +76,7 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit }) => {
             </div>
 
             <div className="flex justify-end gap-2">
-                <Button type="submit" disabled={!selectedShip || !name}>
+                <Button type="submit" disabled={!selectedShip || !name.trim()}>
                     Create Loadout
                 </Button>
             </div>

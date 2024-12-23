@@ -56,7 +56,8 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     BOOST: {
         name: 'Boost',
         stats: [],
-        iconUrl: 'https://cdn.discordapp.com/emojis/1212063630842011678.webp'
+        iconUrl: 'https://cdn.discordapp.com/emojis/1212063630842011678.webp',
+        minPieces: 4
     },
     BURNER: {
         name: 'Burner',

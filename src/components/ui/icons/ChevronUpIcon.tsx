@@ -8,7 +8,7 @@ export const ChevronUpIcon = () => {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="w-3 h-3"
+            className="w-4 h-4"
         >
             <path d="m18 15-6-6-6 6"/>
         </svg>

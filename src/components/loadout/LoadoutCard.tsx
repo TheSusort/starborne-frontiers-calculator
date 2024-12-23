@@ -1,81 +1,82 @@
 import React, { useState } from 'react';
-import { Loadout } from '../../types/loadout';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
-import { Modal, Button } from '../ui';
+import { Modal, Button, CloseIcon } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
-import { useShips } from '../../hooks/useShips';
 
 interface LoadoutCardProps {
-    loadout: Loadout;
+    name?: string; // Optional for team loadouts
     ship: Ship;
+    equipment: Record<GearSlotName, string>;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
-    onUpdate: (id: string, equipment: Record<GearSlotName, string>) => void;
-    onDelete: (id: string) => void;
+    onEquip?: () => void; // Optional for team loadouts
+    onUpdate: (equipment: Record<GearSlotName, string>) => void;
+    onDelete?: () => void; // Optional for team loadouts
+    showControls?: boolean; // Whether to show equip/delete buttons
 }
 
 export const LoadoutCard: React.FC<LoadoutCardProps> = ({
-    loadout,
+    name,
     ship,
+    equipment,
     availableGear,
     getGearPiece,
+    onEquip,
     onUpdate,
     onDelete,
+    showControls = true,
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
-    const gearLookup = useGearLookup(loadout.equipment, getGearPiece);
-    const activeSets = useGearSets(loadout.equipment, gearLookup);
-    const { handleEquipGear } = useShips();
+    const gearLookup = useGearLookup(equipment, getGearPiece);
+    const activeSets = useGearSets(equipment, gearLookup);
 
-    const handleEquipGearLoadout = (slot: GearSlotName, gearId: string) => {
+    const handleEquipGear = (slot: GearSlotName, gearId: string) => {
         const newEquipment = {
-            ...loadout.equipment,
+            ...equipment,
             [slot]: gearId,
         };
-        onUpdate(loadout.id, newEquipment);
-    };
-
-    const handleRemoveGear = (slot: GearSlotName) => {
-        const newEquipment = { ...loadout.equipment };
-        delete newEquipment[slot];
-        onUpdate(loadout.id, newEquipment);
-    };
-
-    const handleEquipLoadout = () => {
-        for (const [slot, gearId] of Object.entries(loadout.equipment)) {
-            handleEquipGear(ship.id, slot as GearSlotName, gearId);
-        }
+        onUpdate(newEquipment);
     };
 
     return (
-        <div className="bg-dark">
-            <div className="p-4 bg-dark-lighter">
-                <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-medium text-gray-200">{loadout.name}</h3>
-                    <div className="flex gap-2">
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleEquipLoadout}
-                        >
-                            Equip to Ship
-                        </Button>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => onDelete(loadout.id)}
-                        >
-                            Delete
-                        </Button>
+        <>
+            {(name || showControls) && (
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        {name && (
+                            <h3 className="text-lg font-medium text-gray-200">{name}</h3>
+                        )}
                     </div>
+                    {showControls && (
+                        <div className="flex gap-2">
+                            {onEquip && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={onEquip}
+                                >
+                                    Equip to Ship
+                                </Button>
+                            )}
+                            {onDelete && (
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={onDelete}
+                                >
+                                    <CloseIcon />
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </div>
-            </div>
+            )}
 
             <ShipDisplay ship={ship} variant="compact">
                 <div className={`p-4 mt-3 -mx-3 bg-dark border-t ${RARITIES[ship.rarity || 'common'].borderColor}`}>
@@ -85,51 +86,50 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                                 key={key}
                                 slotKey={key as GearSlotName}
                                 slotData={slot}
-                                gear={gearLookup[loadout.equipment[key as GearSlotName] || '']}
+                                gear={gearLookup[equipment[key as GearSlotName] || '']}
                                 hoveredGear={hoveredGear}
                                 onSelect={setSelectedSlot}
-                                onRemove={handleRemoveGear}
                                 onHover={setHoveredGear}
                             />
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3">
-                        {activeSets && (
-                            <>
-                                <span className="text-xs text-gray-400">Gear Sets:</span>
-                                {activeSets.map((setName, index) => (
-                                    <img
-                                        key={`${setName}-${index}`}
-                                        src={GEAR_SETS[setName].iconUrl}
-                                        alt={setName}
-                                        className="w-5"
-                                    />
-                                ))}
-                            </>
-                        )}
-                    </div>
+                    {activeSets && activeSets.length > 0 && (
+                        <div className="flex items-center gap-2 pt-3">
+                            <span className="text-xs text-gray-400">Sets:</span>
+                            {activeSets.map((setName, index) => (
+                                <img
+                                    key={`${setName}-${index}`}
+                                    src={GEAR_SETS[setName].iconUrl}
+                                    alt={setName}
+                                    className="w-5"
+                                />
+                            ))}
+                        </div>
+                    )}
                 </div>
             </ShipDisplay>
 
             <Modal
                 isOpen={selectedSlot !== null}
                 onClose={() => setSelectedSlot(null)}
-                title={`Select ${selectedSlot} for ${loadout.name}`}
+                title={`Select ${selectedSlot} for ${ship.name} loadout`}
             >
                 <GearInventory
-                    inventory={availableGear.filter(gear => selectedSlot && gear.slot === selectedSlot)}
+                    inventory={availableGear.filter(gear =>
+                        selectedSlot && gear.slot === selectedSlot
+                    )}
                     mode="select"
                     onEquip={(gear) => {
                         if (selectedSlot) {
-                            handleEquipGearLoadout(selectedSlot, gear.id);
+                            handleEquipGear(selectedSlot, gear.id);
                             setSelectedSlot(null);
                         }
                     }}
-                    onRemove={() => { }}
-                    onEdit={() => { }}
+                    onRemove={() => {}}
+                    onEdit={() => {}}
                 />
             </Modal>
-        </div>
+        </>
     );
 };

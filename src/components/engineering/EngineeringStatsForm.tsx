@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { EngineeringStat, Stat } from '../../types/stats';
 import { ShipTypeName, SHIP_TYPES } from '../../constants';
-import { StatModifierInput } from './StatModifierInput';
+import { StatModifierInput } from '../stats/StatModifierInput';
 import { Button, Select } from '../ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 

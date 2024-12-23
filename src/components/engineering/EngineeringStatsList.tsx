@@ -1,0 +1,67 @@
+import React from 'react';
+import { EngineeringStat } from '../../types/stats';
+import { Button, CloseIcon, EditIcon } from '../ui';
+import { SHIP_TYPES, STATS } from '../../constants';
+
+interface EngineeringStatsListProps {
+    stats: EngineeringStat[];
+    onEdit: (stat: EngineeringStat) => void;
+    onDelete: (shipType: string) => void;
+}
+
+export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
+    stats,
+    onEdit,
+    onDelete
+}) => {
+    if (stats.length === 0) {
+        return (
+            <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                No engineering stats found.
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <h3 className="text-xl font-semibold mb-4">Existing Engineering Stats</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {stats.map((stat) => (
+                    <div key={stat.shipType} className="bg-dark mb-4 border border-gray-600">
+                        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-600">
+                            <h3 className="text-lg font-medium">{SHIP_TYPES[stat.shipType].name}</h3>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="ms-auto me-2"
+                                onClick={() => {
+                                    onEdit(stat);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                            >
+                                <EditIcon />
+                            </Button>
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => onDelete(stat.shipType)}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        </div>
+                        <div className="grid grid-cols-1 px-4 py-2">
+                            {stat.stats.map((s) => (
+                                <div key={`${s.name}-${s.type}`} className="text-sm flex justify-between">
+                                    <span>{STATS[s.name].label}:</span>
+                                    <span>
+                                        +{s.value}{s.type === 'percentage' ? '%' : ''}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </>
+    );
+};

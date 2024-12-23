@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.9.1';
+export const CURRENT_VERSION = 'v0.10.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: 'v0.10.0',
+        date: '2024-12-22',
+        changes: [
+            'Added shipId to gear to stop duplicated gear on ships, both for ship page and autogearing',
+            'Added team loadouts',
+        ]
+    },
     {
         version: 'v0.9.1',
         date: '2024-12-21',

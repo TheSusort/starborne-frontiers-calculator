@@ -17,8 +17,8 @@ import { SimulationResults } from '../components/simulation/SimulationResults';
 import { useNotification } from '../contexts/NotificationContext';
 
 export const AutogearPage: React.FC = () => {
-    const { getGearPiece, inventory } = useInventory();
-    const { getShipById, updateShip } = useShips();
+    const { getGearPiece, inventory, saveInventory } = useInventory();
+    const { getShipById, handleEquipGear } = useShips();
     const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
@@ -100,19 +100,42 @@ export const AutogearPage: React.FC = () => {
     const handleEquipSuggestions = () => {
         if (!selectedShip) return;
 
-        const updatedEquipment = { ...selectedShip.equipment };
+        // Create a map to batch all inventory updates
+        const inventoryUpdates = new Map<string, string>();
+
+        // Process each suggestion one at a time to properly handle gear swaps
         suggestions.forEach(suggestion => {
-            updatedEquipment[suggestion.slotName as GearSlotName] = suggestion.gearId;
+            const { slotName, gearId } = suggestion;
 
+            // Find if this gear is equipped on any ship
+            const gear = getGearPiece(gearId);
+            if (gear?.shipId && gear.shipId !== selectedShip.id) {
+                const previousShip = getShipById(gear.shipId);
+                if (previousShip) {
+                    addNotification('info', `Unequipped ${slotName} from ${previousShip.name}`);
+                }
+            }
+
+            // Add to inventory updates
+            inventoryUpdates.set(gearId, selectedShip.id);
+
+            // Update ship equipment
+            handleEquipGear(selectedShip.id, slotName as GearSlotName, gearId);
         });
 
-        updateShip({
-            ...selectedShip,
-            equipment: updatedEquipment
+        // Batch update the inventory
+        const newInventory = inventory.map(gear => {
+            const newShipId = inventoryUpdates.get(gear.id);
+            if (newShipId !== undefined) {
+                return { ...gear, shipId: newShipId };
+            }
+            return gear;
         });
 
-        addNotification('success', 'Gear equipped successfully');
+        // Save inventory changes
+        saveInventory(newInventory);
 
+        addNotification('success', 'Suggested gear equipped successfully');
 
         // Clear suggestions after equipping
         setSuggestions([]);

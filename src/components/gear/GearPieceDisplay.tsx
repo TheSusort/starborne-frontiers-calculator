@@ -2,16 +2,27 @@ import React from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
 import { GEAR_SETS, RARITIES, STATS } from '../../constants';
+import { Button, CloseIcon, EditIcon } from '../ui';
 
 interface Props {
     gear: GearPiece;
     showDetails?: boolean;
+    mode?: 'manage' | 'select';
+    onRemove?: (id: string) => void;
+    onEdit?: (piece: GearPiece) => void;
+    onEquip?: (piece: GearPiece) => void;
 }
 
-export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) => {
-
+export const GearPieceDisplay: React.FC<Props> = ({
+    gear,
+    showDetails = true,
+    mode = 'manage',
+    onRemove,
+    onEdit,
+    onEquip
+}) => {
     return (
-        <div className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow`}>
+        <div className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow flex flex-col`}>
             {/* Header */}
             <div className={`px-4 py-2 border-b ${RARITIES[gear.rarity].textColor} ${RARITIES[gear.rarity].borderColor} bg-dark-lighter flex justify-between items-center`}>
                 <div className="font-semibold capitalize flex items-center gap-2">
@@ -27,7 +38,7 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
             </div>
 
             {showDetails && (
-                <div className="p-4 space-y-4">
+                <div className="p-4 pb-2 space-y-4 flex-grow">
                     {/* Main Stat */}
                     <div className="bg-dark-lighter p-3 rounded-md">
                         <div className="text-sm text-gray-400 mb-1">Main Stat</div>
@@ -62,6 +73,44 @@ export const GearPieceDisplay: React.FC<Props> = ({ gear, showDetails = true }) 
                     )}
                 </div>
             )}
+
+            {/* Action Buttons */}
+            <div className="p-4 pt-0 mt-auto">
+                {mode === 'manage' ? (
+                    <div className="flex gap-2">
+                        {onEdit && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="ms-auto"
+                                onClick={() => onEdit(gear)}
+                            >
+                                <EditIcon />
+                            </Button>
+                        )}
+                        {onRemove && (
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => onRemove(gear.id)}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        )}
+                    </div>
+                ) : (
+                    onEquip && (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            fullWidth
+                            onClick={() => onEquip(gear)}
+                        >
+                            Equip
+                        </Button>
+                    )
+                )}
+            </div>
         </div>
     );
 };
