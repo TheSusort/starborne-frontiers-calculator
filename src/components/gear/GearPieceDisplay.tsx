@@ -58,7 +58,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
                                         key={index}
                                         className="flex justify-between items-center bg-dark-lighter px-3 py-1.5 rounded"
                                     >
-                                        <span className="capitalize text-gray-300">{STATS[stat.name as StatName].label}</span>
+                                        <span className="text-gray-300">{STATS[stat.name as StatName].label}</span>
                                         <span className="font-medium text-gray-200">
                                             {stat.value}{stat.type === 'percentage' ? '%' : ''}
                                         </span>

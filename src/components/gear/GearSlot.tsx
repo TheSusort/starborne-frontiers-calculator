@@ -45,16 +45,15 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
                         {STATS[gear.mainStat.name].shortLabel}
                         {gear.mainStat.type === 'percentage' ? "%" : ""}
                     </div>
-                    <div className="absolute top-1 right-1 text-xs text-gray-400 capitalize text-center text-xs">
-                        <span className="text-xs text-yellow-400">★ {gear.stars}</span>
-                    </div>
+                    <span className="text-xs text-yellow-400 absolute top-1 right-1 text-center">★ {gear.stars}</span>
 
                     {/* Remove Button */}
                     {onRemove && (
                         <Button
                             variant="danger"
+                            size="sm"
                             onClick={() => onRemove && onRemove(slotKey)}
-                            className="absolute -top-2 -right-2 rounded-full px-1 py-1 hidden group-hover:block"
+                            className="absolute -top-2 -right-2 rounded-full hidden group-hover:block"
                         >
                             <CloseIcon />
                         </Button>

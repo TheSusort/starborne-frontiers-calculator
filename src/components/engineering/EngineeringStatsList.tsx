@@ -49,15 +49,18 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
                                 <CloseIcon />
                             </Button>
                         </div>
-                        <div className="grid grid-cols-1 px-4 py-2">
-                            {stat.stats.map((s) => (
-                                <div key={`${s.name}-${s.type}`} className="text-sm flex justify-between">
-                                    <span>{STATS[s.name].label}:</span>
-                                    <span>
-                                        +{s.value}{s.type === 'percentage' ? '%' : ''}
-                                    </span>
-                                </div>
-                            ))}
+                        <div className="p-4 space-y-4 flex-grow">
+                            <div className="text-sm text-gray-400 mb-2">Engineering Stats</div>
+                            <div className="space-y-2">
+                                {stat.stats.map((s) => (
+                                    <div key={`${s.name}-${s.type}`} className="flex justify-between items-center bg-dark-lighter px-3 py-1.5 rounded">
+                                        <span className="text-gray-300">{STATS[s.name].label}:</span>
+                                        <span className="font-medium text-gray-200">
+                                            +{s.value}{s.type === 'percentage' ? '%' : ''}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 ))}
