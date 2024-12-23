@@ -32,6 +32,9 @@ module.exports = {
       },
       fontSize: {
         xxs: '0.5rem',
+      },
+      letterSpacing: {
+        tightest: '-0.35em',
       }
     },
   },

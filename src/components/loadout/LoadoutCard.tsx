@@ -4,7 +4,7 @@ import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
-import { Modal, Button, CloseIcon } from '../ui';
+import { Modal, Button, CloseIcon, CheckIcon } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 
@@ -46,39 +46,41 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
 
     return (
         <>
-            {(name || showControls) && (
+            {name && (
                 <div className="flex justify-between items-center mb-4">
                     <div>
                         {name && (
                             <h3 className="text-lg font-medium text-gray-200">{name}</h3>
                         )}
                     </div>
-                    {showControls && (
-                        <div className="flex gap-2">
-                            {onEquip && (
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    onClick={onEquip}
-                                >
-                                    Equip to Ship
-                                </Button>
-                            )}
-                            {onDelete && (
-                                <Button
-                                    variant="danger"
-                                    size="sm"
-                                    onClick={onDelete}
-                                >
-                                    <CloseIcon />
-                                </Button>
-                            )}
-                        </div>
-                    )}
+
                 </div>
             )}
 
             <ShipDisplay ship={ship} variant="compact">
+                {showControls && (
+                    <div className="flex gap-2 -mt-10">
+                        {onEquip && (
+                            <Button
+                                variant="primary"
+                                className="ms-auto"
+                                size="sm"
+                                onClick={onEquip}
+                            >
+                                <CheckIcon />
+                            </Button>
+                        )}
+                        {onDelete && (
+                            <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={onDelete}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        )}
+                    </div>
+                )}
                 <div className={`p-4 mt-3 -mx-3 bg-dark border-t ${RARITIES[ship.rarity || 'common'].borderColor}`}>
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, slot]) => (
@@ -126,8 +128,8 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                             setSelectedSlot(null);
                         }
                     }}
-                    onRemove={() => {}}
-                    onEdit={() => {}}
+                    onRemove={() => { }}
+                    onEdit={() => { }}
                 />
             </Modal>
         </>

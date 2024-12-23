@@ -26,9 +26,9 @@ export const SortPanel: React.FC<Props> = ({ options, currentSort, onSort }) => 
             <div className="flex gap-2 items-center">
                 <Select
                     value={currentSort.field}
-                    onChange={(e) => {
+                    onChange={(value) => {
                         onSort({
-                            field: e.target.value,
+                            field: value,
                             direction: 'asc'
                         });
                     }}

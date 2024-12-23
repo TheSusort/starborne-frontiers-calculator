@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Ship } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
 import { Button, Input, Select, CloseIcon } from '../ui';
-import { FACTIONS, RARITIES, SHIP_TYPES, RarityName, STATS } from '../../constants';
+import { FACTIONS, RARITIES, SHIP_TYPES, RarityName, STATS, ShipTypeName, FactionName } from '../../constants';
 import { fetchShipData } from '../../utils/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -191,8 +191,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <Select
                     label="Faction"
                     value={faction}
-                    onChange={(e) => setFaction(e.target.value)}
-                    required
+                    onChange={(value) => setFaction(value as FactionName)}
                     options={factionOptions}
                     noDefaultSelection
                     defaultOption="Select Faction"
@@ -201,8 +200,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <Select
                     label="Type"
                     value={type}
-                    onChange={(e) => setType(e.target.value)}
-                    required
+                    onChange={(value) => setType(value as ShipTypeName)}
                     options={shipTypeOptions}
                     noDefaultSelection
                     defaultOption="Select Type"
@@ -213,8 +211,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <Select
                 label="Rarity"
                 value={rarity}
-                onChange={(e) => setRarity(e.target.value as RarityName)}
-                required
+                onChange={(value) => setRarity(value as RarityName)}
                 options={rarityOptions}
                 noDefaultSelection
                 defaultOption="Select Rarity"

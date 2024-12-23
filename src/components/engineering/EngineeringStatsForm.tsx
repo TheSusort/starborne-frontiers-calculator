@@ -57,8 +57,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
                 <Select
                     label="Ship Type"
                     value={shipType}
-                    onChange={(e) => setShipType(e.target.value)}
-                    required
+                    onChange={(value) => setShipType(value as ShipTypeName)}
                     options={shipTypeOptions}
                 />
             </div>

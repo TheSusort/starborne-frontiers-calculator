@@ -51,8 +51,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         value: type.name,
                         label: `${type.name} (${type.description})`
                     }))}
-                    value={SHIP_TYPES[selectedShipRole || '']?.name}
-                    onChange={(e) => onRoleSelect(e.target.value as ShipTypeName)}
+                    value={selectedShipRole || ''}
+                    onChange={(value) => onRoleSelect(value as ShipTypeName)}
                     noDefaultSelection
                     defaultOption="Manual"
                 />
@@ -94,7 +94,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         label: name
                     }))}
                     value={selectedAlgorithm}
-                    onChange={(e) => onAlgorithmSelect(e.target.value as AutogearAlgorithm)}
+                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
                 />
                 <p className="text-sm text-gray-400">
                     {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
@@ -105,7 +105,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 <Checkbox
                     label="Ignore currently equipped gear"
                     checked={ignoreEquipped}
-                    onChange={(e) => onIgnoreEquippedChange(e.target.checked)}
+                    onChange={(value) => onIgnoreEquippedChange(value)}
                 />
                 <p className="text-sm text-gray-400 mt-1">
                     When checked, the algorithm will ignore gear that is currently equipped on other ships

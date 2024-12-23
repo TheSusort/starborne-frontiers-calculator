@@ -20,7 +20,7 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
     onRunSimulation,
 }) => {
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <h3 className="text-xl font-bold text-gray-200">Settings</h3>
             <ShipSelector
                 onSelect={onShipSelect}
@@ -35,8 +35,8 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
                         value: type.name,
                         label: `${type.name} (${type.description})`
                     }))}
-                    value={SHIP_TYPES[selectedRole]?.name}
-                    onChange={(e) => onRoleSelect(e.target.value as ShipTypeName)}
+                    value={selectedRole}
+                    onChange={(value) => onRoleSelect(value as ShipTypeName)}
                 />
             </div>
 

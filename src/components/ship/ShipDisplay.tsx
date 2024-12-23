@@ -22,20 +22,30 @@ const ShipImage = memo(({ iconUrl, name }: { iconUrl: string, name: string }) =>
 ));
 
 const Header = memo(({ ship }: { ship: Ship }) => (
-    <div className="flex items-center gap-2">
-        {ship.type && SHIP_TYPES[ship.type] && (
-            <ShipImage
-                iconUrl={SHIP_TYPES[ship.type].iconUrl}
-                name={SHIP_TYPES[ship.type].name}
-            />
-        )}
-        {ship.faction && FACTIONS[ship.faction] && (
-            <ShipImage
-                iconUrl={FACTIONS[ship.faction].iconUrl}
-                name={FACTIONS[ship.faction].name}
-            />
-        )}
-        <span className={`font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}>{ship.name}</span>
+    <div>
+        <div className="flex items-center gap-2 min-h-[28px]">
+            {ship.type && SHIP_TYPES[ship.type] && (
+                <ShipImage
+                    iconUrl={SHIP_TYPES[ship.type].iconUrl}
+                    name={SHIP_TYPES[ship.type].name}
+                />
+            )}
+            {ship.faction && FACTIONS[ship.faction] && (
+                <ShipImage
+                    iconUrl={FACTIONS[ship.faction].iconUrl}
+                    name={FACTIONS[ship.faction].name}
+                />
+            )}
+            <span className={`font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}>{ship.name}</span>
+        </div>
+
+        <div className="flex items-center gap-1">
+            {Array.from({ length: 6 }, (_, index) => (
+                <span key={index} className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}>
+                    ★
+                </span>
+            ))}
+        </div>
     </div>
 ));
 
@@ -72,7 +82,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
             onClick={onClick}
         >
             {/* Ship Header */}
-            <div className={`px-4 py-2 bg-dark-lighter border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}>
+            <div className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}>
                 <Header ship={ship} />
                 {(onEdit || onRemove) && (
                     <div className="flex gap-2">
@@ -111,12 +121,6 @@ export const ShipDisplay: React.FC<Props> = memo(({
                 <div className="space-y-1 text-sm">
                     {variant === 'extended' && (
                         <>
-                            {ship.refits && (
-                                <div className="flex justify-between text-gray-300">
-                                    <span>Refits:</span>
-                                    <span>{ship.refits?.length}</span>
-                                </div>
-                            )}
                             {ship.implants && (
                                 <div className="flex justify-between text-gray-300 border-b pb-1 border-dark-lighter">
                                     <span>Implants:</span>

@@ -37,9 +37,8 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
                 if (!ship) return null;
 
                 return (
-                    <div className="flex flex-col">
+                    <div className="flex flex-col" key={loadout.id}>
                         <LoadoutCard
-                            key={loadout.id}
                             name={loadout.name}
                             ship={ship}
                             equipment={loadout.equipment}

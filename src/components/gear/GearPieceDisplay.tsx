@@ -24,17 +24,53 @@ export const GearPieceDisplay: React.FC<Props> = ({
     return (
         <div className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow flex flex-col`}>
             {/* Header */}
-            <div className={`px-4 py-2 border-b ${RARITIES[gear.rarity].textColor} ${RARITIES[gear.rarity].borderColor} bg-dark-lighter flex justify-between items-center`}>
-                <div className="font-semibold capitalize flex items-center gap-2">
-                    <img src={GEAR_SETS[gear.setBonus].iconUrl} alt={gear.setBonus} className="w-6 h-auto" />
-                    <span>{gear.slot}</span>
-                </div>
-                <div className="flex items-center">
-                    <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
-                    <div className="text-sm ps-3">
-                        Lvl {gear.level}
+            <div className={`px-4 py-2 border-b ${RARITIES[gear.rarity].textColor} ${RARITIES[gear.rarity].borderColor} flex justify-between items-center`}>
+                <div>
+                    <div className="font-semibold capitalize flex items-center gap-2">
+                        <img src={GEAR_SETS[gear.setBonus].iconUrl} alt={gear.setBonus} className="w-6 h-auto" />
+                        <span>{gear.slot}</span>
+                    </div>
+                    <div className="flex items-center">
+                        <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
+                        <div className="text-sm ps-3">
+                            Lvl {gear.level}
+                        </div>
                     </div>
                 </div>
+                {mode === 'manage' ? (
+                        <div className="flex gap-2">
+                            {onEdit && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="ms-auto"
+                                    onClick={() => onEdit(gear)}
+                                >
+                                    <EditIcon />
+                                </Button>
+                            )}
+                            {onRemove && (
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    onClick={() => onRemove(gear.id)}
+                                >
+                                    <CloseIcon />
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        onEquip && (
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                fullWidth
+                                onClick={() => onEquip(gear)}
+                            >
+                                Equip
+                            </Button>
+                        )
+                    )}
             </div>
 
             {showDetails && (
@@ -73,44 +109,6 @@ export const GearPieceDisplay: React.FC<Props> = ({
                     )}
                 </div>
             )}
-
-            {/* Action Buttons */}
-            <div className="p-4 pt-0 mt-auto">
-                {mode === 'manage' ? (
-                    <div className="flex gap-2">
-                        {onEdit && (
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                className="ms-auto"
-                                onClick={() => onEdit(gear)}
-                            >
-                                <EditIcon />
-                            </Button>
-                        )}
-                        {onRemove && (
-                            <Button
-                                variant="danger"
-                                size="sm"
-                                onClick={() => onRemove(gear.id)}
-                            >
-                                <CloseIcon />
-                            </Button>
-                        )}
-                    </div>
-                ) : (
-                    onEquip && (
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            fullWidth
-                            onClick={() => onEquip(gear)}
-                        >
-                            Equip
-                        </Button>
-                    )
-                )}
-            </div>
         </div>
     );
 };

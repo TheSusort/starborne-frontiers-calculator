@@ -135,21 +135,21 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Set Bonus"
                     value={setBonus}
-                    onChange={(e) => setSetBonus(e.target.value as GearSetName)}
+                    onChange={(value) => setSetBonus(value as GearSetName)}
                     options={setOptions}
                 />
 
                 <Select
                     label="Slot"
                     value={slot}
-                    onChange={(e) => setSlot(e.target.value as GearSlotName)}
+                    onChange={(value) => setSlot(value as GearSlotName)}
                     options={gearTypeOptions}
                 />
 
                 <Select
                     label="Stars"
                     value={stars.toString()}
-                    onChange={(e) => setStars(Number(e.target.value))}
+                    onChange={(value) => setStars(Number(value))}
                     options={[1, 2, 3, 4, 5, 6].map(num => ({
                         value: num.toString(),
                         label: `${num} ⭐`
@@ -167,7 +167,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Rarity"
                     value={rarity}
-                    onChange={(e) => setRarity(e.target.value as RarityName)}
+                    onChange={(value) => setRarity(value as RarityName)}
                     options={rarityOptions}
                 />
 
@@ -176,7 +176,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Select
                         label="Main Stat"
                         value={mainStat.name}
-                        onChange={(e) => handleMainStatChange({ name: e.target.value as StatName })}
+                        onChange={(value) => handleMainStatChange({ name: value as StatName })}
                         options={getAvailableMainStats(slot).map(stat => ({
                             value: stat,
                             label: STATS[stat as StatName].label
@@ -193,7 +193,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     {(slot === 'sensor' || slot === 'software' || slot === 'thrusters') && (
                         <Select
                             value={mainStat.type}
-                            onChange={(e) => handleMainStatChange({ type: e.target.value as StatType })}
+                            onChange={(value) => handleMainStatChange({ type: value as StatType })}
                             options={getAvailableStatTypes(mainStat.name).map(type => ({
                                 value: type,
                                 label: type.charAt(0).toUpperCase() + type.slice(1)

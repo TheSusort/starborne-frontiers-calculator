@@ -110,7 +110,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
                     <Select
                         label="Stat"
                         value={stat.name}
-                        onChange={(e) => handleStatChange(index, 'name', e.target.value)}
+                        onChange={(value) => handleStatChange(index, 'name', value as StatName)}
                         options={statOptions}
                     />
                     <Input
@@ -122,7 +122,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
                     <Select
                         label="Type"
                         value={stat.type}
-                        onChange={(e) => handleStatChange(index, 'type', e.target.value)}
+                        onChange={(value) => handleStatChange(index, 'type', value as StatType)}
                         options={statOptions.find((option) => option.value === stat.name)?.allowedTypes || []}
                     />
                     <Button

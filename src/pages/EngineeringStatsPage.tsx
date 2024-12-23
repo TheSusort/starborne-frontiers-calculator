@@ -57,7 +57,7 @@ export const EngineeringStatsPage: React.FC = () => {
                 />
             </CollapsibleForm>
 
-            <div className="space-y-6 text-gray-200">
+            <div className="space-y-4 text-gray-200">
                 <EngineeringStatsList
                     stats={engineeringStats.stats}
                     onEdit={(stat: EngineeringStat) => {

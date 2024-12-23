@@ -42,7 +42,7 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                 <label className="block text-sm text-gray-300">Stat</label>
                 <Select
                     value={selectedStat}
-                    onChange={(e) => setSelectedStat(e.target.value as StatName)}
+                    onChange={(value) => setSelectedStat(value as StatName)}
                     options={AVAILABLE_STATS.map(stat => ({
                         value: stat,
                         label: stat.charAt(0).toUpperCase() + stat.slice(1)
