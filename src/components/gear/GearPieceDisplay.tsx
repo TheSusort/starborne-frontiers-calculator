@@ -2,7 +2,7 @@ import React from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
 import { GEAR_SETS, RARITIES, STATS } from '../../constants';
-import { Button, CloseIcon, EditIcon } from '../ui';
+import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 
 interface Props {
     gear: GearPiece;
@@ -64,10 +64,9 @@ export const GearPieceDisplay: React.FC<Props> = ({
                             <Button
                                 variant="primary"
                                 size="sm"
-                                fullWidth
                                 onClick={() => onEquip(gear)}
                             >
-                                Equip
+                                <CheckIcon />
                             </Button>
                         )
                     )}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { GearSlotName } from '../constants';
+import { useNotification } from '../contexts/NotificationContext';
 
 const LOADOUTS_STORAGE_KEY = 'shipLoadouts';
 const TEAM_LOADOUTS_STORAGE_KEY = 'teamLoadouts';
@@ -8,7 +9,7 @@ const TEAM_LOADOUTS_STORAGE_KEY = 'teamLoadouts';
 export const useLoadouts = () => {
     const [loadouts, setLoadouts] = useState<Loadout[]>([]);
     const [teamLoadouts, setTeamLoadouts] = useState<TeamLoadout[]>([]);
-
+    const { addNotification } = useNotification();
     useEffect(() => {
         const saved = localStorage.getItem(LOADOUTS_STORAGE_KEY);
         if (saved) {
@@ -21,24 +22,27 @@ export const useLoadouts = () => {
         setLoadouts(newLoadouts);
     };
 
-    const addLoadout = (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
+    const addLoadout = async (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
         const newLoadout: Loadout = {
             ...loadout,
             id: crypto.randomUUID(),
             createdAt: Date.now(),
         };
-        saveLoadouts([...loadouts, newLoadout]);
+        await saveLoadouts([...loadouts, newLoadout]);
+        addNotification('success', 'Loadout added');
     };
 
-    const updateLoadout = (id: string, equipment: Record<GearSlotName, string>) => {
-        const newLoadouts = loadouts.map(loadout => 
+    const updateLoadout = async (id: string, equipment: Record<GearSlotName, string>) => {
+        const newLoadouts = loadouts.map(loadout =>
             loadout.id === id ? { ...loadout, equipment } : loadout
         );
-        saveLoadouts(newLoadouts);
+        await saveLoadouts(newLoadouts);
+        addNotification('success', 'Loadout updated');
     };
 
-    const deleteLoadout = (id: string) => {
-        saveLoadouts(loadouts.filter(loadout => loadout.id !== id));
+    const deleteLoadout = async (id: string) => {
+        await saveLoadouts(loadouts.filter(loadout => loadout.id !== id));
+        addNotification('success', 'Loadout deleted');
     };
 
     // Load team loadouts
@@ -52,11 +56,12 @@ export const useLoadouts = () => {
     const saveTeamLoadouts = (newTeamLoadouts: TeamLoadout[]) => {
         localStorage.setItem(TEAM_LOADOUTS_STORAGE_KEY, JSON.stringify(newTeamLoadouts));
         setTeamLoadouts(newTeamLoadouts);
+        addNotification('success', 'Team loadout updated');
     };
 
     const validateTeamLoadout = (shipLoadouts: TeamLoadout['shipLoadouts']) => {
         const usedGear = new Set<string>();
-        
+
         for (const loadout of shipLoadouts) {
             for (const gearId of Object.values(loadout.equipment)) {
                 if (usedGear.has(gearId)) {
@@ -65,11 +70,11 @@ export const useLoadouts = () => {
                 usedGear.add(gearId);
             }
         }
-        
+
         return true;
     };
 
-    const addTeamLoadout = (teamLoadout: Omit<TeamLoadout, 'id' | 'createdAt'>) => {
+    const addTeamLoadout = async (teamLoadout: Omit<TeamLoadout, 'id' | 'createdAt'>) => {
         if (!validateTeamLoadout(teamLoadout.shipLoadouts)) {
             throw new Error('Invalid team loadout: Duplicate gear pieces detected');
         }
@@ -79,25 +84,28 @@ export const useLoadouts = () => {
             id: crypto.randomUUID(),
             createdAt: Date.now(),
         };
-        saveTeamLoadouts([...teamLoadouts, newTeamLoadout]);
+        await saveTeamLoadouts([...teamLoadouts, newTeamLoadout]);
+        addNotification('success', 'Team loadout added');
     };
 
-    const updateTeamLoadout = (
-        id: string, 
+    const updateTeamLoadout = async (
+        id: string,
         shipLoadouts: TeamLoadout['shipLoadouts']
     ) => {
         if (!validateTeamLoadout(shipLoadouts)) {
             throw new Error('Invalid team loadout: Duplicate gear pieces detected');
         }
 
-        const newTeamLoadouts = teamLoadouts.map(loadout => 
+        const newTeamLoadouts = teamLoadouts.map(loadout =>
             loadout.id === id ? { ...loadout, shipLoadouts } : loadout
         );
-        saveTeamLoadouts(newTeamLoadouts);
+        await saveTeamLoadouts(newTeamLoadouts);
+        addNotification('success', 'Team loadout updated');
     };
 
-    const deleteTeamLoadout = (id: string) => {
-        saveTeamLoadouts(teamLoadouts.filter(loadout => loadout.id !== id));
+    const deleteTeamLoadout = async (id: string) => {
+        await saveTeamLoadouts(teamLoadouts.filter(loadout => loadout.id !== id));
+        addNotification('success', 'Team loadout deleted');
     };
 
     return {
@@ -110,4 +118,4 @@ export const useLoadouts = () => {
         updateTeamLoadout,
         deleteTeamLoadout,
     };
-}; 
+};

@@ -6,6 +6,8 @@ import { Button, CloseIcon } from '../ui';
 import { LoadoutCard } from './LoadoutCard';
 import { useShips } from '../../hooks/useShips';
 import { GearSlotName } from '../../constants';
+import { useInventory } from '../../hooks/useInventory';
+import { useNotification } from '../../contexts/NotificationContext';
 
 interface TeamLoadoutCardProps {
     teamLoadout: TeamLoadout;
@@ -25,13 +27,50 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     onDelete,
 }) => {
     const { handleEquipGear } = useShips();
+    const { saveInventory } = useInventory();
+    const { addNotification } = useNotification();
 
     const handleEquipTeam = () => {
+        const inventoryUpdates = new Map<string, string>();
+        const processedGear = new Set<string>();
+
         teamLoadout.shipLoadouts.forEach(shipLoadout => {
             Object.entries(shipLoadout.equipment).forEach(([slot, gearId]) => {
+                if (processedGear.has(gearId)) {
+                    addNotification('warning', `Skipped duplicate gear assignment for ${slot}`);
+                    return;
+                }
+
+                const gear = getGearPiece(gearId);
+                if (!gear) {
+                    addNotification('error', `Gear piece ${gearId} not found in inventory`);
+                    return;
+                }
+
+                if (gear.shipId && gear.shipId !== shipLoadout.shipId) {
+                    const previousShip = ships.find(s => s.id === gear.shipId);
+                    if (previousShip) {
+                        addNotification('info', `Unequipped ${slot} from ${previousShip.name}`);
+                    }
+                }
+
+                inventoryUpdates.set(gearId, shipLoadout.shipId);
+                processedGear.add(gearId);
+
                 handleEquipGear(shipLoadout.shipId, slot as GearSlotName, gearId);
             });
         });
+
+        const newInventory = availableGear.map(gear => {
+            const newShipId = inventoryUpdates.get(gear.id);
+            if (newShipId !== undefined) {
+                return { ...gear, shipId: newShipId };
+            }
+            return gear;
+        });
+
+        saveInventory(newInventory);
+        addNotification('success', 'Team loadout equipped successfully');
     };
 
     const handleUpdateShipLoadout = (position: number, equipment: Record<GearSlotName, string>) => {

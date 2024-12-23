@@ -7,17 +7,20 @@ import { GearSlot } from '../gear/GearSlot';
 import { Modal, Button, CloseIcon, CheckIcon } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
+import { useShips } from '../../hooks/useShips';
+import { useInventory } from '../../hooks/useInventory';
+import { useNotification } from '../../contexts/NotificationContext';
 
 interface LoadoutCardProps {
-    name?: string; // Optional for team loadouts
+    name?: string;
     ship: Ship;
     equipment: Record<GearSlotName, string>;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
-    onEquip?: () => void; // Optional for team loadouts
+    onEquip?: () => void;
     onUpdate: (equipment: Record<GearSlotName, string>) => void;
-    onDelete?: () => void; // Optional for team loadouts
-    showControls?: boolean; // Whether to show equip/delete buttons
+    onDelete?: () => void;
+    showControls?: boolean;
 }
 
 export const LoadoutCard: React.FC<LoadoutCardProps> = ({
@@ -35,13 +38,51 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const gearLookup = useGearLookup(equipment, getGearPiece);
     const activeSets = useGearSets(equipment, gearLookup);
+    const { handleEquipGear } = useShips();
+    const { saveInventory } = useInventory();
+    const { addNotification } = useNotification();
 
-    const handleEquipGear = (slot: GearSlotName, gearId: string) => {
-        const newEquipment = {
-            ...equipment,
-            [slot]: gearId,
-        };
-        onUpdate(newEquipment);
+    const handleEquipLoadout = () => {
+        if (!onEquip) return;
+
+        const inventoryUpdates = new Map<string, string>();
+        const processedGear = new Set<string>();
+
+        Object.entries(equipment).forEach(([slot, gearId]) => {
+            if (processedGear.has(gearId)) {
+                addNotification('warning', `Skipped duplicate gear assignment for ${slot}`);
+                return;
+            }
+
+            const gear = getGearPiece(gearId);
+            if (!gear) {
+                addNotification('error', `Gear piece ${gearId} not found in inventory`);
+                return;
+            }
+
+            if (gear.shipId && gear.shipId !== ship.id) {
+                const previousShip = gear.shipId;
+                addNotification('info', `Unequipped ${slot} from ship ${previousShip}`);
+            }
+
+            inventoryUpdates.set(gearId, ship.id);
+            processedGear.add(gearId);
+
+            handleEquipGear(ship.id, slot as GearSlotName, gearId);
+        });
+
+        // Update inventory
+        const newInventory = availableGear.map(gear => {
+            const newShipId = inventoryUpdates.get(gear.id);
+            if (newShipId !== undefined) {
+                return { ...gear, shipId: newShipId };
+            }
+            return gear;
+        });
+
+        saveInventory(newInventory);
+        addNotification('success', 'Loadout equipped successfully');
+        onEquip();
     };
 
     return (
@@ -53,7 +94,6 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                             <h3 className="text-lg font-medium text-gray-200">{name}</h3>
                         )}
                     </div>
-
                 </div>
             )}
 
@@ -65,7 +105,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                                 variant="primary"
                                 className="ms-auto"
                                 size="sm"
-                                onClick={onEquip}
+                                onClick={handleEquipLoadout}
                             >
                                 <CheckIcon />
                             </Button>
@@ -122,9 +162,9 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         selectedSlot && gear.slot === selectedSlot
                     )}
                     mode="select"
-                    onEquip={(gear) => {
+                    onEquip={() => {
                         if (selectedSlot) {
-                            handleEquipGear(selectedSlot, gear.id);
+                            handleEquipLoadout();
                             setSelectedSlot(null);
                         }
                     }}
