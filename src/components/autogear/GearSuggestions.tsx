@@ -25,7 +25,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     };
 
     return (
-        <div className="bg-dark-lighter p-4 pt-0 rounded">
+        <div className="bg-dark-lighter py-4 md:pt-0 rounded">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold text-gray-200">Suggested Gear</h3>
             </div>
@@ -56,4 +56,4 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
             </div>
         </div>
     );
-}; 
+};

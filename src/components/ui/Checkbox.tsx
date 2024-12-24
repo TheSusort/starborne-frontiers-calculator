@@ -32,13 +32,13 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                 ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 ${className}
             `}
+            onClick={() => !disabled && onChange(!checked)}
         >
             <div
                 role="checkbox"
                 aria-checked={checked}
                 aria-disabled={disabled}
                 tabIndex={disabled ? -1 : 0}
-                onClick={() => !disabled && onChange(!checked)}
                 onKeyDown={handleKeyDown}
                 className={`
                     w-4 h-4
@@ -57,8 +57,8 @@ export const Checkbox: React.FC<CheckboxProps> = ({
             >
                 <div className={`
                     transition-all duration-200
-                    ${checked 
-                        ? 'opacity-100 scale-100' 
+                    ${checked
+                        ? 'opacity-100 scale-100'
                         : 'opacity-0 scale-75'
                     }
                 `}>

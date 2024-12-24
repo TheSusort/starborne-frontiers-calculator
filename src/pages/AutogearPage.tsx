@@ -168,7 +168,7 @@ export const AutogearPage: React.FC = () => {
             title="Autogear"
             description="Find the best gear for your ship."
         >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:grid md:grid-cols-2 gap-4">
                 <AutogearSettings
                     selectedShip={selectedShip || null}
                     selectedShipRole={selectedShipRole}
