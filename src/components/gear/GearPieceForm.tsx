@@ -217,7 +217,10 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
             {/* Submit Button */}
             <div className="flex justify-end pt-4">
-                <Button type="submit">
+                <Button
+                    aria-label={editingPiece ? 'Save gear piece' : 'Add gear piece'}
+                    type="submit"
+                >
                     {editingPiece ? 'Save Gear Piece' : 'Add Gear Piece'}
                 </Button>
             </div>

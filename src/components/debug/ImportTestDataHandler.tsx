@@ -1,12 +1,12 @@
 import React, { useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useShips } from '../../hooks/useShips';
 import { useInventory } from '../../hooks/useInventory';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { testData } from '../../constants';
 
-const IMPORT_SECRET = process.env.REACT_APP_IMPORT_SECRET || 'development-secret';
+const IMPORT_SECRET = import.meta.env.VITE_IMPORT_SECRET || 'development-secret';
 
 export const ImportTestDataHandler: React.FC = () => {
     const navigate = useNavigate();

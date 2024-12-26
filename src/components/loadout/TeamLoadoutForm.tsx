@@ -81,6 +81,7 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
 
             <div className="flex justify-end gap-2">
                 <Button
+                    aria-label="Create team loadout"
                     type="submit"
                     disabled={selectedShips.some(ship => !ship) || !name}
                 >

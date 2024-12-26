@@ -21,6 +21,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     return (
         <div className="space-y-4">
             <Button
+                aria-label={selected ? 'Select another Ship' : 'Select a Ship'}
                 variant="secondary"
                 onClick={() => setIsShipModalOpen(true)}
                 fullWidth

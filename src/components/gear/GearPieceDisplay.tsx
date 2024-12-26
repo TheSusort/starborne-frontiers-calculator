@@ -41,6 +41,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
                         <div className="flex gap-2">
                             {onEdit && (
                                 <Button
+                                    aria-label="Edit gear piece"
                                     variant="secondary"
                                     size="sm"
                                     className="ms-auto"
@@ -51,6 +52,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
                             )}
                             {onRemove && (
                                 <Button
+                                    aria-label="Remove gear piece"
                                     variant="danger"
                                     size="sm"
                                     onClick={() => onRemove(gear.id)}
@@ -62,6 +64,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
                     ) : (
                         onEquip && (
                             <Button
+                                aria-label="Equip gear piece"
                                 variant="primary"
                                 size="sm"
                                 onClick={() => onEquip(gear)}

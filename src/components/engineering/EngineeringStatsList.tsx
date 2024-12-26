@@ -31,6 +31,7 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
                         <div className="flex justify-between items-center px-4 py-2 border-b border-gray-600">
                             <h3 className="text-lg font-medium">{SHIP_TYPES[stat.shipType].name}</h3>
                             <Button
+                                aria-label="Edit engineering stats"
                                 variant="secondary"
                                 size="sm"
                                 className="ms-auto me-2"
@@ -42,6 +43,7 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
                                 <EditIcon />
                             </Button>
                             <Button
+                                aria-label="Delete engineering stats"
                                 variant="danger"
                                 size="sm"
                                 onClick={() => onDelete(stat.shipType)}

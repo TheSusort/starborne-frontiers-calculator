@@ -76,7 +76,11 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
             </div>
 
             <div className="flex justify-end gap-2">
-                <Button type="submit" disabled={!selectedShip || !name.trim()}>
+                <Button
+                    aria-label="Create loadout"
+                    type="submit"
+                    disabled={!selectedShip || !name.trim()}
+                >
                     Create Loadout
                 </Button>
             </div>

@@ -45,6 +45,7 @@ export const FilterPanel: React.FC<Props> = ({
                             filter.values.map((value) => (
                                 <div key={value} className="flex justify-between items-center">
                                     <Button
+                                        aria-label={`Remove ${filter.label} filter`}
                                         className="relative flex items-center"
                                         variant="secondary"
                                         onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
@@ -62,7 +63,7 @@ export const FilterPanel: React.FC<Props> = ({
                         ))}
                     </div>
                 )}
-                <Button variant="secondary" className="ml-auto" onClick={onToggle}>
+                <Button variant="secondary" className="ml-auto" onClick={onToggle} aria-label="Filter">
                     <FilterIcon />
                 </Button>
             </div>
@@ -94,6 +95,7 @@ export const FilterPanel: React.FC<Props> = ({
                     {hasActiveFilters && (
                         <div className="pt-4">
                             <Button
+                                aria-label="Clear filters"
                                 variant="secondary"
                                 fullWidth
                                 onClick={onClear}

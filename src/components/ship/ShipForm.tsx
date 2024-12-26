@@ -155,6 +155,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     </div>
                     <div className="flex items-end">
                         <Button
+                            aria-label="Fetch ship data"
                             type="button"
                             variant="primary"
                             onClick={(e) => {
@@ -246,6 +247,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
+                                aria-label="Delete refit"
                                 variant="danger"
                                 onClick={() => handleRefitDelete(index)}
                             >
@@ -265,6 +267,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 ))}
                 {refits?.length < 6 && (
                     <Button
+                        aria-label="Add refit"
                         type="button"
                         variant="primary"
                         onClick={() => setRefits([...refits, { stats: [] }])}
@@ -281,6 +284,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
                             <Button
+                                aria-label="Delete implant"
                                 variant="danger"
                                 onClick={() => handleImplantDelete(index)}
                             >
@@ -300,6 +304,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 ))}
                 {implants?.length < 5 && (
                     <Button
+                        aria-label="Add implant"
                         type="button"
                         variant="primary"
                         onClick={() => setImplants([...implants, { stats: [] }])}
@@ -311,7 +316,10 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
             {/* Submit Button */}
             <div className="flex justify-end pt-4">
-                <Button type="submit">
+                <Button
+                    aria-label={editingShip ? 'Save Changes' : 'Create Ship'}
+                    type="submit"
+                >
                     {editingShip ? 'Save Changes' : 'Create Ship'}
                 </Button>
             </div>

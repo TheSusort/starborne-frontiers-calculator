@@ -41,6 +41,7 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
             </div>
 
             <Button
+                aria-label="Run Simulation"
                 variant="primary"
                 onClick={onRunSimulation}
                 disabled={!selectedShip}

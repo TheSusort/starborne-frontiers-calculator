@@ -70,6 +70,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
             />
 
             <Button
+                aria-label="Save engineering stats"
                 type="submit"
                 className="mt-6"
                 variant="primary"

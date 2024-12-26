@@ -25,6 +25,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                     <h1 className="text-2xl font-bold text-gray-200">{title}</h1>
                     {action && (
                         <Button
+                            aria-label={action.label}
                             variant={action.variant || 'primary'}
                             onClick={action.onClick}
                         >

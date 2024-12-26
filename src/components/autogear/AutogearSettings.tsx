@@ -76,6 +76,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 {priority.maxLimit ? ` (Max: ${priority.maxLimit})` : ''}
                             </span>
                             <Button
+                                aria-label="Remove priority"
                                 variant="danger"
                                 onClick={() => onRemovePriority(index)}
                             >
@@ -113,6 +114,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             <Button
+                aria-label="Find optimal gear"
                 variant="primary"
                 onClick={onFindOptimalGear}
                 disabled={!selectedShip || ((selectedShipRole === '' || selectedShipRole === null) && priorities.length === 0)}

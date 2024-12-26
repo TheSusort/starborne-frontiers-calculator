@@ -126,6 +126,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
                         options={statOptions.find((option) => option.value === stat.name)?.allowedTypes || []}
                     />
                     <Button
+                        aria-label="Remove stat"
                         variant="danger"
                         onClick={() => removeStat(index)}
                     >
@@ -138,6 +139,7 @@ export const StatModifierInput: React.FC<Props> = ({ stats, onChange, maxStats, 
                     variant="secondary"
                     onClick={addStat}
                     type="button"
+                    aria-label="Add stat"
                 >
                     Add Stat
                 </Button>

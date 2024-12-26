@@ -88,6 +88,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                     <div className="flex gap-2">
                         {onEdit && (
                             <Button
+                                aria-label="Edit ship"
                                 variant="secondary"
                                 size="sm"
                                 onClick={(e) => {
@@ -100,6 +101,7 @@ export const ShipDisplay: React.FC<Props> = memo(({
                         )}
                         {onRemove && (
                             <Button
+                                aria-label="Remove ship"
                                 variant="danger"
                                 size="sm"
                                 onClick={(e) => {

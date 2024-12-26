@@ -21,6 +21,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({ notification
             <span className="flex-grow">{notification.message}</span>
             <button
                 onClick={() => onClose(notification.id)}
+                aria-label="Close notification"
                 className="ml-4 text-white hover:text-gray-200"
             >
                 <CloseIcon />

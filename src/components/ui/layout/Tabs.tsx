@@ -18,6 +18,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
                 <nav className="-mb-px flex space-x-4" aria-label="Tabs">
                     {tabs.map((tab) => (
                         <button
+                            aria-label={tab.label}
                             key={tab.id}
                             onClick={() => onChange(tab.id)}
                             className={`
@@ -36,4 +37,4 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
             </div>
         </div>
     );
-}; 
+};

@@ -9,11 +9,17 @@ export const useInventory = () => {
     const [error, setError] = useState<string | null>(null);
 
     const loadInventory = async () => {
+        setLoading(true);
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
-            setInventory(stored ? JSON.parse(stored) : []);
+            if (!stored) {
+                setInventory([]);
+                return;
+            }
+            setInventory(JSON.parse(stored));
         } catch (error) {
             console.error('Error loading inventory:', error);
+            setInventory([]);
             setError('Failed to load inventory');
         } finally {
             setLoading(false);
@@ -35,17 +41,9 @@ export const useInventory = () => {
         return gearId ? inventory.find(gear => gear.id === gearId) : undefined;
     };
 
-
-
     useEffect(() => {
         loadInventory();
     }, []);
-
-    useEffect(() => {
-        if (!loading) {
-            saveInventory(inventory);
-        }
-    }, [inventory, loading, saveInventory]);
 
     return {
         inventory,

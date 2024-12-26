@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
 import { Sidebar } from './components/ui';
 import { ShipsPage } from './pages/ShipsPage';
 import { GearPage } from './pages/GearPage';
@@ -12,13 +12,7 @@ import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { NotificationContainer } from './components/notification/NotificationContainer';
-import Hotjar from '@hotjar/browser';
 import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
-
-const siteId = 5241833;
-const hotjarVersion = 6;
-
-Hotjar.init(siteId, hotjarVersion);
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
@@ -46,7 +40,7 @@ const App: React.FC = () => {
     return (
         <NotificationProvider>
             <Router>
-                <div className="flex">
+                <main className="flex">
                     <Sidebar />
                     <div className="flex-1 lg:pl-64 max-w-full bg-dark-lighter">
                         <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
@@ -78,7 +72,7 @@ const App: React.FC = () => {
                         lastSeenVersion={lastSeenVersion}
                     />
                     <NotificationContainer />
-                </div>
+                </main>
             </Router>
         </NotificationProvider>
     );

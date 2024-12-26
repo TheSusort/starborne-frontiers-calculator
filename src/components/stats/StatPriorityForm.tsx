@@ -63,6 +63,7 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
             </div>
 
             <Button
+                aria-label="Add priority"
                 type="submit"
                 variant="secondary"
                 fullWidth

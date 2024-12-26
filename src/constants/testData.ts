@@ -18,12 +18,6 @@ export const testData = {
                 "healModifier": 0
             },
             "equipment": {
-                "weapon": "1733395701823",
-                "hull": "1733395896424",
-                "generator": "1734256091713",
-                "thrusters": "1733476999932",
-                "sensor": "1733476926597",
-                "software": "1733500872269"
             },
             "refits": [
                 {
@@ -93,18 +87,7 @@ export const testData = {
                         }
                     ]
                 }
-            ],
-            "stats": {
-                "hp": 15026.72,
-                "attack": 14582.25,
-                "defence": 2752.4,
-                "hacking": 94,
-                "security": 16,
-                "crit": 96,
-                "critDamage": 113,
-                "speed": 99,
-                "healModifier": 0
-            }
+            ]
         },
         {
             "id": "1733826045345",

@@ -102,6 +102,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                     <div className="flex gap-2 -mt-10">
                         {onEquip && (
                             <Button
+                                aria-label="Equip loadout"
                                 variant="primary"
                                 className="ms-auto"
                                 size="sm"
@@ -112,6 +113,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         )}
                         {onDelete && (
                             <Button
+                                aria-label="Delete loadout"
                                 variant="danger"
                                 size="sm"
                                 onClick={onDelete}

@@ -37,6 +37,7 @@ export const SortPanel: React.FC<Props> = ({ options, currentSort, onSort }) => 
                     className="text-xs"
                 />
                 <Button
+                    aria-label="Toggle sort direction"
                     variant="secondary"
                     className="w-12"
                     onClick={() => {

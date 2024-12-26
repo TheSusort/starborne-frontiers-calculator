@@ -50,6 +50,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
                     {/* Remove Button */}
                     {onRemove && (
                         <Button
+                            aria-label="Remove gear piece"
                             variant="danger"
                             size="sm"
                             onClick={() => onRemove && onRemove(slotKey)}
@@ -70,11 +71,13 @@ export const GearSlot: React.FC<GearSlotProps> = memo(({
     }
 
     return (
-        <button
+        <Button
+            variant="secondary"
+            aria-label="Equip gear piece"
             onClick={() => onSelect && onSelect(slotKey)}
             className="w-16 h-16 bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors"
         >
             <span className="text-xs text-gray-400 capitalize">equip</span>
-        </button>
+        </Button>
     );
 });

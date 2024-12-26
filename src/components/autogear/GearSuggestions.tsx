@@ -48,6 +48,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 
             <div className="flex justify-end pt-4">
                 <Button
+                    aria-label="Equip all suggestions"
                     variant="primary"
                     onClick={onEquip}
                 >

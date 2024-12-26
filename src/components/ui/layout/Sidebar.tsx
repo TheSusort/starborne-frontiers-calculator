@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
 
@@ -54,6 +54,7 @@ export const Sidebar: React.FC = () => {
             <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark px-4 py-3 z-20">
                 <div className="flex justify-between items-center">
                     <button
+                        aria-label="Open mobile menu"
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                         className="text-gray-300 hover:text-white focus:outline-none focus:text-white transition-colors duration-200"
                     >

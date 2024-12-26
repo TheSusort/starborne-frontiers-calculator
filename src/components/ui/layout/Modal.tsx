@@ -28,6 +28,7 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
                                 {title}
                             </h3>
                             <Button
+                                aria-label="Close modal"
                                 variant="secondary"
                                 onClick={onClose}
                             >

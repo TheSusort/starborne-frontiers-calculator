@@ -1,9 +1,13 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen } from './test-utils/test-utils';
 import App from './App';
 
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+describe('App Component', () => {
+  test('renders without crashing', () => {
+    render(<App />);
+    // Update this test based on what's actually in your App component
+    expect(screen.getByRole('main')).toBeInTheDocument();
+  });
+
+  // Add more app-level tests here
 });

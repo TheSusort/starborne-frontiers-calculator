@@ -104,6 +104,7 @@ export const ShipCard: React.FC<Props> = ({
                         )}
                         {Object.values(ship.equipment) && (
                             <Button
+                                aria-label="Unequip all gear"
                                 className='ml-auto'
                                 variant="secondary"
                                 size='xs'
