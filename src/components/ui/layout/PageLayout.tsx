@@ -20,19 +20,19 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
 }) => {
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <div className="">
+            <div>
+                <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold text-gray-200">{title}</h1>
-                    {description && <p className="text-sm text-gray-400">{description}</p>}
+                    {action && (
+                        <Button
+                            variant={action.variant || 'primary'}
+                            onClick={action.onClick}
+                        >
+                            {action.label}
+                        </Button>
+                    )}
                 </div>
-                {action && (
-                    <Button
-                        variant={action.variant || 'primary'}
-                        onClick={action.onClick}
-                    >
-                        {action.label}
-                    </Button>
-                )}
+                {description && <p className="text-sm text-gray-400 order-2 w-full">{description}</p>}
             </div>
             {children}
         </div>

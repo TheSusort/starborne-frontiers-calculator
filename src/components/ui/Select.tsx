@@ -106,7 +106,7 @@ export const Select: React.FC<Props> = ({
                         ${className}
                     `}
                 >
-                    <span>{selectedOption}</span>
+                    <span className="whitespace-nowrap overflow-hidden overflow-ellipsis">{selectedOption}</span>
                     <span className="transition-transform duration-200">
                         {isOpen ? (
                             <ChevronUpIcon />
@@ -123,8 +123,8 @@ export const Select: React.FC<Props> = ({
                         rounded-md shadow-lg
                         max-h-60 overflow-auto
                         transition-all duration-200 origin-top
-                        ${isOpen 
-                            ? 'opacity-100 scale-100 translate-y-1' 
+                        ${isOpen
+                            ? 'opacity-100 scale-100 translate-y-1'
                             : 'opacity-0 scale-95 translate-y-0 pointer-events-none'
                         }
                     `}

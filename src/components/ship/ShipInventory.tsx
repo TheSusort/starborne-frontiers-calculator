@@ -131,9 +131,9 @@ export const ShipInventory: React.FC<Props> = ({ ships, onRemove, onEdit, onEqui
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col">
                 {sortedAndFilteredInventory.length > 0 && (
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-gray-400 ">
                         Showing {sortedAndFilteredInventory.length} ships
                     </span>
                 )}

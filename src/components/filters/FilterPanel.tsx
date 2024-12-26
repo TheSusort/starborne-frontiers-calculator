@@ -38,32 +38,29 @@ export const FilterPanel: React.FC<Props> = ({
 }) => {
     return (
         <>
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap -mt-8">
                 {hasActiveFilters && (
-                    <>
-                        {/* list out all the active filters, add a close button to each */}
-                        <div className="flex flex-wrap gap-2 me-2">
-                            {filters.map((filter) => (
-                                filter.values.map((value) => (
-                                    <div key={value} className="flex justify-between items-center">
-                                        <Button
-                                            className="relative flex items-center"
-                                            variant="secondary"
-                                            onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
-                                        >
-                                            <div className="flex items-center">
-                                                <div className="flex flex-col items-start mr-3">
-                                                    <span className="text-xxs">{filter.label}</span>
-                                                    <span className="text-xs">{filter.options.find(option => option.value === value)?.label}</span>
-                                                </div>
-                                                <CloseIcon />
+                    <div className="flex flex-wrap gap-2 me-2 order-2 md:order-unset w-full pt-2">
+                        {filters.map((filter) => (
+                            filter.values.map((value) => (
+                                <div key={value} className="flex justify-between items-center">
+                                    <Button
+                                        className="relative flex items-center"
+                                        variant="secondary"
+                                        onClick={() => filter.onChange([...filter.values.filter(v => v !== value)])}
+                                    >
+                                        <div className="flex items-center">
+                                            <div className="flex flex-col items-start mr-3">
+                                                <span className="text-xxs">{filter.label}</span>
+                                                <span className="text-xs">{filter.options.find(option => option.value === value)?.label}</span>
                                             </div>
-                                        </Button>
-                                    </div>
-                                ))
-                            ))}
-                        </div>
-                    </>
+                                            <CloseIcon />
+                                        </div>
+                                    </Button>
+                                </div>
+                            ))
+                        ))}
+                    </div>
                 )}
                 <Button variant="secondary" className="ml-auto" onClick={onToggle}>
                     <FilterIcon />
