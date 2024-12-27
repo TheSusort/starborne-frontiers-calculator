@@ -26,18 +26,42 @@ export const Offcanvas: React.FC<Props> = ({
 
     useEffect(() => {
         if (isOpen) {
+            // Save current scroll position
+            const scrollY = window.scrollY;
+
+            // Apply multiple properties to ensure scroll lock
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflow = 'hidden';
+
             setShouldRender(true);
-            // Small delay to ensure DOM is ready before animation
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     setIsAnimating(true);
                 });
             });
         } else {
+            // Restore scroll position
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            window.scrollTo(0, parseInt(scrollY || '0') * -1);
+
             setIsAnimating(false);
             const timer = setTimeout(() => setShouldRender(false), 300);
             return () => clearTimeout(timer);
         }
+
+        return () => {
+            // Cleanup
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+        };
     }, [isOpen]);
 
     if (!shouldRender) return null;
@@ -65,7 +89,7 @@ export const Offcanvas: React.FC<Props> = ({
                 className={`
                     fixed ${position}-0 top-0 h-full ${width}
                     bg-dark-lighter p-6 shadow-lg
-                    transform transition-transform duration-300 ease-in-out
+                    transform transition-transform duration-300 ease-in-out overflow-y-auto
                     ${translateClass}
                 `}
                 onClick={e => e.stopPropagation()}
