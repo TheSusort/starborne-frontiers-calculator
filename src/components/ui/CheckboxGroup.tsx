@@ -7,6 +7,7 @@ interface Props {
     onChange: (values: string[]) => void;
     options: { value: string; label: string }[];
     className?: string;
+    disabled?: boolean;
 }
 
 export const CheckboxGroup: React.FC<Props> = ({
@@ -14,7 +15,8 @@ export const CheckboxGroup: React.FC<Props> = ({
     values,
     onChange,
     options,
-    className = ''
+    className = '',
+    disabled = false
 }) => {
     const handleChange = (value: string) => {
         const newValues = values.includes(value)
@@ -35,6 +37,7 @@ export const CheckboxGroup: React.FC<Props> = ({
                         label={option.label}
                         checked={values.includes(option.value)}
                         onChange={() => handleChange(option.value)}
+                        disabled={disabled}
                     />
                 ))}
             </div>
