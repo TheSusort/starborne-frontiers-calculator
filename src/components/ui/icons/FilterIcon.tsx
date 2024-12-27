@@ -9,6 +9,8 @@ export const FilterIcon = () => {
             strokeLinecap="round"
             strokeLinejoin="round"
             className="w-4 h-4"
+            role="img"
+            aria-hidden="true"
         >
             <path d="M21 6H3" />
             <path d="M10 12H21" />

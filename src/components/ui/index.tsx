@@ -1,9 +1,4 @@
-export * from './icons/CheckIcon';
-export * from './icons/ChevronDownIcon';
-export * from './icons/ChevronUpIcon';
-export * from './icons/CloseIcon';
-export * from './icons/EditIcon';
-export * from './icons/FilterIcon';
+export * from './icons';
 
 export * from './layout/CollapsibleForm';
 export * from './layout/Modal';
