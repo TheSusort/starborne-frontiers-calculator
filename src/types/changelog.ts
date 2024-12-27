@@ -1,9 +1,9 @@
 export interface ChangelogEntry {
-    version: string;
-    date: string;
-    changes: string[];
+  version: string;
+  date: string;
+  changes: string[];
 }
 
 export interface ChangelogState {
-    lastSeenVersion: string;
-} 
+  lastSeenVersion: string;
+}

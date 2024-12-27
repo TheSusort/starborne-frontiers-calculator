@@ -10,58 +10,50 @@ import { SimulationResults } from '../components/simulation/SimulationResults';
 import { SimulationSettings } from '../components/simulation/SimulationSettings';
 
 export const SimulationPage: React.FC = () => {
-    const { getShipById } = useShips();
-    const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [selectedRole, setSelectedRole] = useState<ShipTypeName>('Attacker');
-    const { getGearPiece } = useInventory();
-    const { getEngineeringStatsForShipType } = useEngineeringStats();
-    const [simulation, setSimulation] = useState<SimulationSummary | null>(null);
+  const { getShipById } = useShips();
+  const [selectedShipId, setSelectedShipId] = useState<string>('');
+  const [selectedRole, setSelectedRole] = useState<ShipTypeName>('Attacker');
+  const { getGearPiece } = useInventory();
+  const { getEngineeringStatsForShipType } = useEngineeringStats();
+  const [simulation, setSimulation] = useState<SimulationSummary | null>(null);
 
-    const selectedShip = getShipById(selectedShipId);
+  const selectedShip = getShipById(selectedShipId);
 
-    const handleRunSimulation = () => {
-        const ship = getShipById(selectedShipId);
-        if (!ship) return;
+  const handleRunSimulation = () => {
+    const ship = getShipById(selectedShipId);
+    if (!ship) return;
 
-        const stats = calculateTotalStats(
-            ship.baseStats,
-            ship.equipment,
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            getEngineeringStatsForShipType(ship.type)
-        );
-
-        const simulationResults = runSimulation(stats, selectedRole);
-        setSimulation(simulationResults);
-    };
-
-    const handleRoleChange = (role: ShipTypeName) => {
-        setSelectedRole(role);
-        setSimulation(null);
-    };
-
-    return (
-        <PageLayout
-            title="Attack Simulation"
-            description="Simulate attacks with your ships and gear."
-        >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SimulationSettings
-                    selectedShip={selectedShip || null}
-                    selectedRole={selectedRole}
-                    onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                    onRoleSelect={handleRoleChange}
-                    onRunSimulation={handleRunSimulation}
-                />
-
-                {simulation && (
-                    <SimulationResults
-                        currentSimulation={simulation}
-                        role={selectedRole}
-                    />
-                )}
-            </div>
-        </PageLayout>
+    const stats = calculateTotalStats(
+      ship.baseStats,
+      ship.equipment,
+      getGearPiece,
+      ship.refits,
+      ship.implants,
+      getEngineeringStatsForShipType(ship.type)
     );
+
+    const simulationResults = runSimulation(stats, selectedRole);
+    setSimulation(simulationResults);
+  };
+
+  const handleRoleChange = (role: ShipTypeName) => {
+    setSelectedRole(role);
+    setSimulation(null);
+  };
+
+  return (
+    <PageLayout title="Attack Simulation" description="Simulate attacks with your ships and gear.">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SimulationSettings
+          selectedShip={selectedShip || null}
+          selectedRole={selectedRole}
+          onShipSelect={(ship) => setSelectedShipId(ship.id)}
+          onRoleSelect={handleRoleChange}
+          onRunSimulation={handleRunSimulation}
+        />
+
+        {simulation && <SimulationResults currentSimulation={simulation} role={selectedRole} />}
+      </div>
+    </PageLayout>
+  );
 };

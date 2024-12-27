@@ -3,29 +3,29 @@
 @tailwind utilities;
 
 @layer base {
-    html {
-        scroll-behavior: smooth;
-        overflow-y: scroll;
-    }
+  html {
+    scroll-behavior: smooth;
+    overflow-y: scroll;
+  }
 
-    /* width */
-    ::-webkit-scrollbar {
-        width: 10px;
-    }
+  /* width */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
 
-    /* Track */
-    ::-webkit-scrollbar-track {
-        background: theme('colors.dark.lighter');
-    }
+  /* Track */
+  ::-webkit-scrollbar-track {
+    background: theme('colors.dark.lighter');
+  }
 
-    /* Handle */
-    ::-webkit-scrollbar-thumb {
-        background: theme('colors.dark.border');
-        border-radius: 5px;
-    }
+  /* Handle */
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.dark.border');
+    border-radius: 5px;
+  }
 
-    /* Handle on hover */
-    ::-webkit-scrollbar-thumb:hover {
-        background: theme('colors.dark.border');
-    }
+  /* Handle on hover */
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.dark.border');
+  }
 }
