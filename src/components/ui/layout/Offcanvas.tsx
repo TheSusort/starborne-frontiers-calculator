@@ -80,12 +80,14 @@ export const Offcanvas: React.FC<Props> = ({
         >
             {/* Backdrop */}
             <div
+                data-testid="offcanvas-backdrop"
                 className="absolute inset-0 bg-black bg-opacity-50"
                 onClick={onClose}
             />
 
             {/* Panel */}
             <div
+                data-testid="offcanvas-panel"
                 className={`
                     fixed ${position}-0 top-0 h-full ${width}
                     bg-dark-lighter p-6 shadow-lg

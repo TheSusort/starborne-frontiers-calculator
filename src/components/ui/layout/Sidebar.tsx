@@ -51,7 +51,7 @@ export const Sidebar: React.FC = () => {
     return (
         <>
             {/* Mobile Menu Button */}
-            <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark px-4 py-3 z-20">
+            <div className="lg:hidden fixed top-0 left-0 right-0 bg-dark px-4 py-3 z-20" role="banner">
                 <div className="flex justify-between items-center">
                     <button
                         aria-label="Open mobile menu"
@@ -74,7 +74,10 @@ export const Sidebar: React.FC = () => {
             </div>
 
             {/* Desktop Sidebar */}
-            <div className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20">
+            <div
+                data-testid="desktop-sidebar"
+                className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20"
+            >
                 <div className="p-4">
                     <SidebarContent />
                 </div>
