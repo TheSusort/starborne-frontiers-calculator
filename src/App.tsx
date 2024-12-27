@@ -13,6 +13,10 @@ import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { NotificationContainer } from './components/notification/NotificationContainer';
 import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
+import { migrateTianshaoToTianchao } from './migrations/factionMigration';
+
+// Run migration when app starts
+migrateTianshaoToTianchao();
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);

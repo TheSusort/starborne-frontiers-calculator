@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { ChevronUpIcon } from './icons/ChevronUpIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 
@@ -27,6 +27,7 @@ export const Select: React.FC<Props> = ({
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const selectId = `select-${Math.random().toString(36).substring(2, 15)}`;
 
     const selectedOption = value === '' && noDefaultSelection
         ? defaultOption
@@ -81,18 +82,23 @@ export const Select: React.FC<Props> = ({
     return (
         <div className="space-y-1 grow" ref={containerRef}>
             {label && (
-                <label className="block text-sm font-medium text-gray-200">
+                <label
+                    htmlFor={selectId}
+                    aria-label={label}
+                    className="block text-sm font-medium text-gray-200"
+                >
                     {label}
                 </label>
             )}
             <div className="relative">
                 <button
                     type="button"
+                    id={selectId}
                     onClick={() => !disabled && setIsOpen(!isOpen)}
                     onKeyDown={handleKeyDown}
                     aria-haspopup="listbox"
                     aria-expanded={isOpen}
-                    aria-labelledby={label}
+                    aria-labelledby={label ? selectId : undefined}
                     disabled={disabled}
                     className={`
                         w-full px-4 py-2

@@ -33,8 +33,8 @@ export const FACTIONS: Record<string, Faction> = {
         name: 'Terran Combine',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426138149044374.webp'
     },
-    TIANSHAO: {
-        name: 'Tianshao',
+    TIANCHAO: {
+        name: 'Tianchao',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426140946636820.webp'
     },
     XAOC: {
