@@ -6,129 +6,151 @@ import { vi } from 'vitest';
 const mockGearItems = testData.gear as GearPiece[];
 
 describe('GearInventory Component', () => {
-  // Mock localStorage
-  const localStorageMock = (() => {
-    let store: { [key: string]: string } = {};
-    return {
-      getItem: vi.fn((key: string) => store[key] || null),
-      setItem: vi.fn((key: string, value: string) => {
-        store[key] = value.toString();
-      }),
-      clear: vi.fn(() => {
-        store = {};
-      }),
-    };
-  })();
+    // Mock localStorage
+    const localStorageMock = (() => {
+        let store: { [key: string]: string } = {};
+        return {
+            getItem: vi.fn((key: string) => store[key] || null),
+            setItem: vi.fn((key: string, value: string) => {
+                store[key] = value.toString();
+            }),
+            clear: vi.fn(() => {
+                store = {};
+            }),
+        };
+    })();
 
-  beforeEach(() => {
-    // Setup localStorage mock
-    Object.defineProperty(window, 'localStorage', {
-      value: localStorageMock,
-    });
-    localStorageMock.clear();
-  });
-
-  test('renders empty state when no items in localStorage', async () => {
-    localStorageMock.getItem.mockReturnValue(null);
-
-    await act(async () => {
-      render(<GearInventory inventory={[]} onRemove={() => {}} onEdit={() => {}} />);
+    beforeEach(() => {
+        // Setup localStorage mock
+        Object.defineProperty(window, 'localStorage', {
+            value: localStorageMock,
+        });
+        localStorageMock.clear();
     });
 
-    expect(await screen.findByText(/no gear pieces added yet/i)).toBeInTheDocument();
-  });
+    test('renders empty state when no items in localStorage', async () => {
+        localStorageMock.getItem.mockReturnValue(null);
 
-  test('renders gear items from localStorage', async () => {
-    // Set up localStorage with test data
-    localStorageMock.getItem.mockReturnValue(JSON.stringify(mockGearItems));
+        await act(async () => {
+            render(<GearInventory inventory={[]} onRemove={() => {}} onEdit={() => {}} />);
+        });
 
-    await act(async () => {
-      render(<GearInventory inventory={mockGearItems} onRemove={() => {}} onEdit={() => {}} />);
+        expect(await screen.findByText(/no gear pieces added yet/i)).toBeInTheDocument();
     });
 
-    // Test for specific gear pieces from test data
-    const legendaryGenerators = await screen.findAllByText('Defence: 1000');
-    expect(legendaryGenerators[0]).toBeInTheDocument();
-    expect(screen.getAllByAltText('CRITICAL')[0]).toBeInTheDocument();
-  });
+    test('renders gear items from localStorage', async () => {
+        // Set up localStorage with test data
+        localStorageMock.getItem.mockReturnValue(JSON.stringify(mockGearItems));
 
-  describe('inventory management', () => {
-    test('removes item when delete button is clicked', async () => {
-      const onRemoveMock = vi.fn();
-      const lastItem = mockGearItems[mockGearItems.length - 1];
+        await act(async () => {
+            render(
+                <GearInventory inventory={mockGearItems} onRemove={() => {}} onEdit={() => {}} />
+            );
+        });
 
-      await act(async () => {
-        render(
-          <GearInventory inventory={mockGearItems} onRemove={onRemoveMock} onEdit={() => {}} />
-        );
-      });
-
-      const deleteButton = screen.getAllByRole('button', { name: /remove gear piece/i })[0];
-      fireEvent.click(deleteButton);
-
-      expect(onRemoveMock).toHaveBeenCalledWith(lastItem.id);
+        // Test for specific gear pieces from test data
+        const legendaryGenerators = await screen.findAllByText('Defence: 1000');
+        expect(legendaryGenerators[0]).toBeInTheDocument();
+        expect(screen.getAllByAltText('CRITICAL')[0]).toBeInTheDocument();
     });
 
-    test('calls edit function when edit button is clicked', async () => {
-      const onEditMock = vi.fn();
-      const lastItem = mockGearItems[mockGearItems.length - 1];
+    describe('inventory management', () => {
+        test('removes item when delete button is clicked', async () => {
+            const onRemoveMock = vi.fn();
+            const lastItem = mockGearItems[mockGearItems.length - 1];
 
-      await act(async () => {
-        render(<GearInventory inventory={mockGearItems} onRemove={() => {}} onEdit={onEditMock} />);
-      });
+            await act(async () => {
+                render(
+                    <GearInventory
+                        inventory={mockGearItems}
+                        onRemove={onRemoveMock}
+                        onEdit={() => {}}
+                    />
+                );
+            });
 
-      const editButton = screen.getAllByRole('button', { name: /edit gear piece/i })[0];
-      fireEvent.click(editButton);
+            const deleteButton = screen.getAllByRole('button', { name: /remove gear piece/i })[0];
+            fireEvent.click(deleteButton);
 
-      expect(onEditMock).toHaveBeenCalledWith(lastItem);
-    });
-  });
+            expect(onRemoveMock).toHaveBeenCalledWith(lastItem.id);
+        });
 
-  describe('filtering functionality', () => {
-    beforeEach(async () => {
-      await act(async () => {
-        render(<GearInventory inventory={mockGearItems} onRemove={() => {}} onEdit={() => {}} />);
-      });
-      await screen.findAllByText('Attack: 800');
-    });
+        test('calls edit function when edit button is clicked', async () => {
+            const onEditMock = vi.fn();
+            const lastItem = mockGearItems[mockGearItems.length - 1];
 
-    test('filters by slot type', async () => {
-      const filterButton = screen.getByLabelText(/filter/i);
-      fireEvent.click(filterButton);
+            await act(async () => {
+                render(
+                    <GearInventory
+                        inventory={mockGearItems}
+                        onRemove={() => {}}
+                        onEdit={onEditMock}
+                    />
+                );
+            });
 
-      const slotFilter = screen.getByLabelText(/Weapon/i);
-      fireEvent.click(slotFilter);
+            const editButton = screen.getAllByRole('button', { name: /edit gear piece/i })[0];
+            fireEvent.click(editButton);
 
-      const weaponItems = screen.getAllByText(/Attack: \d+/);
-      const weaponCount = mockGearItems.filter((item) => item.slot === 'weapon').length;
-      expect(weaponItems).toHaveLength(weaponCount);
-    });
-
-    test('filters by rarity', async () => {
-      const filterButton = screen.getByLabelText(/filter/i);
-      fireEvent.click(filterButton);
-
-      const rarityFilter = screen.getByLabelText(/Legendary/i) as HTMLInputElement;
-      fireEvent.click(rarityFilter);
-
-      // Check that only legendary items are shown
-      const legendaryItems = screen.getAllByText(/Main Stat/i);
-      const legendaryCount = mockGearItems.filter((item) => item.rarity === 'legendary').length;
-      expect(legendaryItems.length).toBe(legendaryCount);
+            expect(onEditMock).toHaveBeenCalledWith(lastItem);
+        });
     });
 
-    test('filters by set bonus', async () => {
-      const filterButton = screen.getByLabelText(/filter/i);
-      fireEvent.click(filterButton);
+    describe('filtering functionality', () => {
+        beforeEach(async () => {
+            await act(async () => {
+                render(
+                    <GearInventory
+                        inventory={mockGearItems}
+                        onRemove={() => {}}
+                        onEdit={() => {}}
+                    />
+                );
+            });
+            await screen.findAllByText('Attack: 800');
+        });
 
-      // Find the checkbox by its label text and click it
-      const criticalCheckbox = screen.getByLabelText(/Critical/i) as HTMLInputElement;
-      fireEvent.click(criticalCheckbox);
+        test('filters by slot type', async () => {
+            const filterButton = screen.getByLabelText(/filter/i);
+            fireEvent.click(filterButton);
 
-      // Should only show items with CRITICAL set bonus
-      const criticalItems = screen.getAllByText(/Main Stat/i);
-      const criticalCount = mockGearItems.filter((item) => item.setBonus === 'CRITICAL').length;
-      expect(criticalItems.length).toBe(criticalCount);
+            const slotFilter = screen.getByLabelText(/Weapon/i);
+            fireEvent.click(slotFilter);
+
+            const weaponItems = screen.getAllByText(/Attack: \d+/);
+            const weaponCount = mockGearItems.filter((item) => item.slot === 'weapon').length;
+            expect(weaponItems).toHaveLength(weaponCount);
+        });
+
+        test('filters by rarity', async () => {
+            const filterButton = screen.getByLabelText(/filter/i);
+            fireEvent.click(filterButton);
+
+            const rarityFilter = screen.getByLabelText(/Legendary/i) as HTMLInputElement;
+            fireEvent.click(rarityFilter);
+
+            // Check that only legendary items are shown
+            const legendaryItems = screen.getAllByText(/Main Stat/i);
+            const legendaryCount = mockGearItems.filter(
+                (item) => item.rarity === 'legendary'
+            ).length;
+            expect(legendaryItems.length).toBe(legendaryCount);
+        });
+
+        test('filters by set bonus', async () => {
+            const filterButton = screen.getByLabelText(/filter/i);
+            fireEvent.click(filterButton);
+
+            // Find the checkbox by its label text and click it
+            const criticalCheckbox = screen.getByLabelText(/Critical/i) as HTMLInputElement;
+            fireEvent.click(criticalCheckbox);
+
+            // Should only show items with CRITICAL set bonus
+            const criticalItems = screen.getAllByText(/Main Stat/i);
+            const criticalCount = mockGearItems.filter(
+                (item) => item.setBonus === 'CRITICAL'
+            ).length;
+            expect(criticalItems.length).toBe(criticalCount);
+        });
     });
-  });
 });

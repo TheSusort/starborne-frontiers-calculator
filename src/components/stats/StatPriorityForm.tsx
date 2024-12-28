@@ -4,65 +4,65 @@ import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
 
 const AVAILABLE_STATS: StatName[] = [
-  'attack',
-  'defence',
-  'hp',
-  'speed',
-  'crit',
-  'critDamage',
-  'healModifier',
-  'hacking',
-  'security',
+    'attack',
+    'defence',
+    'hp',
+    'speed',
+    'crit',
+    'critDamage',
+    'healModifier',
+    'hacking',
+    'security',
 ];
 
 interface Props {
-  onAdd: (priority: StatPriority) => void;
-  existingPriorities: StatPriority[];
+    onAdd: (priority: StatPriority) => void;
+    existingPriorities: StatPriority[];
 }
 
 export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities }) => {
-  const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
-  const [maxLimit, setMaxLimit] = useState<string>('');
+    const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
+    const [maxLimit, setMaxLimit] = useState<string>('');
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
 
-    onAdd({
-      stat: selectedStat,
-      maxLimit: maxLimit ? Number(maxLimit) : undefined,
-      weight: existingPriorities.length + 1,
-    });
+        onAdd({
+            stat: selectedStat,
+            maxLimit: maxLimit ? Number(maxLimit) : undefined,
+            weight: existingPriorities.length + 1,
+        });
 
-    setMaxLimit('');
-  };
+        setMaxLimit('');
+    };
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded">
-      <div className="space-y-2">
-        <label className="block text-sm text-gray-300">Stat</label>
-        <Select
-          value={selectedStat}
-          onChange={(value) => setSelectedStat(value as StatName)}
-          options={AVAILABLE_STATS.map((stat) => ({
-            value: stat,
-            label: stat.charAt(0).toUpperCase() + stat.slice(1),
-          }))}
-        />
-      </div>
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded">
+            <div className="space-y-2">
+                <label className="block text-sm text-gray-300">Stat</label>
+                <Select
+                    value={selectedStat}
+                    onChange={(value) => setSelectedStat(value as StatName)}
+                    options={AVAILABLE_STATS.map((stat) => ({
+                        value: stat,
+                        label: stat.charAt(0).toUpperCase() + stat.slice(1),
+                    }))}
+                />
+            </div>
 
-      <div className="space-y-2">
-        <label className="block text-sm text-gray-300">Max Limit (Optional)</label>
-        <Input
-          type="number"
-          value={maxLimit}
-          onChange={(e) => setMaxLimit(e.target.value)}
-          placeholder="Enter maximum value"
-        />
-      </div>
+            <div className="space-y-2">
+                <label className="block text-sm text-gray-300">Max Limit (Optional)</label>
+                <Input
+                    type="number"
+                    value={maxLimit}
+                    onChange={(e) => setMaxLimit(e.target.value)}
+                    placeholder="Enter maximum value"
+                />
+            </div>
 
-      <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
-        Add Priority
-      </Button>
-    </form>
-  );
+            <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
+                Add Priority
+            </Button>
+        </form>
+    );
 };

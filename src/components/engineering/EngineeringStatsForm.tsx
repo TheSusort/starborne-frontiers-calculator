@@ -6,72 +6,77 @@ import { Button, Select } from '../ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 
 interface EngineeringStatsFormProps {
-  initialStats?: EngineeringStat;
-  onSubmit: (stats: EngineeringStat) => void;
+    initialStats?: EngineeringStat;
+    onSubmit: (stats: EngineeringStat) => void;
 }
 
 export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
-  initialStats,
-  onSubmit,
+    initialStats,
+    onSubmit,
 }) => {
-  const [shipType, setShipType] = useState<ShipTypeName>(
-    initialStats?.shipType || Object.keys(SHIP_TYPES)[0]
-  );
-  const [stats, setStats] = useState<Stat[]>(initialStats?.stats || []);
+    const [shipType, setShipType] = useState<ShipTypeName>(
+        initialStats?.shipType || Object.keys(SHIP_TYPES)[0]
+    );
+    const [stats, setStats] = useState<Stat[]>(initialStats?.stats || []);
 
-  const { getAllAllowedStats } = useEngineeringStats();
+    const { getAllAllowedStats } = useEngineeringStats();
 
-  // Reset form to initial state
-  const resetForm = () => {
-    setShipType(Object.keys(SHIP_TYPES)[0]);
-    setStats([]);
-  };
+    // Reset form to initial state
+    const resetForm = () => {
+        setShipType(Object.keys(SHIP_TYPES)[0]);
+        setStats([]);
+    };
 
-  useEffect(() => {
-    if (initialStats) {
-      setShipType(initialStats.shipType);
-      setStats(initialStats.stats);
-    } else {
-      resetForm();
-    }
-  }, [initialStats]);
+    useEffect(() => {
+        if (initialStats) {
+            setShipType(initialStats.shipType);
+            setStats(initialStats.stats);
+        } else {
+            resetForm();
+        }
+    }, [initialStats]);
 
-  const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
-    value: key,
-    label: type.name,
-  }));
+    const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
+        value: key,
+        label: type.name,
+    }));
 
-  const handleStatChange = (newStats: Stat[]) => {
-    setStats(newStats);
-  };
+    const handleStatChange = (newStats: Stat[]) => {
+        setStats(newStats);
+    };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit({ shipType, stats });
-    resetForm(); // Reset form after successful submission
-  };
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSubmit({ shipType, stats });
+        resetForm(); // Reset form after successful submission
+    };
 
-  return (
-    <form onSubmit={handleSubmit} className="bg-dark  p-6">
-      <div className="mb-4">
-        <Select
-          label="Ship Type"
-          value={shipType}
-          onChange={(value) => setShipType(value as ShipTypeName)}
-          options={shipTypeOptions}
-        />
-      </div>
+    return (
+        <form onSubmit={handleSubmit} className="bg-dark  p-6">
+            <div className="mb-4">
+                <Select
+                    label="Ship Type"
+                    value={shipType}
+                    onChange={(value) => setShipType(value as ShipTypeName)}
+                    options={shipTypeOptions}
+                />
+            </div>
 
-      <StatModifierInput
-        stats={stats}
-        onChange={handleStatChange}
-        maxStats={5}
-        allowedStats={getAllAllowedStats()}
-      />
+            <StatModifierInput
+                stats={stats}
+                onChange={handleStatChange}
+                maxStats={5}
+                allowedStats={getAllAllowedStats()}
+            />
 
-      <Button aria-label="Save engineering stats" type="submit" className="mt-6" variant="primary">
-        Save Engineering Stats
-      </Button>
-    </form>
-  );
+            <Button
+                aria-label="Save engineering stats"
+                type="submit"
+                className="mt-6"
+                variant="primary"
+            >
+                Save Engineering Stats
+            </Button>
+        </form>
+    );
 };

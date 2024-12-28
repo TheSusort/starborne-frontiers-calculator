@@ -17,37 +17,37 @@ export type StatName = PercentageOnlyStats | FlatOnlyStats | FlexibleStats;
 export type StatType = 'flat' | 'percentage';
 
 export interface PercentageStat {
-  name: PercentageOnlyStats | FlexibleStats;
-  value: number;
-  type: 'percentage';
+    name: PercentageOnlyStats | FlexibleStats;
+    value: number;
+    type: 'percentage';
 }
 
 export interface FlatStat {
-  name: FlatOnlyStats | FlexibleStats;
-  value: number;
-  type: 'flat';
+    name: FlatOnlyStats | FlexibleStats;
+    value: number;
+    type: 'flat';
 }
 
 // Combined Stat type
 export type Stat = PercentageStat | FlatStat;
 
 export interface BaseStats {
-  hp: number;
-  attack: number;
-  defence: number;
-  hacking: number;
-  security: number;
-  crit: number;
-  critDamage: number;
-  speed: number;
-  healModifier: number;
+    hp: number;
+    attack: number;
+    defence: number;
+    hacking: number;
+    security: number;
+    crit: number;
+    critDamage: number;
+    speed: number;
+    healModifier: number;
 }
 
 export interface EngineeringStats {
-  stats: EngineeringStat[];
+    stats: EngineeringStat[];
 }
 
 export interface EngineeringStat {
-  shipType: ShipTypeName;
-  stats: Stat[];
+    shipType: ShipTypeName;
+    stats: Stat[];
 }

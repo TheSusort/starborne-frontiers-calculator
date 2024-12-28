@@ -7,8 +7,8 @@ import { EngineeringStat, StatName } from '../../../types/stats';
 import { calculateTotalScore } from '../scoring';
 
 interface GearConfiguration {
-  equipment: Partial<Record<GearSlotName, string>>;
-  score: number;
+    equipment: Partial<Record<GearSlotName, string>>;
+    score: number;
 }
 
 /**
@@ -22,188 +22,188 @@ interface GearConfiguration {
  * 2. Return the best gear combination
  */
 export class BruteForceStrategy extends BaseStrategy {
-  name = 'Brute Force';
-  description = 'Tries every possible combination to find the absolute best gear setup';
+    name = 'Brute Force';
+    description = 'Tries every possible combination to find the absolute best gear setup';
 
-  private scoreCache: Map<string, number> = new Map();
-  private readonly BATCH_SIZE = 50000;
+    private scoreCache: Map<string, number> = new Map();
+    private readonly BATCH_SIZE = 50000;
 
-  async findOptimalGear(
-    ship: Ship,
-    priorities: StatPriority[],
-    inventory: GearPiece[],
-    getGearPiece: (id: string) => GearPiece | undefined,
-    getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-    shipRole?: ShipTypeName,
-    ignoreEquipped?: boolean
-  ): Promise<GearSuggestion[]> {
-    // Filter inventory based on ignoreEquipped setting
-    const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+    async findOptimalGear(
+        ship: Ship,
+        priorities: StatPriority[],
+        inventory: GearPiece[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName,
+        ignoreEquipped?: boolean
+    ): Promise<GearSuggestion[]> {
+        // Filter inventory based on ignoreEquipped setting
+        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
 
-    this.scoreCache.clear();
-    const inventoryBySlot = this.groupAndFilterInventory(availableInventory, shipRole);
+        this.scoreCache.clear();
+        const inventoryBySlot = this.groupAndFilterInventory(availableInventory, shipRole);
 
-    // Initialize progress tracking
-    this.initializeProgress(this.calculateTotalCombinations(inventoryBySlot));
+        // Initialize progress tracking
+        this.initializeProgress(this.calculateTotalCombinations(inventoryBySlot));
 
-    const bestConfig = await this.findBestConfiguration(
-      ship,
-      priorities,
-      inventoryBySlot,
-      {},
-      this.getOptimizedSlotOrder(inventoryBySlot),
-      getGearPiece,
-      getEngineeringStatsForShipType,
-      shipRole
-    );
+        const bestConfig = await this.findBestConfiguration(
+            ship,
+            priorities,
+            inventoryBySlot,
+            {},
+            this.getOptimizedSlotOrder(inventoryBySlot),
+            getGearPiece,
+            getEngineeringStatsForShipType,
+            shipRole
+        );
 
-    return Object.entries(bestConfig.equipment)
-      .filter((entry): entry is [string, string] => entry[1] !== undefined)
-      .map(([slotName, gearId]) => ({
-        slotName,
-        gearId,
-        score: bestConfig.score,
-      }));
-  }
+        return Object.entries(bestConfig.equipment)
+            .filter((entry): entry is [string, string] => entry[1] !== undefined)
+            .map(([slotName, gearId]) => ({
+                slotName,
+                gearId,
+                score: bestConfig.score,
+            }));
+    }
 
-  private getOptimizedSlotOrder(
-    inventoryBySlot: Record<GearSlotName, GearPiece[]>
-  ): GearSlotName[] {
-    // Process slots with fewer options first to reduce branching
-    return Object.entries(inventoryBySlot)
-      .sort(([, a], [, b]) => a.length - b.length)
-      .map(([slot]) => slot as GearSlotName);
-  }
+    private getOptimizedSlotOrder(
+        inventoryBySlot: Record<GearSlotName, GearPiece[]>
+    ): GearSlotName[] {
+        // Process slots with fewer options first to reduce branching
+        return Object.entries(inventoryBySlot)
+            .sort(([, a], [, b]) => a.length - b.length)
+            .map(([slot]) => slot as GearSlotName);
+    }
 
-  private calculateTotalCombinations(inventoryBySlot: Record<GearSlotName, GearPiece[]>): number {
-    return Object.values(inventoryBySlot).reduce((total, items) => total * items.length, 1);
-  }
+    private calculateTotalCombinations(inventoryBySlot: Record<GearSlotName, GearPiece[]>): number {
+        return Object.values(inventoryBySlot).reduce((total, items) => total * items.length, 1);
+    }
 
-  private groupAndFilterInventory(
-    inventory: GearPiece[],
-    shipRole?: ShipTypeName
-  ): Record<GearSlotName, GearPiece[]> {
-    const result: Record<GearSlotName, GearPiece[]> = {} as Record<GearSlotName, GearPiece[]>;
+    private groupAndFilterInventory(
+        inventory: GearPiece[],
+        shipRole?: ShipTypeName
+    ): Record<GearSlotName, GearPiece[]> {
+        const result: Record<GearSlotName, GearPiece[]> = {} as Record<GearSlotName, GearPiece[]>;
 
-    // Initialize slots
-    Object.keys(GEAR_SLOTS).forEach((slot) => {
-      result[slot as GearSlotName] = [];
-    });
+        // Initialize slots
+        Object.keys(GEAR_SLOTS).forEach((slot) => {
+            result[slot as GearSlotName] = [];
+        });
 
-    // Group gear by slot and pre-filter obviously bad choices
-    inventory.forEach((gear) => {
-      // For role-specific optimization, skip gear that doesn't contribute to the role
-      if (shipRole && !this.isGearRelevantForRole(gear, shipRole)) {
-        return;
-      }
-
-      result[gear.slot].push(gear);
-    });
-
-    return result;
-  }
-
-  private isGearRelevantForRole(gear: GearPiece, role: ShipTypeName): boolean {
-    const relevantStats: Record<ShipTypeName, string[]> = {
-      Attacker: ['attack', 'crit', 'critDamage'],
-      Defender: ['hp', 'defence'],
-      Debuffer: ['hacking', 'attack', 'crit', 'critDamage'],
-      Supporter: ['hp', 'healModifier', 'crit', 'critDamage'],
-    };
-    const stats = relevantStats[role] || [];
-    const gearStats = gear.subStats.map((stat) => stat.name);
-    gearStats.push(gear.mainStat.name);
-    return stats.some((stat) => gearStats.includes(stat as StatName));
-  }
-
-  private getCacheKey(equipment: Partial<Record<GearSlotName, string>>): string {
-    return JSON.stringify(equipment);
-  }
-
-  private findBestConfiguration(
-    ship: Ship,
-    priorities: StatPriority[],
-    inventoryBySlot: Record<GearSlotName, GearPiece[]>,
-    currentEquipment: Partial<Record<GearSlotName, string>>,
-    remainingSlots: GearSlotName[],
-    getGearPiece: (id: string) => GearPiece | undefined,
-    getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-    shipRole?: ShipTypeName
-  ): Promise<GearConfiguration> {
-    return new Promise((resolve) => {
-      let batchCount = 0;
-      let bestConfig: GearConfiguration = { equipment: {}, score: -Infinity };
-
-      const processNextBatch = () => {
-        const processConfiguration = (
-          equipment: Partial<Record<GearSlotName, string>>,
-          slots: GearSlotName[]
-        ): boolean => {
-          if (slots.length === 0) {
-            this.incrementProgress();
-            batchCount++;
-
-            const cacheKey = this.getCacheKey(equipment);
-            if (this.scoreCache.has(cacheKey)) {
-              const score = this.scoreCache.get(cacheKey)!;
-              if (score > bestConfig.score) {
-                bestConfig = { equipment: { ...equipment }, score };
-              }
-              return false;
+        // Group gear by slot and pre-filter obviously bad choices
+        inventory.forEach((gear) => {
+            // For role-specific optimization, skip gear that doesn't contribute to the role
+            if (shipRole && !this.isGearRelevantForRole(gear, shipRole)) {
+                return;
             }
 
-            const score = calculateTotalScore(
-              ship,
-              equipment,
-              priorities,
-              getGearPiece,
-              getEngineeringStatsForShipType,
-              shipRole
-            );
+            result[gear.slot].push(gear);
+        });
 
-            this.scoreCache.set(cacheKey, score);
-            if (score > bestConfig.score) {
-              bestConfig = { equipment: { ...equipment }, score };
-            }
-            return false;
-          }
+        return result;
+    }
 
-          const [currentSlot, ...nextSlots] = slots;
-          const availableGear = inventoryBySlot[currentSlot];
+    private isGearRelevantForRole(gear: GearPiece, role: ShipTypeName): boolean {
+        const relevantStats: Record<ShipTypeName, string[]> = {
+            Attacker: ['attack', 'crit', 'critDamage'],
+            Defender: ['hp', 'defence'],
+            Debuffer: ['hacking', 'attack', 'crit', 'critDamage'],
+            Supporter: ['hp', 'healModifier', 'crit', 'critDamage'],
+        };
+        const stats = relevantStats[role] || [];
+        const gearStats = gear.subStats.map((stat) => stat.name);
+        gearStats.push(gear.mainStat.name);
+        return stats.some((stat) => gearStats.includes(stat as StatName));
+    }
 
-          for (const gear of availableGear) {
-            if (Object.values(equipment).includes(gear.id)) {
-              continue;
-            }
+    private getCacheKey(equipment: Partial<Record<GearSlotName, string>>): string {
+        return JSON.stringify(equipment);
+    }
 
-            const newEquipment = {
-              ...equipment,
-              [currentSlot]: gear.id,
+    private findBestConfiguration(
+        ship: Ship,
+        priorities: StatPriority[],
+        inventoryBySlot: Record<GearSlotName, GearPiece[]>,
+        currentEquipment: Partial<Record<GearSlotName, string>>,
+        remainingSlots: GearSlotName[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole?: ShipTypeName
+    ): Promise<GearConfiguration> {
+        return new Promise((resolve) => {
+            let batchCount = 0;
+            let bestConfig: GearConfiguration = { equipment: {}, score: -Infinity };
+
+            const processNextBatch = () => {
+                const processConfiguration = (
+                    equipment: Partial<Record<GearSlotName, string>>,
+                    slots: GearSlotName[]
+                ): boolean => {
+                    if (slots.length === 0) {
+                        this.incrementProgress();
+                        batchCount++;
+
+                        const cacheKey = this.getCacheKey(equipment);
+                        if (this.scoreCache.has(cacheKey)) {
+                            const score = this.scoreCache.get(cacheKey)!;
+                            if (score > bestConfig.score) {
+                                bestConfig = { equipment: { ...equipment }, score };
+                            }
+                            return false;
+                        }
+
+                        const score = calculateTotalScore(
+                            ship,
+                            equipment,
+                            priorities,
+                            getGearPiece,
+                            getEngineeringStatsForShipType,
+                            shipRole
+                        );
+
+                        this.scoreCache.set(cacheKey, score);
+                        if (score > bestConfig.score) {
+                            bestConfig = { equipment: { ...equipment }, score };
+                        }
+                        return false;
+                    }
+
+                    const [currentSlot, ...nextSlots] = slots;
+                    const availableGear = inventoryBySlot[currentSlot];
+
+                    for (const gear of availableGear) {
+                        if (Object.values(equipment).includes(gear.id)) {
+                            continue;
+                        }
+
+                        const newEquipment = {
+                            ...equipment,
+                            [currentSlot]: gear.id,
+                        };
+
+                        if (processConfiguration(newEquipment, nextSlots)) {
+                            return true;
+                        }
+
+                        if (batchCount >= this.BATCH_SIZE) {
+                            batchCount = 0;
+                            return true;
+                        }
+                    }
+
+                    return processConfiguration(equipment, nextSlots);
+                };
+
+                const needsYield = processConfiguration(currentEquipment, remainingSlots);
+
+                if (needsYield && this.currentOperation < this.totalOperations) {
+                    setTimeout(processNextBatch, 0);
+                } else {
+                    resolve(bestConfig);
+                }
             };
 
-            if (processConfiguration(newEquipment, nextSlots)) {
-              return true;
-            }
-
-            if (batchCount >= this.BATCH_SIZE) {
-              batchCount = 0;
-              return true;
-            }
-          }
-
-          return processConfiguration(equipment, nextSlots);
-        };
-
-        const needsYield = processConfiguration(currentEquipment, remainingSlots);
-
-        if (needsYield && this.currentOperation < this.totalOperations) {
-          setTimeout(processNextBatch, 0);
-        } else {
-          resolve(bestConfig);
-        }
-      };
-
-      processNextBatch();
-    });
-  }
+            processNextBatch();
+        });
+    }
 }

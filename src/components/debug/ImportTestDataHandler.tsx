@@ -9,41 +9,41 @@ import { testData } from '../../constants';
 const IMPORT_SECRET = import.meta.env.VITE_IMPORT_SECRET || 'development-secret';
 
 export const ImportTestDataHandler: React.FC = () => {
-  const navigate = useNavigate();
-  const { saveShips } = useShips();
-  const { saveInventory } = useInventory();
+    const navigate = useNavigate();
+    const { saveShips } = useShips();
+    const { saveInventory } = useInventory();
 
-  const importTestData = useCallback(async () => {
-    console.log('Importing test data');
+    const importTestData = useCallback(async () => {
+        console.log('Importing test data');
 
-    saveShips(testData.ships as Ship[]);
-    saveInventory(testData.gear as GearPiece[]);
-  }, [saveShips, saveInventory]);
+        saveShips(testData.ships as Ship[]);
+        saveInventory(testData.gear as GearPiece[]);
+    }, [saveShips, saveInventory]);
 
-  useEffect(() => {
-    const handleTestDataImport = async () => {
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const secret = urlParams.get('secret');
+    useEffect(() => {
+        const handleTestDataImport = async () => {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const secret = urlParams.get('secret');
 
-        if (secret !== IMPORT_SECRET) {
-          console.error('Invalid secret key');
-          navigate('/');
-          return;
-        }
+                if (secret !== IMPORT_SECRET) {
+                    console.error('Invalid secret key');
+                    navigate('/');
+                    return;
+                }
 
-        await importTestData();
+                await importTestData();
 
-        console.log('Test data import completed');
-        navigate('/');
-      } catch (error) {
-        console.error('Error importing test data:', error);
-        navigate('/');
-      }
-    };
+                console.log('Test data import completed');
+                navigate('/');
+            } catch (error) {
+                console.error('Error importing test data:', error);
+                navigate('/');
+            }
+        };
 
-    handleTestDataImport();
-  }, [navigate, importTestData]);
+        handleTestDataImport();
+    }, [navigate, importTestData]);
 
-  return null;
+    return null;
 };
