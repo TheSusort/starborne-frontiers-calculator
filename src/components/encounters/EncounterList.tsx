@@ -35,11 +35,7 @@ const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDel
                                 </Button>
                             </div>
                         </div>
-                        <FormationGrid
-                            formation={encounter.formation}
-                            onPositionSelect={() => {}}
-                            onRemoveShip={() => {}}
-                        />
+                        <FormationGrid formation={encounter.formation} />
                     </div>
                 ))}
             </div>

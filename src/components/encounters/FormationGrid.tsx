@@ -5,9 +5,9 @@ import { HexButton } from '../ui/HexButton';
 
 interface FormationGridProps {
     formation: ShipPosition[];
-    onPositionSelect: (position: Position) => void;
+    onPositionSelect?: (position: Position) => void;
     selectedPosition?: Position;
-    onRemoveShip: (position: Position) => void;
+    onRemoveShip?: (position: Position) => void;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -30,7 +30,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     };
 
     return (
-        <div className="grid p-4 ml-[9.5%]">
+        <div className="grid p-4 pb-6 ml-[9.5%]">
             {rows.map((row, rowIndex) => (
                 <div
                     key={rowIndex}
@@ -43,9 +43,9 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 key={pos}
                                 onClick={(e) => {
                                     if (e.ctrlKey || e.metaKey) {
-                                        onRemoveShip(pos as Position);
+                                        onRemoveShip?.(pos as Position);
                                     } else {
-                                        onPositionSelect(pos as Position);
+                                        onPositionSelect?.(pos as Position);
                                     }
                                 }}
                                 isActive={!!ship}
@@ -64,7 +64,9 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     })}
                 </div>
             ))}
-            <div className="text-xs text-gray-400 mt-6">Tip: Ctrl+Click to remove a ship</div>
+            {onRemoveShip && (
+                <div className="text-xs text-gray-400 mt-6">Tip: Ctrl+Click to remove a ship</div>
+            )}
         </div>
     );
 };
