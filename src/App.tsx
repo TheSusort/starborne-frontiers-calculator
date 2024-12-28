@@ -14,6 +14,7 @@ import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
 import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
 import { migrateTianshaoToTianchao } from './migrations/factionMigration';
+import EncounterNotesPage from './pages/EncounterNotesPage';
 
 // Run migration when app starts
 migrateTianshaoToTianchao();
@@ -59,6 +60,7 @@ const App: React.FC = () => {
                                     <Route path="/autogear" element={<AutogearPage />} />
                                     <Route path="/engineering" element={<EngineeringStatsPage />} />
                                     <Route path="/loadouts" element={<LoadoutsPage />} />
+                                    <Route path="/encounters" element={<EncounterNotesPage />} />
                                     <Route
                                         path="/api/import-test-data"
                                         element={<ImportTestDataHandler />}

@@ -15,7 +15,7 @@ export const Input: React.FC<Props> = ({
 }) => {
     const id = props.id || props.name || `input-${Math.random().toString(36).substring(2, 15)}`;
     return (
-        <div className="space-y-1">
+        <div className="space-y-1 grow">
             {label && (
                 <label
                     className={`block text-sm font-medium text-gray-200 ${labelClassName}`}
