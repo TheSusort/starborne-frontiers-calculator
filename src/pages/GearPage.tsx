@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PageLayout, CollapsibleForm } from '../components/ui';
+import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
 import { GearPieceForm } from '../components/gear/GearPieceForm';
 import { GearInventory } from '../components/gear/GearInventory';
 import { GearPiece } from '../types/gear';
@@ -13,6 +13,9 @@ export const GearPage: React.FC = () => {
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
     const { ships } = useShips();
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+    const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
 
     useEffect(() => {
         // Validate that all equipped gear matches ship assignments
@@ -39,9 +42,18 @@ export const GearPage: React.FC = () => {
     }, [inventory, ships, saveInventory]);
 
     const handleRemovePiece = async (id: string) => {
+        const piece = inventory.find((p) => p.id === id);
+        setPendingDeletePieceEquipped(!!piece?.shipId);
+        setPendingDeleteId(id);
+        setShowDeleteConfirm(true);
+    };
+
+    const deleteGearPiece = async (id: string) => {
         const newInventory = inventory.filter((piece) => piece.id !== id);
         await saveInventory(newInventory);
         addNotification('success', 'Gear piece removed successfully');
+        setPendingDeleteId(null);
+        setShowDeleteConfirm(false);
     };
 
     const handleEditPiece = (piece: GearPiece) => {
@@ -105,6 +117,23 @@ export const GearPage: React.FC = () => {
                 inventory={inventory}
                 onRemove={handleRemovePiece}
                 onEdit={handleEditPiece}
+            />
+
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => {
+                    setShowDeleteConfirm(false);
+                    setPendingDeleteId(null);
+                }}
+                onConfirm={() => pendingDeleteId && deleteGearPiece(pendingDeleteId)}
+                title="Delete Gear Piece"
+                message={
+                    pendingDeletePieceEquipped
+                        ? 'This gear piece is currently equipped. Are you sure you want to delete it?'
+                        : 'Are you sure you want to delete this gear piece?'
+                }
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
             />
         </PageLayout>
     );

@@ -31,7 +31,6 @@ export const SortPanel: React.FC<Props> = ({ options, currentSort, onSort }) => 
                         });
                     }}
                     options={options}
-                    noDefaultSelection={false}
                     className="text-xs"
                 />
                 <Button

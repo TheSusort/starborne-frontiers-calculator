@@ -6,9 +6,11 @@ import { PageLayout } from '../components/ui/layout/PageLayout';
 import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../hooks/useEncounterNotes';
+import { useNotification } from '../hooks/useNotification';
 
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter } = useEncounterNotes();
+    const { addNotification } = useNotification();
     const [editingEncounter, setEditingEncounter] = useState<EncounterNote | null>(null);
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
     const [isFormVisible, setIsFormVisible] = useState(false);
@@ -17,8 +19,10 @@ const EncounterNotesPage: React.FC = () => {
         if (editingEncounter) {
             updateEncounter(encounter);
             setEditingEncounter(null);
+            addNotification('success', 'Encounter Updated');
         } else {
             addEncounter(encounter);
+            addNotification('success', 'Encounter Added');
         }
         setIsFormVisible(false);
     };
@@ -40,6 +44,7 @@ const EncounterNotesPage: React.FC = () => {
                 setIsFormVisible(false);
             }
         }
+        addNotification('success', 'Encounter Deleted');
     };
 
     const handleCancelEdit = () => {

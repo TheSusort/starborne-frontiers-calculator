@@ -10,6 +10,7 @@ import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { Button } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useShips } from '../../hooks/useShips';
+import { ConfirmModal } from '../ui/layout/ConfirmModal';
 
 interface Props {
     ship: Ship;
@@ -35,6 +36,8 @@ export const ShipCard: React.FC<Props> = ({
     onHoverGear,
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [pendingGear, setPendingGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
@@ -50,24 +53,21 @@ export const ShipCard: React.FC<Props> = ({
     const handleEquipAttempt = (gear: GearPiece) => {
         if (gear.shipId && gear.shipId !== ship.id) {
             const currentShip = ships.find((s) => s.id === gear.shipId)?.name || 'another ship';
+            setPendingGear(gear);
+            setShowConfirmModal(true);
+        } else if (selectedSlot) {
+            onEquipGear(ship.id, selectedSlot, gear.id);
+            setSelectedSlot(null);
+            addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
+        }
+    };
 
-            if (
-                window.confirm(
-                    `This ${gear.slot} is currently equipped on ${currentShip}. Would you like to move it to ${ship.name} instead?`
-                )
-            ) {
-                if (selectedSlot) {
-                    onEquipGear(ship.id, selectedSlot, gear.id);
-                    setSelectedSlot(null);
-                    addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
-                }
-            }
-        } else {
-            if (selectedSlot) {
-                onEquipGear(ship.id, selectedSlot, gear.id);
-                setSelectedSlot(null);
-                addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
-            }
+    const handleConfirmEquip = () => {
+        if (pendingGear && selectedSlot) {
+            onEquipGear(ship.id, selectedSlot, pendingGear.id);
+            setSelectedSlot(null);
+            addNotification('success', `Equipped ${pendingGear.slot} on ${ship.name}`);
+            setPendingGear(null);
         }
     };
 
@@ -133,6 +133,19 @@ export const ShipCard: React.FC<Props> = ({
                     onEdit={() => {}}
                 />
             </Modal>
+
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => {
+                    setShowConfirmModal(false);
+                    setPendingGear(null);
+                }}
+                onConfirm={handleConfirmEquip}
+                title="Move Gear"
+                message={`This ${pendingGear?.slot} is currently equipped on ${ships.find((s) => s.id === pendingGear?.shipId)?.name || 'another ship'}. Would you like to move it to ${ship.name} instead?`}
+                confirmLabel="Move"
+                cancelLabel="Cancel"
+            />
         </div>
     );
 };

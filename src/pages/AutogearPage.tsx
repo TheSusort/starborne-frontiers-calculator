@@ -15,6 +15,7 @@ import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
 import { useNotification } from '../hooks/useNotification';
+import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 
 export const AutogearPage: React.FC = () => {
     const { getGearPiece, inventory, saveInventory } = useInventory();
@@ -37,6 +38,7 @@ export const AutogearPage: React.FC = () => {
         percentage: number;
     } | null>(null);
     const [ignoreEquipped, setIgnoreEquipped] = useState(true);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
     const selectedShip = getShipById(selectedShipId);
 
     const handleAddPriority = (priority: StatPriority) => {
@@ -104,14 +106,28 @@ export const AutogearPage: React.FC = () => {
     const handleEquipSuggestions = () => {
         if (!selectedShip) return;
 
+        // Check if any suggested gear is equipped on other ships
+        const hasEquippedGear = suggestions.some((suggestion) => {
+            const gear = getGearPiece(suggestion.gearId);
+            return gear?.shipId && gear.shipId !== selectedShip.id;
+        });
+
+        if (hasEquippedGear) {
+            setShowConfirmModal(true);
+        } else {
+            applyGearSuggestions();
+        }
+    };
+
+    const applyGearSuggestions = () => {
+        if (!selectedShip) return;
+
         // Create a map to batch all inventory updates
         const inventoryUpdates = new Map<string, string>();
 
-        // Process each suggestion one at a time to properly handle gear swaps
         suggestions.forEach((suggestion) => {
             const { slotName, gearId } = suggestion;
 
-            // Find if this gear is equipped on any ship
             const gear = getGearPiece(gearId);
             if (gear?.shipId && gear.shipId !== selectedShip.id) {
                 const previousShip = getShipById(gear.shipId);
@@ -120,10 +136,7 @@ export const AutogearPage: React.FC = () => {
                 }
             }
 
-            // Add to inventory updates
             inventoryUpdates.set(gearId, selectedShip.id);
-
-            // Update ship equipment
             handleEquipGear(selectedShip.id, slotName as GearSlotName, gearId);
         });
 
@@ -136,14 +149,11 @@ export const AutogearPage: React.FC = () => {
             return gear;
         });
 
-        // Save inventory changes
         saveInventory(newInventory);
-
         addNotification('success', 'Suggested gear equipped successfully');
-
-        // Clear suggestions after equipping
         setSuggestions([]);
         setOptimizationProgress(null);
+        setShowConfirmModal(false);
     };
 
     const getCurrentStats = () => {
@@ -225,6 +235,16 @@ export const AutogearPage: React.FC = () => {
                     />
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={applyGearSuggestions}
+                title="Move Gear"
+                message="Some of the suggested gear is currently equipped on other ships. Would you like to move it?"
+                confirmLabel="Move"
+                cancelLabel="Cancel"
+            />
         </PageLayout>
     );
 };

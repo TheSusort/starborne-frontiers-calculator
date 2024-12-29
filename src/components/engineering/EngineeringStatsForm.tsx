@@ -15,15 +15,27 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     onSubmit,
 }) => {
     const [shipType, setShipType] = useState<ShipTypeName>(
-        initialStats?.shipType || Object.keys(SHIP_TYPES)[0]
+        initialStats?.shipType || (Object.keys(SHIP_TYPES)[0] as ShipTypeName)
     );
     const [stats, setStats] = useState<Stat[]>(initialStats?.stats || []);
 
-    const { getAllAllowedStats } = useEngineeringStats();
+    const { getAllAllowedStats, engineeringStats } = useEngineeringStats();
+
+    // Filter out ship types that already have stats
+    const availableShipTypes = Object.entries(SHIP_TYPES).filter(
+        ([key]) =>
+            initialStats?.shipType === key || // Include current ship type if editing
+            !engineeringStats.stats.some((stat) => stat.shipType === key)
+    );
+
+    const shipTypeOptions = availableShipTypes.map(([key, type]) => ({
+        value: key,
+        label: type.name,
+    }));
 
     // Reset form to initial state
     const resetForm = () => {
-        setShipType(Object.keys(SHIP_TYPES)[0]);
+        setShipType(Object.keys(SHIP_TYPES)[0] as ShipTypeName);
         setStats([]);
     };
 
@@ -36,11 +48,6 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
         }
     }, [initialStats]);
 
-    const shipTypeOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
-        value: key,
-        label: type.name,
-    }));
-
     const handleStatChange = (newStats: Stat[]) => {
         setStats(newStats);
     };
@@ -52,7 +59,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-dark  p-6">
+        <form onSubmit={handleSubmit} className="bg-dark p-6">
             <div className="mb-4">
                 <Select
                     label="Ship Type"

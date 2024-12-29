@@ -1,6 +1,7 @@
 export * from './icons';
 
 export * from './layout/CollapsibleForm';
+export * from './layout/ConfirmModal';
 export * from './layout/Modal';
 export * from './layout/Offcanvas';
 export * from './layout/PageLayout';

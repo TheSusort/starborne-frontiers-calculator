@@ -29,7 +29,10 @@ export const GearInventory: React.FC<Props> = ({
     const [sort, setSort] = useState<SortConfig>({ field: 'id', direction: 'asc' });
 
     const hasActiveFilters =
-        selectedSets.length > 0 || selectedTypes.length > 0 || selectedRarities.length > 0;
+        selectedSets.length > 0 ||
+        selectedTypes.length > 0 ||
+        selectedRarities.length > 0 ||
+        selectedEquipped;
 
     const filteredInventory = useMemo(() => {
         return inventory.filter((piece) => {

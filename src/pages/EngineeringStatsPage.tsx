@@ -19,6 +19,11 @@ export const EngineeringStatsPage: React.FC = () => {
                 .concat(stats),
         };
         saveEngineeringStats(newEngStats);
+        if (editingStats) {
+            addNotification('success', 'Engineering stats updated successfully');
+        } else {
+            addNotification('success', 'Engineering stats added successfully');
+        }
         setEditingStats(undefined);
     };
 
@@ -30,6 +35,7 @@ export const EngineeringStatsPage: React.FC = () => {
         if (editingStats?.shipType === shipType) {
             setEditingStats(undefined);
         }
+        addNotification('success', 'Engineering stats deleted successfully');
     };
 
     return (
@@ -52,7 +58,6 @@ export const EngineeringStatsPage: React.FC = () => {
                     onSubmit={(stats) => {
                         handleSubmit(stats);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
-                        addNotification('success', 'Engineering stats saved successfully');
                     }}
                 />
             </CollapsibleForm>
@@ -64,10 +69,7 @@ export const EngineeringStatsPage: React.FC = () => {
                         setEditingStats(stat);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    onDelete={(shipType: string) => {
-                        handleDelete(shipType);
-                        addNotification('success', 'Engineering stats deleted successfully');
-                    }}
+                    onDelete={handleDelete}
                 />
             </div>
         </PageLayout>
