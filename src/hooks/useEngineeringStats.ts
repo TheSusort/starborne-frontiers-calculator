@@ -6,13 +6,13 @@ import { ShipTypeName } from '../constants/shipTypes';
 const STORAGE_KEY = 'engineeringStats';
 
 const getInitialStats = (): EngineeringStats => {
-    const savedStats = localStorage.getItem(STORAGE_KEY);
-    if (savedStats) {
-        try {
+    try {
+        const savedStats = localStorage.getItem(STORAGE_KEY);
+        if (savedStats) {
             return JSON.parse(savedStats);
-        } catch (error) {
-            console.error('Failed to parse engineering stats:', error);
         }
+    } catch (error) {
+        console.error('Error loading engineering stats:', error);
     }
     return { stats: [] };
 };

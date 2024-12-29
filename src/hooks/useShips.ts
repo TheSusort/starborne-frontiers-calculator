@@ -13,10 +13,11 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
+    const [initialized, setInitialized] = useState(false);
 
     // Load ships from localStorage on mount
     useEffect(() => {
-        loadShips();
+        loadShips().then(() => setInitialized(true));
     }, []);
 
     const loadShips = async () => {
@@ -25,6 +26,7 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
             setShips(stored ? JSON.parse(stored) : []);
         } catch (error) {
             console.error('Error loading ships:', error);
+            setShips([]);
             setError('Failed to load ships');
         } finally {
             setLoading(false);
@@ -34,7 +36,6 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const saveShips = useCallback(async (newShips: Ship[]) => {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(newShips));
-            setError(null);
             setShips(newShips);
         } catch (error) {
             console.error('Error saving ships:', error);
@@ -44,10 +45,10 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
     // Save ships changes to localStorage
     useEffect(() => {
-        if (!loading) {
+        if (!loading && initialized) {
             saveShips(ships);
         }
-    }, [ships, loading, saveShips]);
+    }, [ships, loading, saveShips, initialized]);
 
     const handleEquipGear = useCallback((shipId: string, slot: GearSlotName, gearId: string) => {
         setShips((prev) => {

@@ -12,9 +12,13 @@ export const useEncounterNotes = () => {
     }, []);
 
     const loadEncounters = () => {
-        const savedEncounters = localStorage.getItem(STORAGE_KEY);
-        if (savedEncounters) {
-            setEncounters(JSON.parse(savedEncounters));
+        try {
+            const savedEncounters = localStorage.getItem(STORAGE_KEY);
+            if (savedEncounters) {
+                setEncounters(JSON.parse(savedEncounters));
+            }
+        } catch (error) {
+            console.error('Error loading encounters:', error);
         }
         setIsLoading(false);
     };
