@@ -12,7 +12,7 @@ export interface Ship {
     type: ShipTypeName;
     baseStats: BaseStats;
     equipment: Partial<Record<GearSlotName, string>>;
-    equipmentLocked: boolean;
+    equipmentLocked?: boolean;
     refits: Refit[];
     implants: Implant[];
 }
