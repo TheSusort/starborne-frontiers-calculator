@@ -65,8 +65,13 @@ const EncounterNotesPage: React.FC = () => {
             title="Encounter Notes"
             description="Save and manage your successful fleet formations for different encounters"
             action={{
-                label: isFormVisible ? 'Cancel' : 'Add Encounter',
-                onClick: toggleForm,
+                label: isFormVisible ? 'Hide Form' : 'Add Encounter',
+                onClick: () => {
+                    if (editingEncounter) {
+                        setEditingEncounter(null);
+                    }
+                    setIsFormVisible(!isFormVisible);
+                },
                 variant: isFormVisible ? 'secondary' : 'primary',
             }}
         >
@@ -75,11 +80,7 @@ const EncounterNotesPage: React.FC = () => {
                     <h2 className="text-xl font-semibold text-white mb-4">
                         {editingEncounter ? 'Edit Encounter' : 'Add New Encounter'}
                     </h2>
-                    <EncounterForm
-                        onSubmit={handleSubmit}
-                        initialEncounter={editingEncounter}
-                        onCancel={handleCancelEdit}
-                    />
+                    <EncounterForm onSubmit={handleSubmit} initialEncounter={editingEncounter} />
                 </div>
             </CollapsibleForm>
 

@@ -49,6 +49,7 @@ export const ShipsPage: React.FC = () => {
                     }
                     setIsFormVisible(!isFormVisible);
                 },
+                variant: isFormVisible ? 'secondary' : 'primary',
             }}
         >
             {error && <>{addNotification('error', error)}</>}

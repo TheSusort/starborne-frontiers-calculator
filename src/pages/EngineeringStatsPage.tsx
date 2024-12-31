@@ -50,6 +50,7 @@ export const EngineeringStatsPage: React.FC = () => {
                     }
                     setIsFormVisible(!isFormVisible);
                 },
+                variant: isFormVisible ? 'secondary' : 'primary',
             }}
         >
             <CollapsibleForm isVisible={isFormVisible || !!editingStats}>

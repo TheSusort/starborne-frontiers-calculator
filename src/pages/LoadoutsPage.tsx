@@ -38,7 +38,7 @@ export const LoadoutsPage: React.FC = () => {
                     ? 'Hide Form'
                     : `New ${activeTab === 'individual' ? 'Loadout' : 'Team'}`,
                 onClick: () => setShowForm(!showForm),
-                variant: 'primary',
+                variant: showForm ? 'secondary' : 'primary',
             }}
         >
             <Tabs

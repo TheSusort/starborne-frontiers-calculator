@@ -101,6 +101,7 @@ export const GearPage: React.FC = () => {
                     }
                     setIsFormVisible(!isFormVisible);
                 },
+                variant: isFormVisible ? 'secondary' : 'primary',
             }}
         >
             {error && (
