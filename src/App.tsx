@@ -27,14 +27,13 @@ const App: React.FC = () => {
         const savedState = localStorage.getItem('changelogState');
 
         let currentState: ChangelogState;
-        // check that savedState is of string (x numbers).(y numbers).(z numbers)
-        console.log(JSON.parse(savedState)?.lastSeenVersion);
+
         if (savedState && JSON.parse(savedState)?.lastSeenVersion.match(/^\d+\.\d+\.\d+$/)) {
             currentState = { lastSeenVersion: JSON.parse(savedState).lastSeenVersion };
         } else {
             currentState = { lastSeenVersion: '0.0.0' };
         }
-        console.log(currentState);
+
         if (currentState.lastSeenVersion !== CURRENT_VERSION) {
             setShowChangelog(true);
             setLastSeenVersion(currentState.lastSeenVersion);
