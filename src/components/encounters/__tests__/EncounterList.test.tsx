@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
-import EncounterList from '../../encounters/EncounterList';
+import EncounterList from '../EncounterList';
 import { EncounterNote, ShipPosition } from '../../../types/encounters';
 import { vi } from 'vitest';
 

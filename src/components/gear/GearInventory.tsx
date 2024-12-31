@@ -141,6 +141,7 @@ export const GearInventory: React.FC<Props> = ({
         setSelectedSets([]);
         setSelectedTypes([]);
         setSelectedRarities([]);
+        setSelectedEquipped(false);
     };
 
     return (

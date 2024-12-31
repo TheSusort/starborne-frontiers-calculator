@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
-import FormationGrid from '../../encounters/FormationGrid';
+import FormationGrid from '../FormationGrid';
 import { Position, ShipPosition } from '../../../types/encounters';
 import { Ship } from '../../../types/ship';
 import { vi } from 'vitest';

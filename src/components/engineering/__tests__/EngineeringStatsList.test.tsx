@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
-import { EngineeringStatsList } from '../../engineering/EngineeringStatsList';
+import { EngineeringStatsList } from '../EngineeringStatsList';
 import { EngineeringStat } from '../../../types/stats';
 import { SHIP_TYPES } from '../../../constants';
 import { vi } from 'vitest';

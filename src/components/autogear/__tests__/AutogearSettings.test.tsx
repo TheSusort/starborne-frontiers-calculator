@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
-import { AutogearSettings } from '../../autogear/AutogearSettings';
+import { AutogearSettings } from '../AutogearSettings';
 import { Ship } from '../../../types/ship';
 import { AUTOGEAR_STRATEGIES, AutogearAlgorithm } from '../../../utils/autogear/AutogearStrategy';
 import { StatName } from '../../../types/stats';

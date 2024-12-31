@@ -1,5 +1,5 @@
 import { render, screen } from '../../../test-utils/test-utils';
-import { ChangelogModal } from '../../changelog/ChangelogModal';
+import { ChangelogModal } from '../ChangelogModal';
 import { ChangelogEntry } from '../../../types/changelog';
 import { vi } from 'vitest';
 

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '../../../test-utils/test-utils';
-import { GearSuggestions } from '../../autogear/GearSuggestions';
+import { GearSuggestions } from '../GearSuggestions';
 import { GearPiece } from '../../../types/gear';
 import { GearSuggestion } from '../../../types/autogear';
 import { GEAR_SLOT_ORDER } from '../../../constants/gearTypes';

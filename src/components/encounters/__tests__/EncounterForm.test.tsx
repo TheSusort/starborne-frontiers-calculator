@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '../../../test-utils/test-utils';
-import EncounterForm from '../../encounters/EncounterForm';
+import EncounterForm from '../EncounterForm';
 import { EncounterNote } from '../../../types/encounters';
 import { Ship } from '../../../types/ship';
 import { vi } from 'vitest';

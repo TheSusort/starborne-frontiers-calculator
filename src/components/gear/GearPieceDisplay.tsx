@@ -3,6 +3,7 @@ import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
 import { GEAR_SETS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
+import { useShips } from '../../hooks/useShips';
 
 interface Props {
     gear: GearPiece;
@@ -21,6 +22,8 @@ export const GearPieceDisplay: React.FC<Props> = ({
     onEdit,
     onEquip,
 }) => {
+    const { getShipById } = useShips();
+    const ship = gear.shipId ? getShipById(gear.shipId) : undefined;
     return (
         <div
             className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow flex flex-col`}
@@ -114,9 +117,8 @@ export const GearPieceDisplay: React.FC<Props> = ({
                             </ul>
                         </div>
                     )}
-                    <span className="text-xxs text-gray-500">id: {gear.id}</span>
-                    {gear.shipId && (
-                        <span className="text-xxs text-gray-500"> shipId: {gear.shipId}</span>
+                    {ship && (
+                        <span className="text-xxs text-gray-500"> Equipped by: {ship.name}</span>
                     )}
                 </div>
             )}
