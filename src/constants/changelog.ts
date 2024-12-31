@@ -1,20 +1,20 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = 'v0.12.0';
+export const CURRENT_VERSION = '0.12.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
-        version: 'v0.12.0',
+        version: '0.12.0',
         date: '2024-12-31',
         changes: ['Added ship lock state, that will lock the equipment on the ship'],
     },
     {
-        version: 'v0.11.0',
+        version: '0.11.0',
         date: '2024-12-28',
         changes: ['Added encounter list'],
     },
     {
-        version: 'v0.10.0',
+        version: '0.10.0',
         date: '2024-12-22',
         changes: [
             'Added shipId to gear to stop duplicated gear on ships, both for ship page and autogearing',
@@ -22,7 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.9.1',
+        version: '0.9.1',
         date: '2024-12-21',
         changes: [
             'Reworked autogear strategies to get better results',
@@ -31,12 +31,12 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.9.0',
+        version: '0.9.0',
         date: '2024-12-20',
         changes: ['Added autogear brute force mode', 'Improved predefined modes'],
     },
     {
-        version: 'v0.8.0',
+        version: '0.8.0',
         date: '2024-12-19',
         changes: [
             'Added autogear predefined modes',
@@ -47,7 +47,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.7.2',
+        version: '0.7.2',
         date: '2024-12-16',
         changes: [
             'Fixed a bug with stat exclusion',
@@ -55,27 +55,27 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.7.1',
+        version: '0.7.1',
         date: '2024-12-15',
         changes: ['Added stat normalization', 'Optimized gear and ship forms'],
     },
     {
-        version: 'v0.7',
+        version: '0.7',
         date: '2024-12-14',
         changes: ['Added notifications'],
     },
     {
-        version: 'v0.6',
+        version: '0.6',
         date: '2024-12-14',
         changes: ['Added loadouts / ship profiles'],
     },
     {
-        version: 'v0.5',
+        version: '0.5',
         date: '2024-12-12',
         changes: ['Added sorting', 'Formatting improvements'],
     },
     {
-        version: 'v0.4',
+        version: '0.4',
         date: '2024-12-12',
         changes: [
             'Added the rest of the gear sets',
@@ -85,7 +85,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.3',
+        version: '0.3',
         date: '2024-12-12',
         changes: [
             'Added more filters',
@@ -94,12 +94,12 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.2.1',
+        version: '0.2.1',
         date: '2024-12-11',
         changes: ['Bugfix ship form', 'Modal closes on click outside'],
     },
     {
-        version: 'v0.2.0',
+        version: '0.2.0',
         date: '2024-03-20',
         changes: [
             'Added changelog system',
@@ -109,7 +109,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         ],
     },
     {
-        version: 'v0.1.0',
+        version: '0.1.0',
         date: '2024-03-15',
         changes: [
             'Initial release',
