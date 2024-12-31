@@ -44,6 +44,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             <div className="p-4 bg-dark space-y-2">
                 <span className="text-gray-300 text-sm">Predefined Strategies (Experimental)</span>
                 <Select
+                    data-testid="role-select"
                     options={Object.values(SHIP_TYPES).map((type) => ({
                         value: type.name,
                         label: `${type.name} (${type.description})`,
@@ -84,6 +85,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             <div className="space-y-2 p-4 bg-dark">
                 <span className="text-gray-300 text-sm">Algorithm</span>
                 <Select
+                    data-testid="algorithm-select"
                     options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
                         value: key,
                         label: name,

@@ -30,7 +30,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     };
 
     return (
-        <div className="grid p-4 pb-6 ml-[9.5%]">
+        <div className="grid p-4 pb-6 ml-[9.5%]" role="grid">
             {rows.map((row, rowIndex) => (
                 <div
                     key={rowIndex}

@@ -52,7 +52,6 @@ export const ShipCard: React.FC<Props> = ({
 
     const handleEquipAttempt = (gear: GearPiece) => {
         if (gear.shipId && gear.shipId !== ship.id) {
-            const currentShip = ships.find((s) => s.id === gear.shipId)?.name || 'another ship';
             setPendingGear(gear);
             setShowConfirmModal(true);
         } else if (selectedSlot) {

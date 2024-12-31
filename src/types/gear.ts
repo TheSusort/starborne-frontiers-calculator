@@ -12,7 +12,7 @@ export interface GearPiece {
     mainStat: Stat;
     subStats: Stat[];
     setBonus: GearSetName;
-    shipId: string;
+    shipId?: string;
 }
 
 export interface GearSetBonus {

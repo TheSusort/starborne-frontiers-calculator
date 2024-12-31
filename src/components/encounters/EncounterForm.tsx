@@ -8,10 +8,9 @@ import { Button, Input } from '../ui';
 interface EncounterFormProps {
     onSubmit: (encounter: EncounterNote) => void;
     initialEncounter?: EncounterNote | null;
-    onCancel?: () => void;
 }
 
-const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounter, onCancel }) => {
+const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounter }) => {
     const [name, setName] = useState('');
     const [formation, setFormation] = useState<ShipPosition[]>([]);
     const [selectedPosition, setSelectedPosition] = useState<Position>();

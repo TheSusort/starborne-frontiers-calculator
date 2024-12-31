@@ -12,6 +12,8 @@ interface Props {
     value: string;
     onChange: (value: string) => void;
     disabled?: boolean;
+    id?: string;
+    'data-testid'?: string;
 }
 
 export const Select: React.FC<Props> = ({
@@ -24,10 +26,12 @@ export const Select: React.FC<Props> = ({
     value,
     onChange,
     disabled = false,
+    id,
+    'data-testid': testId,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
-    const selectId = `select-${Math.random().toString(36).substring(2, 15)}`;
+    const selectId = id || `select-${Math.random().toString(36).substring(2, 15)}`;
 
     const selectedOption =
         value === '' && noDefaultSelection
@@ -101,6 +105,7 @@ export const Select: React.FC<Props> = ({
                     aria-expanded={isOpen}
                     aria-labelledby={label ? selectId : undefined}
                     disabled={disabled}
+                    data-testid={testId}
                     className={`
                         w-full px-4 py-2
                         bg-dark-lighter border border-dark-border

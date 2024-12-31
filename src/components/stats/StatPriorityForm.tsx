@@ -39,8 +39,8 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
     return (
         <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded">
             <div className="space-y-2">
-                <label className="block text-sm text-gray-300">Stat</label>
                 <Select
+                    label="Stat"
                     value={selectedStat}
                     onChange={(value) => setSelectedStat(value as StatName)}
                     options={AVAILABLE_STATS.map((stat) => ({
@@ -51,8 +51,8 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
             </div>
 
             <div className="space-y-2">
-                <label className="block text-sm text-gray-300">Max Limit (Optional)</label>
                 <Input
+                    label="Max Limit (Optional)"
                     type="number"
                     value={maxLimit}
                     onChange={(e) => setMaxLimit(e.target.value)}

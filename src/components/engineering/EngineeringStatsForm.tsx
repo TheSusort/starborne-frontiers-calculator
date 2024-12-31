@@ -6,7 +6,7 @@ import { Button, Select } from '../ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 
 interface EngineeringStatsFormProps {
-    initialStats?: EngineeringStat;
+    initialStats?: EngineeringStat | null;
     onSubmit: (stats: EngineeringStat) => void;
 }
 
@@ -55,7 +55,10 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSubmit({ shipType, stats });
-        resetForm(); // Reset form after successful submission
+        // Only reset if we're not editing existing stats
+        if (!initialStats) {
+            resetForm();
+        }
     };
 
     return (
