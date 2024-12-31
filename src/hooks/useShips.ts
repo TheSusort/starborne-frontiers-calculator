@@ -53,9 +53,20 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const handleEquipGear = useCallback((shipId: string, slot: GearSlotName, gearId: string) => {
         setShips((prev) => {
             const newShips = prev.map((ship) => {
-                // Remove the gear from any other ship that might have it equipped
+                // First check if the gear is equipped on a locked ship
                 if (
                     ship.id !== shipId &&
+                    ship.equipmentLocked &&
+                    Object.entries(ship.equipment).some(([_, id]) => id === gearId)
+                ) {
+                    // If it is, return early without any changes
+                    return ship;
+                }
+
+                // Remove the gear from any other unlocked ship that might have it equipped
+                if (
+                    ship.id !== shipId &&
+                    !ship.equipmentLocked &&
                     Object.entries(ship.equipment).some(([_, id]) => id === gearId)
                 ) {
                     const newEquipment = { ...ship.equipment };
@@ -124,17 +135,30 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         return ships.find((ship) => ship.id === id);
     };
 
-    const updateShip = useCallback((updatedShip: Ship) => {
-        setShips((prev) =>
-            prev.map((ship) =>
+    const updateShip = useCallback(
+        async (updatedShip: Ship) => {
+            const newShips = ships.map((ship) =>
                 ship.id === updatedShip.id
                     ? {
                           ...updatedShip,
                       }
                     : ship
-            )
-        );
-    }, []);
+            );
+            await saveShips(newShips);
+        },
+        [ships, saveShips]
+    );
+
+    const handleLockEquipment = async (ship: Ship) => {
+        try {
+            const newLockState = !ship.equipmentLocked;
+            await updateShip({ ...ship, equipmentLocked: newLockState });
+            return newLockState;
+        } catch (error) {
+            console.error('Failed to update equipment lock state:', error);
+            throw error;
+        }
+    };
 
     const validateGearAssignments = useCallback(() => {
         if (!getGearPiece) return;
@@ -181,5 +205,6 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         updateShip,
         saveShips,
         validateGearAssignments,
+        handleLockEquipment,
     };
 };

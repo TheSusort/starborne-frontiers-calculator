@@ -25,6 +25,7 @@ export const ShipsPage: React.FC = () => {
         handleRemoveGear,
         handleSaveShip,
         setEditingShip,
+        handleLockEquipment,
     } = useShips({ getGearPiece });
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
@@ -77,6 +78,13 @@ export const ShipsPage: React.FC = () => {
                     setEditingShip(ship);
                     setIsFormVisible(true);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                onLockEquipment={async (ship) => {
+                    const updatedLockState = await handleLockEquipment(ship);
+                    addNotification(
+                        'success',
+                        `Equipment lock state on ${ship.name} set to ${updatedLockState}`
+                    );
                 }}
                 onEquipGear={async (shipId, slot, gearId) => {
                     handleEquipGear(shipId, slot, gearId);

@@ -1,12 +1,12 @@
 import React, { memo, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon, EditIcon } from '../ui';
+import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon } from '../ui';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';
-
+import { useNotification } from '../../hooks/useNotification';
 interface Props {
     ship: Ship;
     variant?: 'full' | 'compact' | 'extended';
@@ -15,6 +15,7 @@ interface Props {
     selected?: boolean;
     onClick?: () => void;
     children?: React.ReactNode;
+    onLockEquipment?: (ship: Ship) => Promise<void>;
 }
 
 const ShipImage = memo(({ iconUrl, name }: { iconUrl: string; name: string }) => (
@@ -57,9 +58,19 @@ const Header = memo(({ ship }: { ship: Ship }) => (
 Header.displayName = 'Header';
 
 export const ShipDisplay: React.FC<Props> = memo(
-    ({ ship, variant = 'full', onEdit, onRemove, selected, onClick, children }) => {
+    ({
+        ship,
+        variant = 'full',
+        onEdit,
+        onRemove,
+        selected,
+        onClick,
+        children,
+        onLockEquipment,
+    }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
+        const { addNotification } = useNotification();
         const totalStats = useMemo(
             () =>
                 calculateTotalStats(
@@ -107,8 +118,26 @@ export const ShipDisplay: React.FC<Props> = memo(
                     className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}
                 >
                     <Header ship={ship} />
-                    {(onEdit || onRemove) && (
+                    {(onEdit || onRemove || onLockEquipment) && (
                         <div className="flex gap-2">
+                            {onLockEquipment && (
+                                <Button
+                                    aria-label={
+                                        ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'
+                                    }
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={async () => {
+                                        try {
+                                            await onLockEquipment(ship);
+                                        } catch (error) {
+                                            console.error('Failed to update lock state:', error);
+                                        }
+                                    }}
+                                >
+                                    {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
+                                </Button>
+                            )}
                             {onEdit && (
                                 <Button
                                     aria-label="Edit ship"

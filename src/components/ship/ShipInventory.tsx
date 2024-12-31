@@ -20,6 +20,7 @@ interface Props {
     onEdit: (ship: Ship) => void;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
+    onLockEquipment: (ship: Ship) => Promise<void>;
     availableGear: GearPiece[];
 }
 
@@ -29,6 +30,7 @@ export const ShipInventory: React.FC<Props> = ({
     onEdit,
     onEquipGear,
     onRemoveGear,
+    onLockEquipment,
     availableGear,
 }) => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -181,11 +183,13 @@ export const ShipInventory: React.FC<Props> = ({
                             <ShipCard
                                 key={ship.id}
                                 ship={ship}
+                                allShips={ships}
                                 hoveredGear={hoveredGear}
                                 availableGear={availableGear}
                                 getGearPiece={getGearPiece}
                                 onEdit={onEdit}
                                 onRemove={onRemove}
+                                onLockEquipment={onLockEquipment}
                                 onEquipGear={onEquipGear}
                                 onRemoveGear={onRemoveGear}
                                 onHoverGear={setHoveredGear}

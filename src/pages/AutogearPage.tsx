@@ -19,7 +19,7 @@ import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 
 export const AutogearPage: React.FC = () => {
     const { getGearPiece, inventory, saveInventory } = useInventory();
-    const { getShipById, handleEquipGear } = useShips();
+    const { getShipById, handleEquipGear, ships } = useShips();
     const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
@@ -56,16 +56,24 @@ export const AutogearPage: React.FC = () => {
         setSuggestions([]);
 
         const strategy = getAutogearStrategy(selectedAlgorithm);
-
-        // Set progress callback for all strategies
         strategy.setProgressCallback(setOptimizationProgress);
 
-        // Always await the strategy result, even if it's not a Promise
+        // Filter out gear that's equipped on locked ships
+        const availableInventory = inventory.filter(
+            (gear) =>
+                !ships.some(
+                    (ship) =>
+                        ship.equipmentLocked &&
+                        ship.id !== selectedShip.id &&
+                        Object.values(ship.equipment).includes(gear.id)
+                )
+        );
+
         const newSuggestions = await Promise.resolve(
             strategy.findOptimalGear(
                 selectedShip,
                 priorities,
-                inventory,
+                availableInventory, // Use filtered inventory
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 selectedShipRole || undefined,

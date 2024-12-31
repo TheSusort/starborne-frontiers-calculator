@@ -25,6 +25,7 @@ describe('AutogearSettings Component', () => {
             healModifier: 0,
         },
         equipment: {},
+        equipmentLocked: false,
         refits: [],
         implants: [],
     };

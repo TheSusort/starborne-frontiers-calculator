@@ -27,6 +27,7 @@ describe('useShips Hook', () => {
                 weapon: 'gear1',
                 hull: 'gear2',
             },
+            equipmentLocked: false,
             refits: [],
             implants: [],
         },
@@ -50,6 +51,7 @@ describe('useShips Hook', () => {
             equipment: {
                 hull: 'gear3',
             },
+            equipmentLocked: true,
             refits: [],
             implants: [],
         },

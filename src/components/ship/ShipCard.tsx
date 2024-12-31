@@ -9,16 +9,17 @@ import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { Button } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
-import { useShips } from '../../hooks/useShips';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
 
 interface Props {
     ship: Ship;
+    allShips: Ship[];
     hoveredGear: GearPiece | null;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
     onEdit: (ship: Ship) => void;
     onRemove: (id: string) => void;
+    onLockEquipment: (ship: Ship) => Promise<void>;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
     onHoverGear: (gear: GearPiece | null) => void;
@@ -26,11 +27,13 @@ interface Props {
 
 export const ShipCard: React.FC<Props> = ({
     ship,
+    allShips,
     hoveredGear,
     availableGear,
     getGearPiece,
     onEdit,
     onRemove,
+    onLockEquipment,
     onEquipGear,
     onRemoveGear,
     onHoverGear,
@@ -41,7 +44,6 @@ export const ShipCard: React.FC<Props> = ({
     const { addNotification } = useNotification();
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
-    const { ships } = useShips();
 
     const handleUnequipAll = () => {
         Object.entries(GEAR_SLOTS).forEach(([key]) => {
@@ -51,6 +53,23 @@ export const ShipCard: React.FC<Props> = ({
     };
 
     const handleEquipAttempt = (gear: GearPiece) => {
+        // First check if the gear is on a locked ship
+        const lockedShip = allShips.find(
+            (s) =>
+                s.equipmentLocked &&
+                s.id !== ship.id &&
+                Object.values(s.equipment).includes(gear.id)
+        );
+
+        if (lockedShip) {
+            addNotification(
+                'error',
+                `This gear is locked to ${lockedShip.name}. Please unlock the ship's equipment first.`
+            );
+            return;
+        }
+
+        // Then proceed with normal equip logic
         if (gear.shipId && gear.shipId !== ship.id) {
             setPendingGear(gear);
             setShowConfirmModal(true);
@@ -72,7 +91,13 @@ export const ShipCard: React.FC<Props> = ({
 
     return (
         <div>
-            <ShipDisplay ship={ship} onEdit={onEdit} onRemove={onRemove} variant="extended">
+            <ShipDisplay
+                ship={ship}
+                onEdit={onEdit}
+                onRemove={onRemove}
+                onLockEquipment={onLockEquipment}
+                variant="extended"
+            >
                 <div className="p-4 bg-dark">
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, _]) => (
@@ -141,7 +166,7 @@ export const ShipCard: React.FC<Props> = ({
                 }}
                 onConfirm={handleConfirmEquip}
                 title="Move Gear"
-                message={`This ${pendingGear?.slot} is currently equipped on ${ships.find((s) => s.id === pendingGear?.shipId)?.name || 'another ship'}. Would you like to move it to ${ship.name} instead?`}
+                message={`This ${pendingGear?.slot} is currently equipped on ${allShips.find((s) => s.id === pendingGear?.shipId)?.name || 'another ship'}. Would you like to move it to ${ship.name} instead?`}
                 confirmLabel="Move"
                 cancelLabel="Cancel"
             />

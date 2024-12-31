@@ -68,6 +68,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             rarity,
             baseStats,
             equipment: editingShip?.equipment || {},
+            equipmentLocked: editingShip?.equipmentLocked || false,
             refits,
             implants,
         };

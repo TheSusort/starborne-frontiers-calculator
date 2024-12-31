@@ -26,6 +26,7 @@ const mockShip: Ship = {
         healModifier: 0,
     },
     equipment: {},
+    equipmentLocked: false,
     refits: [],
     implants: [],
 };
