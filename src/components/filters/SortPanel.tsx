@@ -20,9 +20,9 @@ interface Props {
 export const SortPanel: React.FC<Props> = ({ options, currentSort, onSort }) => {
     return (
         <>
-            <span className="block text-sm font-medium text-gray-300 mb-2">Sorting</span>
-            <div className="flex gap-2 items-center">
+            <div className="flex gap-2 items-end">
                 <Select
+                    label="Sort by"
                     value={currentSort.field}
                     onChange={(value) => {
                         onSort({

@@ -48,15 +48,14 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
     return (
         <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4">
             <div>
-                <label className="block text-sm font-medium text-gray-200">Loadout Name</label>
                 <Input
+                    label="Loadout Name"
                     type="text"
                     value={name}
                     onChange={handleNameChange}
                     required
                     error={error || undefined}
                 />
-                {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
             </div>
 
             <div>

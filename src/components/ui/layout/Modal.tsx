@@ -22,6 +22,7 @@ export const Modal: React.FC<Props> = ({ isOpen, onClose, title, children }) => 
                     <div
                         className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl"
                         onClick={(e) => e.stopPropagation()}
+                        role="dialog"
                     >
                         {/* Header */}
                         <div className="px-6 py-4 border-b border-gray-600 flex justify-between items-center">

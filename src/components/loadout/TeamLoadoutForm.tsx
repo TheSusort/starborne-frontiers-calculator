@@ -59,15 +59,14 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
     return (
         <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4">
             <div>
-                <label className="block text-sm font-medium text-gray-200">Team Loadout Name</label>
                 <Input
+                    label="Team Loadout Name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
                     error={error || undefined}
                 />
-                {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
             </div>
 
             {selectedShips.map((ship, index) => (

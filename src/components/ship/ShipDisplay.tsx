@@ -6,7 +6,7 @@ import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';
-import { useNotification } from '../../hooks/useNotification';
+
 interface Props {
     ship: Ship;
     variant?: 'full' | 'compact' | 'extended';
@@ -70,7 +70,6 @@ export const ShipDisplay: React.FC<Props> = memo(
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
-        const { addNotification } = useNotification();
         const totalStats = useMemo(
             () =>
                 calculateTotalStats(

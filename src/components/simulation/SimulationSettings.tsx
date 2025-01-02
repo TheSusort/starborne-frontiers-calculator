@@ -25,8 +25,8 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
             <ShipSelector onSelect={onShipSelect} selected={selectedShip} variant="full" />
 
             <div className="p-4 bg-dark space-y-2">
-                <span className="text-gray-300 text-sm">Ship Role</span>
                 <Select
+                    label="Ship Role"
                     options={Object.values(SHIP_TYPES).map((type) => ({
                         value: type.name,
                         label: `${type.name} (${type.description})`,

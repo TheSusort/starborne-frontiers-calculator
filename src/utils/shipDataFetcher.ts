@@ -101,7 +101,7 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
 
 export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
     // fetch ship data from constant ships
-    const shipData = SHIPS[shipName.toUpperCase() as keyof typeof SHIPS];
+    const shipData = SHIPS[shipName.toUpperCase().replace(' ', '_') as keyof typeof SHIPS];
     if (!shipData) {
         return null;
     }

@@ -16,7 +16,7 @@ export const StatList: React.FC<StatListProps> = ({
     className = '',
 }) => {
     return (
-        <div className={`bg-dark rounded space-y-2 ${className}`}>
+        <div className={`bg-dark rounded space-y-2 ${className}`} data-testid="stat-list">
             {title && <h3 className="text-lg font-semibold text-gray-200">{title}</h3>}
             {Object.entries(stats).map(([statName, value]) => {
                 const comparisonValue = comparisonStats?.[statName as StatName];

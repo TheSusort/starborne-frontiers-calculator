@@ -34,10 +34,11 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
         });
 
         setMaxLimit('');
+        setSelectedStat(AVAILABLE_STATS[0]);
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded">
+        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4 rounded" role="form">
             <div className="space-y-2">
                 <Select
                     label="Stat"

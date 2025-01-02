@@ -47,19 +47,6 @@ const EncounterNotesPage: React.FC = () => {
         addNotification('success', 'Encounter Deleted');
     };
 
-    const handleCancelEdit = () => {
-        setEditingEncounter(null);
-        setIsFormVisible(false);
-    };
-
-    const toggleForm = () => {
-        if (isFormVisible) {
-            handleCancelEdit();
-        } else {
-            setIsFormVisible(true);
-        }
-    };
-
     return (
         <PageLayout
             title="Encounter Notes"

@@ -179,7 +179,10 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                             {isLoading ? (
                                 <>
                                     <span className="opacity-0">Fetch Data</span>
-                                    <div className="absolute inset-0 flex items-center justify-center">
+                                    <div
+                                        className="absolute inset-0 flex items-center justify-center"
+                                        role="status"
+                                    >
                                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                     </div>
                                 </>

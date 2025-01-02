@@ -110,7 +110,7 @@ export const ShipInventory: React.FC<Props> = ({
     ];
 
     const sortOptions = [
-        { value: 'id', label: 'ID' },
+        { value: 'id', label: 'Date Added' },
         { value: 'type', label: 'Type' },
         { value: 'faction', label: 'Faction' },
         { value: 'rarity', label: 'Rarity' },

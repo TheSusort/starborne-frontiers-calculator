@@ -192,6 +192,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             value: stat,
                             label: STATS[stat as StatName].label,
                         }))}
+                        data-testid="main-stat-select"
                     />
                     <Input
                         label="Main Stat Value"

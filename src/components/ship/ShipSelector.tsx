@@ -37,6 +37,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                 title="Select a Ship"
             >
                 <div className="grid grid-cols-1 gap-2">
+                    {ships.length === 0 && <p>No ships available</p>}
                     {ships.map((ship) => (
                         <ShipDisplay
                             key={ship.id}
