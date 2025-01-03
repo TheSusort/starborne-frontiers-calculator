@@ -43,8 +43,8 @@ export const SimulationPage: React.FC = () => {
 
     return (
         <PageLayout
-            title="Attack Simulation"
-            description="Simulate attacks with your ships and gear."
+            title="Simulation"
+            description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear."
         >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SimulationSettings
