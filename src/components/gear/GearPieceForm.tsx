@@ -13,6 +13,7 @@ import {
 } from '../../constants';
 import { Button, Input, Select } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
+import { calculateMainStatValue } from '../../utils/statCalculator';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -140,6 +141,18 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         label: slot.label,
     }));
 
+    useEffect(() => {
+        if (!editingPiece) {
+            const calculatedValue = calculateMainStatValue(
+                mainStat.name,
+                mainStat.type,
+                stars,
+                level
+            );
+            handleMainStatChange({ value: calculatedValue });
+        }
+    }, [stars, level, mainStat.name, mainStat.type, editingPiece]);
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -171,8 +184,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     type="number"
                     label="Level"
                     value={level}
+                    min={0}
                     max={16}
-                    onChange={(e) => setLevel(Number(e.target.value))}
+                    onChange={(e) => setLevel(Math.min(16, Math.max(0, Number(e.target.value))))}
                 />
 
                 <Select

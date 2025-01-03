@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.12.1';
+export const CURRENT_VERSION = '0.13.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.13.0',
+        date: '2025-01-03',
+        changes: ['Added main stat value suggestions in gear form, based on stars and level'],
+    },
     {
         version: '0.12.1',
         date: '2024-12-31',
