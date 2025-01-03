@@ -26,7 +26,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
     const ship = gear.shipId ? getShipById(gear.shipId) : undefined;
     return (
         <div
-            className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow flex flex-col`}
+            className={`bg-dark shadow-md border ${RARITIES[gear.rarity].borderColor} overflow-hidden flex-grow flex flex-col min-w-[260px]`}
         >
             {/* Header */}
             <div

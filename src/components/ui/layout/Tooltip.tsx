@@ -7,50 +7,67 @@ interface Props {
 }
 
 export const Tooltip: React.FC<Props> = ({ isVisible, children, className }) => {
-    const [position, setPosition] = useState<'top' | 'bottom'>('bottom');
-    const [xOffset, setXOffset] = useState(0);
+    const [coords, setCoords] = useState({ left: 0, top: 0 });
     const tooltipRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (!isVisible || !tooltipRef.current) return;
 
-        const tooltip = tooltipRef.current;
-        const rect = tooltip.getBoundingClientRect();
-        const parentRect = tooltip.parentElement?.getBoundingClientRect();
+        const updatePosition = () => {
+            const tooltip = tooltipRef.current;
+            if (!tooltip) return;
 
-        if (!parentRect) return;
+            const parentRect = tooltip.parentElement?.getBoundingClientRect();
+            if (!parentRect) return;
 
-        // Check vertical position
-        const spaceBelow = window.innerHeight - parentRect.bottom;
-        const spaceAbove = parentRect.top;
-        setPosition(spaceBelow < rect.height && spaceAbove > rect.height ? 'top' : 'bottom');
+            const tooltipRect = tooltip.getBoundingClientRect();
 
-        // Check horizontal position
-        const leftOverflow = rect.left < 0;
-        const rightOverflow = rect.right > window.innerWidth;
+            // Calculate vertical position
+            const spaceBelow = window.innerHeight - parentRect.bottom;
+            const spaceAbove = parentRect.top;
+            const newPosition =
+                spaceBelow < tooltipRect.height && spaceAbove > tooltipRect.height
+                    ? 'top'
+                    : 'bottom';
 
-        if (leftOverflow) {
-            setXOffset(Math.abs(rect.left));
-        } else if (rightOverflow) {
-            setXOffset(window.innerWidth - rect.right);
-        } else {
-            setXOffset(0);
-        }
-    }, [isVisible]);
+            // Calculate center position
+            const left = parentRect.left + parentRect.width / 2 - tooltipRect.width / 2;
+
+            // Adjust if tooltip would overflow window
+            const adjustedLeft = Math.min(
+                Math.max(0, left), // Don't go beyond left edge
+                window.innerWidth - tooltipRect.width // Don't go beyond right edge
+            );
+
+            // Calculate vertical offset based on position
+            const top =
+                newPosition === 'top'
+                    ? parentRect.top - tooltipRect.height - 8 // 8px margin
+                    : parentRect.bottom + 8;
+
+            setCoords({ left: adjustedLeft, top });
+        };
+
+        // Initial position calculation
+        updatePosition();
+
+        // Recalculate on window resize
+        window.addEventListener('resize', updatePosition);
+
+        return () => {
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [isVisible, children]);
 
     if (!isVisible) return null;
 
     return (
         <div
             ref={tooltipRef}
-            className={`
-                absolute z-50 w-64
-                ${position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
-                left-1/2 -translate-x-1/2
-                ${className}
-            `}
+            className={`fixed z-50 ${className}`}
             style={{
-                transform: `translateX(calc(-50% + ${xOffset}px))`,
+                left: `${coords.left}px`,
+                top: `${coords.top}px`,
             }}
         >
             {children}

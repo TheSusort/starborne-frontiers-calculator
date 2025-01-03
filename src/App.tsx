@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
+import { BrowserRouter as Router, Routes, Route } from 'react-router';
 import { Sidebar } from './components/ui';
 import { ShipsPage } from './pages/ShipsPage';
 import { GearPage } from './pages/GearPage';
@@ -15,6 +15,8 @@ import { NotificationContainer } from './components/notification/NotificationCon
 import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
 import { migrateTianshaoToTianchao } from './migrations/factionMigration';
 import EncounterNotesPage from './pages/EncounterNotesPage';
+import HomePage from './pages/HomePage';
+import { JokeCorner } from './components/home/JokeCorner';
 
 // Run migration when app starts
 migrateTianshaoToTianchao();
@@ -70,10 +72,11 @@ const App: React.FC = () => {
                                         path="/api/import-test-data"
                                         element={<ImportTestDataHandler />}
                                     />
-                                    <Route path="/" element={<Navigate to="/ships" replace />} />
+                                    <Route path="/" element={<HomePage />} />
                                 </Routes>
                             </div>
 
+                            <JokeCorner />
                             <footer className="text-center text-xs text-gray-400 mt-auto pt-5">
                                 Made with ❤️ by {AUTHOR}
                             </footer>

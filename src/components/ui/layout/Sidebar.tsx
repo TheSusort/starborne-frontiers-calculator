@@ -10,6 +10,7 @@ export const Sidebar: React.FC = () => {
     const isActive = (path: string) => location.pathname === path;
 
     const navigationLinks = [
+        { path: '/', label: 'Home' },
         { path: '/ships', label: 'Ships' },
         { path: '/gear', label: 'Gear' },
         { path: '/loadouts', label: 'Loadouts' },
