@@ -19,13 +19,13 @@ interface Props {
 }
 
 const ShipImage = memo(({ iconUrl, name }: { iconUrl: string; name: string }) => (
-    <img src={iconUrl} alt={name} className="w-5" />
+    <img src={iconUrl} alt={name} className="w-4" />
 ));
 ShipImage.displayName = 'ShipImage';
 
 const Header = memo(({ ship }: { ship: Ship }) => (
     <div>
-        <div className="flex items-center gap-2 min-h-[28px]">
+        <div className="flex items-center gap-1 min-h-[28px]">
             {ship.type && SHIP_TYPES[ship.type] && (
                 <ShipImage
                     iconUrl={SHIP_TYPES[ship.type].iconUrl}
@@ -38,7 +38,9 @@ const Header = memo(({ ship }: { ship: Ship }) => (
                     name={FACTIONS[ship.faction].name}
                 />
             )}
-            <span className={`font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}>
+            <span
+                className={`lg:text-xs xl:text-sm font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}
+            >
                 {ship.name}
             </span>
         </div>
@@ -118,7 +120,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                 >
                     <Header ship={ship} />
                     {(onEdit || onRemove || onLockEquipment) && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                             {onLockEquipment && (
                                 <Button
                                     aria-label={

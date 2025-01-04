@@ -8,10 +8,10 @@ import { EngineeringStat } from '../../types/stats';
 
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
-    // Convert defense to thousands for easier calculation
-    const x = defense / 1000;
-    // Sigmoid-like function that approximates the curve
-    return (87 * (1 - Math.exp(-0.15 * x))) / (1 + 0.1 * x);
+    // Using the power formula with bounds
+    const reduction = 92.5394 * Math.pow(defense, 0.100911) - 162.696;
+    // Clamp between 0 and 85
+    return Math.max(0, Math.min(85, reduction));
 }
 
 export function calculateEffectiveHP(hp: number, defense: number): number {
