@@ -89,10 +89,25 @@ function calculateDefenderScore(stats: BaseStats): number {
 
 function calculateDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
-    const hackingScore = hacking >= 270 ? 1000 : (hacking / 270) * 1000;
     const dps = calculateDPS(stats);
 
-    return hackingScore + dps * 0.5; // DPS is secondary priority
+    // Heavily penalize builds below 270 hacking
+    if (hacking < 270) {
+        return (hacking / 270) * 100; // Very low score if below minimum
+    }
+
+    // Base score starts at 1000 for meeting minimum hacking
+    let score = 1000;
+
+    // Additional score for hacking above minimum (diminishing returns)
+    if (hacking > 270) {
+        score += Math.sqrt(hacking - 270) * 10;
+    }
+
+    // Add DPS contribution with higher weight
+    score += dps;
+
+    return score;
 }
 
 function calculateSupporterScore(stats: BaseStats): number {

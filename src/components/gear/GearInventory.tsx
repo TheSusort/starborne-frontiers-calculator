@@ -24,7 +24,7 @@ export const GearInventory: React.FC<Props> = ({
     const [selectedSets, setSelectedSets] = useState<string[]>([]);
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
     const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
-    const [selectedEquipped, setSelectedEquipped] = useState<boolean>(false);
+    const [selectedEquipped, setSelectedEquipped] = useState<string>('');
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [sort, setSort] = useState<SortConfig>({ field: 'id', direction: 'asc' });
 
@@ -32,7 +32,7 @@ export const GearInventory: React.FC<Props> = ({
         selectedSets.length > 0 ||
         selectedTypes.length > 0 ||
         selectedRarities.length > 0 ||
-        selectedEquipped;
+        selectedEquipped !== null;
 
     const filteredInventory = useMemo(() => {
         return inventory.filter((piece) => {
@@ -40,9 +40,12 @@ export const GearInventory: React.FC<Props> = ({
             const matchesType = selectedTypes.length === 0 || selectedTypes.includes(piece.slot);
             const matchesRarity =
                 selectedRarities.length === 0 || selectedRarities.includes(piece.rarity);
-            const matchesEquipped = selectedEquipped
-                ? piece.shipId !== '' && piece.shipId !== undefined
-                : true;
+            const matchesEquipped =
+                selectedEquipped === 'equipped'
+                    ? piece.shipId !== '' && piece.shipId !== undefined
+                    : selectedEquipped === 'unequipped'
+                      ? piece.shipId === '' || piece.shipId === undefined
+                      : true;
 
             return matchesSet && matchesType && matchesRarity && matchesEquipped;
         });
@@ -99,9 +102,14 @@ export const GearInventory: React.FC<Props> = ({
         {
             id: 'equipped',
             label: 'Equipped',
-            values: selectedEquipped ? ['equipped'] : [],
-            onChange: () => setSelectedEquipped(!selectedEquipped),
-            options: [{ value: 'equipped', label: 'Equipped to a ship' }],
+            values: selectedEquipped ? [selectedEquipped] : [],
+            onChange: (values: string[]) => {
+                setSelectedEquipped(values[0] === selectedEquipped ? '' : values[0]);
+            },
+            options: [
+                { value: 'equipped', label: 'Equipped to a ship' },
+                { value: 'unequipped', label: 'Not equipped to a ship' },
+            ],
         },
     ];
 
@@ -141,7 +149,7 @@ export const GearInventory: React.FC<Props> = ({
         setSelectedSets([]);
         setSelectedTypes([]);
         setSelectedRarities([]);
-        setSelectedEquipped(false);
+        setSelectedEquipped('');
     };
 
     return (
