@@ -1,11 +1,11 @@
 import React from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
-import { Button, Select, Checkbox } from '../ui';
+import { Button, Select, Checkbox, CloseIcon } from '../ui';
 import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority } from '../../types/autogear';
-import { SHIP_TYPES, ShipTypeName } from '../../constants';
+import { SHIP_TYPES, ShipTypeName, STATS } from '../../constants';
 
 interface AutogearSettingsProps {
     selectedShip: Ship | null;
@@ -64,18 +64,20 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 <div className="bg-dark p-4 rounded space-y-2 text-gray-200">
                     <h3 className="text-lg font-semibold">Priority List</h3>
                     {priorities.map((priority, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                            <span>{index + 1}</span>
+                        <div key={index} className="flex items-center">
                             <span>
-                                {priority.stat}
+                                {STATS[priority.stat].label}
                                 {priority.maxLimit ? ` (Max: ${priority.maxLimit})` : ''}
+                                {priority.weight ? ` (Weight: ${priority.weight})` : ''}
                             </span>
                             <Button
                                 aria-label="Remove priority"
                                 variant="danger"
+                                size="sm"
                                 onClick={() => onRemovePriority(index)}
+                                className="ml-auto"
                             >
-                                Remove
+                                <CloseIcon />
                             </Button>
                         </div>
                     ))}

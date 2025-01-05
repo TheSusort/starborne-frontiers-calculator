@@ -158,8 +158,6 @@ export class BeamSearchStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         shipRole?: ShipTypeName
     ): number {
-        let score = calculatePriorityScore(stats, priorities, shipRole);
-
         const setCount: Record<string, number> = {};
         Object.values(equipment).forEach((gearId) => {
             if (!gearId) return;
@@ -167,6 +165,8 @@ export class BeamSearchStrategy extends BaseStrategy {
             if (!gear?.setBonus) return;
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
         });
+
+        let score = calculatePriorityScore(stats, priorities, shipRole, setCount);
 
         Object.entries(setCount).forEach(([_, count]) => {
             if (count >= 2) {

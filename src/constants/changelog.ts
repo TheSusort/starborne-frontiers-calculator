@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.14.0';
+export const CURRENT_VERSION = '0.14.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.14.1',
+        date: '2025-01-05',
+        changes: [
+            'Added buffer role to autogearing predefined modes, focusing on speed, boost set and lastly effective hp',
+            'Added manual stat priority weights',
+            'Several adjustments to autogear algorithm and simulation, focusing on debuffers and defenders',
+        ],
+    },
     {
         version: '0.14.0',
         date: '2025-01-03',

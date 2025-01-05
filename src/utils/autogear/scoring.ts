@@ -1,6 +1,6 @@
 import { BaseStats } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
-import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
+import { GEAR_SETS, GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../statsCalculator';
 import { GearPiece } from '../../types/gear';
@@ -28,7 +28,8 @@ function calculateDPS(stats: BaseStats): number {
 export function calculatePriorityScore(
     stats: BaseStats,
     priorities: StatPriority[],
-    shipRole?: ShipTypeName
+    shipRole?: ShipTypeName,
+    setCount?: Record<string, number>
 ): number {
     // If a specific role is defined, use role-specific scoring
     if (shipRole) {
@@ -40,7 +41,9 @@ export function calculatePriorityScore(
             case 'Debuffer':
                 return calculateDebufferScore(stats);
             case 'Supporter':
-                return calculateSupporterScore(stats);
+                return calculateHealerScore(stats);
+            case 'Supporter(Buffer)':
+                return calculateBufferScore(stats, setCount);
             default:
                 // Fall through to default scoring
                 break;
@@ -110,13 +113,45 @@ function calculateDebufferScore(stats: BaseStats): number {
     return score;
 }
 
-function calculateSupporterScore(stats: BaseStats): number {
-    const healModifier = stats.healModifier || 0;
+function calculateHealerScore(stats: BaseStats): number {
     const baseHealing = (stats.hp || 0) * 0.15; // 15% of HP
-    const critMultiplier = 1 + (((stats.crit || 0) / 100) * ((stats.critDamage || 0) - 100)) / 100;
+
+    // Use same crit calculation as DPS
+    const crit = stats.crit >= 100 ? 1 : (stats.crit || 0) / 100;
+    const critMultiplier = 1 + crit * ((stats.critDamage || 0) / 100);
+
+    // Apply heal modifier after crit calculations
+    const healModifier = stats.healModifier || 0;
     const totalHealing = baseHealing * critMultiplier * (1 + healModifier / 100);
 
     return totalHealing;
+}
+
+function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number>): number {
+    const speed = stats.speed || 0;
+    const boostCount = setCount?.BOOST || 0;
+    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+
+    // Calculate speed score with diminishing returns after 180
+    let speedScore;
+    if (speed <= 180) {
+        speedScore = speed * 10; // Base weight for speed
+    } else {
+        speedScore = 180 * 10 + Math.sqrt(speed - 180) * 20; // Diminishing returns
+    }
+
+    // Boost set scoring (4 pieces needed for set bonus)
+    // Heavily reward having the full set
+    let boostScore = 0;
+    if (boostCount >= 4) {
+        boostScore = 3000; // Major bonus for complete set
+    }
+
+    // Add effective HP as a secondary consideration
+    // Scale it down to not overshadow primary stats
+    const ehpScore = Math.sqrt(effectiveHP) * 2;
+
+    return speedScore + boostScore + ehpScore;
 }
 
 // Update calculateTotalScore to include shipRole
@@ -137,8 +172,6 @@ export function calculateTotalScore(
         getEngineeringStatsForShipType(ship.type)
     );
 
-    let score = calculatePriorityScore(totalStats, priorities, shipRole);
-
     // Add set bonus consideration
     const setCount: Record<string, number> = {};
     Object.values(equipment).forEach((gearId) => {
@@ -148,8 +181,11 @@ export function calculateTotalScore(
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
     });
 
-    Object.values(setCount).forEach((count) => {
-        if (count >= 2) {
+    let score = calculatePriorityScore(totalStats, priorities, shipRole, setCount);
+
+    Object.values(setCount).forEach((count, index) => {
+        const setBonus = GEAR_SETS[Object.keys(setCount)[index]];
+        if (count >= (setBonus.minPieces || 2)) {
             score *= 1.15; // 15% bonus for completed sets
         }
     });

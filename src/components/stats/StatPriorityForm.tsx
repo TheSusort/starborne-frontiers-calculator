@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, Input, Select } from '../ui';
 import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
+import { STATS } from '../../constants/stats';
 
 const AVAILABLE_STATS: StatName[] = [
     'attack',
@@ -23,6 +24,7 @@ interface Props {
 export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities }) => {
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
+    const [weight, setWeight] = useState<number>(1);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -30,10 +32,12 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
         onAdd({
             stat: selectedStat,
             maxLimit: maxLimit ? Number(maxLimit) : undefined,
-            weight: existingPriorities.length + 1,
+            weight: weight,
         });
 
         setMaxLimit('');
+        console.log(existingPriorities);
+        setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         setSelectedStat(AVAILABLE_STATS[0]);
     };
 
@@ -46,7 +50,7 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                     onChange={(value) => setSelectedStat(value as StatName)}
                     options={AVAILABLE_STATS.map((stat) => ({
                         value: stat,
-                        label: stat.charAt(0).toUpperCase() + stat.slice(1),
+                        label: STATS[stat].label,
                     }))}
                 />
             </div>
@@ -58,6 +62,16 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                     value={maxLimit}
                     onChange={(e) => setMaxLimit(e.target.value)}
                     placeholder="Enter maximum value"
+                />
+            </div>
+
+            <div className="space-y-2">
+                <Input
+                    label="Weight"
+                    type="number"
+                    value={weight}
+                    onChange={(e) => setWeight(Number(e.target.value))}
+                    placeholder="Enter weight"
                 />
             </div>
 

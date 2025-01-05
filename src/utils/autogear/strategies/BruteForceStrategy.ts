@@ -109,6 +109,7 @@ export class BruteForceStrategy extends BaseStrategy {
             Defender: ['hp', 'defence'],
             Debuffer: ['hacking', 'attack', 'crit', 'critDamage'],
             Supporter: ['hp', 'healModifier', 'crit', 'critDamage'],
+            SupporterBuffer: ['speed', 'hp', 'defence'],
         };
         const stats = relevantStats[role] || [];
         const gearStats = gear.subStats.map((stat) => stat.name);

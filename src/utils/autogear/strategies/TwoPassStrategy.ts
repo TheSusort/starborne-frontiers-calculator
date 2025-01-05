@@ -217,9 +217,10 @@ export class TwoPassStrategy extends BaseStrategy {
     private calculateStatScore(
         stats: BaseStats,
         priorities: StatPriority[],
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setCount?: Record<string, number>
     ): number {
-        return calculatePriorityScore(stats, priorities, shipRole);
+        return calculatePriorityScore(stats, priorities, shipRole, setCount);
     }
 
     private evaluateEquipment(

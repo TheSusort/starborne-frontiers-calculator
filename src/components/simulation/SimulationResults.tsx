@@ -224,6 +224,53 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
         </>
     );
 
+    const renderSupporterBufferStats = (simulation: SimulationSummary, isComparison = false) => (
+        <>
+            <div>
+                <span className="text-gray-400">Speed:</span>
+                <span className="ml-2">{simulation.speed}</span>
+            </div>
+            <div>
+                <span className="text-gray-400">Effective HP:</span>
+                <span className="ml-2">
+                    {simulation.effectiveHP?.toLocaleString()}
+                    {isComparison && suggestedSimulation && (
+                        <span
+                            className={`ml-2 ${suggestedSimulation.effectiveHP! > currentSimulation.effectiveHP! ? 'text-green-500' : 'text-red-500'}`}
+                        >
+                            (
+                            {(
+                                ((suggestedSimulation.effectiveHP! -
+                                    currentSimulation.effectiveHP!) /
+                                    currentSimulation.effectiveHP!) *
+                                100
+                            ).toFixed(1)}
+                            %)
+                        </span>
+                    )}
+                </span>
+            </div>
+            <div>
+                <span className="text-gray-400">Damage Reduction:</span>
+                <span className="ml-2">
+                    {simulation.damageReduction}%
+                    {isComparison && suggestedSimulation && (
+                        <span
+                            className={`ml-2 ${suggestedSimulation.damageReduction! > currentSimulation.damageReduction! ? 'text-green-500' : 'text-red-500'}`}
+                        >
+                            (
+                            {(
+                                suggestedSimulation.damageReduction! -
+                                currentSimulation.damageReduction!
+                            ).toFixed(1)}
+                            %)
+                        </span>
+                    )}
+                </span>
+            </div>
+        </>
+    );
+
     const renderStats = (simulation: SimulationSummary, isComparison = false) => {
         switch (role) {
             case 'Defender':
@@ -232,6 +279,8 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                 return renderDebufferStats(simulation, isComparison);
             case 'Supporter':
                 return renderSupporterStats(simulation, isComparison);
+            case 'Supporter(Buffer)':
+                return renderSupporterBufferStats(simulation, isComparison);
             default:
                 return renderAttackerStats(simulation, isComparison);
         }

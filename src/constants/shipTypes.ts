@@ -13,12 +13,17 @@ export const SHIP_TYPES: Record<string, ShipType> = {
     },
     DEBUFFER: {
         name: 'Debuffer',
-        description: 'Maximize damage output while having up to 270 hacking',
+        description: 'Maximize damage output while having 270 hacking or more',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
     SUPPORTER: {
         name: 'Supporter',
         description: 'Maximize healing output',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314233301188750.webp',
+    },
+    SUPPORTER_BUFFER: {
+        name: 'Supporter(Buffer)',
+        description: 'Max speed, then HP/defense, big bonus if boost set',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314233301188750.webp',
     },
 } satisfies Record<string, ShipType>;

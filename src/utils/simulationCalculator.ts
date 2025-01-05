@@ -21,6 +21,9 @@ export interface SimulationSummary {
     averageHealing?: number;
     highestHeal?: number;
     lowestHeal?: number;
+
+    // Supporter(Buffer) specific
+    speed?: number;
 }
 
 const SIMULATION_ITERATIONS = 1000;
@@ -38,6 +41,8 @@ export function runSimulation(stats: BaseStats, role: ShipTypeName | null): Simu
             return runDebufferSimulation(stats);
         case 'Supporter':
             return runHealingSimulation(stats);
+        case 'Supporter(Buffer)':
+            return { ...runDefenderSimulation(stats), speed: stats.speed };
         default:
             return runDamageSimulation(stats);
     }
@@ -83,10 +88,10 @@ function runDefenderSimulation(stats: BaseStats): SimulationSummary {
 }
 
 function runDebufferSimulation(stats: BaseStats): SimulationSummary {
-    const hackSuccessRate = Math.min(
-        100,
-        Math.max(0, (((stats.hacking || 0) - ENEMY_SECURITY) / ENEMY_SECURITY) * 100)
-    );
+    const hacking = stats.hacking || 0;
+
+    // Success rate is the difference between hacking and security as a percentage
+    const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
 
     // Also run damage simulation as secondary output
     const damageSimulation = runDamageSimulation(stats);
@@ -133,7 +138,7 @@ function calculateDamage(stats: BaseStats): number {
     const isCrit = critRoll <= (stats.crit || 0);
 
     if (isCrit) {
-        return baseDamage + baseDamage * ((stats.critDamage || 100) / 100);
+        return baseDamage * (1 + (stats.critDamage || 0) / 100);
     }
     return baseDamage;
 }
@@ -142,11 +147,10 @@ function calculateHealing(baseHealing: number, healModifier: number, stats: Base
     const critRoll = Math.random() * 100;
     const isCrit = critRoll <= (stats.crit || 0);
 
+    let healing = baseHealing;
     if (isCrit) {
-        baseHealing += baseHealing * ((stats.critDamage || 100) / 100);
+        healing = baseHealing * (1 + (stats.critDamage || 0) / 100);
     }
 
-    const healing = baseHealing * healModifier;
-
-    return healing;
+    return healing * healModifier;
 }

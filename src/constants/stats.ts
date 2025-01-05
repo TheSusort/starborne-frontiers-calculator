@@ -29,7 +29,7 @@ export const STATS: Record<
         maxValue: { flat: MAX_FLAT_VALUE, percentage: MAX_PERCENTAGE_VALUE },
     },
     defence: {
-        label: 'Defence',
+        label: 'Defense',
         shortLabel: 'DEF',
         allowedTypes: ['flat', 'percentage'],
         engineeringAllowedTypes: ['percentage'],
