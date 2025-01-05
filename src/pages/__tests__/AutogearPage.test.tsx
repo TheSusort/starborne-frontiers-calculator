@@ -3,7 +3,6 @@ import { AutogearPage } from '../AutogearPage';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { vi } from 'vitest';
-import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 
 // Mock hooks
 const mockShips: Ship[] = [

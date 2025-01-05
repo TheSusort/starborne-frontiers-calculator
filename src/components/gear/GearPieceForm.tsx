@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName, StatType, Stat } from '../../types/stats';
 import {
@@ -30,6 +30,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
     const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
+    const isInitialMount = useRef(true);
+
     useEffect(() => {
         if (editingPiece) {
             setSlot(editingPiece.slot);
@@ -52,35 +54,64 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         return STATS[statName].allowedTypes;
     };
 
-    // Update main stat when slot changes, but preserve values when editing
+    // Separate effect for slot changes
     useEffect(() => {
         if (!editingPiece) {
             const availableStats = getAvailableMainStats(slot);
-            setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
+            if (!availableStats.includes(mainStat.name)) {
+                setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
+            }
         }
     }, [slot, editingPiece]);
 
-    const handleMainStatChange = (
-        changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }
-    ) => {
-        // If stat name changes, keep current type if valid for new stat, otherwise use first allowed type
-        if (changes.name) {
-            const allowedTypes = STATS[changes.name].allowedTypes;
-            changes.type = allowedTypes.includes(mainStat.type) ? mainStat.type : allowedTypes[0];
+    // Separate effect for value calculations
+    useEffect(() => {
+        if (!editingPiece && !isInitialMount.current) {
+            const calculatedValue = calculateMainStatValue(
+                mainStat.name,
+                mainStat.type,
+                stars,
+                level
+            );
+            if (calculatedValue !== mainStat.value) {
+                setMainStat((prev) => ({
+                    ...prev,
+                    value: calculatedValue,
+                }));
+            }
         }
+    }, [stars, level, mainStat.name, mainStat.type, editingPiece]);
 
-        // Validate and cap the value based on STATS configuration
-        if (changes.value !== undefined) {
-            const statConfig = STATS[changes.name || mainStat.name];
-            const type = changes.type || mainStat.type;
-            changes.value = Math.min(changes.value, statConfig.maxValue[type]);
-        }
+    // Add isInitialMount ref to prevent first render calculation
+    useEffect(() => {
+        isInitialMount.current = false;
+    }, []);
 
-        setMainStat({
-            ...mainStat,
-            ...changes,
-        } as Stat);
-    };
+    const handleMainStatChange = useCallback(
+        (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
+            if (changes.name) {
+                const allowedTypes = STATS[changes.name].allowedTypes;
+                changes.type = allowedTypes.includes(mainStat.type)
+                    ? mainStat.type
+                    : allowedTypes[0];
+            }
+
+            if (changes.value !== undefined) {
+                const statConfig = STATS[changes.name || mainStat.name];
+                const type = changes.type || mainStat.type;
+                changes.value = Math.min(changes.value, statConfig.maxValue[type]);
+            }
+
+            setMainStat(
+                (prev) =>
+                    ({
+                        ...prev,
+                        ...changes,
+                    }) as Stat
+            );
+        },
+        [mainStat.type] // Reduced dependencies
+    );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -140,18 +171,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         value: key,
         label: slot.label,
     }));
-
-    useEffect(() => {
-        if (!editingPiece) {
-            const calculatedValue = calculateMainStatValue(
-                mainStat.name,
-                mainStat.type,
-                stars,
-                level
-            );
-            handleMainStatChange({ value: calculatedValue });
-        }
-    }, [stars, level, mainStat.name, mainStat.type, editingPiece]);
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">

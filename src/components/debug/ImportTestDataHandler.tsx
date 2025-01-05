@@ -14,8 +14,6 @@ export const ImportTestDataHandler: React.FC = () => {
     const { saveInventory } = useInventory();
 
     const importTestData = useCallback(async () => {
-        console.log('Importing test data');
-
         saveShips(testData.ships as Ship[]);
         saveInventory(testData.gear as GearPiece[]);
     }, [saveShips, saveInventory]);
@@ -33,8 +31,6 @@ export const ImportTestDataHandler: React.FC = () => {
                 }
 
                 await importTestData();
-
-                console.log('Test data import completed');
                 navigate('/');
             } catch (error) {
                 console.error('Error importing test data:', error);

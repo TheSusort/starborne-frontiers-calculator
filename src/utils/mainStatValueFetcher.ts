@@ -5,7 +5,7 @@ import {
     HACK_SEC_STATS,
     SPD_STATS,
 } from '../constants/mainStatValues';
-import { StatName, StatType } from '../types/stats';
+import { StatName, StatType, FlatOnlyStats } from '../types/stats';
 
 export const calculateMainStatValue = (
     statName: StatName,
@@ -21,7 +21,7 @@ export const calculateMainStatValue = (
         table = FLAT_HP;
     } else if (statName === 'speed') {
         table = SPD_STATS;
-    } else if (['hack', 'sec'].includes(statName)) {
+    } else if (statName === 'hacking' || statName === 'security') {
         table = HACK_SEC_STATS;
     } else {
         table = FLAT_ATK_DEF;

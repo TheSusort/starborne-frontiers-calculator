@@ -36,7 +36,6 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
         });
 
         setMaxLimit('');
-        console.log(existingPriorities);
         setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         setSelectedStat(AVAILABLE_STATS[0]);
     };

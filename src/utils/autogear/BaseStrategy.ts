@@ -56,7 +56,6 @@ export abstract class BaseStrategy implements AutogearStrategy {
     }
 
     protected initializeProgress(total: number) {
-        console.log(`${this.name}: Initializing progress with total ${total}`);
         this.totalOperations = total;
         this.currentOperation = 0;
         this.updateProgress();
