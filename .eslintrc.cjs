@@ -29,7 +29,8 @@ module.exports = {
       argsIgnorePattern: '^_',
       varsIgnorePattern: '^_'
     }],
-    'react/react-in-jsx-scope': 'off'
+    'react/react-in-jsx-scope': 'off',
+    'no-console': ['error', { allow: ['error'] }]
   },
   settings: {
     react: {
