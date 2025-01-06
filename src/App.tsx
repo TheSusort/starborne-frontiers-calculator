@@ -58,7 +58,7 @@ const App: React.FC = () => {
                 <main className="flex">
                     <Sidebar />
                     <div className="flex-1 lg:pl-64 max-w-full bg-dark-lighter">
-                        <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
+                        <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col overflow-x-hidden">
                             <div className="max-w-7xl mx-auto w-full flex-grow">
                                 <Routes>
                                     <Route path="/ships" element={<ShipsPage />} />

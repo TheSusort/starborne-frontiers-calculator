@@ -16,6 +16,7 @@ import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
 import { useNotification } from '../hooks/useNotification';
 import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
+import { GEAR_SLOTS } from '../constants';
 
 export const AutogearPage: React.FC = () => {
     const { getGearPiece, inventory, saveInventory } = useInventory();
@@ -39,6 +40,7 @@ export const AutogearPage: React.FC = () => {
     } | null>(null);
     const [ignoreEquipped, setIgnoreEquipped] = useState(true);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const selectedShip = getShipById(selectedShipId);
 
     const handleAddPriority = (priority: StatPriority) => {
@@ -122,14 +124,40 @@ export const AutogearPage: React.FC = () => {
     const handleEquipSuggestions = () => {
         if (!selectedShip) return;
 
-        // Check if any suggested gear is equipped on other ships
-        const hasEquippedGear = suggestions.some((suggestion) => {
-            const gear = getGearPiece(suggestion.gearId);
-            return gear?.shipId && gear.shipId !== selectedShip.id;
-        });
+        // Create a list of gear movements
+        const gearMovements = suggestions
+            .map((suggestion) => {
+                const gear = getGearPiece(suggestion.gearId);
+                if (gear?.shipId && gear.shipId !== selectedShip.id) {
+                    const previousShip = getShipById(gear.shipId);
+                    if (previousShip) {
+                        return {
+                            fromShip: previousShip.name,
+                            slot: GEAR_SLOTS[suggestion.slotName].label,
+                            toShip: selectedShip.name,
+                        };
+                    }
+                }
+                return null;
+            })
+            .filter((movement): movement is NonNullable<typeof movement> => movement !== null);
 
-        if (hasEquippedGear) {
+        if (gearMovements.length > 0) {
             setShowConfirmModal(true);
+            setModalMessage(
+                <div className="space-y-2 text-gray-200">
+                    <p>The following gear will be moved:</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        {gearMovements.map((movement, index) => (
+                            <li key={index}>
+                                {movement.slot} from{' '}
+                                <span className="font-semibold">{movement.fromShip}</span>
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="mt-4">Do you want to continue?</p>
+                </div>
+            );
         } else {
             applyGearSuggestions();
         }
@@ -257,7 +285,7 @@ export const AutogearPage: React.FC = () => {
                 onClose={() => setShowConfirmModal(false)}
                 onConfirm={applyGearSuggestions}
                 title="Move Gear"
-                message="Some of the suggested gear is currently equipped on other ships. Would you like to move it?"
+                message={modalMessage}
                 confirmLabel="Move"
                 cancelLabel="Cancel"
             />

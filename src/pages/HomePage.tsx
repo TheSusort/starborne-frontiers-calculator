@@ -61,7 +61,7 @@ const HomePage: React.FC = () => {
                         Loadout saving and sharing, for saving gear setups, for individual ships or
                         teams
                     </li>
-                    <li>Encounter notes and tracking, for saving fleet formations</li>
+                    <li>Encounter notes and tracking, for saving and sharing fleet formations</li>
                     <li>Engineering stats, I just wanted to achieve 100% stat coverage</li>
                 </ul>
             </section>
