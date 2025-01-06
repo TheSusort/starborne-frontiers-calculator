@@ -114,28 +114,33 @@ export const StatModifierInput: React.FC<Props> = ({
     return (
         <div className="space-y-4">
             {stats.map((stat, index) => (
-                <div key={index} className="flex gap-4 items-end">
-                    <Select
-                        label="Stat"
-                        value={stat.name}
-                        onChange={(value) => handleStatChange(index, 'name', value as StatName)}
-                        options={statOptions}
-                    />
-                    <Input
-                        type="number"
-                        label="Value"
-                        value={stat.value}
-                        onChange={(e) => handleStatChange(index, 'value', e.target.value)}
-                    />
-                    <Select
-                        label="Type"
-                        value={stat.type}
-                        onChange={(value) => handleStatChange(index, 'type', value as StatType)}
-                        options={
-                            statOptions.find((option) => option.value === stat.name)
-                                ?.allowedTypes || []
-                        }
-                    />
+                <div key={index} className="flex gap-4 items-end w-full">
+                    <div className="grid grid-cols-3 gap-4 items-end w-full">
+                        <Select
+                            label="Stat"
+                            value={stat.name}
+                            onChange={(value) => handleStatChange(index, 'name', value as StatName)}
+                            options={statOptions}
+                            className="w-full"
+                        />
+                        <Input
+                            type="number"
+                            label="Value"
+                            value={stat.value}
+                            onChange={(e) => handleStatChange(index, 'value', e.target.value)}
+                            className="w-full"
+                        />
+                        <Select
+                            label="Type"
+                            value={stat.type}
+                            onChange={(value) => handleStatChange(index, 'type', value as StatType)}
+                            options={
+                                statOptions.find((option) => option.value === stat.name)
+                                    ?.allowedTypes || []
+                            }
+                            className="w-full"
+                        />
+                    </div>
                     <Button
                         aria-label="Remove stat"
                         variant="danger"

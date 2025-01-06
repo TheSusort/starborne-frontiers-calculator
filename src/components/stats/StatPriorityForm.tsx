@@ -54,7 +54,7 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                 />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 grid grid-cols-2 gap-4 items-end">
                 <Input
                     label="Max Limit (Optional)"
                     type="number"
@@ -62,9 +62,6 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
                     onChange={(e) => setMaxLimit(e.target.value)}
                     placeholder="Enter maximum value"
                 />
-            </div>
-
-            <div className="space-y-2">
                 <Input
                     label="Weight"
                     type="number"
