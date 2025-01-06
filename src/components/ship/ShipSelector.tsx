@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../hooks/useShips';
-import { Button, Modal } from '../ui';
+import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from './ShipDisplay';
 
 interface ShipSelectorProps {
@@ -17,7 +17,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
-
+    const [search, setSearch] = useState('');
     return (
         <div className="space-y-4">
             <Button
@@ -35,21 +35,35 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                 isOpen={isShipModalOpen}
                 onClose={() => setIsShipModalOpen(false)}
                 title="Select a Ship"
+                fullHeight
             >
+                <Input
+                    className="mb-4"
+                    placeholder="Search ships"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
                 <div className="grid grid-cols-1 gap-2">
                     {ships.length === 0 && <p>No ships available</p>}
-                    {ships.map((ship) => (
-                        <ShipDisplay
-                            key={ship.id}
-                            ship={ship}
-                            variant="compact"
-                            selected={selected?.id === ship.id}
-                            onClick={() => {
-                                onSelect(ship);
-                                setIsShipModalOpen(false);
-                            }}
-                        />
-                    ))}
+                    {ships
+                        .filter((ship) => ship.name.toLowerCase().includes(search.toLowerCase()))
+                        .sort(
+                            (a, b) =>
+                                Object.keys(a.equipment ?? {}).length -
+                                Object.keys(b.equipment ?? {}).length
+                        )
+                        .map((ship) => (
+                            <ShipDisplay
+                                key={ship.id}
+                                ship={ship}
+                                variant="compact"
+                                selected={selected?.id === ship.id}
+                                onClick={() => {
+                                    onSelect(ship);
+                                    setIsShipModalOpen(false);
+                                }}
+                            />
+                        ))}
                 </div>
             </Modal>
         </div>

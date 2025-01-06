@@ -29,7 +29,7 @@ export const AutogearPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [selectedAlgorithm, setSelectedAlgorithm] = useState<AutogearAlgorithm>(
-        AutogearAlgorithm.BeamSearch
+        AutogearAlgorithm.Genetic
     );
     const [currentSimulation, setCurrentSimulation] = useState<SimulationSummary | null>(null);
     const [suggestedSimulation, setSuggestedSimulation] = useState<SimulationSummary | null>(null);
