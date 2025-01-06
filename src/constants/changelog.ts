@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.14.2';
+export const CURRENT_VERSION = '0.14.3';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.14.3',
+        date: '2025-01-06',
+        changes: [
+            'Autogear algorithm now always include the gear of the selected ship in the calculations',
+        ],
+    },
     {
         version: '0.14.2',
         date: '2025-01-05',

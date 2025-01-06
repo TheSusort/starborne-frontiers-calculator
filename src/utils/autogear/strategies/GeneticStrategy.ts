@@ -45,7 +45,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
-        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+        const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
 
         // Initialize progress tracking (population size * generations)
         const totalOperations = this.POPULATION_SIZE * this.GENERATIONS;

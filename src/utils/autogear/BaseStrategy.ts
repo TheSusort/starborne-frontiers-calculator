@@ -18,13 +18,17 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected currentOperation: number = 0;
     protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
 
-    protected filterInventory(inventory: GearPiece[], ignoreEquipped: boolean): GearPiece[] {
+    protected filterInventory(
+        inventory: GearPiece[],
+        selectedShipId: string,
+        ignoreEquipped: boolean = false
+    ): GearPiece[] {
         if (!ignoreEquipped) {
             return inventory;
         }
 
         // Filter out items that have shipId set (meaning they're equipped)
-        return inventory.filter((item) => !item.shipId);
+        return inventory.filter((item) => !item.shipId || item.shipId === selectedShipId);
     }
 
     abstract findOptimalGear(

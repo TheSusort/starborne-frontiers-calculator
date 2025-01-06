@@ -41,7 +41,7 @@ export class BeamSearchStrategy extends BaseStrategy {
         ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
-        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+        const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
 
         // Calculate total operations:
         // For each slot:

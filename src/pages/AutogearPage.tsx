@@ -58,16 +58,24 @@ export const AutogearPage: React.FC = () => {
         const strategy = getAutogearStrategy(selectedAlgorithm);
         strategy.setProgressCallback(setOptimizationProgress);
 
-        // Filter out gear that's equipped on locked ships
-        const availableInventory = inventory.filter(
-            (gear) =>
-                !ships.some(
-                    (ship) =>
-                        ship.equipmentLocked &&
-                        ship.id !== selectedShip.id &&
-                        Object.values(ship.equipment).includes(gear.id)
-                )
-        );
+        // Filter out gear that's equipped on locked ships, except for gear on the selected ship
+        const availableInventory = inventory.filter((gear) => {
+            // If the gear is equipped on a ship
+            if (gear.shipId) {
+                const equippedShip = ships.find((ship) => ship.id === gear.shipId);
+
+                // Include if:
+                // 1. It's equipped on the selected ship, OR
+                // 2. It's equipped on an unlocked ship
+                return (
+                    gear.shipId === selectedShip.id ||
+                    (equippedShip && !equippedShip.equipmentLocked)
+                );
+            }
+
+            // Include all unequipped gear
+            return true;
+        });
 
         const newSuggestions = await Promise.resolve(
             strategy.findOptimalGear(

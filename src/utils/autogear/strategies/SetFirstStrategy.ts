@@ -40,7 +40,7 @@ export class SetFirstStrategy extends BaseStrategy {
         ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
-        const availableInventory = this.filterInventory(inventory, ignoreEquipped || false);
+        const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
 
         const setGroups = this.groupInventoryBySets(
             availableInventory,
