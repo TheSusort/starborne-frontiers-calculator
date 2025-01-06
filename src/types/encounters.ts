@@ -22,4 +22,5 @@ export interface EncounterNote {
     name: string;
     formation: ShipPosition[];
     createdAt: number;
+    description?: string;
 }

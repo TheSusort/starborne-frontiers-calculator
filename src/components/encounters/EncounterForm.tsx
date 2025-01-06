@@ -3,7 +3,7 @@ import { Position, ShipPosition, EncounterNote } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import { ShipSelector } from '../ship/ShipSelector';
 import FormationGrid from './FormationGrid';
-import { Button, Input } from '../ui';
+import { Button, Input, Textarea } from '../ui';
 
 interface EncounterFormProps {
     onSubmit: (encounter: EncounterNote) => void;
@@ -14,14 +14,17 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
     const [name, setName] = useState('');
     const [formation, setFormation] = useState<ShipPosition[]>([]);
     const [selectedPosition, setSelectedPosition] = useState<Position>();
+    const [description, setDescription] = useState('');
 
     useEffect(() => {
         if (initialEncounter) {
             setName(initialEncounter.name);
             setFormation(initialEncounter.formation);
+            setDescription(initialEncounter.description || '');
         } else {
             setName('');
             setFormation([]);
+            setDescription('');
         }
     }, [initialEncounter]);
 
@@ -32,10 +35,12 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
             name,
             formation,
             createdAt: initialEncounter?.createdAt || Date.now(),
+            description,
         };
         onSubmit(encounterData);
         setName('');
         setFormation([]);
+        setDescription('');
         setSelectedPosition(undefined);
     };
 
@@ -70,6 +75,12 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                         {initialEncounter ? 'Update' : 'Save'} Encounter
                     </Button>
                 </div>
+                <Textarea
+                    label="Description"
+                    id="description"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                />
             </form>
 
             <div className="bg-dark-light space-y-4 max-w-[700px] mx-auto py-6">

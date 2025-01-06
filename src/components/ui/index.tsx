@@ -15,3 +15,4 @@ export * from './CheckboxGroup';
 export * from './Input';
 export * from './ProgressBar';
 export * from './Select';
+export * from './Textarea';

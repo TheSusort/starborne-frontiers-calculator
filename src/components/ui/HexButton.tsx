@@ -17,7 +17,6 @@ export const HexButton: React.FC<HexButtonProps> = ({
         <button
             className={`
                 w-full aspect-[1.15/1] relative
-                before:content-[''] before:block before:pb-[86.6%]
                 transform scale-[1.15]
                 ${className}
             `}
