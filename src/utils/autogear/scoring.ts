@@ -181,14 +181,7 @@ export function calculateTotalScore(
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
     });
 
-    let score = calculatePriorityScore(totalStats, priorities, shipRole, setCount);
-
-    Object.values(setCount).forEach((count, index) => {
-        const setBonus = GEAR_SETS[Object.keys(setCount)[index]];
-        if (count >= (setBonus.minPieces || 2)) {
-            score *= 1.15; // 15% bonus for completed sets
-        }
-    });
+    const score = calculatePriorityScore(totalStats, priorities, shipRole, setCount);
 
     return score;
 }

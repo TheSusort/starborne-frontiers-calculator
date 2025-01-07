@@ -6,7 +6,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '0.15.0',
         date: '2025-01-06',
-        changes: ['Added encounter export as image', 'Added encounter description'],
+        changes: [
+            'Added encounter export as image',
+            'Added encounter description',
+            'further adjustments to autogear algorithm',
+        ],
     },
     {
         version: '0.14.3',

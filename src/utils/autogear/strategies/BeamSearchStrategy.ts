@@ -166,15 +166,7 @@ export class BeamSearchStrategy extends BaseStrategy {
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
         });
 
-        let score = calculatePriorityScore(stats, priorities, shipRole, setCount);
-
-        Object.entries(setCount).forEach(([_, count]) => {
-            if (count >= 2) {
-                score *= 1.15;
-            } else if (count === 1) {
-                score *= 1.05;
-            }
-        });
+        const score = calculatePriorityScore(stats, priorities, shipRole, setCount);
 
         return score;
     }
