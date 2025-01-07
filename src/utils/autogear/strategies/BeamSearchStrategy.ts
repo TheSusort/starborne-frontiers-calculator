@@ -125,7 +125,7 @@ export class BeamSearchStrategy extends BaseStrategy {
                 );
 
                 const score = this.calculateConfigurationScore(
-                    totalStats,
+                    totalStats.final,
                     priorities,
                     newEquipment,
                     getGearPiece,

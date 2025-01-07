@@ -160,7 +160,10 @@ export class SetFirstStrategy extends BaseStrategy {
                             ship.implants,
                             getEngineeringStatsForShipType(ship.type)
                         );
-                        const currentScore = this.calculateStatScore(currentStats, priorities);
+                        const currentScore = this.calculateStatScore(
+                            currentStats.final,
+                            priorities
+                        );
 
                         if (!best || currentScore > best.score) {
                             return { piece: current, score: currentScore };
@@ -225,7 +228,8 @@ export class SetFirstStrategy extends BaseStrategy {
                     getEngineeringStatsForShipType(ship.type)
                 );
 
-                const score = this.calculateStatScore(totalStats, priorities, shipRole) * 1.15;
+                const score =
+                    this.calculateStatScore(totalStats.final, priorities, shipRole) * 1.15;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -271,7 +275,7 @@ export class SetFirstStrategy extends BaseStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculateStatScore(totalStats, priorities, shipRole);
+                    const score = this.calculateStatScore(totalStats.final, priorities, shipRole);
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;

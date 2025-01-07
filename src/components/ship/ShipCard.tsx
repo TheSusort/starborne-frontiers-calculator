@@ -90,7 +90,7 @@ export const ShipCard: React.FC<Props> = ({
     };
 
     return (
-        <div>
+        <>
             <ShipDisplay
                 ship={ship}
                 onEdit={onEdit}
@@ -170,6 +170,6 @@ export const ShipCard: React.FC<Props> = ({
                 confirmLabel="Move"
                 cancelLabel="Cancel"
             />
-        </div>
+        </>
     );
 };

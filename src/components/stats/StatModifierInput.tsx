@@ -87,9 +87,11 @@ export const StatModifierInput: React.FC<Props> = ({
         onChange(newStats);
     };
 
-    // Filter out stats that don't have allowed types and match excluded stats
+    // Filter out stats that don't have allowed types, match excluded stats, or are healModifier
     const statOptions = Object.entries(allowedStats || STATS)
-        .filter(([_, value]) => value.allowedTypes?.length)
+        .filter(
+            ([key, value]) => value.allowedTypes?.length && key !== 'healModifier' // Exclude healModifier
+        )
         .map(([key, value]) => {
             const allowedTypesForStat = value.allowedTypes?.filter(
                 (type) =>

@@ -5,5 +5,6 @@ export * from './CloseIcon';
 export * from './CopyIcon';
 export * from './EditIcon';
 export * from './FilterIcon';
+export * from './InfoIcon';
 export * from './LockIcon';
 export * from './UnlockedLockIcon';

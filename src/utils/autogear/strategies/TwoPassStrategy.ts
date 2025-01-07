@@ -105,7 +105,7 @@ export class TwoPassStrategy extends BaseStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculateStatScore(totalStats, priorities, shipRole);
+                    const score = this.calculateStatScore(totalStats.final, priorities, shipRole);
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;

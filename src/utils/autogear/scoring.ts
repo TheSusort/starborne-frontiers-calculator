@@ -181,7 +181,7 @@ export function calculateTotalScore(
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
     });
 
-    const score = calculatePriorityScore(totalStats, priorities, shipRole, setCount);
+    const score = calculatePriorityScore(totalStats.final, priorities, shipRole, setCount);
 
     return score;
 }

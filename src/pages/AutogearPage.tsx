@@ -96,8 +96,8 @@ export const AutogearPage: React.FC = () => {
         const suggestedStats = calculateSuggestedStats(newSuggestions);
 
         if (currentStats && suggestedStats) {
-            setCurrentSimulation(runSimulation(currentStats, selectedShipRole));
-            setSuggestedSimulation(runSimulation(suggestedStats, selectedShipRole));
+            setCurrentSimulation(runSimulation(currentStats.final, selectedShipRole));
+            setSuggestedSimulation(runSimulation(suggestedStats.final, selectedShipRole));
         }
 
         setSuggestions(newSuggestions);
@@ -270,10 +270,10 @@ export const AutogearPage: React.FC = () => {
 
             {currentStats && suggestedStats && suggestions.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-200">
-                    <StatList stats={currentStats} title="Current Stats" className="p-4" />
+                    <StatList stats={currentStats.final} title="Current Stats" className="p-4" />
                     <StatList
-                        stats={suggestedStats}
-                        comparisonStats={currentStats}
+                        stats={suggestedStats.final}
+                        comparisonStats={currentStats.final}
                         title="Stats with Suggested Gear"
                         className="p-4"
                     />

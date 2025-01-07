@@ -19,6 +19,10 @@ export const StatList: React.FC<StatListProps> = ({
         <div className={`bg-dark rounded space-y-2 ${className}`} data-testid="stat-list">
             {title && <h3 className="text-lg font-semibold text-gray-200">{title}</h3>}
             {Object.entries(stats).map(([statName, value]) => {
+                if (statName === 'healModifier' && value <= 0) {
+                    return null;
+                }
+
                 const comparisonValue = comparisonStats?.[statName as StatName];
                 const difference =
                     comparisonValue !== undefined ? value - comparisonValue : undefined;

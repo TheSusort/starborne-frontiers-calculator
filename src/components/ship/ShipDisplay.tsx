@@ -1,11 +1,13 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon } from '../ui';
+import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon } from '../ui';
 import { calculateTotalStats } from '../../utils/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';
+import { Tooltip } from '../ui/layout/Tooltip';
+import { StatBreakdown } from '../stats/StatBreakdown';
 
 interface Props {
     ship: Ship;
@@ -70,9 +72,11 @@ export const ShipDisplay: React.FC<Props> = memo(
         children,
         onLockEquipment,
     }) => {
+        const [showStatsBreakdown, setShowStatsBreakdown] = useState(false);
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
-        const totalStats = useMemo(
+
+        const statsBreakdown = useMemo(
             () =>
                 calculateTotalStats(
                     ship.baseStats,
@@ -109,7 +113,7 @@ export const ShipDisplay: React.FC<Props> = memo(
 
         return (
             <div
-                className={`flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
+                className={`flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                 onClick={onClick}
@@ -171,8 +175,7 @@ export const ShipDisplay: React.FC<Props> = memo(
 
                 {children}
 
-                <div className="p-4">
-                    {/* Stats */}
+                <div className="px-4 pt-0 pb-6 relative flex-grow">
                     <div className="space-y-1 text-sm">
                         {variant === 'extended' && (
                             <>
@@ -184,7 +187,21 @@ export const ShipDisplay: React.FC<Props> = memo(
                                 )}
                             </>
                         )}
-                        <StatList stats={totalStats} />
+                        <div className="flex items-center justify-between">
+                            <div className="flex-grow">
+                                <StatList stats={statsBreakdown.final} />
+                            </div>
+                            <div
+                                className="cursor-pointer text-gray-400 hover:text-gray-200 absolute bottom-1 right-1"
+                                onMouseEnter={() => setShowStatsBreakdown(true)}
+                                onMouseLeave={() => setShowStatsBreakdown(false)}
+                            >
+                                <InfoIcon />
+                            </div>
+                        </div>
+                        <Tooltip isVisible={showStatsBreakdown}>
+                            <StatBreakdown breakdown={statsBreakdown} />
+                        </Tooltip>
                     </div>
                 </div>
             </div>
