@@ -2,6 +2,7 @@ import React from 'react';
 import { EngineeringStat } from '../../types/stats';
 import { Button, CloseIcon, EditIcon } from '../ui';
 import { SHIP_TYPES, STATS } from '../../constants';
+import { StatDisplay } from '../stats/StatDisplay';
 
 interface EngineeringStatsListProps {
     stats: EngineeringStat[];
@@ -56,24 +57,7 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
                         <div className="p-4 space-y-4 flex-grow">
                             <div className="text-sm text-gray-400 mb-2">Engineering Stats</div>
                             <div className="space-y-2">
-                                {stat.stats.length > 0 ? (
-                                    stat.stats.map((s) => (
-                                        <div
-                                            key={`${s.name}-${s.type}`}
-                                            className="flex justify-between items-center bg-dark-lighter px-3 py-1.5 rounded"
-                                        >
-                                            <span className="text-gray-300">
-                                                {STATS[s.name].label}:
-                                            </span>
-                                            <span className="font-medium text-gray-200">
-                                                +{s.value}
-                                                {s.type === 'percentage' ? '%' : ''}
-                                            </span>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="text-gray-400 text-xs">No stats added</div>
-                                )}
+                                <StatDisplay stats={stat.stats} />
                             </div>
                         </div>
                     </div>

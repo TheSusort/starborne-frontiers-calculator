@@ -70,7 +70,7 @@ describe('ConfirmModal Component', () => {
         render(<ConfirmModal {...defaultProps} />);
 
         const message = screen.getByText('Are you sure you want to proceed?');
-        expect(message).toHaveClass('text-gray-200');
+        expect(message).toHaveClass('');
 
         const buttonContainer = screen.getByRole('button', { name: 'Confirm' }).parentElement;
         expect(buttonContainer).toHaveClass('flex', 'justify-end', 'gap-3');

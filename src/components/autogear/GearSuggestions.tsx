@@ -25,9 +25,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     };
 
     return (
-        <div className="bg-dark-lighter py-4 md:pt-0 rounded">
+        <div className="bg-dark-lighter py-4 md:pt-0">
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold text-gray-200">Suggested Gear</h3>
+                <h3 className="text-xl font-semibold ">Suggested Gear</h3>
             </div>
             <div className="grid grid-cols-3 gap-2 bg-dark p-4">
                 {GEAR_SLOT_ORDER.map((slotName) => {

@@ -1,13 +1,13 @@
 import { render, screen, fireEvent } from '../../../../test-utils/test-utils';
 import { Sidebar } from '../Sidebar';
 import { vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter } from 'react-router-dom';
 import { APP_NAME } from '../../../../constants/config';
 import { CURRENT_VERSION } from '../../../../constants/changelog';
 
 // Mock the router hooks
-vi.mock('react-router', async () => {
-    const actual = await vi.importActual('react-router');
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom');
     return {
         ...actual,
         useLocation: () => ({

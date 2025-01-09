@@ -1,5 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate } from 'react-router-dom';
 import { useShips } from '../../hooks/useShips';
 import { useInventory } from '../../hooks/useInventory';
 import { GearPiece } from '../../types/gear';

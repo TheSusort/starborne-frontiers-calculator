@@ -145,7 +145,7 @@ export const AutogearPage: React.FC = () => {
         if (gearMovements.length > 0) {
             setShowConfirmModal(true);
             setModalMessage(
-                <div className="space-y-2 text-gray-200">
+                <div className="space-y-2 ">
                     <p>The following gear will be moved:</p>
                     <ul className="list-disc pl-4 space-y-1">
                         {gearMovements.map((movement, index) => (
@@ -251,7 +251,7 @@ export const AutogearPage: React.FC = () => {
 
                 {/* Show progress bar for any strategy when optimizing */}
                 {optimizationProgress && (
-                    <div className="col-span-2 p-4 bg-dark rounded">
+                    <div className="col-span-2 p-4 bg-dark">
                         <ProgressBar
                             current={optimizationProgress.current}
                             total={optimizationProgress.total}
@@ -269,7 +269,7 @@ export const AutogearPage: React.FC = () => {
             )}
 
             {currentStats && suggestedStats && suggestions.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
                     <StatList stats={currentStats.final} title="Current Stats" className="p-4" />
                     <StatList
                         stats={suggestedStats.final}

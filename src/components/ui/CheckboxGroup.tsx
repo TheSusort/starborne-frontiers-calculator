@@ -27,7 +27,7 @@ export const CheckboxGroup: React.FC<Props> = ({
 
     return (
         <div className={className}>
-            <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+            <label className="block text-sm font-medium  mb-2">{label}</label>
             <div className="space-y-2">
                 {options.map((option) => (
                     <Checkbox

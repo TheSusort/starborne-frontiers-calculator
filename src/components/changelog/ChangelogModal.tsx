@@ -34,11 +34,11 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                 {entries.map((entry) => (
                     <div key={entry.version}>
                         {compareVersions(entry.version, lastSeenVersion) && (
-                            <div className={`mb-6 text-gray-200`}>
+                            <div className={`mb-6 `}>
                                 <h3 className="font-bold mb-2">
                                     Version {entry.version} - {entry.date}
                                     {compareVersions(entry.version, lastSeenVersion) && (
-                                        <span className="ml-2 text-xs bg-blue-500 text-gray-200 px-2 py-1 rounded">
+                                        <span className="ml-2 text-xs bg-blue-500  px-2 py-1">
                                             New
                                         </span>
                                     )}

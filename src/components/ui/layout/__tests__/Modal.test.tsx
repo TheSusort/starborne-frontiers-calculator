@@ -93,7 +93,7 @@ describe('Modal Component', () => {
         // Header section
         const header = screen.getByRole('heading', { level: 3 });
         expect(header).toHaveTextContent('Test Modal');
-        expect(header).toHaveClass('text-xl', 'font-semibold', 'text-gray-200');
+        expect(header).toHaveClass('text-xl', 'font-semibold', '');
 
         // Content section
         const content = screen.getByText('Modal content');

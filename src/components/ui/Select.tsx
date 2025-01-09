@@ -87,11 +87,7 @@ export const Select: React.FC<Props> = ({
     return (
         <div className="space-y-1 grow" ref={containerRef}>
             {label && (
-                <label
-                    htmlFor={selectId}
-                    aria-label={label}
-                    className="block text-sm font-medium text-gray-200"
-                >
+                <label htmlFor={selectId} aria-label={label} className="block text-sm font-medium ">
                     {label}
                 </label>
             )}
@@ -110,7 +106,7 @@ export const Select: React.FC<Props> = ({
                         w-full px-4 py-2
                         bg-dark-lighter border border-dark-border
                         focus:outline-none focus:ring-2 focus:ring-primary
-                        text-gray-200 h-10
+                         h-10
                         flex items-center justify-between
                         transition-colors duration-150
                         ${error ? 'border-red-500' : 'focus:border-primary'}
@@ -130,7 +126,7 @@ export const Select: React.FC<Props> = ({
                     className={`
                         absolute z-10 w-full
                         bg-dark-lighter border border-dark-border
-                        rounded-md shadow-lg
+                        shadow-lg
                         max-h-60 overflow-auto
                         transition-all duration-200 origin-top
                         ${
@@ -155,7 +151,7 @@ export const Select: React.FC<Props> = ({
                                 ${
                                     value === ''
                                         ? 'bg-primary text-dark'
-                                        : 'text-gray-200 hover:bg-primary hover:text-dark'
+                                        : ' hover:bg-primary hover:text-dark'
                                 }
                             `}
                         >
@@ -177,7 +173,7 @@ export const Select: React.FC<Props> = ({
                                 ${
                                     option.value === value
                                         ? 'bg-primary text-dark'
-                                        : 'text-gray-200 hover:bg-primary hover:text-dark'
+                                        : ' hover:bg-primary hover:text-dark'
                                 }
                             `}
                         >

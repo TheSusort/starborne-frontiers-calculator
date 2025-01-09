@@ -98,7 +98,7 @@ export const Offcanvas: React.FC<Props> = ({
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-semibold text-gray-200">{title}</h3>
+                    <h3 className="text-xl font-semibold ">{title}</h3>
                     {!hideCloseButton && (
                         <Button aria-label="Close offcanvas" variant="secondary" onClick={onClose}>
                             <CloseIcon />

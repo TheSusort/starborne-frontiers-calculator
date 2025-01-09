@@ -31,9 +31,9 @@ export const JokeCorner: React.FC = () => {
                 </button>
                 <Tooltip
                     isVisible={isVisible}
-                    className="w-72 bg-dark border border-dark-border rounded-lg p-4 shadow-lg"
+                    className="w-72 bg-dark border border-dark-border p-4 shadow-lg"
                 >
-                    <p className="text-gray-200">{currentJoke}</p>
+                    <p className="">{currentJoke}</p>
                 </Tooltip>
             </div>
         </div>

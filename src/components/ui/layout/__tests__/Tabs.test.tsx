@@ -57,7 +57,7 @@ describe('Tabs Component', () => {
         render(<Tabs {...defaultProps} />);
 
         const inactiveTab = screen.getByRole('button', { name: 'Second Tab' });
-        expect(inactiveTab).toHaveClass('hover:text-gray-300', 'hover:border-gray-300');
+        expect(inactiveTab).toHaveClass('hover:', 'hover:border-gray-300');
     });
 
     test('applies consistent base styles to all tabs', () => {

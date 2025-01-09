@@ -70,7 +70,7 @@ describe('PageLayout Component', () => {
 
         // Check header section
         const header = screen.getByRole('heading', { level: 1 });
-        expect(header).toHaveClass('text-2xl', 'font-bold', 'text-gray-200');
+        expect(header).toHaveClass('text-2xl', 'font-bold', '');
 
         // Check description styling
         const description = screen.getByText('Test description');

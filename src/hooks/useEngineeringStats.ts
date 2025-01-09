@@ -48,6 +48,10 @@ export const useEngineeringStats = () => {
     };
 
     const getEngineeringStatsForShipType = (shipType: ShipTypeName) => {
+        // if SUPPORTER_BUFFER, use SUPPORTER stats
+        if (shipType === 'SUPPORTER_BUFFER') {
+            return engineeringStats.stats.find((stat) => stat.shipType === 'SUPPORTER');
+        }
         return engineeringStats.stats.find((stat) => stat.shipType === shipType);
     };
 

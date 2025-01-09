@@ -7,7 +7,7 @@ import { ShipDisplay } from './ShipDisplay';
 interface ShipSelectorProps {
     selected: Ship | null;
     onSelect: (ship: Ship) => void;
-    variant?: 'compact' | 'full';
+    variant?: 'compact' | 'full' | 'extended';
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({

@@ -33,7 +33,7 @@ export const ShipsPage: React.FC = () => {
     if (loading) {
         return (
             <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl text-gray-200">Loading ships...</div>
+                <div className="animate-pulse text-xl ">Loading ships...</div>
             </div>
         );
     }

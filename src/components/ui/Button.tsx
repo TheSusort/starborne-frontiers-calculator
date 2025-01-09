@@ -18,9 +18,9 @@ export const Button: React.FC<Props> = ({
     const variants = {
         primary:
             'text-dark bg-gradient-to-r from-primary to-primary-hover hover:bg-gradient-to-r hover:from-primary-hover hover:to-primary',
-        secondary: 'bg-dark border border-gray-600 text-gray-200 hover:bg-dark-border',
-        danger: 'bg-gradient-to-r from-red-600 to-red-500 text-gray-200 hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500',
-        link: 'text-gray-200 hover:text-white !p-0 bg-dark',
+        secondary: 'bg-dark border border-gray-600  hover:bg-dark-border',
+        danger: 'bg-gradient-to-r from-red-600 to-red-500  hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500',
+        link: ' hover:text-white !p-0 bg-dark',
     };
 
     const sizes = {

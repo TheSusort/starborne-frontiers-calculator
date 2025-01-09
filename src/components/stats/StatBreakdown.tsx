@@ -46,17 +46,18 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
     const implantDiff = calculateDiff(breakdown.final, breakdown.afterSets);
 
     return (
-        <div className="bg-dark-lighter p-4 border border-gray-600 shadow-lg">
-            <table className="w-full text-sm table-auto text-gray-300">
+        <div className="pb-4">
+            <table className="w-full text-xs table-auto">
                 <thead>
-                    <tr className="border-b border-gray-600">
-                        <th className="font-bold p-1">Stat</th>
+                    <tr className="border-b border-gray-600 text-left">
+                        <th className="font-bold p-1 border-r border-gray-600">Stat</th>
                         <th className="font-bold p-1">Base</th>
                         <th className="font-bold p-1">Refits</th>
-                        <th className="font-bold p-1">Eng.</th>
+                        <th className="font-bold p-1 border-r border-gray-600">Eng.</th>
                         <th className="font-bold p-1">Gear</th>
                         <th className="font-bold p-1">Sets</th>
                         <th className="font-bold p-1">Impl.</th>
+                        <th className="font-bold p-1 border-l border-gray-600">Final</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -67,6 +68,7 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                         const gearValue = gearDiff[statName];
                         const setsValue = setsDiff[statName];
                         const implantValue = implantDiff[statName];
+                        const finalValue = breakdown.final[statName];
 
                         if (
                             !baseValue &&
@@ -74,19 +76,27 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                             !engineeringValue &&
                             !gearValue &&
                             !setsValue &&
-                            !implantValue
+                            !implantValue &&
+                            !finalValue
                         ) {
                             return null;
                         }
 
                         return (
-                            <tr key={statName} className="text-gray-300 border-b border-gray-600">
-                                <td className="p-1">{STATS[statName].shortLabel}</td>
-                                <td className="p-1">{baseValue || '-'}</td>
+                            <tr
+                                key={statName}
+                                className={` ${statName !== 'speed' ? 'border-b border-gray-600' : ''}`}
+                            >
+                                <td className="p-1 border-r border-gray-600">
+                                    {STATS[statName].shortLabel}
+                                </td>
+                                <td className="p-1 text-gray-400">{baseValue || '-'}</td>
                                 <td className={`p-1 ${refitValue ? 'text-yellow-400' : ''}`}>
                                     {refitValue ? formatValue(refitValue) : '-'}
                                 </td>
-                                <td className={`p-1 ${engineeringValue ? 'text-blue-400' : ''}`}>
+                                <td
+                                    className={`p-1 border-r border-gray-600 ${engineeringValue ? 'text-blue-400' : ''}`}
+                                >
                                     {engineeringValue ? formatValue(engineeringValue) : '-'}
                                 </td>
                                 <td className={`p-1 ${gearValue ? 'text-green-400' : ''}`}>
@@ -97,6 +107,9 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                                 </td>
                                 <td className={`p-1 ${implantValue ? 'text-purple-400' : ''}`}>
                                     {implantValue ? formatValue(implantValue) : '-'}
+                                </td>
+                                <td className={`p-1 border-l border-gray-600`}>
+                                    {finalValue ? finalValue : '-'}
                                 </td>
                             </tr>
                         );

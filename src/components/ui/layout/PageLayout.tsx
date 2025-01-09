@@ -17,7 +17,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({ title, description, chil
         <div className="space-y-8">
             <div>
                 <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-gray-200">{title}</h1>
+                    <h1 className="text-2xl font-bold ">{title}</h1>
                     {action && (
                         <Button
                             aria-label={action.label}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router-dom';
 import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
 
@@ -23,7 +23,7 @@ export const Sidebar: React.FC = () => {
     const SidebarContent = () => (
         <div className="space-y-2">
             <span className="text-xs text-gray-400 hidden lg:block">{CURRENT_VERSION}</span>
-            <h1 className="text-gray-200 text-xl font-bold mb-8 hidden lg:block">{APP_NAME}</h1>
+            <h1 className=" text-xl font-bold mb-8 hidden lg:block">{APP_NAME}</h1>
 
             <nav className="space-y-2">
                 {navigationLinks.map(({ path, label }) => (
@@ -37,8 +37,8 @@ export const Sidebar: React.FC = () => {
                             transform hover:scale-105
                             ${
                                 isActive(path)
-                                    ? 'bg-primary hover:bg-primary-hover'
-                                    : 'text-gray-300 hover:bg-dark-border'
+                                    ? 'bg-primary hover:bg-primary-hover text-dark'
+                                    : ' hover:bg-dark-border'
                             }
                         `}
                     >
@@ -60,7 +60,7 @@ export const Sidebar: React.FC = () => {
                     <button
                         aria-label="Open mobile menu"
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        className="text-gray-300 hover:text-white focus:outline-none focus:text-white transition-colors duration-200"
+                        className=" hover:text-white focus:outline-none focus:text-white transition-colors duration-200"
                     >
                         <svg
                             className="h-6 w-6"

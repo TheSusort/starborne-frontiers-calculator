@@ -38,11 +38,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 }) => {
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold text-gray-200">Settings</h3>
+            <h3 className="text-xl font-bold ">Settings</h3>
             <ShipSelector onSelect={onShipSelect} selected={selectedShip} />
 
             <div className="p-4 bg-dark space-y-2">
-                <span className="text-gray-300 text-sm">Predefined Strategies (Experimental)</span>
+                <span className=" text-sm">Predefined Strategies (Experimental)</span>
                 <Select
                     data-testid="role-select"
                     options={Object.values(SHIP_TYPES).map((type) => ({
@@ -61,7 +61,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             )}
 
             {priorities.length > 0 && (
-                <div className="bg-dark p-4 rounded space-y-2 text-gray-200">
+                <div className="bg-dark p-4 space-y-2 ">
                     <h3 className="text-lg font-semibold">Priority List</h3>
                     {priorities.map((priority, index) => (
                         <div key={index} className="flex items-center">
@@ -85,7 +85,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             )}
 
             <div className="space-y-2 p-4 bg-dark">
-                <span className="text-gray-300 text-sm">Algorithm</span>
+                <span className=" text-sm">Algorithm</span>
                 <Select
                     data-testid="algorithm-select"
                     options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({

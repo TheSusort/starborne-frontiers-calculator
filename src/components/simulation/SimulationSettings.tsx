@@ -21,8 +21,8 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
 }) => {
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold text-gray-200">Settings</h3>
-            <ShipSelector onSelect={onShipSelect} selected={selectedShip} variant="full" />
+            <h3 className="text-xl font-bold ">Settings</h3>
+            <ShipSelector onSelect={onShipSelect} selected={selectedShip} variant="compact" />
 
             <div className="p-4 bg-dark space-y-2">
                 <Select

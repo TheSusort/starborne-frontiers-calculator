@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.15.1';
+export const CURRENT_VERSION = '0.16.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.16.0',
+        date: '2025-01-09',
+        changes: [
+            'Added backup and restore feature',
+            'Added ship details page with stat breakdown, refits and implants and gear slot analysis',
+            'Updated ship data with more accurate stats, and more ships',
+        ],
+    },
     {
         version: '0.15.1',
         date: '2025-01-07',

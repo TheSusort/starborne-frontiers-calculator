@@ -17,10 +17,7 @@ export const Input: React.FC<Props> = ({
     return (
         <div className="space-y-1 grow">
             {label && (
-                <label
-                    className={`block text-sm font-medium text-gray-200 ${labelClassName}`}
-                    htmlFor={id}
-                >
+                <label className={`block text-sm font-medium  ${labelClassName}`} htmlFor={id}>
                     {label}
                 </label>
             )}
@@ -28,7 +25,7 @@ export const Input: React.FC<Props> = ({
                 className={`
                     w-full px-1 md:px-4 py-2 bg-dark-lighter border border-dark-border
                      focus:outline-none focus:ring-2 focus:ring-primary
-                    text-gray-200 placeholder-gray-500 h-10
+                     placeholder-gray-500 h-10
                     ${error ? 'border-red-500' : 'focus:border-primary'}
                     ${className}
                 `}

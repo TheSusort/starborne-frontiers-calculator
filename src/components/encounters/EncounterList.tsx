@@ -88,7 +88,9 @@ const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDel
                     ))}
                 </div>
             ) : (
-                <div className="text-center text-white">No encounters found</div>
+                <div className="text-center py-8 text-gray-400 bg-dark-lighter  border-2 border-dashed">
+                    No encounters found
+                </div>
             )}
         </div>
     );

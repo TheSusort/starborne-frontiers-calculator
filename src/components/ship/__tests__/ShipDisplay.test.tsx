@@ -121,7 +121,7 @@ describe('ShipDisplay', () => {
 
         const stars = screen.getAllByText('★');
         const activeStars = stars.filter((star) => star.className.includes('text-yellow-400'));
-        const inactiveStars = stars.filter((star) => star.className.includes('text-gray-300'));
+        const inactiveStars = stars.filter((star) => star.className.includes(''));
 
         expect(activeStars).toHaveLength(2); // Two refits
         expect(inactiveStars).toHaveLength(4); // Remaining slots

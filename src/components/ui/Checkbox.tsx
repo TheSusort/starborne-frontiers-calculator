@@ -42,7 +42,6 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                     className={`
                         w-4 h-4
                         flex items-center justify-center
-                        rounded
                         border
                         transition-all duration-200
                         ${checked ? 'bg-primary border-primary' : 'border-gray-600 bg-dark'}
@@ -51,7 +50,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                     `}
                 >
                     <div
-                        className={`
+                        className={`text-dark
                         transition-all duration-200
                         ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     `}
@@ -59,7 +58,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                         {checked && <CheckIcon />}
                     </div>
                 </div>
-                <span className="text-gray-200 select-none">{label}</span>
+                <span className=" select-none">{label}</span>
             </label>
         </div>
     );

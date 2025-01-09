@@ -288,7 +288,7 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
 
     return (
         <div
-            className={`grid grid-cols-1 ${suggestedSimulation ? 'md:grid-cols-2' : ''} gap-4 mt-4 text-gray-200`}
+            className={`grid grid-cols-1 ${suggestedSimulation ? 'md:grid-cols-2' : ''} gap-4 mt-4 `}
         >
             <div>
                 <div className="bg-dark p-4 space-y-2">

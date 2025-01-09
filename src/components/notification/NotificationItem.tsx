@@ -8,7 +8,7 @@ interface NotificationItemProps {
 }
 
 export const NotificationItem: React.FC<NotificationItemProps> = ({ notification, onClose }) => {
-    const baseClasses = 'flex items-center p-4 rounded-lg shadow-lg mb-2 text-white';
+    const baseClasses = 'flex items-center p-4  shadow-lg mb-2 text-white';
     const typeClasses = {
         success: 'bg-green-500',
         error: 'bg-red-500',
@@ -22,7 +22,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({ notification
             <button
                 onClick={() => onClose(notification.id)}
                 aria-label="Close notification"
-                className="ml-4 text-white hover:text-gray-200"
+                className="ml-4 text-white hover:"
             >
                 <CloseIcon />
             </button>

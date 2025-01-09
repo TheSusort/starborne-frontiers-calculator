@@ -22,11 +22,15 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     const { getAllAllowedStats, engineeringStats } = useEngineeringStats();
 
     // Filter out ship types that already have stats
-    const availableShipTypes = Object.entries(SHIP_TYPES).filter(
-        ([key]) =>
+    const availableShipTypes = Object.entries(SHIP_TYPES).filter(([key]) => {
+        // Supporter(Buffer) is a subtype of Supporter, so we don't want to show it
+        if (key === 'SUPPORTER_BUFFER') return false;
+
+        return (
             initialStats?.shipType === key || // Include current ship type if editing
             !engineeringStats.stats.some((stat) => stat.shipType === key)
-    );
+        );
+    });
 
     const shipTypeOptions = availableShipTypes.map(([key, type]) => ({
         value: key,

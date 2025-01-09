@@ -52,7 +52,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 isSelected={selectedPosition === pos}
                             >
                                 <div className="flex flex-col items-center">
-                                    <span className="text-xs text-gray-300">{pos}</span>
+                                    <span className="text-xs ">{pos}</span>
                                     {ship && (
                                         <span className="text-white text-xs mt-1 px-1 truncate max-w-full">
                                             {ship.name}

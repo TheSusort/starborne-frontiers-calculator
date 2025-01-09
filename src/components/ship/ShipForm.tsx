@@ -97,7 +97,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         try {
             const data = await fetchShipData(name);
             if (!data) {
-                setError('Could not find ship data. Please check the ship name and try again.');
+                setError(
+                    "Could not find ship data. If it's a newer ship, I may not have it in the database yet."
+                );
                 return;
             }
 
@@ -107,9 +109,14 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setRarity(data.rarity as RarityName);
             addNotification('success', 'Ship data fetched successfully');
         } catch (err) {
-            setError('Failed to fetch ship data. Please try again later.');
+            setError(
+                "Failed to fetch ship data. If it's a newer ship, I may not have it in the database yet."
+            );
             console.error('Error fetching ship data:', err);
-            addNotification('error', 'Failed to fetch ship data. Please try again later.');
+            addNotification(
+                'error',
+                "Failed to fetch ship data. If it's a newer ship, I may not have it in the database yet."
+            );
         } finally {
             setIsLoading(false);
         }
@@ -144,9 +151,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
-            <h2 className="text-2xl font-bold text-gray-200">
-                {editingShip ? 'Edit Ship' : 'Create New Ship'}
-            </h2>
+            <h2 className="text-2xl font-bold ">{editingShip ? 'Edit Ship' : 'Create New Ship'}</h2>
 
             {/* Ship Name with Fetch button */}
             <div className="space-y-2">
@@ -230,7 +235,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
             {/* Base Stats */}
             <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-200">Base Stats</h3>
+                <h3 className="text-lg font-medium ">Base Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(baseStats).map(
                         ([stat, value]) =>
@@ -255,7 +260,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
             {/* Refits Section */}
             <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-200">Refits</h3>
+                <h3 className="text-lg font-medium ">Refits</h3>
                 {refits?.map((refit, index) => (
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">
@@ -292,7 +297,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
             {/* Implants Section */}
             <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-200">Implants</h3>
+                <h3 className="text-lg font-medium ">Implants</h3>
                 {implants?.map((implant, index) => (
                     <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
                         <div className="absolute top-2 right-4">

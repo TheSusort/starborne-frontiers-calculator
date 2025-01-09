@@ -251,7 +251,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
             {/* Sub Stats Section */}
             <div className="space-y-4">
-                <h4 className="text-sm font-medium text-gray-200">Sub Stats</h4>
+                <h4 className="text-sm font-medium ">Sub Stats</h4>
                 <StatModifierInput
                     stats={subStats}
                     onChange={setSubStats}

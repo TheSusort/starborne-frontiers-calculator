@@ -17,12 +17,13 @@ interface Props {
     hoveredGear: GearPiece | null;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
-    onEdit: (ship: Ship) => void;
-    onRemove: (id: string) => void;
-    onLockEquipment: (ship: Ship) => Promise<void>;
+    onHoverGear: (gear: GearPiece | null) => void;
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
-    onHoverGear: (gear: GearPiece | null) => void;
+    onEdit?: (ship: Ship) => void;
+    onRemove?: (id: string) => void;
+    onLockEquipment?: (ship: Ship) => Promise<void>;
+    variant?: 'full' | 'compact' | 'extended';
 }
 
 export const ShipCard: React.FC<Props> = ({
@@ -37,6 +38,7 @@ export const ShipCard: React.FC<Props> = ({
     onEquipGear,
     onRemoveGear,
     onHoverGear,
+    variant = 'full',
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -96,7 +98,7 @@ export const ShipCard: React.FC<Props> = ({
                 onEdit={onEdit}
                 onRemove={onRemove}
                 onLockEquipment={onLockEquipment}
-                variant="extended"
+                variant={variant}
             >
                 <div className="p-4 bg-dark">
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">

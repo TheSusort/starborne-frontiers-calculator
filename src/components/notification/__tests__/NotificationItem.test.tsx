@@ -53,7 +53,7 @@ describe('NotificationItem', () => {
             'flex',
             'items-center',
             'p-4',
-            'rounded-lg',
+            '',
             'shadow-lg',
             'mb-2',
             'text-white'
@@ -64,6 +64,6 @@ describe('NotificationItem', () => {
         render(<NotificationItem {...defaultProps} />);
 
         const closeButton = screen.getByRole('button', { name: /close notification/i });
-        expect(closeButton).toHaveClass('ml-4', 'text-white', 'hover:text-gray-200');
+        expect(closeButton).toHaveClass('ml-4', 'text-white', 'hover:');
     });
 });

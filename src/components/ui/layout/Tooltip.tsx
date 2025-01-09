@@ -6,7 +6,7 @@ interface Props {
     className?: string;
 }
 
-export const Tooltip: React.FC<Props> = ({ isVisible, children, className }) => {
+export const Tooltip: React.FC<Props> = ({ isVisible, children, className = '' }) => {
     const [coords, setCoords] = useState({ left: 0, top: 0 });
     const tooltipRef = useRef<HTMLDivElement>(null);
 

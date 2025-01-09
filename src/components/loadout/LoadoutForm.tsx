@@ -59,7 +59,7 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
             </div>
 
             <div>
-                <label className="block text-sm font-medium text-gray-200">Select Ship</label>
+                <label className="block text-sm font-medium ">Select Ship</label>
                 <ShipSelector onSelect={setSelectedShip} selected={selectedShip} />
             </div>
 

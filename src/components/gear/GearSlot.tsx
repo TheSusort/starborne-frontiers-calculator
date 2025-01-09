@@ -33,7 +33,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                             />
                         </div>
                         {/* main stat and stars */}
-                        <div className="text-xs text-gray-200 font-bold">
+                        <div className="text-xs  font-bold">
                             {STATS[gear.mainStat.name].shortLabel}
                             {gear.mainStat.type === 'percentage' ? '%' : ''}
                         </div>

@@ -4,6 +4,7 @@ import { StatName } from '../../types/stats';
 import { GEAR_SETS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../hooks/useShips';
+import { StatDisplay } from '../stats/StatDisplay';
 
 interface Props {
     gear: GearPiece;
@@ -87,9 +88,9 @@ export const GearPieceDisplay: React.FC<Props> = ({
             {showDetails && (
                 <div className="p-4 pb-2 space-y-4 flex-grow">
                     {/* Main Stat */}
-                    <div className="bg-dark-lighter p-3 rounded-md">
+                    <div className="bg-dark-lighter p-3">
                         <div className="text-sm text-gray-400 mb-1">Main Stat</div>
-                        <div className="font-medium capitalize text-gray-200">
+                        <div className="font-medium capitalize ">
                             {STATS[gear.mainStat.name as StatName].label}: {gear.mainStat.value}
                             {gear.mainStat.type === 'percentage' ? '%' : ''}
                         </div>
@@ -99,22 +100,7 @@ export const GearPieceDisplay: React.FC<Props> = ({
                     {gear.subStats.length > 0 && (
                         <div>
                             <div className="text-sm text-gray-400 mb-2">Sub Stats</div>
-                            <ul className="space-y-2">
-                                {gear.subStats.map((stat, index) => (
-                                    <li
-                                        key={index}
-                                        className="flex justify-between items-center bg-dark-lighter px-3 py-1.5 rounded"
-                                    >
-                                        <span className="text-gray-300">
-                                            {STATS[stat.name as StatName].label}
-                                        </span>
-                                        <span className="font-medium text-gray-200">
-                                            {stat.value}
-                                            {stat.type === 'percentage' ? '%' : ''}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
+                            <StatDisplay stats={gear.subStats} />
                         </div>
                     )}
                     {ship && (

@@ -65,7 +65,7 @@ export const Modal: React.FC<Props> = ({
                     >
                         {/* Header */}
                         <div className="px-6 py-4 border-b border-gray-600 flex justify-between items-center">
-                            <h3 className="text-xl font-semibold text-gray-200">{title}</h3>
+                            <h3 className="text-xl font-semibold ">{title}</h3>
                             <Button aria-label="Close modal" variant="secondary" onClick={onClose}>
                                 <CloseIcon />
                             </Button>

@@ -16,8 +16,8 @@ export const StatList: React.FC<StatListProps> = ({
     className = '',
 }) => {
     return (
-        <div className={`bg-dark rounded space-y-2 ${className}`} data-testid="stat-list">
-            {title && <h3 className="text-lg font-semibold text-gray-200">{title}</h3>}
+        <div className={`bg-dark space-y-2 ${className}`} data-testid="stat-list">
+            {title && <h3 className="text-lg font-semibold">{title}</h3>}
             {Object.entries(stats).map(([statName, value]) => {
                 if (statName === 'healModifier' && value <= 0) {
                     return null;
@@ -29,11 +29,9 @@ export const StatList: React.FC<StatListProps> = ({
 
                 return (
                     <div key={statName} className="flex justify-between items-center">
-                        <span className="text-gray-300 capitalize">
-                            {STATS[statName as StatName].label}
-                        </span>
+                        <span className="capitalize">{STATS[statName as StatName].label}</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-gray-300">
+                            <span>
                                 {Math.round(value)}
                                 {PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)
                                     ? '%'

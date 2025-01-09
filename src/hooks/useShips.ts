@@ -163,33 +163,34 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const validateGearAssignments = useCallback(() => {
         if (!getGearPiece) return;
 
-        setShips((prev) =>
-            prev.map((ship) => {
-                const newEquipment = { ...ship.equipment };
-                let hasChanges = false;
+        const newShips = ships.map((ship) => {
+            const newEquipment = { ...ship.equipment };
+            let hasChanges = false;
 
-                // Remove any gear IDs that don't belong to this ship
-                Object.entries(newEquipment).forEach(([slot, gearId]) => {
-                    if (gearId) {
-                        const gear = getGearPiece(gearId);
-                        if (!gear || (gear.shipId && gear.shipId !== ship.id)) {
-                            delete newEquipment[slot];
-                            hasChanges = true;
-                        }
+            Object.entries(newEquipment).forEach(([slot, gearId]) => {
+                if (gearId) {
+                    const gear = getGearPiece(gearId);
+                    if (!gear || (gear.shipId && gear.shipId !== ship.id)) {
+                        delete newEquipment[slot];
+                        hasChanges = true;
                     }
-                });
+                }
+            });
 
-                return hasChanges ? { ...ship, equipment: newEquipment } : ship;
-            })
-        );
-    }, [getGearPiece]);
+            return hasChanges ? { ...ship, equipment: newEquipment } : ship;
+        });
+
+        if (JSON.stringify(newShips) !== JSON.stringify(ships)) {
+            setShips(newShips);
+        }
+    }, [ships, getGearPiece]);
 
     // Run validation when ships change or getGearPiece is provided
     useEffect(() => {
-        if (getGearPiece && !loading) {
+        if (getGearPiece && !loading && initialized) {
             validateGearAssignments();
         }
-    }, [getGearPiece, loading, validateGearAssignments]);
+    }, [getGearPiece, loading, initialized, validateGearAssignments]);
 
     return {
         ships,

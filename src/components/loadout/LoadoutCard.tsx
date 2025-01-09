@@ -88,9 +88,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
         <>
             {name && (
                 <div className="flex justify-between items-center mb-4">
-                    <div>
-                        {name && <h3 className="text-lg font-medium text-gray-200">{name}</h3>}
-                    </div>
+                    <div>{name && <h3 className="text-lg font-medium ">{name}</h3>}</div>
                 </div>
             )}
 
