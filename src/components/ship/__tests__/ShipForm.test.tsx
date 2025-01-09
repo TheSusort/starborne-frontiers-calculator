@@ -101,6 +101,7 @@ describe('ShipForm', () => {
             faction: 'TERRAN_COMBINE',
             type: 'ATTACKER',
             rarity: 'legendary',
+            affinity: 'CHEMICAL',
         });
 
         render(<ShipForm {...defaultProps} />);

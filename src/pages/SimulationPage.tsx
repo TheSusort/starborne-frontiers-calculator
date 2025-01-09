@@ -32,7 +32,7 @@ export const SimulationPage: React.FC = () => {
             getEngineeringStatsForShipType(ship.type)
         );
 
-        const simulationResults = runSimulation(stats, selectedRole);
+        const simulationResults = runSimulation(stats.final, selectedRole);
         setSimulation(simulationResults);
     };
 
