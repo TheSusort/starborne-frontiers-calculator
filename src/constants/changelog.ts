@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.16.0';
+export const CURRENT_VERSION = '0.16.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.16.1',
+        date: '2025-01-09',
+        changes: [
+            'Adjusted effective hp calculation to be much more accurate, thanks to Engwaraato for the new formula',
+        ],
+    },
     {
         version: '0.16.0',
         date: '2025-01-09',
