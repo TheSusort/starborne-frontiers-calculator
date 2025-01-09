@@ -1,7 +1,7 @@
 import React from 'react';
 import { EngineeringStat } from '../../types/stats';
 import { Button, CloseIcon, EditIcon } from '../ui';
-import { SHIP_TYPES, STATS } from '../../constants';
+import { SHIP_TYPES } from '../../constants';
 import { StatDisplay } from '../stats/StatDisplay';
 
 interface EngineeringStatsListProps {

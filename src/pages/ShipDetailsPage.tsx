@@ -6,7 +6,6 @@ import { StatDisplay } from '../components/stats/StatDisplay';
 import { StatDistributionChart } from '../components/stats/StatDistributionChart';
 import { useInventory } from '../hooks/useInventory';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { calculateTotalStats } from '../utils/statsCalculator';
 import { analyzeStatDistribution } from '../utils/analysis/statDistribution';
 import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/ui/layout/PageLayout';

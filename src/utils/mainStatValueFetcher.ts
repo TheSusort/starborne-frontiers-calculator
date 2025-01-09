@@ -5,7 +5,7 @@ import {
     HACK_SEC_STATS,
     SPD_STATS,
 } from '../constants/mainStatValues';
-import { StatName, StatType, FlatOnlyStats } from '../types/stats';
+import { StatName, StatType } from '../types/stats';
 
 export const calculateMainStatValue = (
     statName: StatName,

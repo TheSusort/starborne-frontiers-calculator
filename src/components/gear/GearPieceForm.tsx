@@ -62,7 +62,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 setMainStat({ name: availableStats[0], value: 0, type: 'flat' } as Stat);
             }
         }
-    }, [slot, editingPiece]);
+    }, [slot, editingPiece, mainStat.name, mainStat.value]);
 
     // Separate effect for value calculations
     useEffect(() => {
@@ -80,7 +80,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 }));
             }
         }
-    }, [stars, level, mainStat.name, mainStat.type, editingPiece]);
+    }, [stars, level, mainStat.name, mainStat.type, mainStat.value, editingPiece]);
 
     // Add isInitialMount ref to prevent first render calculation
     useEffect(() => {
@@ -110,7 +110,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     }) as Stat
             );
         },
-        [mainStat.type] // Reduced dependencies
+        [mainStat.type, mainStat.name] // Reduced dependencies
     );
 
     const handleSubmit = (e: React.FormEvent) => {

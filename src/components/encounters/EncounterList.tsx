@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import domtoimage from 'dom-to-image';
 import { EncounterNote } from '../../types/encounters';
 import { Button, CloseIcon, EditIcon, CopyIcon } from '../ui';
