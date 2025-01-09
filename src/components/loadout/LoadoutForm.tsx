@@ -60,7 +60,11 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
 
             <div>
                 <label className="block text-sm font-medium ">Select Ship</label>
-                <ShipSelector onSelect={setSelectedShip} selected={selectedShip} />
+                <ShipSelector
+                    onSelect={setSelectedShip}
+                    selected={selectedShip}
+                    sortDirection="desc"
+                />
             </div>
 
             <div className="flex justify-end gap-2">

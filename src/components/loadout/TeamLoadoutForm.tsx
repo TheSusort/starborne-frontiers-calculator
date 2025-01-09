@@ -74,6 +74,7 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
                     <ShipSelector
                         selected={ship}
                         onSelect={(ship) => handleShipSelect(ship, index)}
+                        sortDirection="desc"
                     />
                 </div>
             ))}

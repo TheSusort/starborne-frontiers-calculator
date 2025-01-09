@@ -8,12 +8,14 @@ interface ShipSelectorProps {
     selected: Ship | null;
     onSelect: (ship: Ship) => void;
     variant?: 'compact' | 'full' | 'extended';
+    sortDirection?: 'asc' | 'desc';
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({
     selected,
     onSelect,
     variant = 'compact',
+    sortDirection = 'asc',
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
@@ -47,11 +49,11 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                     {ships.length === 0 && <p>No ships available</p>}
                     {ships
                         .filter((ship) => ship.name.toLowerCase().includes(search.toLowerCase()))
-                        .sort(
-                            (a, b) =>
-                                Object.keys(a.equipment ?? {}).length -
-                                Object.keys(b.equipment ?? {}).length
-                        )
+                        .sort((a, b) => {
+                            const aLength = Object.keys(a.equipment ?? {}).length;
+                            const bLength = Object.keys(b.equipment ?? {}).length;
+                            return sortDirection === 'asc' ? aLength - bLength : bLength - aLength;
+                        })
                         .map((ship) => (
                             <ShipDisplay
                                 key={ship.id}

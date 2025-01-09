@@ -100,6 +100,7 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                             selected={null}
                             onSelect={handleShipSelect}
                             variant="compact"
+                            sortDirection="desc"
                         />
                     </div>
                 )}
