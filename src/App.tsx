@@ -17,6 +17,12 @@ import EncounterNotesPage from './pages/EncounterNotesPage';
 import HomePage from './pages/HomePage';
 import { JokeCorner } from './components/home/JokeCorner';
 import { ShipDetailsPage } from './pages/ShipDetailsPage';
+import Hotjar from '@hotjar/browser';
+
+// init hotjar
+const siteId = 5241833;
+const hotjarVersion = 6;
+Hotjar.init(siteId, hotjarVersion);
 
 // Run migration when app starts
 migrateTianshaoToTianchao();
