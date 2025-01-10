@@ -3,6 +3,7 @@ import { StatName } from './stats';
 export interface StatPriority {
     stat: StatName;
     maxLimit?: number;
+    minLimit?: number;
     weight: number;
 }
 

@@ -32,7 +32,22 @@ export function calculatePriorityScore(
     shipRole?: ShipTypeName,
     setCount?: Record<string, number>
 ): number {
-    // If a specific role is defined, use role-specific scoring
+    // Check all minimum requirements first
+    for (const priority of priorities) {
+        if (priority.minLimit) {
+            const statValue = stats[priority.stat] || 0;
+            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
+            const normalizedValue = statValue / normalizer;
+            const normalizedMin = priority.minLimit / normalizer;
+
+            if (normalizedValue < normalizedMin) {
+                // Heavy penalty for not meeting minimum requirements
+                return (normalizedValue / normalizedMin) * 100;
+            }
+        }
+    }
+
+    // If all minimum requirements are met, proceed with role-specific scoring
     if (shipRole) {
         switch (shipRole) {
             case 'Attacker':
@@ -46,12 +61,11 @@ export function calculatePriorityScore(
             case 'Supporter(Buffer)':
                 return calculateBufferScore(stats, setCount);
             default:
-                // Fall through to default scoring
                 break;
         }
     }
 
-    // Default scoring logic (unchanged)
+    // Default scoring logic for manual mode or after role-specific scoring
     let totalScore = 0;
     priorities.forEach((priority, index) => {
         const statValue = stats[priority.stat] || 0;
@@ -100,7 +114,7 @@ function calculateDebufferScore(stats: BaseStats): number {
         return (hacking / 270) * 100; // Very low score if below minimum
     }
 
-    // Base score starts at 1000 for meeting minimum hacking
+    // Base score starts at 1000 for meeting minimum hacking and speed
     let score = 1000;
 
     // Additional score for hacking above minimum (diminishing returns)

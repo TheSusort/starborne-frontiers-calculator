@@ -19,11 +19,21 @@ const AVAILABLE_STATS: StatName[] = [
 interface Props {
     onAdd: (priority: StatPriority) => void;
     existingPriorities: StatPriority[];
+    hideWeight?: boolean;
+    hideMaxLimit?: boolean;
+    hideMinLimit?: boolean;
 }
 
-export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities }) => {
+export const StatPriorityForm: React.FC<Props> = ({
+    onAdd,
+    existingPriorities,
+    hideWeight,
+    hideMaxLimit,
+    hideMinLimit,
+}) => {
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
+    const [minLimit, setMinLimit] = useState<string>('');
     const [weight, setWeight] = useState<number>(1);
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -31,12 +41,16 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
 
         onAdd({
             stat: selectedStat,
-            maxLimit: maxLimit ? Number(maxLimit) : undefined,
-            weight: weight,
+            maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
+            minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
+            weight: hideWeight ? 1 : weight,
         });
 
         setMaxLimit('');
-        setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
+        setMinLimit('');
+        if (!hideWeight) {
+            setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
+        }
         setSelectedStat(AVAILABLE_STATS[0]);
     };
 
@@ -55,21 +69,36 @@ export const StatPriorityForm: React.FC<Props> = ({ onAdd, existingPriorities })
             </div>
 
             <div className="space-y-2 grid grid-cols-2 gap-4 items-end">
-                <Input
-                    label="Max Limit (Optional)"
-                    type="number"
-                    value={maxLimit}
-                    onChange={(e) => setMaxLimit(e.target.value)}
-                    placeholder="Enter maximum value"
-                />
+                {!hideMinLimit && (
+                    <Input
+                        label="Min Limit (Optional)"
+                        type="number"
+                        value={minLimit}
+                        onChange={(e) => setMinLimit(e.target.value)}
+                        placeholder="Enter minimum value"
+                    />
+                )}
+                {!hideMaxLimit && (
+                    <Input
+                        label="Max Limit (Optional)"
+                        type="number"
+                        value={maxLimit}
+                        onChange={(e) => setMaxLimit(e.target.value)}
+                        placeholder="Enter maximum value"
+                    />
+                )}
+            </div>
+
+            {!hideWeight && (
                 <Input
                     label="Weight"
                     type="number"
                     value={weight}
                     onChange={(e) => setWeight(Number(e.target.value))}
                     placeholder="Enter weight"
+                    className="mt-4"
                 />
-            </div>
+            )}
 
             <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
                 Add Priority

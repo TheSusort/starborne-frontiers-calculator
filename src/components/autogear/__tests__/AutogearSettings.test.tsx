@@ -43,6 +43,8 @@ describe('AutogearSettings Component', () => {
         onRemovePriority: vi.fn(),
         onFindOptimalGear: vi.fn(),
         onIgnoreEquippedChange: vi.fn(),
+        onToggleSecondaryRequirements: vi.fn(),
+        showSecondaryRequirements: false,
     };
 
     beforeEach(() => {

@@ -13,6 +13,7 @@ interface AutogearSettingsProps {
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
     ignoreEquipped: boolean;
+    showSecondaryRequirements: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -20,6 +21,7 @@ interface AutogearSettingsProps {
     onRemovePriority: (index: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
+    onToggleSecondaryRequirements: (value: boolean) => void;
 }
 
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
@@ -28,6 +30,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedAlgorithm,
     priorities,
     ignoreEquipped,
+    showSecondaryRequirements,
     onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
@@ -35,6 +38,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemovePriority,
     onFindOptimalGear,
     onIgnoreEquippedChange,
+    onToggleSecondaryRequirements,
 }) => {
     return (
         <div className="space-y-4">
@@ -56,8 +60,28 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 />
             </div>
 
-            {(selectedShipRole === '' || selectedShipRole === null) && (
-                <StatPriorityForm onAdd={onAddPriority} existingPriorities={priorities} />
+            {selectedShipRole && (
+                <div className="p-4 bg-dark">
+                    <Checkbox
+                        label="Add secondary requirements"
+                        checked={showSecondaryRequirements}
+                        onChange={onToggleSecondaryRequirements}
+                    />
+                    <p className="text-sm text-gray-400 mt-1">
+                        Add additional minimum/maximum stat requirements to the predefined role
+                    </p>
+                </div>
+            )}
+
+            {(selectedShipRole === null ||
+                selectedShipRole === '' ||
+                showSecondaryRequirements) && (
+                <StatPriorityForm
+                    onAdd={onAddPriority}
+                    existingPriorities={priorities}
+                    hideWeight={showSecondaryRequirements}
+                    hideMaxLimit={showSecondaryRequirements}
+                />
             )}
 
             {priorities.length > 0 && (

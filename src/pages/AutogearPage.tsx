@@ -42,6 +42,7 @@ export const AutogearPage: React.FC = () => {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const selectedShip = getShipById(selectedShipId);
+    const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
 
     const handleAddPriority = (priority: StatPriority) => {
         setPriorities([...priorities, priority]);
@@ -214,6 +215,7 @@ export const AutogearPage: React.FC = () => {
 
     const handleRoleChange = (role: ShipTypeName) => {
         setSelectedShipRole(role);
+        setShowSecondaryRequirements(false);
         setCurrentSimulation(null);
         setSuggestedSimulation(null);
     };
@@ -237,6 +239,8 @@ export const AutogearPage: React.FC = () => {
                     onAddPriority={handleAddPriority}
                     onRemovePriority={handleRemovePriority}
                     onFindOptimalGear={handleAutogear}
+                    showSecondaryRequirements={showSecondaryRequirements}
+                    onToggleSecondaryRequirements={setShowSecondaryRequirements}
                 />
 
                 {suggestions.length > 0 && (
