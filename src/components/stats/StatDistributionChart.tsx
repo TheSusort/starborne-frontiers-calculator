@@ -22,7 +22,7 @@ export const StatDistributionChart: React.FC<Props> = ({ contributions }) => {
             {contributions.map((contribution) => (
                 <div key={contribution.slotName} className="mb-3">
                     <div className="flex justify-between text-sm mb-1">
-                        <span className="">{GEAR_SLOTS[contribution.slotName].label}</span>
+                        <span>{GEAR_SLOTS[contribution.slotName].label}</span>
                         <span className="text-gray-400">
                             {contribution.relativeScore > 0.1
                                 ? contribution.relativeScore.toFixed(1)

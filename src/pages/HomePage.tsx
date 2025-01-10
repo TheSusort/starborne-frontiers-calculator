@@ -8,7 +8,7 @@ const HomePage: React.FC = () => {
         <div className="space-y-8">
             <section className="space-y-4">
                 <h1 className="text-3xl font-bold text-gray-100">Welcome to the {APP_NAME}</h1>
-                <p className="">
+                <p>
                     Build, customize, simulate, and calculate the best gear for your fleet with our
                     comprehensive ship management tools.
                 </p>
@@ -19,7 +19,7 @@ const HomePage: React.FC = () => {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     <div className="bg-dark p-4 ">
                         <h3 className="text-xl font-semibold text-gray-100 mb-2">1. Add Ships</h3>
-                        <p className="">
+                        <p>
                             Start by visiting the{' '}
                             <Link to="/ships" className="text-primary hover:text-primary-hover">
                                 Ships
@@ -29,7 +29,7 @@ const HomePage: React.FC = () => {
                     </div>
                     <div className="bg-dark p-4 ">
                         <h3 className="text-xl font-semibold text-gray-100 mb-2">2. Add Gear</h3>
-                        <p className="">
+                        <p>
                             Configure your equipment in the{' '}
                             <Link to="/gear" className="text-primary hover:text-primary-hover">
                                 Gear
@@ -39,7 +39,7 @@ const HomePage: React.FC = () => {
                     </div>
                     <div className="bg-dark p-4 ">
                         <h3 className="text-xl font-semibold text-gray-100 mb-2">3. Gear Up</h3>
-                        <p className="">
+                        <p>
                             Let the app calculate the best gear for your fleet with the{' '}
                             <Link to="/autogear" className="text-primary hover:text-primary-hover">
                                 Autogear Tool
@@ -81,13 +81,13 @@ const HomePage: React.FC = () => {
 
             <section className="space-y-4">
                 <h2 className="text-2xl font-bold text-gray-100">Feedback</h2>
-                <p className="">
+                <p>
                     Please provide feedback on the app, or any suggestions for improvements.
                     I&apos;m open to any suggestions, as I&apos;m running out of ideas of stuff to
                     implement.
                 </p>
 
-                <p className="">
+                <p>
                     Contact me directly on Discord at <b>alvbert</b>, or in the{' '}
                     <Link
                         to="https://discord.com/invite/playfrontiers"
@@ -104,7 +104,7 @@ const HomePage: React.FC = () => {
                     </Link>
                 </p>
 
-                <p className="">
+                <p>
                     This whole project is also open source, and you can find the code on{' '}
                     <Link
                         to="https://github.com/TheSusort/starborne-frontiers-calculator"
@@ -119,6 +119,20 @@ const HomePage: React.FC = () => {
 
             <section className="bg-dark p-4">
                 <h2 className="text-lg font-bold mb-4">Backup & Restore</h2>
+                <p className="text-sm mb-4">
+                    Create and restore your gear and ship data from a backup file. This is useful if
+                    you want to migrate your data to a new device, or if you want to backup your
+                    data.
+                    <br />
+                    <br /> If you just want to test the app, you can use this{' '}
+                    <Link
+                        to="https://pastebin.com/m0TMcQZA"
+                        className="text-primary hover:text-primary-hover"
+                    >
+                        Pastebin link
+                    </Link>{' '}
+                    to get the data, and save it as a json file to restore.
+                </p>
                 <BackupRestoreData />
             </section>
         </div>

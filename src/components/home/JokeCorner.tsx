@@ -33,7 +33,7 @@ export const JokeCorner: React.FC = () => {
                     isVisible={isVisible}
                     className="w-72 bg-dark border border-dark-border p-4 shadow-lg"
                 >
-                    <p className="">{currentJoke}</p>
+                    <p>{currentJoke}</p>
                 </Tooltip>
             </div>
         </div>
