@@ -12,7 +12,6 @@ import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
-import { ImportTestDataHandler } from './components/debug/ImportTestDataHandler';
 import { migrateTianshaoToTianchao } from './migrations/factionMigration';
 import EncounterNotesPage from './pages/EncounterNotesPage';
 import HomePage from './pages/HomePage';
@@ -69,10 +68,6 @@ const App: React.FC = () => {
                                     <Route path="/engineering" element={<EngineeringStatsPage />} />
                                     <Route path="/loadouts" element={<LoadoutsPage />} />
                                     <Route path="/encounters" element={<EncounterNotesPage />} />
-                                    <Route
-                                        path="/api/import-test-data"
-                                        element={<ImportTestDataHandler />}
-                                    />
                                     <Route path="/" element={<HomePage />} />
                                     <Route path="/ships/:shipId" element={<ShipDetailsPage />} />
                                 </Routes>

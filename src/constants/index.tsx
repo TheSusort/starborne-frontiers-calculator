@@ -7,4 +7,3 @@ export * from './rarities';
 export * from './ships';
 export * from './shipTypes';
 export * from './stats';
-export * from './testData';

@@ -1,9 +1,37 @@
 import { render, screen, fireEvent, act } from '../../../test-utils/test-utils';
 import { GearInventory } from '../GearInventory';
-import { testData } from '../../../constants/testData';
 import { GearPiece } from '../../../types/gear';
 import { vi } from 'vitest';
-const mockGearItems = testData.gear as GearPiece[];
+const mockGearItems: GearPiece[] = [
+    {
+        id: '1',
+        slot: 'weapon',
+        rarity: 'legendary',
+        setBonus: 'CRITICAL',
+        level: 100,
+        stars: 5,
+        mainStat: {
+            name: 'attack',
+            value: 1000,
+            type: 'flat',
+        },
+        subStats: [],
+    },
+    {
+        id: '2',
+        slot: 'weapon',
+        rarity: 'legendary',
+        setBonus: 'CRITICAL',
+        level: 100,
+        stars: 5,
+        mainStat: {
+            name: 'attack',
+            value: 1000,
+            type: 'flat',
+        },
+        subStats: [],
+    },
+];
 
 describe('GearInventory Component', () => {
     // Mock localStorage
