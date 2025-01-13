@@ -25,40 +25,42 @@ const ShipImage = memo(({ iconUrl, name }: { iconUrl: string; name: string }) =>
 ));
 ShipImage.displayName = 'ShipImage';
 
-const Header = memo(({ ship }: { ship: Ship }) => (
-    <div>
-        <div className="flex items-center gap-1 min-h-[28px]">
-            {ship.type && SHIP_TYPES[ship.type] && (
-                <ShipImage
-                    iconUrl={SHIP_TYPES[ship.type].iconUrl}
-                    name={SHIP_TYPES[ship.type].name}
-                />
-            )}
-            {ship.faction && FACTIONS[ship.faction] && (
-                <ShipImage
-                    iconUrl={FACTIONS[ship.faction].iconUrl}
-                    name={FACTIONS[ship.faction].name}
-                />
-            )}
-            <span
-                className={`lg:text-xs xl:text-sm font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}
-            >
-                {ship.name}
-            </span>
-        </div>
-
-        <div className="flex items-center gap-1">
-            {Array.from({ length: 6 }, (_, index) => (
+const Header = memo(
+    ({ ship, variant = 'full' }: { ship: Ship; variant?: 'full' | 'compact' | 'extended' }) => (
+        <div>
+            <div className="flex items-center gap-1 min-h-[28px]">
+                {ship.type && SHIP_TYPES[ship.type] && (
+                    <ShipImage
+                        iconUrl={SHIP_TYPES[ship.type].iconUrl}
+                        name={SHIP_TYPES[ship.type].name}
+                    />
+                )}
+                {ship.faction && FACTIONS[ship.faction] && (
+                    <ShipImage
+                        iconUrl={FACTIONS[ship.faction].iconUrl}
+                        name={FACTIONS[ship.faction].name}
+                    />
+                )}
                 <span
-                    key={index}
-                    className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                    className={`${variant === 'compact' ? 'text-sm' : 'lg:text-xs xl:text-sm'} font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}
                 >
-                    ★
+                    {ship.name}
                 </span>
-            ))}
+            </div>
+
+            <div className="flex items-center gap-1">
+                {Array.from({ length: 6 }, (_, index) => (
+                    <span
+                        key={index}
+                        className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                    >
+                        ★
+                    </span>
+                ))}
+            </div>
         </div>
-    </div>
-));
+    )
+);
 Header.displayName = 'Header';
 
 export const ShipDisplay: React.FC<Props> = memo(
@@ -104,7 +106,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                     onClick={onClick}
                 >
-                    <Header ship={ship} />
+                    <Header ship={ship} variant="compact" />
                     {children}
                 </div>
             );

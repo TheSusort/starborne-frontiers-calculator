@@ -45,6 +45,16 @@ export function calculatePriorityScore(
                 return (normalizedValue / normalizedMin) * 100;
             }
         }
+
+        if (priority.maxLimit) {
+            const statValue = stats[priority.stat] || 0;
+            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
+            const normalizedValue = statValue / normalizer;
+            const normalizedMax = priority.maxLimit / normalizer;
+            if (normalizedValue > normalizedMax) {
+                return (normalizedValue / normalizedMax) * 100;
+            }
+        }
     }
 
     // If all minimum requirements are met, proceed with role-specific scoring
@@ -96,8 +106,7 @@ export function calculatePriorityScore(
 }
 
 function calculateAttackerScore(stats: BaseStats): number {
-    const dps = calculateDPS(stats);
-    return dps;
+    return calculateDPS(stats);
 }
 
 function calculateDefenderScore(stats: BaseStats): number {
@@ -139,9 +148,8 @@ function calculateHealerScore(stats: BaseStats): number {
 
     // Apply heal modifier after crit calculations
     const healModifier = stats.healModifier || 0;
-    const totalHealing = baseHealing * critMultiplier * (1 + healModifier / 100);
 
-    return totalHealing;
+    return baseHealing * critMultiplier * (1 + healModifier / 100);
 }
 
 function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number>): number {

@@ -75,7 +75,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                         type="number"
                         value={minLimit}
                         onChange={(e) => setMinLimit(e.target.value)}
-                        placeholder="Enter minimum value"
+                        placeholder="min value"
                     />
                 )}
                 {!hideMaxLimit && (
@@ -84,7 +84,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                         type="number"
                         value={maxLimit}
                         onChange={(e) => setMaxLimit(e.target.value)}
-                        placeholder="Enter maximum value"
+                        placeholder="max value"
                     />
                 )}
             </div>

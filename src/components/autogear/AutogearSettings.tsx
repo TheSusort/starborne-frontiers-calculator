@@ -80,7 +80,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     onAdd={onAddPriority}
                     existingPriorities={priorities}
                     hideWeight={showSecondaryRequirements}
-                    hideMaxLimit={showSecondaryRequirements}
                 />
             )}
 
@@ -91,8 +90,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <div key={index} className="flex items-center">
                             <span>
                                 {STATS[priority.stat].label}
-                                {priority.maxLimit ? ` (Max: ${priority.maxLimit})` : ''}
-                                {priority.weight ? ` (Weight: ${priority.weight})` : ''}
+                                {' ('}
+                                {priority.minLimit ? `Min: ${priority.minLimit}` : ''}
+                                {priority.minLimit && priority.maxLimit ? `, ` : ''}
+                                {priority.maxLimit ? ` Max: ${priority.maxLimit}` : ''}
+                                {priority.weight !== 1 ? ` (Weight: ${priority.weight})` : ''}
+                                {') '}
                             </span>
                             <Button
                                 aria-label="Remove priority"

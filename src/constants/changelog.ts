@@ -6,7 +6,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '0.16.3',
         date: '2025-01-13',
-        changes: ['Added upgrade suggestions'],
+        changes: [
+            'Added upgrade suggestions',
+            'Added max limit to predefined modes secondary requirements',
+        ],
     },
     {
         version: '0.16.2',
