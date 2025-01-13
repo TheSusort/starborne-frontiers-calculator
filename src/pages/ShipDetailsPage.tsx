@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Ship } from '../types/ship';
 import { ShipCard } from '../components/ship/ShipCard';
 import { StatDisplay } from '../components/stats/StatDisplay';
-import { StatDistributionChart } from '../components/stats/StatDistributionChart';
 import { useInventory } from '../hooks/useInventory';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { analyzeStatDistribution } from '../utils/analysis/statDistribution';
@@ -13,6 +12,13 @@ import { GearPiece } from '../types/gear';
 import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
 import { ShipForm } from '../components/ship/ShipForm';
 import { useNotification } from '../hooks/useNotification';
+import { analyzeEnhancedStatDistribution } from '../utils/analysis/enhancedStatDistribution';
+import { EnhancedStatDistributionView } from '../components/stats/EnhancedStatDistribution';
+import { analyzeUpgrades } from '../utils/analysis/upgradeAnalysis';
+import { UpgradeSuggestions } from '../components/stats/UpgradeSuggestions';
+import { calculateTotalStats } from '../utils/statsCalculator';
+import { useOrphanSetPieces } from '../hooks/useGear';
+import { useGearLookup } from '../hooks/useGear';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -29,8 +35,9 @@ export const ShipDetailsPage: React.FC = () => {
     } = useShips({ getGearPiece });
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
-
     const ship = ships.find((s) => s.id === shipId);
+    const gearLookup = useGearLookup(ship?.equipment || {}, getGearPiece);
+    const orphanSetPieces = useOrphanSetPieces(ship || ({} as Ship), gearLookup);
 
     if (!ship) {
         return (
@@ -54,6 +61,22 @@ export const ShipDetailsPage: React.FC = () => {
         getGearPiece,
         ship,
         getEngineeringStatsForShipType
+    );
+
+    const upgradeSuggestions = analyzeUpgrades(
+        statDistribution,
+        ship.equipment,
+        getGearPiece,
+        ship,
+        calculateTotalStats(
+            ship.baseStats,
+            ship.equipment,
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            getEngineeringStatsForShipType(ship.type)
+        ).final,
+        orphanSetPieces
     );
 
     return (
@@ -112,7 +135,7 @@ export const ShipDetailsPage: React.FC = () => {
                     />
 
                     <section className="bg-dark p-4">
-                        <h2 className="text-lg font-bold mb-4">Refits ({ship.refits.length}/6)</h2>
+                        <h3 className="mb-4">Refits ({ship.refits.length}/6)</h3>
                         {ship.refits.length > 0 ? (
                             <div className="space-y-2">
                                 {ship.refits.map((refit, index) => (
@@ -129,9 +152,7 @@ export const ShipDetailsPage: React.FC = () => {
                     </section>
 
                     <section className="bg-dark p-4">
-                        <h2 className="text-lg font-bold mb-4">
-                            Implants ({ship.implants.length})
-                        </h2>
+                        <h3 className="mb-4">Implants ({ship.implants.length})</h3>
                         {ship.implants.length > 0 ? (
                             <div className="space-y-2">
                                 {ship.implants.map((implant, index) => (
@@ -149,9 +170,14 @@ export const ShipDetailsPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                    {statDistribution.length > 0 && (
-                        <StatDistributionChart contributions={statDistribution} />
-                    )}
+                    <EnhancedStatDistributionView
+                        distribution={analyzeEnhancedStatDistribution(
+                            ship,
+                            getGearPiece,
+                            getEngineeringStatsForShipType
+                        )}
+                    />
+                    <UpgradeSuggestions suggestions={upgradeSuggestions} />
                 </div>
             </div>
         </PageLayout>

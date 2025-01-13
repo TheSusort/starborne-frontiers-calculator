@@ -34,4 +34,5 @@ export interface GearLoadout {
 export type GearSlot = {
     label: GearSlotName;
     availableMainStats: StatName[];
+    expectedContribution: number;
 };

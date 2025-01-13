@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
+import { GEAR_SETS } from '../constants/gearSets';
 
 // Helper type for the gear lookup
 type GearLookup = Record<string, GearPiece | undefined>;
@@ -43,8 +44,43 @@ export const useGearSets = (equipment: Ship['equipment'], gearLookup: GearLookup
 
         // For each set, add the set name multiple times based on complete sets
         return Object.entries(setCount).flatMap(([setName, count]) => {
-            const completeSets = Math.floor(count / 2);
+            const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
             return Array(completeSets).fill(setName);
         });
     }, [equipment, gearLookup]);
 };
+
+/**
+ * Finds all pieces that are part of incomplete sets
+ */
+export function useOrphanSetPieces(ship: Ship, gearLookup: GearLookup): GearPiece[] {
+    return useMemo(() => {
+        // Count pieces per set
+        const setCount: Record<string, number> = {};
+
+        // Track pieces by their set for easy lookup later
+        const piecesBySet: Record<string, GearPiece[]> = {};
+
+        // Analyze each equipped piece
+        Object.values(ship?.equipment || {}).forEach((gearId) => {
+            if (!gearId) return;
+
+            const gear = gearLookup[gearId];
+            if (!gear?.setBonus) return;
+
+            // Count the piece
+            setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
+
+            // Store the piece reference
+            if (!piecesBySet[gear.setBonus]) {
+                piecesBySet[gear.setBonus] = [];
+            }
+            piecesBySet[gear.setBonus].push(gear);
+        });
+
+        // Find all pieces from incomplete sets (count < 2)
+        return Object.entries(setCount)
+            .filter(([_, count]) => count < 2)
+            .flatMap(([setName]) => piecesBySet[setName] || []);
+    }, [ship?.equipment, gearLookup]);
+}

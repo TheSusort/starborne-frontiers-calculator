@@ -102,7 +102,9 @@ function calculateAttackerScore(stats: BaseStats): number {
 
 function calculateDefenderScore(stats: BaseStats): number {
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    return effectiveHP;
+    // add security as a secondary stat
+    const security = stats.security || 0;
+    return effectiveHP + security * STAT_NORMALIZERS.security;
 }
 
 function calculateDebufferScore(stats: BaseStats): number {
