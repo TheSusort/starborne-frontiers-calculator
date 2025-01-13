@@ -32,76 +32,68 @@ export function calculatePriorityScore(
     shipRole?: ShipTypeName,
     setCount?: Record<string, number>
 ): number {
-    // Check all minimum requirements first
-    for (const priority of priorities) {
-        if (priority.minLimit) {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const normalizedMin = priority.minLimit / normalizer;
+    let penalties = 0;
 
-            if (normalizedValue < normalizedMin) {
-                // Heavy penalty for not meeting minimum requirements
-                return (normalizedValue / normalizedMin) * 100;
+    // Calculate penalties based on min/max limits
+    for (const priority of priorities) {
+        const statValue = stats[priority.stat] || 0;
+
+        if (priority.minLimit) {
+            if (statValue < priority.minLimit) {
+                // Calculate penalty as percentage below minimum
+                const diff = (priority.minLimit - statValue) / priority.minLimit;
+                penalties += diff * 100;
             }
         }
 
         if (priority.maxLimit) {
-            const statValue = stats[priority.stat] || 0;
-            const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-            const normalizedValue = statValue / normalizer;
-            const normalizedMax = priority.maxLimit / normalizer;
-            if (normalizedValue > normalizedMax) {
-                return (normalizedValue / normalizedMax) * 100;
+            if (statValue > priority.maxLimit) {
+                // Calculate penalty as half the percentage above maximum
+                const diff = (statValue - priority.maxLimit) / priority.maxLimit;
+                penalties += diff * 100;
             }
         }
     }
 
-    // If all minimum requirements are met, proceed with role-specific scoring
+    // Get base score from role-specific calculation
+    let baseScore = 0;
     if (shipRole) {
         switch (shipRole) {
             case 'Attacker':
-                return calculateAttackerScore(stats);
+                baseScore = calculateAttackerScore(stats);
+                break;
             case 'Defender':
-                return calculateDefenderScore(stats);
+                baseScore = calculateDefenderScore(stats);
+                break;
             case 'Debuffer':
-                return calculateDebufferScore(stats);
+                baseScore = calculateDebufferScore(stats);
+                break;
             case 'Supporter':
-                return calculateHealerScore(stats);
+                baseScore = calculateHealerScore(stats);
+                break;
             case 'Supporter(Buffer)':
-                return calculateBufferScore(stats, setCount);
-            default:
+                baseScore = calculateBufferScore(stats, setCount);
                 break;
         }
+    } else {
+        // Default scoring logic for manual mode
+        baseScore = calculateDefaultScore(stats, priorities);
     }
 
-    // Default scoring logic for manual mode or after role-specific scoring
+    // Apply penalties as percentage reduction of base score
+    return Math.max(0, baseScore * (1 - penalties / 100));
+}
+
+// Helper function for default scoring mode
+function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): number {
     let totalScore = 0;
     priorities.forEach((priority, index) => {
         const statValue = stats[priority.stat] || 0;
         const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
         const normalizedValue = statValue / normalizer;
         const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-
-        if (priority.maxLimit) {
-            const normalizedLimit = priority.maxLimit / normalizer;
-            if (normalizedValue > normalizedLimit) {
-                totalScore -=
-                    (normalizedValue - normalizedLimit) * priority.weight * orderMultiplier * 100;
-                return;
-            }
-
-            let score = normalizedValue * priority.weight * orderMultiplier;
-            const ratio = normalizedValue / normalizedLimit;
-            if (ratio > 0.8) {
-                score *= 1 - (ratio - 0.8);
-            }
-            totalScore += score;
-        } else {
-            totalScore += normalizedValue * priority.weight * orderMultiplier;
-        }
+        totalScore += normalizedValue * priority.weight * orderMultiplier;
     });
-
     return totalScore;
 }
 
