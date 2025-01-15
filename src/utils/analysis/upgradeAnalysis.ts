@@ -35,7 +35,7 @@ export function analyzeUpgrades(
 
         const relevantSet = gear.setBonus && DESIRED_SETS[ship.type].includes(gear.setBonus);
 
-        // Add gear quality check
+        // Add gear quality check.
         if (
             contribution.relativeScore <
             GEAR_SLOTS[contribution.slotName].expectedContribution - 1
@@ -63,6 +63,10 @@ export function analyzeUpgrades(
         );
         const expectedContribution = GEAR_SLOTS[contribution.slotName].expectedContribution;
 
+        const existingSuggestion = suggestions.find(
+            (suggestion) => suggestion.slotName === contribution.slotName
+        );
+
         if (gear.level < 16) {
             const currentContribution = contribution.relativeScore;
             let reason: string;
@@ -75,17 +79,24 @@ export function analyzeUpgrades(
                 reason = `Minor improvements available`;
             }
 
-            suggestions.push({
-                slotName: contribution.slotName,
-                currentLevel: gear.level,
-                priority: contribution.relativeScore,
-                reasons: [
-                    {
-                        title: 'Low level',
-                        reason: reason,
-                    },
-                ],
-            });
+            if (existingSuggestion) {
+                existingSuggestion.reasons.push({
+                    title: 'Low level',
+                    reason: reason,
+                });
+            } else {
+                suggestions.push({
+                    slotName: contribution.slotName,
+                    currentLevel: gear.level,
+                    priority: contribution.relativeScore,
+                    reasons: [
+                        {
+                            title: 'Low level',
+                            reason: reason,
+                        },
+                    ],
+                });
+            }
         }
 
         if (orphanSetPieces.length > 0 && !relevantSet) {
@@ -102,16 +113,23 @@ export function analyzeUpgrades(
                     },
                     orphanSetPiecesOtherThanThis[0]
                 );
-                suggestions.push({
-                    slotName: contribution.slotName,
-                    currentLevel: gear.level,
-                    reasons: [
-                        {
-                            title: 'Not optimal set bonus',
-                            reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus].name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
-                        },
-                    ],
-                });
+                if (existingSuggestion) {
+                    existingSuggestion.reasons.push({
+                        title: 'Not optimal set bonus',
+                        reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus].name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                    });
+                } else {
+                    suggestions.push({
+                        slotName: contribution.slotName,
+                        currentLevel: gear.level,
+                        reasons: [
+                            {
+                                title: 'Not optimal set bonus',
+                                reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus].name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                            },
+                        ],
+                    });
+                }
             }
         }
     });

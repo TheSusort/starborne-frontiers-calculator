@@ -1,6 +1,6 @@
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { StatName } from '../../types/stats';
+import { BaseStats, StatName } from '../../types/stats';
 import { calculateTotalStats } from '../statsCalculator';
 import { ShipTypeName } from '../../constants/shipTypes';
 import { SlotContribution } from './statDistribution';
@@ -18,6 +18,16 @@ const DESIRED_STATS: Record<ShipTypeName, StatName[]> = {
     SUPPORTER_BUFFER: ['speed', 'hp', 'defence'],
     DEBUFFER: ['hacking', 'speed', 'attack', 'crit', 'critDamage'],
 };
+
+function checkCritRate(gear: GearPiece, totalStats: BaseStats): UpgradeReason | null {
+    if (totalStats.crit < 95 && !gear.subStats.some((s) => s.name === 'crit')) {
+        return {
+            title: 'Low crit rate',
+            reason: 'Consider finding a new piece with more crit rate substats',
+        };
+    }
+    return null;
+}
 
 export function analyzeGearQuality(
     gear: GearPiece,
@@ -60,17 +70,24 @@ export function analyzeGearQuality(
         (id) => id && getGearPiece(id)?.setBonus === 'boost'
     ).length;
 
+    const critCheck = checkCritRate(gear, totalStats);
+
     switch (ship.type) {
-        case 'ATTACKER':
-        case 'DEBUFFER':
         case 'SUPPORTER':
-            if (totalStats.crit < 95 && !gear.subStats.some((s) => s.name === 'crit')) {
+            if (gear.setBonus !== 'repair') {
                 qualityCheck.reasons.push({
-                    title: 'Low crit rate',
-                    reason: 'Need more crit rate substats to reach 100%',
+                    title: 'Not a repair piece',
+                    reason: `Consider finding a new ${gear.slot} with the repair set`,
                 });
             }
+        // Fall through to crit check
+        case 'ATTACKER':
+        case 'DEBUFFER':
+            if (critCheck) {
+                qualityCheck.reasons.push(critCheck);
+            }
             break;
+
         case 'SUPPORTER_BUFFER':
             if (
                 boostPieces < 4 &&

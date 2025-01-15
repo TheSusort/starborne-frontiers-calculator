@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
-import { SortConfig } from '../filters/SortPanel';
+import { usePersistedFilters } from '../../hooks/usePersistedFilters';
 
 interface Props {
     inventory: GearPiece[];
@@ -21,35 +21,36 @@ export const GearInventory: React.FC<Props> = ({
     onEquip,
     mode = 'manage',
 }) => {
-    const [selectedSets, setSelectedSets] = useState<string[]>([]);
-    const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-    const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
-    const [selectedEquipped, setSelectedEquipped] = useState<string>('');
-    const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [sort, setSort] = useState<SortConfig>({ field: 'id', direction: 'asc' });
+    const [isFilterOpen, setIsFilterOpen] = React.useState(false);
+    const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters');
 
     const hasActiveFilters =
-        selectedSets.length > 0 ||
-        selectedTypes.length > 0 ||
-        selectedRarities.length > 0 ||
-        selectedEquipped !== null;
+        (state.filters.sets?.length ?? 0) > 0 ||
+        (state.filters.types?.length ?? 0) > 0 ||
+        (state.filters.rarities?.length ?? 0) > 0 ||
+        (state.filters.equipped ?? '') !== '';
 
     const filteredInventory = useMemo(() => {
         return inventory.filter((piece) => {
-            const matchesSet = selectedSets.length === 0 || selectedSets.includes(piece.setBonus);
-            const matchesType = selectedTypes.length === 0 || selectedTypes.includes(piece.slot);
+            const matchesSet =
+                (state.filters.sets?.length ?? 0) === 0 ||
+                (state.filters.sets?.includes(piece.setBonus) ?? false);
+            const matchesType =
+                (state.filters.types?.length ?? 0) === 0 ||
+                (state.filters.types?.includes(piece.slot) ?? false);
             const matchesRarity =
-                selectedRarities.length === 0 || selectedRarities.includes(piece.rarity);
+                (state.filters.rarities?.length ?? 0) === 0 ||
+                (state.filters.rarities?.includes(piece.rarity) ?? false);
             const matchesEquipped =
-                selectedEquipped === 'equipped'
+                state.filters.equipped === 'equipped'
                     ? piece.shipId !== '' && piece.shipId !== undefined
-                    : selectedEquipped === 'unequipped'
+                    : state.filters.equipped === 'unequipped'
                       ? piece.shipId === '' || piece.shipId === undefined
                       : true;
 
             return matchesSet && matchesType && matchesRarity && matchesEquipped;
         });
-    }, [inventory, selectedSets, selectedTypes, selectedRarities, selectedEquipped]);
+    }, [inventory, state.filters]);
 
     const uniqueSets = useMemo(() => {
         const sets = new Set(inventory.map((piece) => piece.setBonus));
@@ -72,8 +73,9 @@ export const GearInventory: React.FC<Props> = ({
         {
             id: 'set',
             label: 'Sets',
-            values: selectedSets,
-            onChange: setSelectedSets,
+            values: state.filters.sets ?? [],
+            onChange: (sets) =>
+                setState((prev) => ({ ...prev, filters: { ...prev.filters, sets } })),
             options: uniqueSets.map((set) => ({
                 value: set,
                 label: GEAR_SETS[set].name,
@@ -82,8 +84,9 @@ export const GearInventory: React.FC<Props> = ({
         {
             id: 'type',
             label: 'Slots',
-            values: selectedTypes,
-            onChange: setSelectedTypes,
+            values: state.filters.types ?? [],
+            onChange: (types) =>
+                setState((prev) => ({ ...prev, filters: { ...prev.filters, types } })),
             options: uniqueTypes.map((type) => ({
                 value: type,
                 label: GEAR_SLOTS[type].label,
@@ -92,8 +95,9 @@ export const GearInventory: React.FC<Props> = ({
         {
             id: 'rarity',
             label: 'Rarity',
-            values: selectedRarities,
-            onChange: setSelectedRarities,
+            values: state.filters.rarities ?? [],
+            onChange: (rarities) =>
+                setState((prev) => ({ ...prev, filters: { ...prev.filters, rarities } })),
             options: uniqueRarities.map((rarity) => ({
                 value: rarity,
                 label: RARITIES[rarity].label,
@@ -102,9 +106,10 @@ export const GearInventory: React.FC<Props> = ({
         {
             id: 'equipped',
             label: 'Equipped',
-            values: selectedEquipped ? [selectedEquipped] : [],
-            onChange: (values: string[]) => {
-                setSelectedEquipped(values[0] === selectedEquipped ? '' : values[0]);
+            values: state.filters.equipped ? [state.filters.equipped] : [],
+            onChange: (values) => {
+                const equipped = values[0] === state.filters.equipped ? '' : values[0];
+                setState((prev) => ({ ...prev, filters: { ...prev.filters, equipped } }));
             },
             options: [
                 { value: 'equipped', label: 'Equipped to a ship' },
@@ -124,33 +129,26 @@ export const GearInventory: React.FC<Props> = ({
     const sortedAndFilteredInventory = useMemo(() => {
         const filtered = filteredInventory;
         return [...filtered].sort((a, b) => {
-            switch (sort.field) {
+            switch (state.sort.field) {
                 case 'setBonus':
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? GEAR_SETS[a.setBonus].name.localeCompare(GEAR_SETS[b.setBonus].name)
                         : GEAR_SETS[b.setBonus].name.localeCompare(GEAR_SETS[a.setBonus].name);
                 case 'level':
-                    return sort.direction === 'asc' ? a.level - b.level : b.level - a.level;
+                    return state.sort.direction === 'asc' ? a.level - b.level : b.level - a.level;
                 case 'stars':
-                    return sort.direction === 'asc' ? a.stars - b.stars : b.stars - a.stars;
+                    return state.sort.direction === 'asc' ? a.stars - b.stars : b.stars - a.stars;
                 case 'rarity':
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
                 default:
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? b.id.localeCompare(a.id)
                         : a.id.localeCompare(b.id);
             }
         });
-    }, [filteredInventory, sort]);
-
-    const clearFilters = () => {
-        setSelectedSets([]);
-        setSelectedTypes([]);
-        setSelectedRarities([]);
-        setSelectedEquipped('');
-    };
+    }, [filteredInventory, state.sort]);
 
     return (
         <div className="space-y-6">
@@ -167,8 +165,8 @@ export const GearInventory: React.FC<Props> = ({
                     onClear={clearFilters}
                     hasActiveFilters={hasActiveFilters}
                     sortOptions={sortOptions}
-                    sort={sort}
-                    setSort={setSort}
+                    sort={state.sort}
+                    setSort={(sort) => setState((prev) => ({ ...prev, sort }))}
                 />
             </div>
 

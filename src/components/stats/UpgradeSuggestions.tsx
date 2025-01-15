@@ -46,12 +46,18 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                   : 'border-blue-500 bg-blue-900/20'
                         }`}
                     >
-                        <div className="flex flex-col mb-1">
+                        <div className="mb-1 flex flex-wrap">
                             <span className="font-medium">
                                 {GEAR_SLOTS[suggestion.slotName].label}
                             </span>
+
+                            {suggestion.currentLevel !== 16 && (
+                                <span className="text-sm ml-auto">
+                                    Level {suggestion.currentLevel} → 16
+                                </span>
+                            )}
                             {suggestion.priority && (
-                                <span className="text-xs w-full">
+                                <span className="block text-xs w-full">
                                     {suggestion.priority.toFixed(1)}% is a{' '}
                                     {suggestion.priority! <
                                     GEAR_SLOTS[suggestion.slotName].expectedContribution - 5
@@ -64,11 +70,6 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                     piece
                                 </span>
                             )}
-                            {suggestion.currentLevel !== 16 && (
-                                <span className="text-sm">
-                                    Level {suggestion.currentLevel} → 16
-                                </span>
-                            )}
                         </div>
                         <ul className="text-sm text-gray-400 list-disc ml-4">
                             {suggestion.reasons.map((reason, index) => {
@@ -76,7 +77,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                 return (
                                     <li key={index}>
                                         <span
-                                            className="font-bold text-xs inline-flex items-center"
+                                            className="text-xs inline-flex items-center"
                                             onMouseEnter={() =>
                                                 handleMouseEnter(tooltipId, reason.reason)
                                             }
@@ -85,7 +86,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                             {reason.title} <InfoIcon />
                                         </span>
                                         <Tooltip isVisible={tooltips[tooltipId] || false}>
-                                            <span className="text-gray-400 bg-dark-lighter p-2 border border-gray-300">
+                                            <span className="text-gray-400 bg-dark-lighter p-2 border border-gray-300 block">
                                                 {tooltipContent[tooltipId]}
                                             </span>
                                         </Tooltip>

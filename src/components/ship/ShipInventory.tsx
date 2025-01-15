@@ -13,6 +13,7 @@ import {
 } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
+import { usePersistedFilters } from '../../hooks/usePersistedFilters';
 
 interface Props {
     ships: Ship[];
@@ -34,26 +35,54 @@ export const ShipInventory: React.FC<Props> = ({
     availableGear,
 }) => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
-    const [selectedFactions, setSelectedFactions] = useState<string[]>([]);
-    const [selectedShipTypes, setSelectedShipTypes] = useState<string[]>([]);
-    const [selectedRarities, setSelectedRarities] = useState<string[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    const [sort, setSort] = useState<SortConfig>({ field: 'id', direction: 'asc' });
+
+    const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters');
 
     const hasActiveFilters =
-        selectedFactions.length > 0 || selectedShipTypes.length > 0 || selectedRarities.length > 0;
+        (state.filters.factions?.length ?? 0) > 0 ||
+        (state.filters.shipTypes?.length ?? 0) > 0 ||
+        (state.filters.rarities?.length ?? 0) > 0;
+
+    const setSelectedFactions = (factions: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, factions },
+        }));
+    };
+
+    const setSelectedShipTypes = (shipTypes: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, shipTypes },
+        }));
+    };
+
+    const setSelectedRarities = (rarities: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, rarities },
+        }));
+    };
+
+    const setSort = (sort: SortConfig) => {
+        setState((prev) => ({ ...prev, sort }));
+    };
 
     const filteredInventory = useMemo(() => {
         return ships.filter((ship) => {
             const matchesFaction =
-                selectedFactions.length === 0 || selectedFactions.includes(ship.faction);
+                (state.filters.factions?.length ?? 0) === 0 ||
+                (state.filters.factions?.includes(ship.faction) ?? false);
             const matchesType =
-                selectedShipTypes.length === 0 || selectedShipTypes.includes(ship.type);
+                (state.filters.shipTypes?.length ?? 0) === 0 ||
+                (state.filters.shipTypes?.includes(ship.type) ?? false);
             const matchesRarity =
-                selectedRarities.length === 0 || selectedRarities.includes(ship.rarity);
+                (state.filters.rarities?.length ?? 0) === 0 ||
+                (state.filters.rarities?.includes(ship.rarity) ?? false);
             return matchesFaction && matchesType && matchesRarity;
         });
-    }, [ships, selectedFactions, selectedShipTypes, selectedRarities]);
+    }, [ships, state.filters]);
 
     const uniqueFactions = useMemo(() => {
         const factions = new Set(ships.map((ship) => ship.faction));
@@ -80,7 +109,7 @@ export const ShipInventory: React.FC<Props> = ({
         {
             id: 'faction',
             label: 'Factions',
-            values: selectedFactions,
+            values: state.filters.factions ?? [],
             onChange: setSelectedFactions,
             options: uniqueFactions.map((faction) => ({
                 value: faction,
@@ -90,7 +119,7 @@ export const ShipInventory: React.FC<Props> = ({
         {
             id: 'shipType',
             label: 'Ship Type',
-            values: selectedShipTypes,
+            values: state.filters.shipTypes ?? [],
             onChange: setSelectedShipTypes,
             options: uniqueShipTypes.map((shipType) => ({
                 value: shipType,
@@ -100,7 +129,7 @@ export const ShipInventory: React.FC<Props> = ({
         {
             id: 'rarity',
             label: 'Rarity',
-            values: selectedRarities,
+            values: state.filters.rarities ?? [],
             onChange: setSelectedRarities,
             options: uniqueRarities.map((rarity) => ({
                 value: rarity,
@@ -111,6 +140,7 @@ export const ShipInventory: React.FC<Props> = ({
 
     const sortOptions = [
         { value: 'id', label: 'Date Added' },
+        { value: 'name', label: 'Name' },
         { value: 'type', label: 'Type' },
         { value: 'faction', label: 'Faction' },
         { value: 'rarity', label: 'Rarity' },
@@ -120,37 +150,35 @@ export const ShipInventory: React.FC<Props> = ({
     const sortedAndFilteredInventory = useMemo(() => {
         const filtered = filteredInventory;
         return [...filtered].sort((a, b) => {
-            switch (sort.field) {
+            switch (state.sort.field) {
                 case 'type':
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? SHIP_TYPES[a.type].name.localeCompare(SHIP_TYPES[b.type].name)
                         : SHIP_TYPES[b.type].name.localeCompare(SHIP_TYPES[a.type].name);
                 case 'faction':
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? FACTIONS[a.faction].name.localeCompare(FACTIONS[b.faction].name)
                         : FACTIONS[b.faction].name.localeCompare(FACTIONS[a.faction].name);
                 case 'rarity':
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
                 case 'gearCount': {
                     const aCount = Object.values(a.equipment).filter(Boolean).length;
                     const bCount = Object.values(b.equipment).filter(Boolean).length;
-                    return sort.direction === 'asc' ? aCount - bCount : bCount - aCount;
+                    return state.sort.direction === 'asc' ? aCount - bCount : bCount - aCount;
                 }
+                case 'name':
+                    return state.sort.direction === 'asc'
+                        ? a.name.localeCompare(b.name)
+                        : b.name.localeCompare(a.name);
                 default:
-                    return sort.direction === 'asc'
+                    return state.sort.direction === 'asc'
                         ? a.id.localeCompare(b.id)
                         : b.id.localeCompare(a.id);
             }
         });
-    }, [filteredInventory, sort]);
-
-    const clearFilters = () => {
-        setSelectedFactions([]);
-        setSelectedShipTypes([]);
-        setSelectedRarities([]);
-    };
+    }, [filteredInventory, state.sort]);
 
     return (
         <div className="space-y-6">
@@ -167,7 +195,7 @@ export const ShipInventory: React.FC<Props> = ({
                     onClear={clearFilters}
                     hasActiveFilters={hasActiveFilters}
                     sortOptions={sortOptions}
-                    sort={sort}
+                    sort={state.sort}
                     setSort={setSort}
                 />
             </div>
