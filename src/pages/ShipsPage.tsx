@@ -8,7 +8,7 @@ import { useNotification } from '../hooks/useNotification';
 import { Ship } from '../types/ship';
 
 export const ShipsPage: React.FC = () => {
-    const { inventory, saveInventory } = useInventory();
+    const { inventory } = useInventory();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteShip, setPendingDeleteShip] = useState<Ship | null>(null);

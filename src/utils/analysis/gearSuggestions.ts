@@ -73,6 +73,7 @@ export function analyzeGearQuality(
     const critCheck = checkCritRate(gear, totalStats);
 
     switch (ship.type) {
+        // @ts-expect-error supporters want repair set, and crit check
         case 'SUPPORTER':
             if (gear.setBonus !== 'repair') {
                 qualityCheck.reasons.push({
