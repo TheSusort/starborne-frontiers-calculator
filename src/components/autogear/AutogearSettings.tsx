@@ -68,7 +68,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         onChange={onToggleSecondaryRequirements}
                     />
                     <p className="text-sm text-gray-400 mt-1">
-                        Add additional minimum/maximum stat requirements to the predefined role
+                        Add additional minimum/maximum stat requirements to the predefined role. For
+                        example higher hacking, speed targets, cap crit going over 100%. These are
+                        soft capped and will penalize the score relatively if not met.
                     </p>
                 </div>
             )}

@@ -3,11 +3,16 @@ import { ShipForm } from '../components/ship/ShipForm';
 import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
 import { useShips } from '../hooks/useShips';
-import { PageLayout, CollapsibleForm } from '../components/ui';
+import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
 import { useNotification } from '../hooks/useNotification';
+import { Ship } from '../types/ship';
 
 export const ShipsPage: React.FC = () => {
     const { inventory, saveInventory } = useInventory();
+    const [isFormVisible, setIsFormVisible] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [pendingDeleteShip, setPendingDeleteShip] = useState<Ship | null>(null);
+
     const getGearPiece = useCallback(
         (id: string) => {
             return inventory.find((gear) => gear.id === id);
@@ -27,13 +32,35 @@ export const ShipsPage: React.FC = () => {
         setEditingShip,
         handleLockEquipment,
     } = useShips({ getGearPiece });
-    const [isFormVisible, setIsFormVisible] = useState(false);
+
     const { addNotification } = useNotification();
+
+    const handleShipDelete = async (id: string) => {
+        setPendingDeleteShip(ships.find((s) => s.id === id) || null);
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmShipDelete = async () => {
+        if (!pendingDeleteShip) return;
+
+        // Unequip all gear before deleting
+        const gearPromises = Object.entries(pendingDeleteShip.equipment).map(([slot, gearId]) => {
+            if (gearId) {
+                return handleRemoveGear(pendingDeleteShip.id, slot);
+            }
+            return Promise.resolve();
+        });
+
+        await Promise.all(gearPromises);
+        await handleRemoveShip(pendingDeleteShip.id);
+        addNotification('success', 'Ship removed successfully');
+        setPendingDeleteShip(null);
+    };
 
     if (loading) {
         return (
             <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl ">Loading ships...</div>
+                <div className="animate-pulse text-xl">Loading ships...</div>
             </div>
         );
     }
@@ -70,10 +97,7 @@ export const ShipsPage: React.FC = () => {
 
             <ShipInventory
                 ships={ships}
-                onRemove={(ship) => {
-                    handleRemoveShip(ship);
-                    addNotification('success', 'Ship removed successfully');
-                }}
+                onRemove={handleShipDelete}
                 onEdit={(ship) => {
                     setEditingShip(ship);
                     setIsFormVisible(true);
@@ -86,38 +110,27 @@ export const ShipsPage: React.FC = () => {
                         `Equipment lock state on ${ship.name} set to ${updatedLockState}`
                     );
                 }}
-                onEquipGear={async (shipId, slot, gearId) => {
-                    handleEquipGear(shipId, slot, gearId);
-
-                    const newInventory = inventory.map((gear) => {
-                        if (gear.id === gearId) {
-                            return { ...gear, shipId };
-                        }
-                        return gear;
-                    });
-                    await saveInventory(newInventory);
-                }}
-                onRemoveGear={async (shipId, slot, showNotification = true) => {
-                    const ship = ships.find((s) => s.id === shipId);
-                    const gearId = ship?.equipment[slot];
-
-                    handleRemoveGear(shipId, slot);
-
-                    if (gearId) {
-                        const newInventory = inventory.map((gear) => {
-                            if (gear.id === gearId) {
-                                return { ...gear, shipId: '' };
-                            }
-                            return gear;
-                        });
-                        await saveInventory(newInventory);
-                    }
-
-                    if (showNotification) {
-                        addNotification('success', 'Gear removed successfully');
-                    }
-                }}
+                onEquipGear={handleEquipGear}
+                onRemoveGear={handleRemoveGear}
                 availableGear={inventory}
+            />
+
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => {
+                    setShowDeleteConfirm(false);
+                    setPendingDeleteShip(null);
+                }}
+                onConfirm={confirmShipDelete}
+                title="Delete Ship"
+                message={
+                    pendingDeleteShip?.equipment &&
+                    Object.values(pendingDeleteShip.equipment).some((id) => id)
+                        ? `This ship has equipped gear that will be unequipped. Are you sure you want to delete ${pendingDeleteShip.name}?`
+                        : `Are you sure you want to delete ${pendingDeleteShip?.name}?`
+                }
+                confirmLabel="Delete"
+                cancelLabel="Cancel"
             />
         </PageLayout>
     );

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
-
+import logo from '/favicon.ico?url';
 export const Sidebar: React.FC = () => {
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -23,7 +23,10 @@ export const Sidebar: React.FC = () => {
     const SidebarContent = () => (
         <div className="space-y-2">
             <span className="text-xs text-gray-400 hidden lg:block">{CURRENT_VERSION}</span>
-            <h1 className=" text-xl font-bold mb-8 hidden lg:block">{APP_NAME}</h1>
+            <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
+                <img src={logo} alt="logo" className="w-8 h-8" />
+                {APP_NAME}
+            </h1>
 
             <nav className="space-y-2">
                 {navigationLinks.map(({ path, label }) => (
@@ -85,7 +88,10 @@ export const Sidebar: React.FC = () => {
                             )}
                         </svg>
                     </button>
-                    <h1 className="text-white text-xl font-bold">{APP_NAME}</h1>
+                    <h1 className="text-white text-xl font-bold flex items-center gap-2">
+                        <img src={logo} alt="logo" className="w-8 h-8" />
+                        {APP_NAME}
+                    </h1>
                     <span className="text-xs text-gray-400">{CURRENT_VERSION}</span>
                 </div>
             </div>
