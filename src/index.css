@@ -34,4 +34,24 @@
     .clip-hex {
         clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
     }
+
+    .filter-chemical {
+        filter: invert(23%) sepia(41%) saturate(5391%) hue-rotate(67deg) brightness(80%)
+            contrast(90%);
+    }
+
+    .filter-electric {
+        filter: invert(32%) sepia(85%) saturate(5240%) hue-rotate(200deg) brightness(100%)
+            contrast(100%);
+    }
+
+    .filter-thermal {
+        filter: invert(48%) sepia(9%) saturate(7214%) hue-rotate(340deg) brightness(100%)
+            contrast(93%);
+    }
+
+    .filter-antimatter {
+        filter: invert(45%) sepia(96%) saturate(6155%) hue-rotate(258deg) brightness(100%)
+            contrast(91%);
+    }
 }

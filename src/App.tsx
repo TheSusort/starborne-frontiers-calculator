@@ -13,6 +13,7 @@ import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
 import { migrateTianshaoToTianchao } from './migrations/factionMigration';
+import { migrateShipAffinity } from './migrations/affinityMigration';
 import EncounterNotesPage from './pages/EncounterNotesPage';
 import HomePage from './pages/HomePage';
 import { JokeCorner } from './components/home/JokeCorner';
@@ -24,8 +25,9 @@ const siteId = 5241833;
 const hotjarVersion = 6;
 Hotjar.init(siteId, hotjarVersion);
 
-// Run migration when app starts
+// Run migrations when app starts
 migrateTianshaoToTianchao();
+migrateShipAffinity();
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);

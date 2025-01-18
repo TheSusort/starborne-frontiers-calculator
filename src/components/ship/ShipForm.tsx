@@ -14,6 +14,7 @@ import {
 import { fetchShipData } from '../../utils/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { useNotification } from '../../hooks/useNotification';
+import { AffinityName } from '../../types/ship';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -32,6 +33,13 @@ const initialBaseStats: BaseStats = {
     healModifier: 0,
 };
 
+const AFFINITIES: { value: AffinityName; label: string }[] = [
+    { value: 'chemical', label: 'Chemical' },
+    { value: 'electric', label: 'Electric' },
+    { value: 'thermal', label: 'Thermal' },
+    { value: 'antimatter', label: 'Antimatter' },
+];
+
 export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [name, setName] = useState(editingShip?.name || '');
     const [baseStats, setBaseStats] = useState<BaseStats>(
@@ -45,6 +53,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { addNotification } = useNotification();
+    const [affinity, setAffinity] = useState<AffinityName | undefined>(editingShip?.affinity);
 
     useEffect(() => {
         if (editingShip) {
@@ -55,6 +64,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setRarity(editingShip.rarity);
             setRefits(editingShip.refits);
             setImplants(editingShip.implants);
+            setAffinity(editingShip.affinity);
         }
     }, [editingShip]);
 
@@ -66,6 +76,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             faction,
             type,
             rarity,
+            affinity,
             baseStats,
             equipment: editingShip?.equipment || {},
             equipmentLocked: editingShip?.equipmentLocked || false,
@@ -107,6 +118,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setFaction(data.faction);
             setType(data.type);
             setRarity(data.rarity as RarityName);
+            setAffinity(data.affinity as AffinityName);
             addNotification('success', 'Ship data fetched successfully');
         } catch (err) {
             setError(
@@ -203,7 +215,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             </div>
 
             {/* Type and Faction section */}
-            <div className="flex flex-row gap-4">
+            <div className="flex flex-row flex-wrap gap-4">
                 <Select
                     label="Faction"
                     value={faction}
@@ -220,6 +232,15 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                     options={shipTypeOptions}
                     noDefaultSelection
                     defaultOption="Select Type"
+                />
+
+                <Select
+                    label="Affinity"
+                    value={affinity || ''}
+                    onChange={(value) => setAffinity(value as AffinityName)}
+                    options={AFFINITIES}
+                    noDefaultSelection
+                    defaultOption="Select Affinity"
                 />
             </div>
 

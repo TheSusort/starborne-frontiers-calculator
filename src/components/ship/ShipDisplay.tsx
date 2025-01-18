@@ -1,5 +1,5 @@
 import React, { memo, useMemo } from 'react';
-import { Ship } from '../../types/ship';
+import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
 import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon } from '../ui';
 import { calculateTotalStats } from '../../utils/statsCalculator';
@@ -20,10 +20,27 @@ interface Props {
     onLockEquipment?: (ship: Ship) => Promise<void>;
 }
 
-const ShipImage = memo(({ iconUrl, name }: { iconUrl: string; name: string }) => (
-    <img src={iconUrl} alt={name} className="w-4" />
-));
+const ShipImage = memo(
+    ({ iconUrl, name, className }: { iconUrl: string; name: string; className?: string }) => (
+        <img src={iconUrl} alt={name} className={`w-4 ${className}`} />
+    )
+);
 ShipImage.displayName = 'ShipImage';
+
+const AffinityClass = ({ affinity }: { affinity: AffinityName }) => {
+    switch (affinity) {
+        case 'chemical':
+            return 'filter-chemical';
+        case 'electric':
+            return 'filter-electric';
+        case 'thermal':
+            return 'filter-thermal';
+        case 'antimatter':
+            return 'filter-antimatter';
+        default:
+            return '';
+    }
+};
 
 const Header = memo(
     ({ ship, variant = 'full' }: { ship: Ship; variant?: 'full' | 'compact' | 'extended' }) => (
@@ -33,6 +50,7 @@ const Header = memo(
                     <ShipImage
                         iconUrl={SHIP_TYPES[ship.type].iconUrl}
                         name={SHIP_TYPES[ship.type].name}
+                        className={`${ship.affinity ? AffinityClass({ affinity: ship.affinity }) : ''}`}
                     />
                 )}
                 {ship.faction && FACTIONS[ship.faction] && (

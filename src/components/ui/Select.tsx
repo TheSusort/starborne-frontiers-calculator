@@ -124,10 +124,10 @@ export const Select: React.FC<Props> = ({
 
                 <div
                     className={`
-                        absolute z-10 w-full
+                        absolute z-10 min-w-full w-auto
                         bg-dark-lighter border border-dark-border
                         shadow-lg
-                        max-h-60 overflow-auto
+                        max-h-60 overflow-y-auto overflow-x-hidden
                         transition-all duration-200 origin-top
                         ${
                             isOpen

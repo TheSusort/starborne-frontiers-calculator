@@ -4,6 +4,8 @@ import { ShipTypeName } from '../constants/shipTypes';
 import { RarityName } from '../constants/rarities';
 import { Stat, BaseStats } from './stats';
 
+export type AffinityName = 'chemical' | 'electric' | 'thermal' | 'antimatter';
+
 export interface Ship {
     id: string;
     name: string;
@@ -15,6 +17,7 @@ export interface Ship {
     equipmentLocked?: boolean;
     refits: Refit[];
     implants: Implant[];
+    affinity?: AffinityName;
 }
 
 export interface Faction {

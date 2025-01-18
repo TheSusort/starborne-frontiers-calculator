@@ -54,9 +54,21 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 <div className="flex flex-col items-center">
                                     <span className="text-xs ">{pos}</span>
                                     {ship && (
-                                        <span className="text-white text-xs mt-1 px-1 truncate max-w-full">
-                                            {ship.name}
-                                        </span>
+                                        <>
+                                            <span className="text-white text-xs mt-1 px-1 truncate max-w-full">
+                                                {ship.name}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                                {Array.from({ length: 6 }, (_, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                                                    >
+                                                        ★
+                                                    </span>
+                                                ))}
+                                            </span>
+                                        </>
                                     )}
                                 </div>
                             </HexButton>
