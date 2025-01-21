@@ -50,53 +50,68 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         }
     }, [ships, loading, saveShips, initialized]);
 
-    const handleEquipGear = useCallback((shipId: string, slot: GearSlotName, gearId: string) => {
-        setShips((prev) => {
-            const newShips = prev.map((ship) => {
-                // First check if the gear is equipped on a locked ship
-                if (
-                    ship.id !== shipId &&
-                    ship.equipmentLocked &&
-                    Object.entries(ship.equipment).some(([_, id]) => id === gearId)
-                ) {
-                    // If it is, return early without any changes
+    const handleEquipGear = useCallback(
+        async (shipId: string, slot: GearSlotName, gearId: string) => {
+            // First update ships
+            setShips((prev) => {
+                const newShips = prev.map((ship) => {
+                    // First check if the gear is equipped on a locked ship
+                    if (
+                        ship.id !== shipId &&
+                        ship.equipmentLocked &&
+                        Object.entries(ship.equipment).some(([_, id]) => id === gearId)
+                    ) {
+                        return ship;
+                    }
+
+                    // Remove the gear from any other unlocked ship that might have it equipped
+                    if (
+                        ship.id !== shipId &&
+                        !ship.equipmentLocked &&
+                        Object.entries(ship.equipment).some(([_, id]) => id === gearId)
+                    ) {
+                        const newEquipment = { ...ship.equipment };
+                        Object.entries(newEquipment).forEach(([key, id]) => {
+                            if (id === gearId) {
+                                delete newEquipment[key as GearSlotName];
+                            }
+                        });
+                        return {
+                            ...ship,
+                            equipment: newEquipment,
+                        };
+                    }
+
+                    // Equip the gear to the target ship
+                    if (ship.id === shipId) {
+                        return {
+                            ...ship,
+                            equipment: {
+                                ...ship.equipment,
+                                [slot]: gearId,
+                            },
+                        };
+                    }
                     return ship;
-                }
+                });
 
-                // Remove the gear from any other unlocked ship that might have it equipped
-                if (
-                    ship.id !== shipId &&
-                    !ship.equipmentLocked &&
-                    Object.entries(ship.equipment).some(([_, id]) => id === gearId)
-                ) {
-                    const newEquipment = { ...ship.equipment };
-                    Object.entries(newEquipment).forEach(([key, id]) => {
-                        if (id === gearId) {
-                            delete newEquipment[key as GearSlotName];
-                        }
-                    });
-                    return {
-                        ...ship,
-                        equipment: newEquipment,
-                    };
-                }
-
-                // Equip the gear to the target ship
-                if (ship.id === shipId) {
-                    return {
-                        ...ship,
-                        equipment: {
-                            ...ship.equipment,
-                            [slot]: gearId,
-                        },
-                    };
-                }
-                return ship;
+                return newShips;
             });
 
-            return newShips;
-        });
-    }, []);
+            // Then update the gear's shipId in inventory
+            if (getGearPiece) {
+                const gear = getGearPiece(gearId);
+                if (gear) {
+                    const updatedGear = { ...gear, shipId };
+                    const event = new CustomEvent('updateInventory', {
+                        detail: { gear: updatedGear },
+                    });
+                    window.dispatchEvent(event);
+                }
+            }
+        },
+        [getGearPiece]
+    );
 
     const handleRemoveGear = (shipId: string, slot: GearSlotName) => {
         setShips((prev) =>

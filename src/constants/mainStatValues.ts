@@ -1,9 +1,4 @@
-type StatTable = {
-    [key: number]: {
-        // star rating
-        [key: number]: number; // level
-    };
-};
+type StatTable = Record<number, Record<number, number>>;
 
 // Percentage stats (ATK%, DEF%, HP%, CRT%, CPR%)
 export const PERCENTAGE_STATS: StatTable = {

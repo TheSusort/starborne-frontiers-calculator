@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
 import { GearPieceForm } from '../components/gear/GearPieceForm';
 import { GearInventory } from '../components/gear/GearInventory';
+import { GearUpgradeAnalysis } from '../components/gear/GearUpgradeAnalysis';
 import { GearPiece } from '../types/gear';
 import { useInventory } from '../hooks/useInventory';
 import { useNotification } from '../hooks/useNotification';
 import { useShips } from '../hooks/useShips';
+import { SHIP_TYPES } from '../constants';
+import { Tabs } from '../components/ui/layout/Tabs';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -16,6 +19,12 @@ export const GearPage: React.FC = () => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
+    const [activeTab, setActiveTab] = useState('inventory');
+
+    const tabs = [
+        { id: 'inventory', label: 'Inventory' },
+        { id: 'analysis', label: 'Upgrade Analysis' },
+    ];
 
     useEffect(() => {
         // Validate that all equipped gear matches ship assignments
@@ -105,7 +114,7 @@ export const GearPage: React.FC = () => {
             }}
         >
             {error && (
-                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 ">
+                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700">
                     {error}
                 </div>
             )}
@@ -114,11 +123,21 @@ export const GearPage: React.FC = () => {
                 <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
             </CollapsibleForm>
 
-            <GearInventory
-                inventory={inventory}
-                onRemove={handleRemovePiece}
-                onEdit={handleEditPiece}
-            />
+            <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            {activeTab === 'inventory' ? (
+                <>
+                    <GearInventory
+                        inventory={inventory}
+                        onRemove={handleRemovePiece}
+                        onEdit={handleEditPiece}
+                    />
+                </>
+            ) : (
+                <GearUpgradeAnalysis
+                    inventory={inventory}
+                    shipRoles={Object.values(SHIP_TYPES).map((type) => type.name)}
+                />
+            )}
 
             <ConfirmModal
                 isOpen={showDeleteConfirm}

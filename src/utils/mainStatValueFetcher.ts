@@ -7,15 +7,15 @@ import {
 } from '../constants/mainStatValues';
 import { StatName, StatType } from '../types/stats';
 
-export const calculateMainStatValue = (
+export function calculateMainStatValue(
     statName: StatName,
-    statType: StatType,
+    type: StatType,
     stars: number,
     level: number
-): number => {
+): number {
     let table;
 
-    if (statType === 'percentage') {
+    if (type === 'percentage') {
         table = PERCENTAGE_STATS;
     } else if (statName === 'hp') {
         table = FLAT_HP;
@@ -32,4 +32,4 @@ export const calculateMainStatValue = (
     }
 
     return table[stars][level];
-};
+}

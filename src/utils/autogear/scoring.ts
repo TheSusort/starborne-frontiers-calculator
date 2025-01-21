@@ -48,7 +48,7 @@ export function calculatePriorityScore(
 
         if (priority.maxLimit) {
             if (statValue > priority.maxLimit) {
-                // Calculate penalty as half the percentage above maximum
+                // Calculate penalty as the percentage above maximum
                 const diff = (statValue - priority.maxLimit) / priority.maxLimit;
                 penalties += diff * 100;
             }
@@ -103,32 +103,14 @@ function calculateAttackerScore(stats: BaseStats): number {
 
 function calculateDefenderScore(stats: BaseStats): number {
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    // add security as a secondary stat
-    const security = stats.security || 0;
-    return effectiveHP + security * STAT_NORMALIZERS.security;
+    return effectiveHP;
 }
 
 function calculateDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
     const dps = calculateDPS(stats);
 
-    // Heavily penalize builds below 270 hacking
-    if (hacking < 270) {
-        return (hacking / 270) * 100; // Very low score if below minimum
-    }
-
-    // Base score starts at 1000 for meeting minimum hacking and speed
-    let score = 1000;
-
-    // Additional score for hacking above minimum (diminishing returns)
-    if (hacking > 270) {
-        score += Math.sqrt(hacking - 270) * 10;
-    }
-
-    // Add DPS contribution with higher weight
-    score += dps;
-
-    return score;
+    return dps * hacking;
 }
 
 function calculateHealerScore(stats: BaseStats): number {

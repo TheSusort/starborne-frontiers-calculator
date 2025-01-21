@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.16.4';
+export const CURRENT_VERSION = '0.17.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.17.0',
+        date: '2025-01-21',
+        changes: ['Added gear upgrade analysis', 'Fixed a bug with gear/ship link'],
+    },
     {
         version: '0.16.4',
         date: '2025-01-15',

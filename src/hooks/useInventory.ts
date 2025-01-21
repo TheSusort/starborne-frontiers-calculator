@@ -37,13 +37,33 @@ export const useInventory = () => {
         }
     }, []);
 
-    const getGearPiece = (gearId: string): GearPiece | undefined => {
-        return gearId ? inventory.find((gear) => gear.id === gearId) : undefined;
-    };
+    const getGearPiece = useCallback(
+        (gearId: string): GearPiece | undefined => {
+            return gearId ? inventory.find((gear) => gear.id === gearId) : undefined;
+        },
+        [inventory]
+    );
 
     useEffect(() => {
         loadInventory();
     }, []);
+
+    useEffect(() => {
+        const handleInventoryUpdate = (event: CustomEvent<{ gear: GearPiece }>) => {
+            const updatedGear = event.detail.gear;
+            const newInventory = inventory.map((gear) =>
+                gear.id === updatedGear.id ? updatedGear : gear
+            );
+            // Save to localStorage when inventory is updated
+            saveInventory(newInventory);
+        };
+
+        window.addEventListener('updateInventory', handleInventoryUpdate as EventListener);
+
+        return () => {
+            window.removeEventListener('updateInventory', handleInventoryUpdate as EventListener);
+        };
+    }, [inventory, saveInventory]);
 
     return {
         inventory,
