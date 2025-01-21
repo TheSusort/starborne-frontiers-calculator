@@ -1,6 +1,6 @@
 import React from 'react';
 import { GearPiece } from '../../types/gear';
-import { ShipTypeName } from '../../constants';
+import { SHIP_TYPES, ShipTypeName } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
@@ -23,12 +23,15 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
             </span>
 
             {shipRoles.map((role) => {
-                const results = analyzePotentialUpgrades(inventory, role);
+                const results = analyzePotentialUpgrades(inventory, SHIP_TYPES[role].name);
 
                 if (results.length === 0) return null;
                 return (
                     <div key={role} className="space-y-4 bg-dark p-4">
-                        <h3 className="text-lg font-medium">{role}</h3>
+                        <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
+                        <span className="text-sm text-gray-400">
+                            {SHIP_TYPES[role].description}
+                        </span>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {results.map((result, index) => (
                                 <div key={result.piece.id} className="space-y-2">

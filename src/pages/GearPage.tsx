@@ -133,10 +133,7 @@ export const GearPage: React.FC = () => {
                     />
                 </>
             ) : (
-                <GearUpgradeAnalysis
-                    inventory={inventory}
-                    shipRoles={Object.values(SHIP_TYPES).map((type) => type.name)}
-                />
+                <GearUpgradeAnalysis inventory={inventory} shipRoles={Object.keys(SHIP_TYPES)} />
             )}
 
             <ConfirmModal
