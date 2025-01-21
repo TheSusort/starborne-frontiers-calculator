@@ -8,7 +8,7 @@ interface Props {
     inventory: GearPiece[];
     shipRoles: ShipTypeName[];
 }
-// gold, silver, bronze tailwind colors
+
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
 
 export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) => {
@@ -19,7 +19,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                 This analysis tries to find the 3 best gear upgrades for each ship role, by
                 simulating upgrading each piece to 16, 10 different times, and averaging the
                 results. The results are percentages of improvement to the role score over the
-                current gear.
+                current level of the piece.
             </span>
 
             {shipRoles.map((role) => {

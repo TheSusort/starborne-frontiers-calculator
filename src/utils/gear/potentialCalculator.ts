@@ -199,5 +199,7 @@ export function analyzePotentialUpgrades(
         };
     });
 
-    return results.sort((a, b) => b.improvement - a.improvement).slice(0, count);
+    return results
+        .sort((a, b) => b.improvement / b.currentScore - a.improvement / a.currentScore)
+        .slice(0, count);
 }
