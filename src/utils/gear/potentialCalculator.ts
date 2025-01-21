@@ -56,6 +56,23 @@ function getAvailableStats(
     return availableStats;
 }
 
+function getSubstatIncrease(stat: Stat, rarity: string): number {
+    const range = SUBSTAT_RANGES[stat.name]?.[stat.type];
+    if (!range) return 0;
+
+    const { min, max } = range;
+    switch (rarity) {
+        case 'rare':
+            return min;
+        case 'epic':
+            return Math.floor((min + max) / 2);
+        case 'legendary':
+            return max;
+        default:
+            return 0;
+    }
+}
+
 function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece {
     if (piece.level >= targetLevel) return piece;
 
@@ -107,12 +124,8 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
             const randomIndex = Math.floor(Math.random() * newSubStats.length);
             const stat = newSubStats[randomIndex];
 
-            if (SUBSTAT_RANGES[stat.name]?.[stat.type]) {
-                const increase = Math.floor(
-                    (SUBSTAT_RANGES[stat.name][stat.type].max -
-                        SUBSTAT_RANGES[stat.name][stat.type].min) /
-                        4
-                );
+            const increase = getSubstatIncrease(stat, piece.rarity);
+            if (increase > 0) {
                 newSubStats[randomIndex] = {
                     ...stat,
                     value: stat.value + increase,
