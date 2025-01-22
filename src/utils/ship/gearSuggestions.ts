@@ -1,7 +1,7 @@
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
-import { calculateTotalStats } from '../statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 import { ShipTypeName } from '../../constants/shipTypes';
 import { SlotContribution } from './statDistribution';
 import { GEAR_SLOTS } from '../../constants/gearTypes';

@@ -4,7 +4,7 @@ import { SlotContribution } from './statDistribution';
 import { UpgradeSuggestion } from '../../types/analysis';
 import { analyzeGearQuality } from './gearSuggestions';
 import { Ship } from '../../types/ship';
-import { calculateTotalStats } from '../statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { ShipTypeName } from '../../constants/shipTypes';
 

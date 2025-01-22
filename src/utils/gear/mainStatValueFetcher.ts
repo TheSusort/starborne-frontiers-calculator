@@ -4,8 +4,8 @@ import {
     FLAT_HP,
     HACK_SEC_STATS,
     SPD_STATS,
-} from '../constants/mainStatValues';
-import { StatName, StatType } from '../types/stats';
+} from '../../constants/mainStatValues';
+import { StatName, StatType } from '../../types/stats';
 
 export function calculateMainStatValue(
     statName: StatName,

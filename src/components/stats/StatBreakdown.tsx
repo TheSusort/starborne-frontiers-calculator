@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatBreakdown as StatBreakdownType } from '../../utils/statsCalculator';
+import { StatBreakdown as StatBreakdownType } from '../../utils/ship/statsCalculator';
 import { BaseStats } from '../../types/stats';
 import { STATS } from '../../constants/stats';
 

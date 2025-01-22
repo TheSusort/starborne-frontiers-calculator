@@ -3,7 +3,7 @@ import { SimulationPage } from '../SimulationPage';
 import { Ship } from '../../types/ship';
 import { vi } from 'vitest';
 import React from 'react';
-import { SimulationSummary } from '../../utils/simulationCalculator';
+import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { BaseStats } from '../../types/stats';
 
 window.scrollTo = vi.fn();

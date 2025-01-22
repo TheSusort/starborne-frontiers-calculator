@@ -2,7 +2,7 @@ import React, { memo, useMemo } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
 import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon } from '../ui';
-import { calculateTotalStats } from '../../utils/statsCalculator';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';

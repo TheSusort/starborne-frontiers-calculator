@@ -3,7 +3,7 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
-import { calculateTotalStats } from '../../statsCalculator';
+import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats } from '../../../types/stats';
 import { EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';

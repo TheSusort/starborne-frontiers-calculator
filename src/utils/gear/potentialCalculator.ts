@@ -1,12 +1,12 @@
 import { GearPiece } from '../../types/gear';
 import { Stat, StatName, StatType } from '../../types/stats';
 import { STATS } from '../../constants';
-import { calculateMainStatValue } from '../mainStatValueFetcher';
+import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
-import { calculateTotalStats } from '../statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 
 const UPGRADE_LEVELS = {
     rare: {

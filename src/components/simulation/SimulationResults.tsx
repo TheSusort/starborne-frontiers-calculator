@@ -1,5 +1,5 @@
 import React from 'react';
-import { SimulationSummary } from '../../utils/simulationCalculator';
+import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { ShipTypeName } from '../../constants';
 
 interface SimulationResultsProps {

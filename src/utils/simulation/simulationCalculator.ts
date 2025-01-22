@@ -1,6 +1,6 @@
-import { BaseStats } from '../types/stats';
-import { ShipTypeName } from '../constants';
-import { calculateDamageReduction } from './autogear/scoring';
+import { BaseStats } from '../../types/stats';
+import { ShipTypeName } from '../../constants';
+import { calculateDamageReduction } from '../autogear/scoring';
 
 export interface SimulationSummary {
     // Common

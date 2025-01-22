@@ -1,5 +1,5 @@
-import { BaseStats } from '../types/stats';
-import { SHIPS } from '../constants/ships';
+import { BaseStats } from '../../types/stats';
+import { SHIPS } from '../../constants/ships';
 export interface ParsedShipData {
     baseStats: BaseStats;
     faction: string;

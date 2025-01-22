@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ShipForm } from '../components/ship/ShipForm';
 import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
@@ -34,6 +34,12 @@ export const ShipsPage: React.FC = () => {
     } = useShips({ getGearPiece });
 
     const { addNotification } = useNotification();
+
+    useEffect(() => {
+        if (error) {
+            addNotification('error', error);
+        }
+    }, [error, addNotification]);
 
     const handleShipDelete = async (id: string) => {
         setPendingDeleteShip(ships.find((s) => s.id === id) || null);
@@ -80,8 +86,6 @@ export const ShipsPage: React.FC = () => {
                 variant: isFormVisible ? 'secondary' : 'primary',
             }}
         >
-            {error && <>{addNotification('error', error)}</>}
-
             <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                 <ShipForm
                     onSubmit={async (ship) => {

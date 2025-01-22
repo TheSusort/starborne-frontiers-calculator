@@ -11,7 +11,7 @@ import {
     ShipTypeName,
     FactionName,
 } from '../../constants';
-import { fetchShipData } from '../../utils/shipDataFetcher';
+import { fetchShipData } from '../../utils/dataUpdate/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { useNotification } from '../../hooks/useNotification';
 import { AffinityName } from '../../types/ship';

@@ -4,7 +4,7 @@ import { Ship } from '../../../types/ship';
 import { vi } from 'vitest';
 import { SHIP_TYPES } from '../../../constants/shipTypes';
 import { FACTIONS } from '../../../constants/factions';
-import { fetchShipData } from '../../../utils/shipDataFetcher';
+import { fetchShipData } from '../../../utils/dataUpdate/shipDataFetcher';
 
 // Mock fetch ship data utility
 vi.mock('../../../utils/shipDataFetcher', () => ({

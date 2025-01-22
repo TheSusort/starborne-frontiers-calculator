@@ -1,5 +1,5 @@
 import React from 'react';
-import { SlotContribution } from '../../utils/analysis/statDistribution';
+import { SlotContribution } from '../../utils/ship/statDistribution';
 import { GEAR_SLOTS } from '../../constants';
 
 interface Props {

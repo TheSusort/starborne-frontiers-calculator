@@ -3,7 +3,7 @@ import { GearPiece } from '../../types/gear';
 import { GearSlotName, GEAR_SLOTS, ShipTypeName, SHIP_TYPES } from '../../constants';
 import { calculateTotalScore } from '../autogear/scoring';
 import { Ship } from '../../types/ship';
-import { calculateTotalStats } from '../statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 
 export interface SlotContribution {
     slotName: GearSlotName;

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { TeamLoadout } from '../types/loadout';
-import { calculateGearSets } from '../utils/gearSetCalculator';
+import { calculateGearSets } from '../utils/gear/gearSetCalculator';
 import { GearPiece } from '../types/gear';
 
 export const useTeamGearLookup = (

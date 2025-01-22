@@ -1,5 +1,5 @@
-import { GearPiece } from '../types/gear';
-import { GEAR_SETS } from '../constants';
+import { GearPiece } from '../../types/gear';
+import { GEAR_SETS } from '../../constants';
 
 export const calculateGearSets = (equippedGear: GearPiece[]): string[] => {
     const setCounter: Record<string, number> = {};

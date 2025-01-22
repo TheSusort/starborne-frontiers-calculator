@@ -2,7 +2,7 @@ import { BaseStats } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
-import { calculateTotalStats } from '../statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
 

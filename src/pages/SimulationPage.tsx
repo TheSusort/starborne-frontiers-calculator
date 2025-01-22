@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useShips } from '../hooks/useShips';
-import { calculateTotalStats } from '../utils/statsCalculator';
+import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
 import { PageLayout } from '../components/ui';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { runSimulation, SimulationSummary } from '../utils/simulationCalculator';
+import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
 import { ShipTypeName } from '../constants';
 import { SimulationResults } from '../components/simulation/SimulationResults';
 import { SimulationSettings } from '../components/simulation/SimulationSettings';

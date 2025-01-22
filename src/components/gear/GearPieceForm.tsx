@@ -13,7 +13,7 @@ import {
 } from '../../constants';
 import { Button, Input, Select } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
-import { calculateMainStatValue } from '../../utils/mainStatValueFetcher';
+import { calculateMainStatValue } from '../../utils/gear/mainStatValueFetcher';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;

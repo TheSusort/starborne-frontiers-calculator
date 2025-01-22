@@ -5,20 +5,19 @@ import { ShipCard } from '../components/ship/ShipCard';
 import { StatDisplay } from '../components/stats/StatDisplay';
 import { useInventory } from '../hooks/useInventory';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { analyzeStatDistribution } from '../utils/analysis/statDistribution';
+import { analyzeStatDistribution } from '../utils/ship/statDistribution';
 import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/ui/layout/PageLayout';
 import { GearPiece } from '../types/gear';
 import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
 import { ShipForm } from '../components/ship/ShipForm';
 import { useNotification } from '../hooks/useNotification';
-import { analyzeEnhancedStatDistribution } from '../utils/analysis/enhancedStatDistribution';
-import { EnhancedStatDistributionView } from '../components/stats/EnhancedStatDistribution';
-import { analyzeUpgrades } from '../utils/analysis/upgradeAnalysis';
+import { analyzeUpgrades } from '../utils/ship/upgradeAnalysis';
 import { UpgradeSuggestions } from '../components/stats/UpgradeSuggestions';
-import { calculateTotalStats } from '../utils/statsCalculator';
+import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { useOrphanSetPieces } from '../hooks/useGear';
 import { useGearLookup } from '../hooks/useGear';
+import { StatDistributionChart } from '../components/stats/StatDistributionChart';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -170,10 +169,11 @@ export const ShipDetailsPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
-                    <EnhancedStatDistributionView
-                        distribution={analyzeEnhancedStatDistribution(
-                            ship,
+                    <StatDistributionChart
+                        contributions={analyzeStatDistribution(
+                            ship.equipment,
                             getGearPiece,
+                            ship,
                             getEngineeringStatsForShipType
                         )}
                     />

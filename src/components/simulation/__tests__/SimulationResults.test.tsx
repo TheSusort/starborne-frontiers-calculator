@@ -1,6 +1,6 @@
 import { render, screen } from '../../../test-utils/test-utils';
 import { SimulationResults } from '../SimulationResults';
-import { SimulationSummary } from '../../../utils/simulationCalculator';
+import { SimulationSummary } from '../../../utils/simulation/simulationCalculator';
 
 describe('SimulationResults', () => {
     const mockAttackerSimulation: SimulationSummary = {
