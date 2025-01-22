@@ -19,6 +19,7 @@ import HomePage from './pages/HomePage';
 import { JokeCorner } from './components/home/JokeCorner';
 import { ShipDetailsPage } from './pages/ShipDetailsPage';
 import Hotjar from '@hotjar/browser';
+import { AuthProvider } from './contexts/AuthProvider';
 
 // init hotjar
 const siteId = 5241833;
@@ -61,42 +62,53 @@ const App: React.FC = () => {
     };
 
     return (
-        <NotificationProvider>
-            <Router>
-                <main className="flex">
-                    <Sidebar />
-                    <div className="flex-1 lg:pl-64 max-w-full bg-dark-lighter">
-                        <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col overflow-x-hidden">
-                            <div className="max-w-7xl mx-auto w-full flex-grow">
-                                <Routes>
-                                    <Route path="/ships" element={<ShipsPage />} />
-                                    <Route path="/gear" element={<GearPage />} />
-                                    <Route path="/simulation" element={<SimulationPage />} />
-                                    <Route path="/autogear" element={<AutogearPage />} />
-                                    <Route path="/engineering" element={<EngineeringStatsPage />} />
-                                    <Route path="/loadouts" element={<LoadoutsPage />} />
-                                    <Route path="/encounters" element={<EncounterNotesPage />} />
-                                    <Route path="/" element={<HomePage />} />
-                                    <Route path="/ships/:shipId" element={<ShipDetailsPage />} />
-                                </Routes>
-                            </div>
+        <AuthProvider>
+            <NotificationProvider>
+                <Router>
+                    <main className="flex">
+                        <Sidebar />
+                        <div className="flex-1 lg:pl-64 max-w-full bg-dark-lighter">
+                            <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col overflow-x-hidden">
+                                <div className="max-w-7xl mx-auto w-full flex-grow">
+                                    <Routes>
+                                        <Route path="/ships" element={<ShipsPage />} />
+                                        <Route path="/gear" element={<GearPage />} />
+                                        <Route path="/simulation" element={<SimulationPage />} />
+                                        <Route path="/autogear" element={<AutogearPage />} />
+                                        <Route
+                                            path="/engineering"
+                                            element={<EngineeringStatsPage />}
+                                        />
+                                        <Route path="/loadouts" element={<LoadoutsPage />} />
+                                        <Route
+                                            path="/encounters"
+                                            element={<EncounterNotesPage />}
+                                        />
+                                        <Route path="/" element={<HomePage />} />
+                                        <Route
+                                            path="/ships/:shipId"
+                                            element={<ShipDetailsPage />}
+                                        />
+                                    </Routes>
+                                </div>
 
-                            <JokeCorner />
-                            <footer className="text-center text-xs mt-auto pt-5">
-                                Made with ❤️ by {AUTHOR}
-                            </footer>
+                                <JokeCorner />
+                                <footer className="text-center text-xs mt-auto pt-5">
+                                    Made with ❤️ by {AUTHOR}
+                                </footer>
+                            </div>
                         </div>
-                    </div>
-                    <ChangelogModal
-                        isOpen={showChangelog}
-                        onClose={handleCloseChangelog}
-                        entries={CHANGELOG}
-                        lastSeenVersion={lastSeenVersion}
-                    />
-                    <NotificationContainer />
-                </main>
-            </Router>
-        </NotificationProvider>
+                        <ChangelogModal
+                            isOpen={showChangelog}
+                            onClose={handleCloseChangelog}
+                            entries={CHANGELOG}
+                            lastSeenVersion={lastSeenVersion}
+                        />
+                        <NotificationContainer />
+                    </main>
+                </Router>
+            </NotificationProvider>
+        </AuthProvider>
     );
 };
 
