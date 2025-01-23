@@ -13,7 +13,7 @@ import {
 } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
-import { usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 
 interface Props {
     ships: Ship[];
@@ -45,28 +45,28 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.rarities?.length ?? 0) > 0;
 
     const setSelectedFactions = (factions: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, factions },
         }));
     };
 
     const setSelectedShipTypes = (shipTypes: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, shipTypes },
         }));
     };
 
     const setSelectedRarities = (rarities: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, rarities },
         }));
     };
 
     const setSort = (sort: SortConfig) => {
-        setState((prev) => ({ ...prev, sort }));
+        setState((prev: FilterState) => ({ ...prev, sort }));
     };
 
     const filteredInventory = useMemo(() => {

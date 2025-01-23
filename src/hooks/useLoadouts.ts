@@ -1,109 +1,110 @@
-import { useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { GearSlotName } from '../constants';
+import { useStorage } from './useStorage';
 import { useNotification } from './useNotification';
 
 const LOADOUTS_STORAGE_KEY = 'shipLoadouts';
 const TEAM_LOADOUTS_STORAGE_KEY = 'teamLoadouts';
 
 export const useLoadouts = () => {
-    const [loadouts, setLoadouts] = useState<Loadout[]>([]);
-    const [teamLoadouts, setTeamLoadouts] = useState<TeamLoadout[]>([]);
     const { addNotification } = useNotification();
-    useEffect(() => {
-        const saved = localStorage.getItem(LOADOUTS_STORAGE_KEY);
-        if (saved) {
-            setLoadouts(JSON.parse(saved));
-        }
-    }, []);
+    const { data: loadouts = [], setData: setLoadouts } = useStorage<Loadout[]>({
+        key: LOADOUTS_STORAGE_KEY,
+        defaultValue: [],
+    });
 
-    const saveLoadouts = (newLoadouts: Loadout[]) => {
-        localStorage.setItem(LOADOUTS_STORAGE_KEY, JSON.stringify(newLoadouts));
-        setLoadouts(newLoadouts);
-    };
+    const { data: teamLoadouts = [], setData: setTeamLoadouts } = useStorage<TeamLoadout[]>({
+        key: TEAM_LOADOUTS_STORAGE_KEY,
+        defaultValue: [],
+    });
 
-    const addLoadout = async (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
-        const newLoadout: Loadout = {
-            ...loadout,
-            id: crypto.randomUUID(),
-            createdAt: Date.now(),
-        };
-        await saveLoadouts([...loadouts, newLoadout]);
-        addNotification('success', 'Loadout added');
-    };
+    const addLoadout = useCallback(
+        async (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
+            const newLoadout: Loadout = {
+                ...loadout,
+                id: crypto.randomUUID(),
+                createdAt: Date.now(),
+            };
+            await setLoadouts([...loadouts, newLoadout]);
+            addNotification('success', 'Loadout added');
+        },
+        [loadouts, setLoadouts, addNotification]
+    );
 
-    const updateLoadout = async (id: string, equipment: Record<GearSlotName, string>) => {
-        const newLoadouts = loadouts.map((loadout) =>
-            loadout.id === id ? { ...loadout, equipment } : loadout
-        );
-        await saveLoadouts(newLoadouts);
-        addNotification('success', 'Loadout updated');
-    };
+    const updateLoadout = useCallback(
+        async (id: string, equipment: Record<GearSlotName, string>) => {
+            const newLoadouts = loadouts.map((loadout) =>
+                loadout.id === id ? { ...loadout, equipment } : loadout
+            );
+            await setLoadouts(newLoadouts);
+            addNotification('success', 'Loadout updated');
+        },
+        [loadouts, setLoadouts, addNotification]
+    );
 
-    const deleteLoadout = async (id: string) => {
-        await saveLoadouts(loadouts.filter((loadout) => loadout.id !== id));
-        addNotification('success', 'Loadout deleted');
-    };
+    const deleteLoadout = useCallback(
+        async (id: string) => {
+            await setLoadouts(loadouts.filter((loadout) => loadout.id !== id));
+            addNotification('success', 'Loadout deleted');
+        },
+        [loadouts, setLoadouts, addNotification]
+    );
 
-    // Load team loadouts
-    useEffect(() => {
-        const saved = localStorage.getItem(TEAM_LOADOUTS_STORAGE_KEY);
-        if (saved) {
-            setTeamLoadouts(JSON.parse(saved));
-        }
-    }, []);
-
-    const saveTeamLoadouts = (newTeamLoadouts: TeamLoadout[]) => {
-        localStorage.setItem(TEAM_LOADOUTS_STORAGE_KEY, JSON.stringify(newTeamLoadouts));
-        setTeamLoadouts(newTeamLoadouts);
-        addNotification('success', 'Team loadout updated');
-    };
-
-    const validateTeamLoadout = (shipLoadouts: TeamLoadout['shipLoadouts']) => {
+    const validateTeamLoadout = useCallback((shipLoadouts: TeamLoadout['shipLoadouts']) => {
         const usedGear = new Set<string>();
 
         for (const loadout of shipLoadouts) {
             for (const gearId of Object.values(loadout.equipment)) {
                 if (usedGear.has(gearId)) {
-                    return false; // Gear piece is already used
+                    return false;
                 }
                 usedGear.add(gearId);
             }
         }
 
         return true;
-    };
+    }, []);
 
-    const addTeamLoadout = async (teamLoadout: Omit<TeamLoadout, 'id' | 'createdAt'>) => {
-        if (!validateTeamLoadout(teamLoadout.shipLoadouts)) {
-            throw new Error('Invalid team loadout: Duplicate gear pieces detected');
-        }
+    const addTeamLoadout = useCallback(
+        async (teamLoadout: Omit<TeamLoadout, 'id' | 'createdAt'>) => {
+            if (!validateTeamLoadout(teamLoadout.shipLoadouts)) {
+                throw new Error('Invalid team loadout: Duplicate gear pieces detected');
+            }
 
-        const newTeamLoadout: TeamLoadout = {
-            ...teamLoadout,
-            id: crypto.randomUUID(),
-            createdAt: Date.now(),
-        };
-        await saveTeamLoadouts([...teamLoadouts, newTeamLoadout]);
-        addNotification('success', 'Team loadout added');
-    };
+            const newTeamLoadout: TeamLoadout = {
+                ...teamLoadout,
+                id: crypto.randomUUID(),
+                createdAt: Date.now(),
+            };
+            await setTeamLoadouts([...teamLoadouts, newTeamLoadout]);
+            addNotification('success', 'Team loadout added');
+        },
+        [teamLoadouts, setTeamLoadouts, validateTeamLoadout, addNotification]
+    );
 
-    const updateTeamLoadout = async (id: string, shipLoadouts: TeamLoadout['shipLoadouts']) => {
-        if (!validateTeamLoadout(shipLoadouts)) {
-            throw new Error('Invalid team loadout: Duplicate gear pieces detected');
-        }
+    const updateTeamLoadout = useCallback(
+        async (id: string, shipLoadouts: TeamLoadout['shipLoadouts']) => {
+            if (!validateTeamLoadout(shipLoadouts)) {
+                throw new Error('Invalid team loadout: Duplicate gear pieces detected');
+            }
 
-        const newTeamLoadouts = teamLoadouts.map((loadout) =>
-            loadout.id === id ? { ...loadout, shipLoadouts } : loadout
-        );
-        await saveTeamLoadouts(newTeamLoadouts);
-        addNotification('success', 'Team loadout updated');
-    };
+            const newTeamLoadouts = teamLoadouts.map((loadout) =>
+                loadout.id === id ? { ...loadout, shipLoadouts } : loadout
+            );
+            await setTeamLoadouts(newTeamLoadouts);
+            addNotification('success', 'Team loadout updated');
+        },
+        [teamLoadouts, setTeamLoadouts, validateTeamLoadout, addNotification]
+    );
 
-    const deleteTeamLoadout = async (id: string) => {
-        await saveTeamLoadouts(teamLoadouts.filter((loadout) => loadout.id !== id));
-        addNotification('success', 'Team loadout deleted');
-    };
+    const deleteTeamLoadout = useCallback(
+        async (id: string) => {
+            await setTeamLoadouts(teamLoadouts.filter((loadout) => loadout.id !== id));
+            addNotification('success', 'Team loadout deleted');
+        },
+        [teamLoadouts, setTeamLoadouts, addNotification]
+    );
 
     return {
         loadouts,

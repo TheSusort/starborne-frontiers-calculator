@@ -1,51 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { EncounterNote } from '../types/encounters';
+import { useStorage } from './useStorage';
 
 const STORAGE_KEY = 'encounterNotes';
 
 export const useEncounterNotes = () => {
-    const [encounters, setEncounters] = useState<EncounterNote[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const {
+        data: encounters = [],
+        setData: setEncounters,
+        loading: isLoading,
+    } = useStorage<EncounterNote[]>({ key: STORAGE_KEY, defaultValue: [] });
 
-    useEffect(() => {
-        loadEncounters();
-    }, []);
+    const addEncounter = useCallback(
+        (encounter: Omit<EncounterNote, 'id' | 'createdAt'>) => {
+            const newEncounter: EncounterNote = {
+                ...encounter,
+                id: Date.now().toString(),
+                createdAt: Date.now(),
+            };
+            setEncounters([...encounters, newEncounter]);
+        },
+        [encounters, setEncounters]
+    );
 
-    const loadEncounters = () => {
-        try {
-            const savedEncounters = localStorage.getItem(STORAGE_KEY);
-            if (savedEncounters) {
-                setEncounters(JSON.parse(savedEncounters));
-            }
-        } catch (error) {
-            console.error('Error loading encounters:', error);
-        }
-        setIsLoading(false);
-    };
+    const updateEncounter = useCallback(
+        (encounter: EncounterNote) => {
+            const updatedEncounters = encounters.map((e) =>
+                e.id === encounter.id ? encounter : e
+            );
+            setEncounters(updatedEncounters);
+        },
+        [encounters, setEncounters]
+    );
 
-    const saveEncounters = (updatedEncounters: EncounterNote[]) => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedEncounters));
-        setEncounters(updatedEncounters);
-    };
-
-    const addEncounter = (encounter: Omit<EncounterNote, 'id' | 'createdAt'>) => {
-        const newEncounter: EncounterNote = {
-            ...encounter,
-            id: Date.now().toString(),
-            createdAt: Date.now(),
-        };
-        saveEncounters([...encounters, newEncounter]);
-    };
-
-    const updateEncounter = (encounter: EncounterNote) => {
-        const updatedEncounters = encounters.map((e) => (e.id === encounter.id ? encounter : e));
-        saveEncounters(updatedEncounters);
-    };
-
-    const deleteEncounter = (encounterId: string) => {
-        const updatedEncounters = encounters.filter((e) => e.id !== encounterId);
-        saveEncounters(updatedEncounters);
-    };
+    const deleteEncounter = useCallback(
+        (encounterId: string) => {
+            const updatedEncounters = encounters.filter((e) => e.id !== encounterId);
+            setEncounters(updatedEncounters);
+        },
+        [encounters, setEncounters]
+    );
 
     return {
         encounters,

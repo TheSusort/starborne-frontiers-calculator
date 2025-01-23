@@ -51,14 +51,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
                 <span className="text-sm text-gray-400">
                     Login is optional, to be able to easely access your data across devices. The app
-                    works without it. If you login, your data will be stored in Google Firebase,
-                    instead of local storage.
+                    works without it. If you login, your master data will be stored in Google
+                    Firebase.
+                    <b>
+                        I recommend backing up your data through the home page, before logging in
+                        for the first time.
+                    </b>
                 </span>
                 {!showEmailForm ? (
                     <div className="flex flex-col gap-3">
                         <button
                             onClick={handleGoogleSignIn}
-                            className="w-full px-4 py-2 bg-white hover:bg-gray-100 text-dark transition-colors rounded flex items-center justify-center gap-2"
+                            className="px-4 py-2 bg-white hover:bg-gray-100 text-dark transition-colors rounded flex items-center justify-center gap-2"
                         >
                             <img
                                 src="https://www.google.com/favicon.ico"
@@ -77,7 +81,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                         </div>
                         <button
                             onClick={() => setShowEmailForm(true)}
-                            className="w-full px-4 py-2 bg-primary hover:bg-primary-hover text-dark transition-colors rounded"
+                            className="px-4 py-2 bg-primary hover:bg-primary-hover text-dark transition-colors rounded"
                         >
                             Continue with Email
                         </button>
