@@ -43,7 +43,6 @@ function getAvailableStats(
         const name = statName as StatName;
         if (name === mainStat.name) return;
 
-        const existingStat = currentStats.find((s) => s.name === name);
         const availableTypes = statConfig.allowedTypes.filter(
             (type) => !currentStats.some((s) => s.name === name && s.type === type)
         );
@@ -137,21 +136,6 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
     upgradedPiece.subStats = newSubStats;
     upgradedPiece.level = targetLevel;
     return upgradedPiece;
-}
-
-function statsToBaseStats(stats: Record<string, number>): BaseStats {
-    return {
-        hp: 0,
-        attack: 0,
-        defence: 0,
-        hacking: 0,
-        security: 0,
-        speed: 0,
-        crit: 0,
-        critDamage: 0,
-        healModifier: 0,
-        ...stats,
-    };
 }
 
 function calculateGearStats(piece: GearPiece): BaseStats {

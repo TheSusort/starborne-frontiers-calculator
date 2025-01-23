@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
 import { firebaseStorage, UserData } from '../services/firebaseStorage';
 import { useNotification } from './useNotification';
@@ -16,15 +16,7 @@ export function useStorage<T>(config: StorageConfig<T>) {
     const { addNotification } = useNotification();
     const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-    // Load data on mount and when auth state changes
-    useEffect(() => {
-        if (isInitialLoad || user?.uid) {
-            loadData();
-            setIsInitialLoad(false);
-        }
-    }, [user?.uid]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setLoading(true);
         try {
             // Always check localStorage first for faster loads
@@ -58,7 +50,7 @@ export function useStorage<T>(config: StorageConfig<T>) {
             addNotification('error', 'Failed to load data');
         }
         setLoading(false);
-    };
+    }, [key, user?.uid, addNotification]);
 
     const saveData = async (newData: T) => {
         try {
@@ -78,13 +70,21 @@ export function useStorage<T>(config: StorageConfig<T>) {
         }
     };
 
+    // Load data on mount and when auth state changes
+    useEffect(() => {
+        if (isInitialLoad || user?.uid) {
+            loadData();
+            setIsInitialLoad(false);
+        }
+    }, [user?.uid, isInitialLoad, loadData]);
+
     // Clear localStorage when user logs out
     useEffect(() => {
         if (!user && data !== defaultValue) {
             localStorage.removeItem(key);
             setData(defaultValue);
         }
-    }, [user, key]);
+    }, [user, key, data, defaultValue]);
 
     return {
         data: data as T,

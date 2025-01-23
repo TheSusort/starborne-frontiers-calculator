@@ -28,7 +28,6 @@ export const Modal: React.FC<Props> = ({
             document.body.style.overflow = 'hidden';
         } else {
             // Restore scroll position
-            const scrollY = document.body.style.top;
             document.body.style.position = '';
             document.body.style.top = '';
             document.body.style.width = '';
