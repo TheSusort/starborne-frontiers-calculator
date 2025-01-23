@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
 import { firebaseStorage, UserData } from '../services/firebaseStorage';
 import { useNotification } from './useNotification';
@@ -14,12 +14,11 @@ export function useStorage<T>(config: StorageConfig<T>) {
     const [data, setData] = useState<T>(defaultValue);
     const [loading, setLoading] = useState(true);
     const { addNotification } = useNotification();
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const prevUserRef = useRef(user?.uid);
 
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            // Always check localStorage first for faster loads
             const localData = localStorage.getItem(key);
             const hasLocalData = !!localData;
 
@@ -27,17 +26,14 @@ export function useStorage<T>(config: StorageConfig<T>) {
                 setData(JSON.parse(localData));
             }
 
-            // If user is logged in and it's initial load or login, sync with Firebase
             if (user?.uid) {
                 const firebaseData = await firebaseStorage.getUserData(user.uid);
 
                 if (firebaseData?.[key as keyof UserData]) {
-                    // Firebase data exists - use it and update localStorage
                     const userData = firebaseData[key as keyof UserData] as T;
                     setData(userData);
                     localStorage.setItem(key, JSON.stringify(userData));
                 } else if (hasLocalData) {
-                    // No Firebase data but we have local data - migrate it
                     const parsedData = JSON.parse(localData);
                     await firebaseStorage.saveUserData(user.uid, {
                         [key]: parsedData,
@@ -52,13 +48,32 @@ export function useStorage<T>(config: StorageConfig<T>) {
         setLoading(false);
     }, [key, user?.uid, addNotification]);
 
+    // Load data on mount and when auth state changes
+    useEffect(() => {
+        const userChanged = prevUserRef.current !== user?.uid;
+        if (userChanged) {
+            if (!user) {
+                // Handle logout
+                localStorage.removeItem(key);
+                setData(defaultValue);
+            } else {
+                // Handle login
+                loadData();
+            }
+            prevUserRef.current = user?.uid;
+        }
+    }, [user, loadData, key, defaultValue]);
+
+    // Initial load
+    useEffect(() => {
+        loadData();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     const saveData = async (newData: T) => {
         try {
-            // Always save to localStorage first
             localStorage.setItem(key, JSON.stringify(newData));
             setData(newData);
 
-            // If user is logged in, sync to Firebase
             if (user?.uid) {
                 await firebaseStorage.saveUserData(user.uid, {
                     [key]: newData,
@@ -69,22 +84,6 @@ export function useStorage<T>(config: StorageConfig<T>) {
             addNotification('error', 'Failed to save to cloud storage');
         }
     };
-
-    // Load data on mount and when auth state changes
-    useEffect(() => {
-        if (isInitialLoad || user?.uid) {
-            loadData();
-            setIsInitialLoad(false);
-        }
-    }, [user?.uid, isInitialLoad, loadData]);
-
-    // Clear localStorage when user logs out
-    useEffect(() => {
-        if (!user && data !== defaultValue) {
-            localStorage.removeItem(key);
-            setData(defaultValue);
-        }
-    }, [user, key, data, defaultValue]);
 
     return {
         data: data as T,
