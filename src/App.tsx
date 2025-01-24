@@ -20,6 +20,7 @@ import { JokeCorner } from './components/home/JokeCorner';
 import { ShipDetailsPage } from './pages/ShipDetailsPage';
 import Hotjar from '@hotjar/browser';
 import { AuthProvider } from './contexts/AuthProvider';
+import { STORAGE_KEYS } from './constants/storage';
 
 // init hotjar
 const siteId = 5241833;
@@ -35,7 +36,7 @@ const App: React.FC = () => {
     const [lastSeenVersion, setLastSeenVersion] = useState(CURRENT_VERSION);
 
     useEffect(() => {
-        const savedState = localStorage.getItem('changelogState');
+        const savedState = localStorage.getItem(STORAGE_KEYS.CHANGELOG_STATE);
 
         let currentState: ChangelogState;
 
@@ -54,7 +55,7 @@ const App: React.FC = () => {
     const handleCloseChangelog = () => {
         setShowChangelog(false);
         localStorage.setItem(
-            'changelogState',
+            STORAGE_KEYS.CHANGELOG_STATE,
             JSON.stringify({
                 lastSeenVersion: CURRENT_VERSION,
             })
@@ -62,8 +63,8 @@ const App: React.FC = () => {
     };
 
     return (
-        <AuthProvider>
-            <NotificationProvider>
+        <NotificationProvider>
+            <AuthProvider>
                 <Router>
                     <main className="flex">
                         <Sidebar />
@@ -107,8 +108,8 @@ const App: React.FC = () => {
                         <NotificationContainer />
                     </main>
                 </Router>
-            </NotificationProvider>
-        </AuthProvider>
+            </AuthProvider>
+        </NotificationProvider>
     );
 };
 

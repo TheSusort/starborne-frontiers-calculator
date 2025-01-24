@@ -3,8 +3,9 @@ import { Ship } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
 import { GearPiece } from '../types/gear';
 import { useStorage } from './useStorage';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'ships';
+const STORAGE_KEY = STORAGE_KEYS.SHIPS;
 
 interface UseShipsProps {
     getGearPiece?: (id: string) => GearPiece | undefined;

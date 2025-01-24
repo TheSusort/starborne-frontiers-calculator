@@ -1,8 +1,9 @@
 import { useCallback } from 'react';
 import { EncounterNote } from '../types/encounters';
 import { useStorage } from './useStorage';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'encounterNotes';
+const STORAGE_KEY = STORAGE_KEYS.ENCOUNTER_NOTES;
 
 export const useEncounterNotes = () => {
     const {

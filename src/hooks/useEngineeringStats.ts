@@ -3,8 +3,9 @@ import { EngineeringStats, StatName, StatType } from '../types/stats';
 import { STATS } from '../constants/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { useStorage } from './useStorage';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'engineeringStats';
+const STORAGE_KEY = STORAGE_KEYS.ENGINEERING_STATS;
 
 export const useEngineeringStats = () => {
     const { data: engineeringStats = { stats: [] }, setData: setEngineeringStats } =

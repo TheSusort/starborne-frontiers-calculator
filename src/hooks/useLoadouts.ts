@@ -3,9 +3,10 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { GearSlotName } from '../constants';
 import { useStorage } from './useStorage';
 import { useNotification } from './useNotification';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const LOADOUTS_STORAGE_KEY = 'shipLoadouts';
-const TEAM_LOADOUTS_STORAGE_KEY = 'teamLoadouts';
+const LOADOUTS_STORAGE_KEY = STORAGE_KEYS.SHIP_LOADOUTS;
+const TEAM_LOADOUTS_STORAGE_KEY = STORAGE_KEYS.TEAM_LOADOUTS;
 
 export const useLoadouts = () => {
     const { addNotification } = useNotification();

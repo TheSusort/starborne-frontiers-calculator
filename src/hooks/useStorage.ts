@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
 import { firebaseStorage, UserData } from '../services/firebaseStorage';
 import { useNotification } from './useNotification';
+import { STORAGE_KEYS, StorageKey } from '../constants/storage';
 
 interface StorageConfig<T> {
-    key: string;
+    key: StorageKey;
     defaultValue: T;
 }
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect } from 'react';
 import { GearPiece } from '../types/gear';
 import { useStorage } from './useStorage';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'gear-inventory';
+const STORAGE_KEY = STORAGE_KEYS.GEAR_INVENTORY;
 
 export const useInventory = () => {
     const {

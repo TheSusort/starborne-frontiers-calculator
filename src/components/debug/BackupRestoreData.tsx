@@ -3,19 +3,11 @@ import { Button } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { firebaseStorage } from '../../services/firebaseStorage';
+import { STORAGE_KEYS, StorageKey } from '../../constants/storage';
 
-const STORAGE_KEYS = [
-    'changelogState',
-    'encounterNotes',
-    'engineeringStats',
-    'gear-inventory',
-    'shipLoadouts',
-    'ships',
-    'teamLoadouts',
-] as const;
-
+const BACKUP_KEYS = Object.values(STORAGE_KEYS);
 type StorageData = {
-    [K in (typeof STORAGE_KEYS)[number]]?: string;
+    [K in StorageKey]?: string;
 };
 
 export const BackupRestoreData: React.FC = () => {
@@ -26,10 +18,10 @@ export const BackupRestoreData: React.FC = () => {
     const handleBackup = () => {
         try {
             const backup: StorageData = {};
-            STORAGE_KEYS.forEach((key) => {
+            BACKUP_KEYS.forEach((key) => {
                 const data = localStorage.getItem(key);
                 if (data) {
-                    backup[key] = data;
+                    backup[key as StorageKey] = data;
                 }
             });
 
@@ -61,7 +53,7 @@ export const BackupRestoreData: React.FC = () => {
 
                 // First update localStorage
                 Object.entries(backup).forEach(([key, value]) => {
-                    if (STORAGE_KEYS.includes(key as (typeof STORAGE_KEYS)[number]) && value) {
+                    if (BACKUP_KEYS.includes(key as StorageKey) && value) {
                         localStorage.setItem(key, value);
                     }
                 });

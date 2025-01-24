@@ -9,6 +9,8 @@ import {
     signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
+import { useNotification } from '../hooks/useNotification';
+import { STORAGE_KEYS } from '../constants/storage';
 
 interface AuthContextType {
     user: User | null;
@@ -24,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const { addNotification } = useNotification();
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -65,9 +68,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const signOut = async () => {
         try {
             await firebaseSignOut(auth);
+            // Clear all local storage data
+            Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+
+            addNotification('success', 'Logged out successfully');
         } catch (error) {
-            console.error('Error signing out:', error);
-            throw error;
+            console.error('Logout failed:', error);
+            addNotification('error', 'Failed to log out');
         }
     };
 
