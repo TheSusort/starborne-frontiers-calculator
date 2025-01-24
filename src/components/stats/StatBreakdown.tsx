@@ -27,17 +27,18 @@ const formatValue = (value: number): string => {
 };
 
 export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
-    const allStats = new Set<keyof BaseStats>();
-    [
-        breakdown.base,
-        breakdown.afterRefits,
-        breakdown.afterEngineering,
-        breakdown.afterGear,
-        breakdown.afterSets,
-        breakdown.final,
-    ].forEach((stats) => {
-        Object.keys(stats).forEach((key) => allStats.add(key as keyof BaseStats));
-    });
+    // Order based on BaseStats interface
+    const orderedStatNames: (keyof BaseStats)[] = [
+        'hp',
+        'attack',
+        'defence',
+        'hacking',
+        'security',
+        'crit',
+        'critDamage',
+        'speed',
+        'healModifier',
+    ];
 
     const refitDiff = calculateDiff(breakdown.afterRefits, breakdown.base);
     const engineeringDiff = calculateDiff(breakdown.afterEngineering, breakdown.afterRefits);
@@ -61,7 +62,7 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                     </tr>
                 </thead>
                 <tbody>
-                    {Array.from(allStats).map((statName) => {
+                    {orderedStatNames.map((statName) => {
                         const baseValue = breakdown.base[statName] || 0;
                         const refitValue = refitDiff[statName];
                         const engineeringValue = engineeringDiff[statName];
@@ -85,7 +86,7 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                         return (
                             <tr
                                 key={statName}
-                                className={` ${statName !== 'speed' ? 'border-b border-gray-600' : ''}`}
+                                className={`${statName !== 'speed' ? 'border-b border-gray-600' : ''}`}
                             >
                                 <td className="p-1 border-r border-gray-600">
                                     {STATS[statName].shortLabel}

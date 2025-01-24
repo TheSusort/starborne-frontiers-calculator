@@ -1,6 +1,8 @@
 import React from 'react';
 import { Button } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
+import { useAuth } from '../../contexts/AuthProvider';
+import { firebaseStorage } from '../../services/firebaseStorage';
 
 const STORAGE_KEYS = [
     'changelogState',
@@ -18,6 +20,7 @@ type StorageData = {
 
 export const BackupRestoreData: React.FC = () => {
     const { addNotification } = useNotification();
+    const { user } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleBackup = () => {
@@ -47,22 +50,46 @@ export const BackupRestoreData: React.FC = () => {
         }
     };
 
-    const handleRestore = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const handleRestore = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const backup = JSON.parse(e.target?.result as string) as StorageData;
 
+                // First update localStorage
                 Object.entries(backup).forEach(([key, value]) => {
                     if (STORAGE_KEYS.includes(key as (typeof STORAGE_KEYS)[number]) && value) {
                         localStorage.setItem(key, value);
                     }
                 });
 
-                addNotification('success', 'Data restored successfully. Please refresh the page.');
+                // If user is logged in, sync to Firebase
+                if (user?.uid) {
+                    try {
+                        const firebaseData: Record<string, unknown> = {};
+                        Object.entries(backup).forEach(([key, value]) => {
+                            if (value) {
+                                firebaseData[key] = JSON.parse(value);
+                            }
+                        });
+
+                        await firebaseStorage.saveUserData(user.uid, firebaseData);
+                        addNotification('success', 'Data restored and synced to cloud storage');
+                    } catch (error) {
+                        console.error('Failed to sync with Firebase:', error);
+                        addNotification(
+                            'warning',
+                            'Data restored locally but failed to sync to cloud'
+                        );
+                    }
+                } else {
+                    addNotification('success', 'Data restored locally');
+                }
+
+                addNotification('info', 'Please refresh the page to see the changes');
             } catch (error) {
                 console.error('Restore failed:', error);
                 addNotification('error', 'Failed to restore backup');

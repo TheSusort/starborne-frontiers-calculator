@@ -15,21 +15,36 @@ export const StatList: React.FC<StatListProps> = ({
     title,
     className = '',
 }) => {
+    // Order based on BaseStats interface
+    const orderedStatNames = [
+        'hp',
+        'attack',
+        'defence',
+        'hacking',
+        'security',
+        'crit',
+        'critDamage',
+        'speed',
+        'healModifier',
+    ] satisfies (keyof BaseStats)[];
+
     return (
         <div className={`bg-dark space-y-2 ${className}`} data-testid="stat-list">
             {title && <h3 className="text-lg font-semibold">{title}</h3>}
-            {Object.entries(stats).map(([statName, value]) => {
+            {orderedStatNames.map((statName) => {
+                const value = stats[statName];
+
                 if (statName === 'healModifier' && value <= 0) {
                     return null;
                 }
 
-                const comparisonValue = comparisonStats?.[statName as StatName];
+                const comparisonValue = comparisonStats?.[statName];
                 const difference =
                     comparisonValue !== undefined ? value - comparisonValue : undefined;
 
                 return (
                     <div key={statName} className="flex justify-between items-center">
-                        <span className="capitalize">{STATS[statName as StatName].label}</span>
+                        <span className="capitalize">{STATS[statName].label}</span>
                         <div className="flex items-center gap-2">
                             <span>
                                 {Math.round(value)}
