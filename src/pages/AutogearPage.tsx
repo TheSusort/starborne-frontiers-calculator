@@ -20,7 +20,7 @@ import { GEAR_SLOTS } from '../constants';
 
 export const AutogearPage: React.FC = () => {
     const { getGearPiece, inventory, saveInventory } = useInventory();
-    const { getShipById, handleEquipGear, ships } = useShips();
+    const { getShipById, handleEquipGear, ships, handleEquipMultipleGear } = useShips();
     const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
@@ -167,29 +167,26 @@ export const AutogearPage: React.FC = () => {
     const applyGearSuggestions = () => {
         if (!selectedShip) return;
 
-        // Create a map to batch all inventory updates
-        const inventoryUpdates = new Map<string, string>();
+        const gearAssignments = suggestions.map((suggestion) => ({
+            slot: suggestion.slotName as GearSlotName,
+            gearId: suggestion.gearId,
+        }));
 
-        suggestions.forEach((suggestion) => {
-            const { slotName, gearId } = suggestion;
+        // Update ships equipment
+        handleEquipMultipleGear(selectedShip.id, gearAssignments);
 
-            const gear = getGearPiece(gearId);
-            if (gear?.shipId && gear.shipId !== selectedShip.id) {
-                const previousShip = getShipById(gear.shipId);
-                if (previousShip) {
-                    addNotification('info', `Unequipped ${slotName} from ${previousShip.name}`);
-                }
-            }
-
-            inventoryUpdates.set(gearId, selectedShip.id);
-            handleEquipGear(selectedShip.id, slotName as GearSlotName, gearId);
-        });
-
-        // Batch update the inventory
+        // Update inventory state
         const newInventory = inventory.map((gear) => {
-            const newShipId = inventoryUpdates.get(gear.id);
-            if (newShipId !== undefined) {
-                return { ...gear, shipId: newShipId };
+            const assignment = gearAssignments.find((a) => a.gearId === gear.id);
+            if (assignment) {
+                return { ...gear, shipId: selectedShip.id };
+            }
+            // If this gear was on the selected ship but not in new assignments, clear its shipId
+            if (gear.shipId === selectedShip.id) {
+                const stillEquipped = gearAssignments.some((a) => a.gearId === gear.id);
+                if (!stillEquipped) {
+                    return { ...gear, shipId: '' };
+                }
             }
             return gear;
         });

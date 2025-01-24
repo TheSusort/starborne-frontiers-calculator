@@ -177,6 +177,110 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         }
     }, [getGearPiece, loading, validateGearAssignments]);
 
+    const handleUnequipAllGear = useCallback(
+        async (shipId: string) => {
+            setShips(
+                ships.map((ship) => {
+                    if (ship.id === shipId) {
+                        // Get all equipped gear IDs before clearing
+                        const equippedGear = Object.entries(ship.equipment)
+                            .filter(([_, gearId]) => gearId)
+                            .map(([_, gearId]) => gearId);
+
+                        // Update inventory for each piece
+                        equippedGear.forEach((gearId) => {
+                            if (getGearPiece) {
+                                const gear = getGearPiece(gearId as string);
+                                if (gear) {
+                                    const event = new CustomEvent('updateInventory', {
+                                        detail: { gear: { ...gear, shipId: '' } },
+                                    });
+                                    window.dispatchEvent(event);
+                                }
+                            }
+                        });
+
+                        // Clear all equipment at once
+                        return {
+                            ...ship,
+                            equipment: {},
+                        };
+                    }
+                    return ship;
+                })
+            );
+        },
+        [ships, setShips, getGearPiece]
+    );
+
+    const handleEquipMultipleGear = useCallback(
+        async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
+            setShips(
+                ships.map((ship) => {
+                    // First check if any of the gear is equipped on a locked ship
+                    const lockedAssignments = gearAssignments.filter(({ gearId }) =>
+                        ships.some(
+                            (s) =>
+                                s.id !== shipId &&
+                                s.equipmentLocked &&
+                                Object.values(s.equipment).includes(gearId)
+                        )
+                    );
+
+                    if (lockedAssignments.length > 0) {
+                        return ship;
+                    }
+
+                    // Handle the target ship
+                    if (ship.id === shipId) {
+                        const newEquipment = { ...ship.equipment };
+                        gearAssignments.forEach(({ slot, gearId }) => {
+                            newEquipment[slot] = gearId;
+                        });
+                        return { ...ship, equipment: newEquipment };
+                    }
+
+                    // Remove gear from other unlocked ships
+                    if (!ship.equipmentLocked) {
+                        const newEquipment = { ...ship.equipment };
+                        let hasChanges = false;
+
+                        Object.entries(newEquipment).forEach(([slot, currentGearId]) => {
+                            if (
+                                gearAssignments.some(
+                                    (assignment) => assignment.gearId === currentGearId
+                                )
+                            ) {
+                                delete newEquipment[slot as GearSlotName];
+                                hasChanges = true;
+                            }
+                        });
+
+                        if (hasChanges) {
+                            return { ...ship, equipment: newEquipment };
+                        }
+                    }
+
+                    return ship;
+                })
+            );
+
+            // Update inventory shipIds
+            if (getGearPiece) {
+                gearAssignments.forEach(({ gearId }) => {
+                    const gear = getGearPiece(gearId);
+                    if (gear) {
+                        const event = new CustomEvent('updateInventory', {
+                            detail: { gear: { ...gear, shipId } },
+                        });
+                        window.dispatchEvent(event);
+                    }
+                });
+            }
+        },
+        [ships, setShips, getGearPiece]
+    );
+
     return {
         ships,
         loading,
@@ -190,5 +294,7 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         updateShip,
         validateGearAssignments,
         handleLockEquipment,
+        handleUnequipAllGear,
+        handleEquipMultipleGear,
     };
 };

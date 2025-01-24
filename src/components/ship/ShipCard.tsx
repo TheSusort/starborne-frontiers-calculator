@@ -23,6 +23,7 @@ interface Props {
     onEdit?: (ship: Ship) => void;
     onRemove?: (id: string) => void;
     onLockEquipment?: (ship: Ship) => Promise<void>;
+    onUnequipAll: (shipId: string) => void;
     variant?: 'full' | 'compact' | 'extended';
 }
 
@@ -38,6 +39,7 @@ export const ShipCard: React.FC<Props> = ({
     onEquipGear,
     onRemoveGear,
     onHoverGear,
+    onUnequipAll,
     variant = 'full',
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
@@ -48,9 +50,7 @@ export const ShipCard: React.FC<Props> = ({
     const activeSets = useGearSets(ship.equipment, gearLookup);
 
     const handleUnequipAll = () => {
-        Object.entries(GEAR_SLOTS).forEach(([key]) => {
-            onRemoveGear(ship.id, key as GearSlotName, false);
-        });
+        onUnequipAll(ship.id);
         addNotification('success', `Unequipped all gear on ${ship.name}`);
     };
 

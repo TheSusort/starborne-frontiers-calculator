@@ -30,6 +30,7 @@ export const ShipsPage: React.FC = () => {
         handleSaveShip,
         setEditingShip,
         handleLockEquipment,
+        handleUnequipAllGear,
     } = useShips({ getGearPiece });
 
     const { addNotification } = useNotification();
@@ -109,6 +110,7 @@ export const ShipsPage: React.FC = () => {
                 }}
                 onEquipGear={handleEquipGear}
                 onRemoveGear={handleRemoveGear}
+                onUnequipAll={handleUnequipAllGear}
                 availableGear={inventory}
             />
 
