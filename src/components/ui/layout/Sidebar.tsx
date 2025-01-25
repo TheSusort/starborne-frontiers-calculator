@@ -116,7 +116,6 @@ export const Sidebar: React.FC = () => {
             <Offcanvas
                 isOpen={isMobileMenuOpen}
                 onClose={() => setIsMobileMenuOpen(false)}
-                title={APP_NAME}
                 position="left"
                 width="w-64"
                 hideCloseButton

@@ -34,13 +34,13 @@ export const GearPieceDisplay: React.FC<Props> = ({
                 className={`px-4 py-2 border-b ${RARITIES[gear.rarity].textColor} ${RARITIES[gear.rarity].borderColor} flex justify-between items-center`}
             >
                 <div>
-                    <div className="font-semibold capitalize flex items-center gap-2">
+                    <div className="capitalize flex items-center gap-2">
                         <img
                             src={GEAR_SETS[gear.setBonus].iconUrl}
                             alt={gear.setBonus}
                             className="w-6 h-auto"
                         />
-                        <span>{gear.slot}</span>
+                        <span className="font-secondary">{gear.slot}</span>
                     </div>
                     <div className="flex items-center">
                         <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
