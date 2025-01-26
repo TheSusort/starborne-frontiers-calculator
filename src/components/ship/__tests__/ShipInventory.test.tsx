@@ -99,6 +99,7 @@ describe('ShipInventory', () => {
         onRemoveGear: vi.fn(),
         onLockEquipment: vi.fn(),
         availableGear: mockGear,
+        onUnequipAll: vi.fn(),
     };
 
     beforeEach(() => {

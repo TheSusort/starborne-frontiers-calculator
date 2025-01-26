@@ -173,6 +173,7 @@ describe('ShipCard', () => {
         onEquipGear: vi.fn(),
         onRemoveGear: vi.fn(),
         onHoverGear: vi.fn(),
+        onUnequipAll: vi.fn(),
     };
 
     beforeEach(() => {
