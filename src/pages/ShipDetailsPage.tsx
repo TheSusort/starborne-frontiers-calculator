@@ -31,6 +31,7 @@ export const ShipDetailsPage: React.FC = () => {
         updateShip,
         handleRemoveShip: removeShip,
         handleLockEquipment: toggleEquipmentLock,
+        handleUnequipAllGear,
     } = useShips({ getGearPiece });
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
@@ -124,6 +125,9 @@ export const ShipDetailsPage: React.FC = () => {
                             const updatedShip = { ...ship };
                             delete updatedShip.equipment[slot];
                             updateShip(updatedShip);
+                        }}
+                        onUnequipAll={() => {
+                            handleUnequipAllGear(ship.id);
                         }}
                         onHoverGear={setHoveredGear}
                         onEdit={() => {

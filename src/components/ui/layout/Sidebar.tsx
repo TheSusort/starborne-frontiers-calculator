@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
 import logo from '/favicon.ico?url';
+import { LoginButton } from '../../auth/LoginButton';
+
 export const Sidebar: React.FC = () => {
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -21,7 +23,7 @@ export const Sidebar: React.FC = () => {
     ];
 
     const SidebarContent = () => (
-        <div className="space-y-2">
+        <div className="space-y-2 flex flex-col h-full">
             <span className="text-xs text-gray-400 hidden lg:block">{CURRENT_VERSION}</span>
             <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
                 <img src={logo} alt="logo" className="w-8 h-8" />
@@ -49,6 +51,10 @@ export const Sidebar: React.FC = () => {
                     </Link>
                 ))}
             </nav>
+
+            <div className="!mt-auto">
+                <LoginButton />
+            </div>
         </div>
     );
 
@@ -101,7 +107,7 @@ export const Sidebar: React.FC = () => {
                 data-testid="desktop-sidebar"
                 className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20"
             >
-                <div className="p-4">
+                <div className="p-4 h-full">
                     <SidebarContent />
                 </div>
             </div>
@@ -110,7 +116,6 @@ export const Sidebar: React.FC = () => {
             <Offcanvas
                 isOpen={isMobileMenuOpen}
                 onClose={() => setIsMobileMenuOpen(false)}
-                title={APP_NAME}
                 position="left"
                 width="w-64"
                 hideCloseButton

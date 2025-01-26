@@ -4,7 +4,7 @@ import { GEAR_SETS, GEAR_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
-import { usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 
 interface Props {
     inventory: GearPiece[];
@@ -75,7 +75,7 @@ export const GearInventory: React.FC<Props> = ({
             label: 'Sets',
             values: state.filters.sets ?? [],
             onChange: (sets) =>
-                setState((prev) => ({ ...prev, filters: { ...prev.filters, sets } })),
+                setState((prev: FilterState) => ({ ...prev, filters: { ...prev.filters, sets } })),
             options: uniqueSets.map((set) => ({
                 value: set,
                 label: GEAR_SETS[set].name,
@@ -86,7 +86,7 @@ export const GearInventory: React.FC<Props> = ({
             label: 'Slots',
             values: state.filters.types ?? [],
             onChange: (types) =>
-                setState((prev) => ({ ...prev, filters: { ...prev.filters, types } })),
+                setState((prev: FilterState) => ({ ...prev, filters: { ...prev.filters, types } })),
             options: uniqueTypes.map((type) => ({
                 value: type,
                 label: GEAR_SLOTS[type].label,
@@ -97,7 +97,10 @@ export const GearInventory: React.FC<Props> = ({
             label: 'Rarity',
             values: state.filters.rarities ?? [],
             onChange: (rarities) =>
-                setState((prev) => ({ ...prev, filters: { ...prev.filters, rarities } })),
+                setState((prev: FilterState) => ({
+                    ...prev,
+                    filters: { ...prev.filters, rarities },
+                })),
             options: uniqueRarities.map((rarity) => ({
                 value: rarity,
                 label: RARITIES[rarity].label,
@@ -109,7 +112,10 @@ export const GearInventory: React.FC<Props> = ({
             values: state.filters.equipped ? [state.filters.equipped] : [],
             onChange: (values) => {
                 const equipped = values[0] === state.filters.equipped ? '' : values[0];
-                setState((prev) => ({ ...prev, filters: { ...prev.filters, equipped } }));
+                setState((prev: FilterState) => ({
+                    ...prev,
+                    filters: { ...prev.filters, equipped },
+                }));
             },
             options: [
                 { value: 'equipped', label: 'Equipped to a ship' },
@@ -166,7 +172,7 @@ export const GearInventory: React.FC<Props> = ({
                     hasActiveFilters={hasActiveFilters}
                     sortOptions={sortOptions}
                     sort={state.sort}
-                    setSort={(sort) => setState((prev) => ({ ...prev, sort }))}
+                    setSort={(sort) => setState((prev: FilterState) => ({ ...prev, sort }))}
                 />
             </div>
 

@@ -66,14 +66,14 @@ export const STATS: Record<
     hacking: {
         label: 'Hacking',
         shortLabel: 'HACK',
-        allowedTypes: ['flat'],
+        allowedTypes: ['flat', 'percentage'],
         engineeringAllowedTypes: ['flat'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 },
     },
     security: {
         label: 'Security',
         shortLabel: 'SEC',
-        allowedTypes: ['flat'],
+        allowedTypes: ['flat', 'percentage'],
         engineeringAllowedTypes: ['flat'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 },
     },

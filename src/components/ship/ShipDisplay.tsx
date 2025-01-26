@@ -60,7 +60,7 @@ const Header = memo(
                     />
                 )}
                 <span
-                    className={`${variant === 'compact' ? 'text-sm' : 'lg:text-xs xl:text-sm'} font-bold ${RARITIES[ship.rarity || 'common'].textColor}`}
+                    className={`${variant === 'compact' ? 'text-sm' : 'lg:text-sm'} font-secondary ${RARITIES[ship.rarity || 'common'].textColor}`}
                 >
                     {ship.name}
                 </span>

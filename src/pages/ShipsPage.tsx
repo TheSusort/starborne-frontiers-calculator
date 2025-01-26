@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ShipForm } from '../components/ship/ShipForm';
 import { ShipInventory } from '../components/ship/ShipInventory';
 import { useInventory } from '../hooks/useInventory';
@@ -23,7 +23,6 @@ export const ShipsPage: React.FC = () => {
     const {
         ships,
         loading,
-        error,
         editingShip,
         handleRemoveShip,
         handleEquipGear,
@@ -31,15 +30,10 @@ export const ShipsPage: React.FC = () => {
         handleSaveShip,
         setEditingShip,
         handleLockEquipment,
+        handleUnequipAllGear,
     } = useShips({ getGearPiece });
 
     const { addNotification } = useNotification();
-
-    useEffect(() => {
-        if (error) {
-            addNotification('error', error);
-        }
-    }, [error, addNotification]);
 
     const handleShipDelete = async (id: string) => {
         setPendingDeleteShip(ships.find((s) => s.id === id) || null);
@@ -116,6 +110,7 @@ export const ShipsPage: React.FC = () => {
                 }}
                 onEquipGear={handleEquipGear}
                 onRemoveGear={handleRemoveGear}
+                onUnequipAll={handleUnequipAllGear}
                 availableGear={inventory}
             />
 

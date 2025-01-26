@@ -5,14 +5,11 @@ export const PERCENTAGE_ONLY_STATS = ['crit', 'critDamage', 'healModifier'] as c
 
 export type PercentageOnlyStats = (typeof PERCENTAGE_ONLY_STATS)[number];
 
-// Stats that can only be flat values
-export type FlatOnlyStats = 'hacking' | 'security';
-
 // Stats that can be either
-export type FlexibleStats = 'hp' | 'attack' | 'defence' | 'speed';
+export type FlexibleStats = 'hp' | 'attack' | 'defence' | 'speed' | 'hacking' | 'security';
 
 // Combined type for all stat names
-export type StatName = PercentageOnlyStats | FlatOnlyStats | FlexibleStats;
+export type StatName = PercentageOnlyStats | FlexibleStats;
 
 export type StatType = 'flat' | 'percentage';
 
@@ -23,7 +20,7 @@ export interface PercentageStat {
 }
 
 export interface FlatStat {
-    name: FlatOnlyStats | FlexibleStats;
+    name: FlexibleStats;
     value: number;
     type: 'flat';
 }

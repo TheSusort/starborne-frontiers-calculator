@@ -13,7 +13,7 @@ import {
 } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
-import { usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 
 interface Props {
     ships: Ship[];
@@ -22,6 +22,7 @@ interface Props {
     onEquipGear: (shipId: string, slot: GearSlotName, gearId: string) => void;
     onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
     onLockEquipment: (ship: Ship) => Promise<void>;
+    onUnequipAll: (shipId: string) => void;
     availableGear: GearPiece[];
 }
 
@@ -32,6 +33,7 @@ export const ShipInventory: React.FC<Props> = ({
     onEquipGear,
     onRemoveGear,
     onLockEquipment,
+    onUnequipAll,
     availableGear,
 }) => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -45,28 +47,28 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.rarities?.length ?? 0) > 0;
 
     const setSelectedFactions = (factions: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, factions },
         }));
     };
 
     const setSelectedShipTypes = (shipTypes: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, shipTypes },
         }));
     };
 
     const setSelectedRarities = (rarities: string[]) => {
-        setState((prev) => ({
+        setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, rarities },
         }));
     };
 
     const setSort = (sort: SortConfig) => {
-        setState((prev) => ({ ...prev, sort }));
+        setState((prev: FilterState) => ({ ...prev, sort }));
     };
 
     const filteredInventory = useMemo(() => {
@@ -220,6 +222,7 @@ export const ShipInventory: React.FC<Props> = ({
                                 onLockEquipment={onLockEquipment}
                                 onEquipGear={onEquipGear}
                                 onRemoveGear={onRemoveGear}
+                                onUnequipAll={onUnequipAll}
                                 onHoverGear={setHoveredGear}
                             />
                         ))}

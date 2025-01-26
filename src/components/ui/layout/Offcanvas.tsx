@@ -5,7 +5,7 @@ import { Button, CloseIcon } from '../';
 interface Props {
     isOpen: boolean;
     onClose: () => void;
-    title: string;
+    title?: string;
     children: React.ReactNode;
     position?: 'left' | 'right';
     width?: string;
@@ -97,17 +97,23 @@ export const Offcanvas: React.FC<Props> = ({
                 `}
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-semibold ">{title}</h3>
-                    {!hideCloseButton && (
-                        <Button aria-label="Close offcanvas" variant="secondary" onClick={onClose}>
-                            <CloseIcon />
-                        </Button>
-                    )}
-                </div>
+                {(title || !hideCloseButton) && (
+                    <div className="flex justify-between items-center mb-6">
+                        {title && <h3 className="text-xl font-semibold ">{title}</h3>}
+                        {!hideCloseButton && (
+                            <Button
+                                aria-label="Close offcanvas"
+                                variant="secondary"
+                                onClick={onClose}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        )}
+                    </div>
+                )}
                 <div
                     className={`
-                    transition-opacity duration-200 ease-in-out delay-150
+                    transition-opacity duration-200 ease-in-out delay-150 h-[calc(100vh-3rem)]
                     ${isAnimating ? 'opacity-100' : 'opacity-0'}
                 `}
                 >

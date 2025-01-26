@@ -1,61 +1,50 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { GearPiece } from '../types/gear';
+import { useStorage } from './useStorage';
+import { STORAGE_KEYS } from '../constants/storage';
 
-const STORAGE_KEY = 'gear-inventory';
+const STORAGE_KEY = STORAGE_KEYS.GEAR_INVENTORY;
 
 export const useInventory = () => {
-    const [inventory, setInventory] = useState<GearPiece[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const {
+        data: inventory = [],
+        setData: setInventory,
+        loading,
+        reload,
+    } = useStorage<GearPiece[]>({
+        key: STORAGE_KEY,
+        defaultValue: [],
+    });
 
-    const loadInventory = async () => {
-        setLoading(true);
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            if (!stored) {
-                setInventory([]);
-                return;
+    const saveInventory = useCallback(
+        async (newInventory: GearPiece[]) => {
+            try {
+                await setInventory(newInventory);
+            } catch (error) {
+                console.error('Error saving inventory:', error);
+                throw error;
             }
-            setInventory(JSON.parse(stored));
-        } catch (error) {
-            console.error('Error loading inventory:', error);
-            setInventory([]);
-            setError('Failed to load inventory');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const saveInventory = useCallback(async (newInventory: GearPiece[]) => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(newInventory));
-            setError(null);
-            setInventory(newInventory);
-        } catch (error) {
-            console.error('Error saving inventory:', error);
-            setError('Failed to save inventory');
-        }
-    }, []);
+        },
+        [setInventory]
+    );
 
     const getGearPiece = useCallback(
         (gearId: string): GearPiece | undefined => {
-            return gearId ? inventory.find((gear) => gear.id === gearId) : undefined;
+            return gearId ? inventory?.find((gear) => gear.id === gearId) : undefined;
         },
         [inventory]
     );
 
     useEffect(() => {
-        loadInventory();
-    }, []);
-
-    useEffect(() => {
         const handleInventoryUpdate = (event: CustomEvent<{ gear: GearPiece }>) => {
             const updatedGear = event.detail.gear;
-            const newInventory = inventory.map((gear) =>
+            const newInventory = inventory?.map((gear) =>
                 gear.id === updatedGear.id ? updatedGear : gear
             );
             // Save to localStorage when inventory is updated
-            saveInventory(newInventory);
+            if (newInventory) {
+                saveInventory(newInventory);
+            }
         };
 
         window.addEventListener('updateInventory', handleInventoryUpdate as EventListener);
@@ -68,10 +57,10 @@ export const useInventory = () => {
     return {
         inventory,
         loading,
-        error,
+        error: null, // Handled by notifications now
         setInventory,
         saveInventory,
-        loadInventory,
+        loadInventory: reload,
         getGearPiece,
     };
 };
