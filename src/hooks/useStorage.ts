@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
 import { firebaseStorage, UserData } from '../services/firebaseStorage';
 import { useNotification } from './useNotification';
-import { STORAGE_KEYS, StorageKey } from '../constants/storage';
+import { StorageKey } from '../constants/storage';
 
 interface StorageConfig<T> {
     key: StorageKey;
@@ -12,7 +12,21 @@ interface StorageConfig<T> {
 export function useStorage<T>(config: StorageConfig<T>) {
     const { key, defaultValue } = config;
     const { user } = useAuth();
-    const [data, setData] = useState<T>(defaultValue);
+    const [data, setData] = useState<T>(() => {
+        // Initialize from localStorage on mount
+        const localData = localStorage.getItem(key);
+        if (localData) {
+            try {
+                const parsedData = JSON.parse(localData);
+                if (Array.isArray(parsedData) && parsedData.length > 0) {
+                    return parsedData as T;
+                }
+            } catch (error) {
+                console.error('Error parsing local data:', error);
+            }
+        }
+        return defaultValue;
+    });
     const [loading, setLoading] = useState(true);
     const { addNotification } = useNotification();
     const prevUserRef = useRef(user?.uid);
@@ -20,33 +34,20 @@ export function useStorage<T>(config: StorageConfig<T>) {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const localData = localStorage.getItem(key);
-            const hasLocalData = !!localData;
-
-            if (hasLocalData) {
-                setData(JSON.parse(localData));
-            }
-
             if (user?.uid) {
                 const firebaseData = await firebaseStorage.getUserData(user.uid);
-
                 if (firebaseData?.[key as keyof UserData]) {
                     const userData = firebaseData[key as keyof UserData] as T;
                     setData(userData);
                     localStorage.setItem(key, JSON.stringify(userData));
-                } else if (hasLocalData) {
-                    const parsedData = JSON.parse(localData);
-                    await firebaseStorage.saveUserData(user.uid, {
-                        [key]: parsedData,
-                    });
-                    addNotification('success', 'Data migrated to cloud storage');
                 }
             }
         } catch (error) {
             console.error('Error loading data:', error);
             addNotification('error', 'Failed to load data');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }, [key, user?.uid, addNotification]);
 
     // Load data on mount and when auth state changes

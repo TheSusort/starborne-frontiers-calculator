@@ -22,6 +22,7 @@ const calculateDiff = (current: BaseStats, previous: BaseStats): Partial<BaseSta
 };
 
 const formatValue = (value: number): string => {
+    value = Math.round(value);
     if (value > 0) return `+${value}`;
     return value.toString();
 };
@@ -110,7 +111,7 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                                     {implantValue ? formatValue(implantValue) : '-'}
                                 </td>
                                 <td className={`p-1 border-l border-gray-600`}>
-                                    {finalValue ? finalValue : '-'}
+                                    {finalValue ? Math.round(finalValue) : '-'}
                                 </td>
                             </tr>
                         );

@@ -128,6 +128,44 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212064208011657272.webp',
     },
+    OMNICORE: {
+        name: 'Omnicore',
+        stats: [
+            { name: 'attack', value: 10, type: 'percentage' },
+            { name: 'defence', value: 10, type: 'percentage' },
+            { name: 'hacking', value: 10, type: 'percentage' },
+            { name: 'security', value: 10, type: 'percentage' },
+            { name: 'crit', value: 10, type: 'percentage' },
+            { name: 'critDamage', value: 10, type: 'percentage' },
+            { name: 'speed', value: 10, type: 'percentage' },
+            { name: 'hp', value: 10, type: 'percentage' },
+        ],
+        iconUrl: 'https://cdn.discordapp.com/emojis/1312034714919505920.webp',
+    },
+    SWIFTNESS: {
+        name: 'Swiftness',
+        stats: [
+            { name: 'speed', value: 15, type: 'percentage' },
+            { name: 'hacking', value: 10, type: 'flat' },
+        ],
+        iconUrl: 'https://cdn.discordapp.com/emojis/1312034718010834965.webp',
+    },
+    RECOVERY: {
+        name: 'Recovery',
+        stats: [
+            { name: 'hp', value: 10, type: 'percentage' },
+            { name: 'healModifier', value: 10, type: 'percentage' },
+        ],
+        iconUrl: 'https://cdn.discordapp.com/emojis/1312034716295368785.webp',
+    },
+    EXPLOIT: {
+        name: 'Exploit',
+        stats: [
+            { name: 'hacking', value: 20, type: 'flat' },
+            { name: 'attack', value: 10, type: 'percentage' },
+        ],
+        iconUrl: 'https://cdn.discordapp.com/emojis/1312034713745227796.webp',
+    },
 } satisfies Record<string, GearSetBonus>;
 
 export type GearSetName = keyof typeof GEAR_SETS;

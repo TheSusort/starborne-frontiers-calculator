@@ -17,7 +17,8 @@ export const useGearLookup = (
         const lookup: GearLookup = {};
         Object.entries(equipment).forEach(([_, gearId]) => {
             if (gearId) {
-                lookup[gearId] = getGearPiece(gearId);
+                const gear = getGearPiece(gearId);
+                lookup[gearId] = gear;
             }
         });
         return lookup;

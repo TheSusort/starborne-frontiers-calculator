@@ -121,7 +121,7 @@ export const calculateTotalStats = (
             target[stat.name] = (target[stat.name] || 0) + stat.value;
         } else if (stat.type === 'percentage') {
             const baseValue = base[stat.name];
-            const bonus = Math.round(baseValue * (stat.value / 100));
+            const bonus = baseValue * (stat.value / 100);
             target[stat.name] += bonus;
         } else {
             target[stat.name] = (target[stat.name] || 0) + stat.value;

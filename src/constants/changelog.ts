@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.17.0';
+export const CURRENT_VERSION = '0.18.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.18.0',
+        date: '2025-01-26',
+        changes: ['Added login', 'Added firebase storage', 'Styling & performance tweaks'],
+    },
     {
         version: '0.17.0',
         date: '2025-01-21',
