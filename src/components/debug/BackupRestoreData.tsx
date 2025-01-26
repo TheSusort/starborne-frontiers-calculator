@@ -1,9 +1,12 @@
-import React from 'react';
-import { Button } from '../ui';
+import React, { useState } from 'react';
+import { Button, ConfirmModal } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { firebaseStorage } from '../../services/firebaseStorage';
 import { STORAGE_KEYS, StorageKey } from '../../constants/storage';
+import { deleteUser } from 'firebase/auth';
+import { db } from '../../config/firebase';
+import { doc, deleteDoc } from 'firebase/firestore';
 
 const BACKUP_KEYS = Object.values(STORAGE_KEYS);
 type StorageData = {
@@ -14,6 +17,7 @@ export const BackupRestoreData: React.FC = () => {
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const handleBackup = () => {
         try {
@@ -96,24 +100,68 @@ export const BackupRestoreData: React.FC = () => {
         fileInputRef.current?.click();
     };
 
-    return (
-        <div className="flex items-center gap-4">
-            <Button variant="secondary" onClick={handleBackup} aria-label="Backup data">
-                Backup Data
-            </Button>
+    const handleDeleteAccount = async () => {
+        if (!user) return;
 
-            <div>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".json"
-                    onChange={handleRestore}
-                    className="hidden"
-                />
-                <Button variant="secondary" onClick={handleRestoreClick} aria-label="Restore data">
-                    Restore Data
+        try {
+            // Delete Firestore data
+            await deleteDoc(doc(db, 'users', user.uid));
+
+            // Clear local storage
+            Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+
+            // Delete user account
+            await deleteUser(user);
+
+            addNotification('success', 'Account deleted successfully');
+        } catch (error) {
+            console.error('Error deleting account:', error);
+            addNotification('error', 'Failed to delete account. You may need to re-authenticate.');
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-4">
+                <Button variant="secondary" onClick={handleBackup} aria-label="Backup data">
+                    Backup Data
                 </Button>
+
+                <div>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleRestore}
+                        className="hidden"
+                    />
+                    <Button
+                        variant="secondary"
+                        onClick={handleRestoreClick}
+                        aria-label="Restore data"
+                    >
+                        Restore Data
+                    </Button>
+                </div>
             </div>
+            {user && (
+                <div className="border-t pt-4 mt-4">
+                    <h3 className="text-lg font-medium mb-2">Danger Zone</h3>
+                    <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+                        Delete Account
+                    </Button>
+                </div>
+            )}
+
+            <ConfirmModal
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteAccount}
+                title="Delete Account"
+                message="Are you sure you want to delete your account? This action cannot be undone and will delete all your data."
+                confirmLabel="Delete Account"
+                cancelLabel="Cancel"
+            />
         </div>
     );
 };
