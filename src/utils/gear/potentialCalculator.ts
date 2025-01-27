@@ -144,7 +144,7 @@ function calculateGearStats(piece: GearPiece): BaseStats {
         {
             hp: 20000,
             attack: 5000,
-            defence: 3000,
+            defence: 4000,
             hacking: 150,
             security: 50,
             speed: 80,
@@ -178,7 +178,7 @@ export function analyzePotentialUpgrades(
         const currentStats = calculateGearStats(piece);
         const currentScore = calculatePriorityScore(currentStats, [], shipRole);
 
-        const simulations = Array.from({ length: 10 }, () => {
+        const simulations = Array.from({ length: 100 }, () => {
             const upgradedPiece = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
@@ -196,7 +196,5 @@ export function analyzePotentialUpgrades(
         };
     });
 
-    return results
-        .sort((a, b) => b.improvement / b.currentScore - a.improvement / a.currentScore)
-        .slice(0, count);
+    return results.sort((a, b) => b.potentialScore - a.potentialScore).slice(0, count);
 }

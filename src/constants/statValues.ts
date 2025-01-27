@@ -5,16 +5,16 @@ type StatValueRange = {
 
 export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
     hp: {
-        flat: { min: 250, max: 500 },
-        percentage: { min: 4, max: 7 },
+        flat: { min: 250, max: 540 },
+        percentage: { min: 4, max: 8 },
     },
     attack: {
-        flat: { min: 50, max: 100 },
-        percentage: { min: 4, max: 7 },
+        flat: { min: 50, max: 130 },
+        percentage: { min: 4, max: 8 },
     },
     defence: {
-        flat: { min: 50, max: 100 },
-        percentage: { min: 4, max: 7 },
+        flat: { min: 50, max: 130 },
+        percentage: { min: 4, max: 8 },
     },
     hacking: {
         flat: { min: 5, max: 8 },
@@ -26,12 +26,9 @@ export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
         flat: { min: 5, max: 8 },
     },
     crit: {
-        percentage: { min: 4, max: 7 },
+        percentage: { min: 4, max: 8 },
     },
     critDamage: {
-        percentage: { min: 4, max: 7 },
-    },
-    healModifier: {
-        percentage: { min: 4, max: 7 },
+        percentage: { min: 4, max: 8 },
     },
 };
