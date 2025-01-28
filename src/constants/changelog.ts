@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.18.2';
+export const CURRENT_VERSION = '0.19.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.19.0',
+        date: '2025-01-28',
+        changes: [
+            'Added gear/implant swapping in simulation page',
+            'Added collapsible implant/refit forms, with better mobile support',
+        ],
+    },
     {
         version: '0.18.2',
         date: '2025-01-28',
