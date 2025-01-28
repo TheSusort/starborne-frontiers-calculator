@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Select, Input, Button, CloseIcon } from '../ui';
 import { Stat, StatName, StatType } from '../../types/stats';
 import { STATS } from '../../constants';
+import { ChevronDownIcon, ChevronUpIcon, EditIcon } from '../ui/icons';
 
 interface Props {
     stats: Stat[];
@@ -9,7 +10,21 @@ interface Props {
     maxStats: number;
     allowedStats?: Record<StatName, { allowedTypes: StatType[] | undefined }>;
     excludedStats?: Array<{ name: StatName; type: StatType }>;
+    alwaysColumn?: boolean;
+    defaultExpanded?: boolean;
 }
+
+const StatSummary: React.FC<{ stat: Stat }> = ({ stat }) => {
+    const statLabel = STATS[stat.name].label;
+    const typeLabel = stat.type.charAt(0).toUpperCase() + stat.type.slice(1);
+
+    return (
+        <span className="text-sm">
+            {statLabel}: {stat.value}
+            {typeLabel === 'Percentage' ? '%' : ''}
+        </span>
+    );
+};
 
 export const StatModifierInput: React.FC<Props> = ({
     stats,
@@ -17,7 +32,11 @@ export const StatModifierInput: React.FC<Props> = ({
     maxStats,
     allowedStats,
     excludedStats = [],
+    alwaysColumn = false,
+    defaultExpanded = true,
 }) => {
+    const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+
     const handleStatChange = (index: number, field: keyof Stat, value: string) => {
         const newStats = [...stats];
         const currentStat = newStats[index];
@@ -113,11 +132,42 @@ export const StatModifierInput: React.FC<Props> = ({
         // Only include stats that have at least one allowed type after filtering
         .filter((stat) => stat.allowedTypes && stat.allowedTypes.length > 0);
 
+    if (!isExpanded) {
+        return (
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setIsExpanded(true)}
+                        className="flex items-center gap-1"
+                    >
+                        <EditIcon />
+                    </Button>
+                    {stats.length > 0 && (
+                        <div className="flex gap-2 text-gray-400 items-center">
+                            {stats.map((stat, index) => (
+                                <React.Fragment key={index}>
+                                    <StatSummary stat={stat} />
+                                    {index < stats.length - 1 && <span>|</span>}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 me-12">
             {stats.map((stat, index) => (
                 <div key={index} className="flex gap-4 items-end w-full">
-                    <div className="grid grid-cols-3 gap-4 items-end w-full">
+                    <div
+                        className={`grid grid-cols-1 ${
+                            alwaysColumn ? '' : 'md:grid-cols-3'
+                        } gap-4 items-end w-full`}
+                    >
                         <Select
                             label="Stat"
                             value={stat.name}
@@ -145,7 +195,9 @@ export const StatModifierInput: React.FC<Props> = ({
                     </div>
                     <Button
                         aria-label="Remove stat"
-                        variant="danger"
+                        variant="secondary"
+                        size="sm"
+                        className="!h-10"
                         onClick={() => removeStat(index)}
                     >
                         <CloseIcon />

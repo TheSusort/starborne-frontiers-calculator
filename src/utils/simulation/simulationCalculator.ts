@@ -24,6 +24,7 @@ export interface SimulationSummary {
 
     // Supporter(Buffer) specific
     speed?: number;
+    activeSets?: string[];
 }
 
 const SIMULATION_ITERATIONS = 1000;
@@ -31,7 +32,11 @@ const ENEMY_ATTACK = 15000; // For defender simulations
 const ENEMY_SECURITY = 170; // For debuffer simulations
 const BASE_HEAL_PERCENT = 0.15; // 15% of max HP
 
-export function runSimulation(stats: BaseStats, role: ShipTypeName | null): SimulationSummary {
+export function runSimulation(
+    stats: BaseStats,
+    role: ShipTypeName | null,
+    activeSets?: string[]
+): SimulationSummary {
     switch (role) {
         case 'Attacker':
             return runDamageSimulation(stats);
@@ -42,7 +47,11 @@ export function runSimulation(stats: BaseStats, role: ShipTypeName | null): Simu
         case 'Supporter':
             return runHealingSimulation(stats);
         case 'Supporter(Buffer)':
-            return { ...runDefenderSimulation(stats), speed: stats.speed };
+            return {
+                ...runDefenderSimulation(stats),
+                speed: stats.speed,
+                activeSets: activeSets,
+            };
         default:
             return runDamageSimulation(stats);
     }

@@ -283,11 +283,12 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <div className="space-y-4">
                 <h3 className="text-lg font-medium ">Refits</h3>
                 {refits?.map((refit, index) => (
-                    <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
-                        <div className="absolute top-2 right-4">
+                    <div key={index} className="p-4 border border-gray-700 relative">
+                        <div className="absolute top-4 right-4">
                             <Button
                                 aria-label="Delete refit"
                                 variant="danger"
+                                size="sm"
                                 onClick={() => handleRefitDelete(index)}
                             >
                                 <CloseIcon />
@@ -301,6 +302,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                                 setRefits(newRefits);
                             }}
                             maxStats={2}
+                            defaultExpanded={editingShip ? false : true}
                         />
                     </div>
                 ))}
@@ -320,11 +322,12 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <div className="space-y-4">
                 <h3 className="text-lg font-medium ">Implants</h3>
                 {implants?.map((implant, index) => (
-                    <div key={index} className="p-4 border border-gray-700  space-y-4 relative">
-                        <div className="absolute top-2 right-4">
+                    <div key={index} className="p-4 border border-gray-700 relative">
+                        <div className="absolute top-4 right-4">
                             <Button
                                 aria-label="Delete implant"
                                 variant="danger"
+                                size="sm"
                                 onClick={() => handleImplantDelete(index)}
                             >
                                 <CloseIcon />
@@ -338,6 +341,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                                 setImplants(newImplants);
                             }}
                             maxStats={2}
+                            defaultExpanded={editingShip ? false : true}
                         />
                     </div>
                 ))}

@@ -6,12 +6,14 @@ interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
     suggestedSimulation?: SimulationSummary;
     role: ShipTypeName | null;
+    alwaysColumn?: boolean;
 }
 
 export const SimulationResults: React.FC<SimulationResultsProps> = ({
     currentSimulation,
     suggestedSimulation,
     role,
+    alwaysColumn = false,
 }) => {
     const renderAttackerStats = (simulation: SimulationSummary, isComparison = false) => (
         <>
@@ -227,6 +229,16 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
     const renderSupporterBufferStats = (simulation: SimulationSummary, isComparison = false) => (
         <>
             <div>
+                <span className="text-gray-400">Boost Set:</span>
+                <span
+                    className={`ml-2 ${
+                        simulation.activeSets?.includes('BOOST') ? 'text-green-500' : 'text-red-500'
+                    }`}
+                >
+                    {simulation.activeSets?.includes('BOOST') ? 'Active' : 'Inactive'}
+                </span>
+            </div>
+            <div>
                 <span className="text-gray-400">Speed:</span>
                 <span className="ml-2">{simulation.speed}</span>
             </div>
@@ -288,7 +300,9 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
 
     return (
         <div
-            className={`grid grid-cols-1 ${suggestedSimulation ? 'md:grid-cols-2' : ''} gap-4 mt-4 `}
+            className={`grid grid-cols-1 ${
+                suggestedSimulation && !alwaysColumn ? 'md:grid-cols-2' : ''
+            } gap-4 mt-4 `}
         >
             <div>
                 <div className="bg-dark p-4 space-y-2">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useShips } from '../hooks/useShips';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
-import { PageLayout } from '../components/ui';
+import { Button, PageLayout } from '../components/ui';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
 import { SHIP_TYPES, ShipTypeName } from '../constants';
@@ -13,8 +13,11 @@ import { GearTesting } from '../components/simulation/GearTesting';
 import { Modal } from '../components/ui/layout/Modal';
 import { GearInventory } from '../components/gear/GearInventory';
 import { useNotification } from '../hooks/useNotification';
-import { GEAR_SLOTS, GearSlotName } from '../constants';
+import { GearSlotName } from '../constants';
 import { GearPiece } from '../types/gear';
+import { ImplantTesting } from '../components/simulation/ImplantTesting';
+import { Implant } from '../types/ship';
+import { useGearLookup, useGearSets } from '../hooks/useGear';
 
 interface SimulationState {
     current: SimulationSummary;
@@ -25,7 +28,7 @@ export const SimulationPage: React.FC = () => {
     const { getShipById } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedRole, setSelectedRole] = useState<ShipTypeName>('Attacker');
-    const { getGearPiece, inventory, saveInventory } = useInventory();
+    const { getGearPiece, inventory } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [simulation, setSimulation] = useState<SimulationState | null>(null);
     const [searchParams] = useSearchParams();
@@ -33,7 +36,8 @@ export const SimulationPage: React.FC = () => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
-    const { ships, handleEquipMultipleGear } = useShips({ getGearPiece });
+    const { handleEquipMultipleGear, updateShip } = useShips({ getGearPiece });
+    const [temporaryImplants, setTemporaryImplants] = useState<Implant[]>([]);
 
     useEffect(() => {
         const shipId = searchParams.get('shipId');
@@ -63,13 +67,15 @@ export const SimulationPage: React.FC = () => {
             temporaryGear,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants,
+            temporaryImplants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
         setSimulation({
-            current: runSimulation(currentStats.final, selectedRole),
-            temporary: hasGearChanges() ? runSimulation(temporaryStats.final, selectedRole) : null,
+            current: runSimulation(currentStats.final, selectedRole, activeCurrentSets),
+            temporary: hasChanges()
+                ? runSimulation(temporaryStats.final, selectedRole, activeTemporarySets)
+                : null,
         });
     };
 
@@ -77,6 +83,13 @@ export const SimulationPage: React.FC = () => {
         if (!selectedShip) return false;
         return JSON.stringify(temporaryGear) !== JSON.stringify(selectedShip.equipment);
     };
+
+    const hasImplantChanges = () => {
+        if (!selectedShip) return false;
+        return JSON.stringify(temporaryImplants) !== JSON.stringify(selectedShip.implants);
+    };
+
+    const hasChanges = () => hasGearChanges() || hasImplantChanges();
 
     const handleSaveGearChanges = () => {
         if (!selectedShip) return;
@@ -97,24 +110,50 @@ export const SimulationPage: React.FC = () => {
         }
     };
 
+    const handleSaveImplantChanges = () => {
+        if (!selectedShip) return;
+
+        const updatedShip = {
+            ...selectedShip,
+            implants: temporaryImplants,
+        };
+
+        updateShip(updatedShip);
+        addNotification('success', 'Implant changes saved successfully');
+    };
+
+    const handleResetImplantChanges = () => {
+        if (selectedShip) {
+            setTemporaryImplants(selectedShip.implants);
+            setSimulation(null);
+        }
+    };
+
     const handleRoleChange = (role: ShipTypeName) => {
         setSelectedRole(role);
         setSimulation(null);
     };
 
     const selectedShip = getShipById(selectedShipId);
+    const currentGearLookup = useGearLookup(selectedShip?.equipment || {}, getGearPiece);
+    const temporaryGearLookup = useGearLookup(temporaryGear, getGearPiece);
+    const activeCurrentSets = useGearSets(selectedShip?.equipment || {}, currentGearLookup);
+    const activeTemporarySets = useGearSets(temporaryGear, temporaryGearLookup);
 
     useEffect(() => {
         if (selectedShip) {
             setTemporaryGear(selectedShip.equipment);
+            setTemporaryImplants(selectedShip.implants);
+            setSelectedRole(SHIP_TYPES[selectedShip.type].name);
         }
     }, [selectedShip]);
 
     return (
         <PageLayout
             title="Simulation"
-            description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear."
+            description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear and implants to see how they affect the simulation. Choose the ship role to choose scenario. "
         >
+            <SimulationInfo />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
                     <SimulationSettings
@@ -124,37 +163,61 @@ export const SimulationPage: React.FC = () => {
                         onRoleSelect={handleRoleChange}
                         onRunSimulation={handleRunSimulation}
                     />
-                </div>
-                <div className="space-y-4">
-                    {selectedShip && (
-                        <GearTesting
-                            ship={selectedShip}
-                            temporaryGear={temporaryGear}
-                            getGearPiece={getGearPiece}
-                            hoveredGear={hoveredGear}
-                            onGearHover={setHoveredGear}
-                            onSelectSlot={setSelectedSlot}
-                            onRemoveGear={(slot) => {
-                                setTemporaryGear((prev) => {
-                                    const next = { ...prev };
-                                    delete next[slot];
-                                    return next;
-                                });
-                            }}
-                            onSaveChanges={handleSaveGearChanges}
-                            onResetChanges={handleResetGearChanges}
-                            hasChanges={hasGearChanges()}
+
+                    <Button
+                        aria-label="Run Simulation"
+                        variant="primary"
+                        onClick={handleRunSimulation}
+                        disabled={!selectedShip}
+                        fullWidth
+                    >
+                        Run Simulation
+                    </Button>
+
+                    {simulation && (
+                        <SimulationResults
+                            currentSimulation={simulation.current}
+                            suggestedSimulation={simulation.temporary || undefined}
+                            role={selectedRole}
+                            alwaysColumn
                         />
                     )}
                 </div>
-            </div>
-            <div className="space-y-4">
-                {simulation && (
-                    <SimulationResults
-                        currentSimulation={simulation.current}
-                        suggestedSimulation={simulation.temporary || undefined}
-                        role={selectedRole}
-                    />
+                {selectedShip && (
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold">Quick Swap</h3>
+                        <div className="bg-dark p-4 space-y-4">
+                            <GearTesting
+                                ship={selectedShip}
+                                temporaryGear={temporaryGear}
+                                getGearPiece={getGearPiece}
+                                hoveredGear={hoveredGear}
+                                onGearHover={setHoveredGear}
+                                onSelectSlot={setSelectedSlot}
+                                onRemoveGear={(slot) => {
+                                    setTemporaryGear((prev) => {
+                                        const next = { ...prev };
+                                        delete next[slot];
+                                        return next;
+                                    });
+                                }}
+                                onSaveChanges={handleSaveGearChanges}
+                                onResetChanges={handleResetGearChanges}
+                                hasChanges={hasGearChanges()}
+                            />
+
+                            <hr className="border-gray-700" />
+
+                            <ImplantTesting
+                                ship={selectedShip}
+                                temporaryImplants={temporaryImplants}
+                                onImplantsChange={setTemporaryImplants}
+                                onSaveChanges={handleSaveImplantChanges}
+                                onResetChanges={handleResetImplantChanges}
+                                hasChanges={hasImplantChanges()}
+                            />
+                        </div>
+                    </div>
                 )}
             </div>
 
@@ -186,3 +249,12 @@ export const SimulationPage: React.FC = () => {
 };
 
 export default SimulationPage;
+
+const SimulationInfo: React.FC = () => (
+    <ul className="list-disc list-inside text-sm text-gray-400">
+        <li>It will only use 100% damage hits, no ship specific attacks are used.</li>
+        <li>For defenders, it will take hits from an enemy with 15000 attack and 170 security.</li>
+        <li>For debuffers, it will also try to hack an enemy with 170 security.</li>
+        <li>For supporters, it will heal an ally with using 15% of their max HP.</li>
+    </ul>
+);

@@ -29,20 +29,22 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold ">Suggested Gear</h3>
             </div>
-            <div className="grid grid-cols-3 gap-2 bg-dark p-4">
-                {GEAR_SLOT_ORDER.map((slotName) => {
-                    const suggestion = getSuggestionForSlot(slotName);
-                    return (
-                        <div key={slotName} className="flex items-center justify-center">
-                            <GearSlot
-                                slotKey={slotName}
-                                gear={suggestion ? getGearPiece(suggestion.gearId) : undefined}
-                                hoveredGear={hoveredGear}
-                                onHover={onHover}
-                            />
-                        </div>
-                    );
-                })}
+            <div className="bg-dark">
+                <div className="grid grid-cols-3 gap-2 bg-dark p-4 w-fit mx-auto">
+                    {GEAR_SLOT_ORDER.map((slotName) => {
+                        const suggestion = getSuggestionForSlot(slotName);
+                        return (
+                            <div key={slotName} className="flex items-center justify-center">
+                                <GearSlot
+                                    slotKey={slotName}
+                                    gear={suggestion ? getGearPiece(suggestion.gearId) : undefined}
+                                    hoveredGear={hoveredGear}
+                                    onHover={onHover}
+                                />
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
 
             <div className="flex justify-end pt-4">

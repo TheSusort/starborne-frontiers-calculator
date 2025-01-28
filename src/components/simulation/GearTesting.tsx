@@ -1,7 +1,7 @@
 import React from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { GearSlotName } from '../../constants';
+import { GearSlotName, GEAR_SLOT_ORDER } from '../../constants';
 import { GearSlot } from '../gear/GearSlot';
 import { Button } from '../ui';
 
@@ -32,14 +32,18 @@ export const GearTesting: React.FC<GearTestingProps> = ({
 }) => {
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold">Test Gear</h3>
+            <h4 className="font-semibold">Gear</h4>
             <div className="p-4 bg-dark">
                 <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
-                    {Object.entries(temporaryGear).map(([slot, gearId]) => (
+                    {GEAR_SLOT_ORDER.map((slotKey) => (
                         <GearSlot
-                            key={slot}
-                            slotKey={slot as GearSlotName}
-                            gear={gearId ? getGearPiece(gearId) : undefined}
+                            key={slotKey}
+                            slotKey={slotKey}
+                            gear={
+                                temporaryGear[slotKey]
+                                    ? getGearPiece(temporaryGear[slotKey]!)
+                                    : undefined
+                            }
                             hoveredGear={hoveredGear}
                             onSelect={onSelectSlot}
                             onRemove={onRemoveGear}

@@ -17,7 +17,6 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
     selectedRole,
     onShipSelect,
     onRoleSelect,
-    onRunSimulation,
 }) => {
     return (
         <div className="space-y-4">
@@ -40,32 +39,6 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
                     onChange={(value) => onRoleSelect(value as ShipTypeName)}
                 />
             </div>
-
-            <Button
-                aria-label="Run Simulation"
-                variant="primary"
-                onClick={onRunSimulation}
-                disabled={!selectedShip}
-                fullWidth
-            >
-                Run Simulation
-            </Button>
-
-            <SimulationInfo />
         </div>
     );
 };
-
-const SimulationInfo: React.FC = () => (
-    <p className="text-gray-400 text-sm">
-        This simulates scenarios with the selected ship and gear.
-        <br />
-        It will only use 100% damage hits, no ship specific attacks are used.
-        <br />
-        For defenders, it will take hits from an enemy with 15000 attack and 170 security.
-        <br />
-        For debuffers, it will also try to hack an enemy with 170 security.
-        <br />
-        For supporters, it will heal an ally with using 15% of their max HP.
-    </p>
-);

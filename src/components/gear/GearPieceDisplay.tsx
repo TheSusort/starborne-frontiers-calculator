@@ -1,7 +1,7 @@
 import { memo, useMemo, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
-import { GEAR_SETS, RARITIES, STATS } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../hooks/useShips';
 import { StatDisplay } from '../stats/StatDisplay';
@@ -56,7 +56,7 @@ export const GearPieceDisplay = memo(
                     <div>
                         <div className="capitalize flex items-center gap-2">
                             <img src={slotInfo} alt={gear.setBonus} className="w-6 h-auto" />
-                            <span className="font-secondary">{gear.slot}</span>
+                            <span className="font-secondary">{GEAR_SLOTS[gear.slot].label}</span>
                         </div>
                         <div className="flex items-center">
                             <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
