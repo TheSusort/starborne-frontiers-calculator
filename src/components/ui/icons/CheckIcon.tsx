@@ -1,11 +1,12 @@
-export const CheckIcon = () => {
-    // TODO: tilt icon to the right
+import React from 'react';
+
+export const CheckIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
     return (
         <svg
             viewBox="0 0 48 48"
             version="1"
             xmlns="http://www.w3.org/2000/svg"
-            className="w-4 h-4"
+            className={`w-4 h-4 ${className}`}
             role="img"
             aria-hidden="true"
         >

@@ -187,3 +187,5 @@ export const ShipDetailsPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default ShipDetailsPage;

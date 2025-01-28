@@ -39,3 +39,5 @@ export const JokeCorner: React.FC = () => {
         </div>
     );
 };
+
+export default JokeCorner;

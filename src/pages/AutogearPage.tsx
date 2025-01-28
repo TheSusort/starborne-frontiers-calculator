@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useShips } from '../hooks/useShips';
 import { useInventory } from '../hooks/useInventory';
 import { GearSuggestion, StatPriority } from '../types/autogear';
@@ -10,17 +10,18 @@ import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
 import { StatList } from '../components/stats/StatList';
-import { GearSlotName, ShipTypeName } from '../constants';
+import { GearSlotName, SHIP_TYPES, ShipTypeName } from '../constants';
 import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
 import { useNotification } from '../hooks/useNotification';
 import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 import { GEAR_SLOTS } from '../constants';
+import { useSearchParams } from 'react-router-dom';
 
 export const AutogearPage: React.FC = () => {
     const { getGearPiece, inventory, saveInventory } = useInventory();
-    const { getShipById, handleEquipGear, ships, handleEquipMultipleGear } = useShips();
+    const { getShipById, ships, handleEquipMultipleGear } = useShips();
     const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
@@ -43,6 +44,19 @@ export const AutogearPage: React.FC = () => {
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const selectedShip = getShipById(selectedShipId);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
+    const [searchParams] = useSearchParams();
+
+    // Add effect to handle URL parameters
+    useEffect(() => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                setSelectedShipId(shipId);
+                setSelectedShipRole(SHIP_TYPES[ship.type].name);
+            }
+        }
+    }, [searchParams, getShipById]);
 
     const handleAddPriority = (priority: StatPriority) => {
         setPriorities([...priorities, priority]);
@@ -293,3 +307,5 @@ export const AutogearPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default AutogearPage;

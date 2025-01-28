@@ -1,8 +1,10 @@
-export const LockIcon = () => {
+import React from 'react';
+
+export const LockIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 locked"
+            className={`h-4 w-4 locked ${className}`}
             viewBox="0 0 24 24"
             fill="currentColor"
             stroke="currentColor"

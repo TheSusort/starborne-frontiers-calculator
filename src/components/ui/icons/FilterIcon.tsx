@@ -1,4 +1,6 @@
-export const FilterIcon = () => {
+import React from 'react';
+
+export const FilterIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -8,7 +10,7 @@ export const FilterIcon = () => {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="w-4 h-4"
+            className={`w-4 h-4 ${className}`}
             role="img"
             aria-hidden="true"
         >

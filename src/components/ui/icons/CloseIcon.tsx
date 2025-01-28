@@ -1,7 +1,9 @@
-export const CloseIcon = () => {
+import React from 'react';
+
+export const CloseIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
     return (
         <svg
-            className="w-4 h-4"
+            className={`w-4 h-4 ${className}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

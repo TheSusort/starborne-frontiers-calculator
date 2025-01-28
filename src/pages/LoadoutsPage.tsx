@@ -123,3 +123,5 @@ export const LoadoutsPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default LoadoutsPage;

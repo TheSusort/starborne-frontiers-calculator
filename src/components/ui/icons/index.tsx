@@ -1,3 +1,4 @@
+export * from './ChartIcon';
 export * from './CheckIcon';
 export * from './ChevronDownIcon';
 export * from './ChevronUpIcon';
@@ -5,6 +6,8 @@ export * from './CloseIcon';
 export * from './CopyIcon';
 export * from './EditIcon';
 export * from './FilterIcon';
+export * from './GearIcon';
 export * from './InfoIcon';
 export * from './LockIcon';
+export * from './MenuIcon';
 export * from './UnlockedLockIcon';

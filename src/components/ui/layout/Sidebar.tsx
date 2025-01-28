@@ -4,6 +4,7 @@ import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
 import logo from '/favicon.ico?url';
 import { LoginButton } from '../../auth/LoginButton';
+import { MenuIcon } from '../icons/MenuIcon';
 
 export const Sidebar: React.FC = () => {
     const location = useLocation();
@@ -71,28 +72,7 @@ export const Sidebar: React.FC = () => {
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                         className=" hover:text-white focus:outline-none focus:text-white transition-colors duration-200"
                     >
-                        <svg
-                            className="h-6 w-6"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            {isMobileMenuOpen ? (
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M6 18L18 6M6 6l12 12"
-                                />
-                            ) : (
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M4 6h16M4 12h16M4 18h16"
-                                />
-                            )}
-                        </svg>
+                        <MenuIcon className="h-6 w-6" />
                     </button>
                     <h1 className="text-white text-xl font-bold flex items-center gap-2">
                         <img src={logo} alt="logo" className="w-8 h-8" />

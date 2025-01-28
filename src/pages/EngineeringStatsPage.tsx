@@ -76,3 +76,5 @@ export const EngineeringStatsPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default EngineeringStatsPage;

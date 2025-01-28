@@ -1,26 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Sidebar } from './components/ui';
-import { ShipsPage } from './pages/ShipsPage';
-import { GearPage } from './pages/GearPage';
-import { SimulationPage } from './pages/SimulationPage';
-import { AutogearPage } from './pages/AutogearPage';
-import { EngineeringStatsPage } from './pages/EngineeringStatsPage';
-import { LoadoutsPage } from './pages/LoadoutsPage';
-import { ChangelogModal } from './components/changelog/ChangelogModal';
-import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
-import { ChangelogState } from './types/changelog';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
 import { migrateTianshaoToTianchao } from './migrations/factionMigration';
 import { migrateShipAffinity } from './migrations/affinityMigration';
-import EncounterNotesPage from './pages/EncounterNotesPage';
-import HomePage from './pages/HomePage';
-import { JokeCorner } from './components/home/JokeCorner';
-import { ShipDetailsPage } from './pages/ShipDetailsPage';
 import Hotjar from '@hotjar/browser';
 import { AuthProvider } from './contexts/AuthProvider';
 import { STORAGE_KEYS } from './constants/storage';
+import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
+import { ChangelogState } from './types/changelog';
+
+// Lazy load components and pages
+const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
+const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
+const ShipsPage = lazy(() => import('./pages/ShipsPage'));
+const GearPage = lazy(() => import('./pages/GearPage'));
+const SimulationPage = lazy(() => import('./pages/SimulationPage'));
+const AutogearPage = lazy(() => import('./pages/AutogearPage'));
+const EngineeringStatsPage = lazy(() => import('./pages/EngineeringStatsPage'));
+const LoadoutsPage = lazy(() => import('./pages/LoadoutsPage'));
+const EncounterNotesPage = lazy(() => import('./pages/EncounterNotesPage'));
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ShipDetailsPage = lazy(() => import('./pages/ShipDetailsPage'));
 
 // init hotjar
 const siteId = 5241833;
@@ -71,26 +73,33 @@ const App: React.FC = () => {
                         <div className="flex-1 lg:pl-64 max-w-full bg-dark-lighter">
                             <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col overflow-x-hidden">
                                 <div className="max-w-7xl mx-auto w-full flex-grow">
-                                    <Routes>
-                                        <Route path="/ships" element={<ShipsPage />} />
-                                        <Route path="/gear" element={<GearPage />} />
-                                        <Route path="/simulation" element={<SimulationPage />} />
-                                        <Route path="/autogear" element={<AutogearPage />} />
-                                        <Route
-                                            path="/engineering"
-                                            element={<EngineeringStatsPage />}
-                                        />
-                                        <Route path="/loadouts" element={<LoadoutsPage />} />
-                                        <Route
-                                            path="/encounters"
-                                            element={<EncounterNotesPage />}
-                                        />
-                                        <Route path="/" element={<HomePage />} />
-                                        <Route
-                                            path="/ships/:shipId"
-                                            element={<ShipDetailsPage />}
-                                        />
-                                    </Routes>
+                                    <Suspense
+                                        fallback={<div className="text-center">Loading...</div>}
+                                    >
+                                        <Routes>
+                                            <Route path="/ships" element={<ShipsPage />} />
+                                            <Route path="/gear" element={<GearPage />} />
+                                            <Route
+                                                path="/simulation"
+                                                element={<SimulationPage />}
+                                            />
+                                            <Route path="/autogear" element={<AutogearPage />} />
+                                            <Route
+                                                path="/engineering"
+                                                element={<EngineeringStatsPage />}
+                                            />
+                                            <Route path="/loadouts" element={<LoadoutsPage />} />
+                                            <Route
+                                                path="/encounters"
+                                                element={<EncounterNotesPage />}
+                                            />
+                                            <Route path="/" element={<HomePage />} />
+                                            <Route
+                                                path="/ships/:shipId"
+                                                element={<ShipDetailsPage />}
+                                            />
+                                        </Routes>
+                                    </Suspense>
                                 </div>
 
                                 <JokeCorner />

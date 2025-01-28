@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useShips } from '../hooks/useShips';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { useInventory } from '../hooks/useInventory';
 import { PageLayout } from '../components/ui';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
-import { ShipTypeName } from '../constants';
+import { SHIP_TYPES, ShipTypeName } from '../constants';
 import { SimulationResults } from '../components/simulation/SimulationResults';
 import { SimulationSettings } from '../components/simulation/SimulationSettings';
+import { useSearchParams } from 'react-router-dom';
 
 export const SimulationPage: React.FC = () => {
     const { getShipById } = useShips();
@@ -16,8 +17,18 @@ export const SimulationPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [simulation, setSimulation] = useState<SimulationSummary | null>(null);
+    const [searchParams] = useSearchParams();
 
-    const selectedShip = getShipById(selectedShipId);
+    useEffect(() => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                setSelectedShipId(shipId);
+                setSelectedRole(SHIP_TYPES[ship.type].name);
+            }
+        }
+    }, [searchParams, getShipById]);
 
     const handleRunSimulation = () => {
         const ship = getShipById(selectedShipId);
@@ -41,6 +52,8 @@ export const SimulationPage: React.FC = () => {
         setSimulation(null);
     };
 
+    const selectedShip = getShipById(selectedShipId);
+
     return (
         <PageLayout
             title="Simulation"
@@ -62,3 +75,5 @@ export const SimulationPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default SimulationPage;

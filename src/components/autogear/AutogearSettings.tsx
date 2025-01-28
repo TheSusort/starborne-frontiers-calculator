@@ -46,7 +46,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             <ShipSelector onSelect={onShipSelect} selected={selectedShip} />
 
             <div className="p-4 bg-dark space-y-2">
-                <span className=" text-sm">Predefined Strategies (Experimental)</span>
+                <span className=" text-sm">Predefined Strategies</span>
                 <Select
                     data-testid="role-select"
                     options={Object.values(SHIP_TYPES).map((type) => ({

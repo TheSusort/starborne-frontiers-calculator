@@ -134,3 +134,5 @@ export const ShipsPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default ShipsPage;

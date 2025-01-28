@@ -155,3 +155,5 @@ export const GearPage: React.FC = () => {
         </PageLayout>
     );
 };
+
+export default GearPage;

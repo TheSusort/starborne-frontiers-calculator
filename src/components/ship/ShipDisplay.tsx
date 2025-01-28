@@ -7,7 +7,11 @@ import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';
 import { StatBreakdown } from '../stats/StatBreakdown';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { MenuIcon } from '../ui/icons/MenuIcon';
+import { Dropdown } from '../ui/Dropdown';
+import { GearIcon } from '../ui/icons/GearIcon';
+import { ChartIcon } from '../ui/icons/ChartIcon';
 
 interface Props {
     ship: Ship;
@@ -94,6 +98,7 @@ export const ShipDisplay: React.FC<Props> = memo(
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
+        const navigate = useNavigate();
 
         const statsBreakdown = useMemo(
             () =>
@@ -145,12 +150,10 @@ export const ShipDisplay: React.FC<Props> = memo(
                         <div className="flex gap-1">
                             {onLockEquipment && (
                                 <Button
-                                    aria-label={
-                                        ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'
-                                    }
                                     variant="secondary"
                                     size="sm"
-                                    onClick={async () => {
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
                                         try {
                                             await onLockEquipment(ship);
                                         } catch (error) {
@@ -161,39 +164,82 @@ export const ShipDisplay: React.FC<Props> = memo(
                                     {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
                                 </Button>
                             )}
-                            {onEdit && (
-                                <Button
-                                    aria-label="Edit ship"
-                                    variant="secondary"
-                                    size="sm"
+                            <Dropdown
+                                trigger={
+                                    <Button variant="secondary" size="sm" aria-label="Ship actions">
+                                        <MenuIcon />
+                                    </Button>
+                                }
+                            >
+                                <Dropdown.Item onClick={() => {}}>
+                                    <Link
+                                        to={`/ships/${ship.id}`}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <InfoIcon />
+                                        <span>Ship info</span>
+                                    </Link>
+                                </Dropdown.Item>
+
+                                <Dropdown.Item
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onEdit(ship);
+                                        navigate(`/autogear?shipId=${ship.id}`);
                                     }}
                                 >
-                                    <EditIcon />
-                                </Button>
-                            )}
-                            {onRemove && (
-                                <Button
-                                    aria-label="Remove ship"
-                                    variant="danger"
-                                    size="sm"
+                                    <div className="flex items-center gap-2">
+                                        <GearIcon />
+                                        <span>Optimize gear</span>
+                                    </div>
+                                </Dropdown.Item>
+
+                                <Dropdown.Item
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRemove(ship.id);
+                                        navigate(`/simulation?shipId=${ship.id}`);
                                     }}
                                 >
-                                    <CloseIcon />
-                                </Button>
-                            )}
+                                    <div className="flex items-center gap-2">
+                                        <ChartIcon />
+                                        <span>Simulate ship</span>
+                                    </div>
+                                </Dropdown.Item>
+
+                                {onEdit && (
+                                    <Dropdown.Item
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEdit(ship);
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <EditIcon />
+                                            <span>Edit ship</span>
+                                        </div>
+                                    </Dropdown.Item>
+                                )}
+                                {onRemove && (
+                                    <Dropdown.Item
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onRemove(ship.id);
+                                        }}
+                                        className="text-red-500"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <CloseIcon />
+                                            <span>Remove ship</span>
+                                        </div>
+                                    </Dropdown.Item>
+                                )}
+                            </Dropdown>
                         </div>
                     )}
                 </div>
 
                 {children}
 
-                <div className="px-4 relative flex-grow">
+                <div className="px-4 pb-4 relative flex-grow">
                     <div className="space-y-1 text-sm">
                         {ship.implants && variant === 'full' && (
                             <div className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter">
@@ -209,21 +255,6 @@ export const ShipDisplay: React.FC<Props> = memo(
                                 )}
                             </div>
                         </div>
-                        {variant !== 'extended' && (
-                            <Link
-                                to={`/ships/${ship.id}`}
-                                className="ml-auto w-min block pt-2 pb-4"
-                            >
-                                <Button
-                                    aria-label="View ship details"
-                                    variant="secondary"
-                                    className="flex items-center"
-                                    size="xs"
-                                >
-                                    <InfoIcon /> <span className="ml-1">Details</span>
-                                </Button>
-                            </Link>
-                        )}
                     </div>
                 </div>
             </div>

@@ -56,3 +56,5 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
         </Modal>
     );
 };
+
+export default ChangelogModal;
