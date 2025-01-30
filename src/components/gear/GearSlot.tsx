@@ -48,7 +48,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                                 variant="danger"
                                 size="sm"
                                 onClick={() => onRemove && onRemove(slotKey)}
-                                className="absolute -top-2 -right-2 rounded-full hidden group-hover:block"
+                                className="!absolute -top-2 -right-2 rounded-full hidden group-hover:block"
                             >
                                 <CloseIcon />
                             </Button>

@@ -47,6 +47,30 @@
         clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
     }
 
+    .clip-1-corner {
+        clip-path: polygon(0 10px, 10px 0, 100% 0, 100% 0%, 100% 100%, 0% 100%);
+    }
+
+    .shine-effect {
+        &::after {
+            background: #fff;
+            content: '';
+            height: 155px;
+            left: -75px;
+            opacity: 0.2;
+            position: absolute;
+            top: -50px;
+            transform: rotate(35deg);
+            transition: all 1000ms cubic-bezier(0.19, 1, 0.22, 1);
+            width: 50px;
+        }
+
+        &:hover::after {
+            left: 120%;
+            transition: all 1000ms cubic-bezier(0.19, 1, 0.22, 1);
+        }
+    }
+
     .filter-chemical {
         filter: invert(23%) sepia(41%) saturate(5391%) hue-rotate(67deg) brightness(80%)
             contrast(90%);

@@ -54,7 +54,7 @@ export const Dropdown: React.FC<DropdownProps> & { Item: typeof DropdownItem } =
                 <div
                     className={`absolute z-50 mt-2 ${
                         align === 'right' ? 'right-0' : 'left-0'
-                    } min-w-[200px] bg-dark border border-dark-border rounded shadow-lg`}
+                    } min-w-[200px] bg-dark border border-dark-border shadow-lg`}
                     onClick={(e) => e.stopPropagation()}
                 >
                     {children}
