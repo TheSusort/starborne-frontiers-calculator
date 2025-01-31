@@ -71,6 +71,24 @@
         }
     }
 
+    .section-split-effect {
+        &::before {
+            content: '';
+            height: 42px;
+            width: 0;
+            display: block;
+            position: absolute;
+            right: calc(100% - 10px);
+            top: -1px;
+            background: theme('colors.dark.DEFAULT');
+            transition: width 0.2s ease-in-out;
+        }
+
+        &:hover::before {
+            width: 6px;
+        }
+    }
+
     .filter-chemical {
         filter: invert(23%) sepia(41%) saturate(5391%) hue-rotate(67deg) brightness(80%)
             contrast(90%);

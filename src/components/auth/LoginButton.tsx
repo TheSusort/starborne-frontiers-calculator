@@ -17,22 +17,16 @@ export const LoginButton: React.FC = () => {
                         className="w-8 h-8 rounded-full"
                     />
                 )}
-                <button
-                    onClick={() => signOut()}
-                    className="px-4 py-2 bg-dark-border hover:bg-dark-border-hover transition-colors"
-                >
+                <Button onClick={() => signOut()} fullWidth variant="secondary">
                     Sign Out
-                </button>
+                </Button>
             </div>
         );
     }
 
     return (
         <>
-            <Button
-                onClick={() => setShowAuthModal(true)}
-                className="px-4 py-2 bg-primary hover:bg-primary-hover text-dark transition-colors w-full text-left"
-            >
+            <Button onClick={() => setShowAuthModal(true)} fullWidth variant="primary">
                 Sign In
             </Button>
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />

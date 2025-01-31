@@ -40,11 +40,12 @@ export const Sidebar: React.FC = () => {
                         className={`
                             block px-4 py-2
                             transition-all duration-200 ease-in-out
-                            transform hover:scale-105
+                            transform hover:scale-105 border
+                            section-split-effect text-right
                             ${
                                 isActive(path)
-                                    ? 'bg-primary hover:bg-primary-hover text-dark'
-                                    : ' hover:bg-dark-border'
+                                    ? 'bg-primary hover:bg-primary-hover text-dark border-primary hover:border-primary-hover'
+                                    : ' hover:bg-dark-border border-dark-border'
                             }
                         `}
                     >

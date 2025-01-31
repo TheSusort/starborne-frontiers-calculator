@@ -106,7 +106,7 @@ export const Select: React.FC<Props> = ({
                         w-full px-4 py-2
                         bg-dark-lighter border border-dark-border
                         focus:outline-none focus:ring-2 focus:ring-primary
-                         h-10
+                        h-10 hover:bg-dark-border
                         flex items-center justify-between
                         transition-colors duration-150
                         ${error ? 'border-red-500' : 'focus:border-primary'}
