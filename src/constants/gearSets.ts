@@ -50,16 +50,19 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063630842011678.webp',
         minPieces: 4,
+        description: 'All buffs lasts an extra turn',
     },
     BURNER: {
         name: 'Burner',
         stats: [{ name: 'attack', value: 15, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034712268832808.webp',
+        description: 'Applies inferno',
     },
     DECIMATION: {
         name: 'Decimation',
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063643328577546.webp',
+        description: '10% extra DoT damage',
     },
     HACKING: {
         name: 'Hacking',
@@ -70,6 +73,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Leech',
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063612789858395.webp',
+        description: 'Leach 15% from damage dealt',
     },
     REPAIR: {
         name: 'Repair',
@@ -80,6 +84,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Reflect',
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063615918546985.webp',
+        description: 'Reflect 10% of damage dealt',
     },
     REVENGE: {
         name: 'Revenge',
@@ -90,11 +95,13 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Shield',
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063619739816037.webp',
+        description: 'Generate 4% shield each turn',
     },
     CLOAKING: {
         name: 'Cloaking',
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063623661486090.webp',
+        description: '2 turns stealth',
     },
     ABYSSAL_ASSAULT: {
         name: 'Abyssal Assault',

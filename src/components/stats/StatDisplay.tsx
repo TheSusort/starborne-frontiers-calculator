@@ -6,9 +6,10 @@ interface Props {
     stats: Stat[];
     className?: string;
     title?: string;
+    compact?: boolean;
 }
 
-export const StatDisplay: React.FC<Props> = ({ stats, className = '', title }) => {
+export const StatDisplay: React.FC<Props> = ({ stats, className = '', title, compact = false }) => {
     if (stats.length === 0) {
         return null;
     }
@@ -24,7 +25,11 @@ export const StatDisplay: React.FC<Props> = ({ stats, className = '', title }) =
                     >
                         {stat.value !== 0 && (
                             <>
-                                <span>{STATS[stat.name as StatName].label}</span>
+                                <span>
+                                    {compact
+                                        ? STATS[stat.name as StatName].shortLabel
+                                        : STATS[stat.name as StatName].label}
+                                </span>
                                 <span>
                                     {stat.value}
                                     {stat.type === 'percentage' ? '%' : ''}

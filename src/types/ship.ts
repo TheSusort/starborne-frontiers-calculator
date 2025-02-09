@@ -37,4 +37,5 @@ export interface Refit {
 
 export interface Implant {
     stats: Stat[];
+    description?: string;
 }

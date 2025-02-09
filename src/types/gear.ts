@@ -20,6 +20,7 @@ export interface GearSetBonus {
     stats: Stat[];
     iconUrl: string;
     minPieces?: number;
+    description?: string;
 }
 
 export interface GearLoadout {

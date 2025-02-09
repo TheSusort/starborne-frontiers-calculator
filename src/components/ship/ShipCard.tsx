@@ -7,9 +7,10 @@ import { GearSlot } from '../gear/GearSlot';
 import { Modal } from '../ui/layout/Modal';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
-import { Button } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
+import { StatDisplay } from '../stats/StatDisplay';
 
 interface Props {
     ship: Ship;
@@ -48,7 +49,7 @@ export const ShipCard: React.FC<Props> = ({
     const { addNotification } = useNotification();
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
-
+    const [showGearSets, setShowGearSets] = useState(false);
     const handleUnequipAll = () => {
         onUnequipAll(ship.id);
         addNotification('success', `Unequipped all gear on ${ship.name}`);
@@ -116,18 +117,65 @@ export const ShipCard: React.FC<Props> = ({
                     </div>
 
                     <div className="flex items-center gap-2 pt-3">
-                        {activeSets && (
-                            <>
-                                <span className="text-xs text-gray-400">Gear Sets:</span>
-                                {activeSets.map((setName, index) => (
-                                    <img
-                                        key={`${setName}-${index}`}
-                                        src={GEAR_SETS[setName].iconUrl}
-                                        alt={setName}
-                                        className="w-5"
-                                    />
-                                ))}
-                            </>
+                        {activeSets.length > 0 && (
+                            <div className="relative">
+                                <div
+                                    className="flex items-center gap-2"
+                                    onMouseEnter={() => setShowGearSets(true)}
+                                    onMouseLeave={() => setShowGearSets(false)}
+                                >
+                                    <span className="text-xs text-gray-400">Gear Sets:</span>
+                                    {activeSets.map((setName, index) => (
+                                        <img
+                                            key={`${setName}-${index}`}
+                                            src={GEAR_SETS[setName].iconUrl}
+                                            alt={setName}
+                                            className="w-5"
+                                        />
+                                    ))}
+                                </div>
+                                <Tooltip
+                                    isVisible={showGearSets}
+                                    className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                >
+                                    {activeSets.map((setName, index) => (
+                                        <>
+                                            <span className="text-sm flex items-center gap-2">
+                                                <img
+                                                    key={`${setName}-${index}`}
+                                                    src={GEAR_SETS[setName].iconUrl}
+                                                    alt={setName}
+                                                    className="w-5"
+                                                />
+                                                {GEAR_SETS[setName].name}
+                                            </span>
+                                            <ul
+                                                className={`text-xs ${
+                                                    index === activeSets.length - 1
+                                                        ? ''
+                                                        : 'border-b border-gray-700 pb-2'
+                                                }`}
+                                            >
+                                                {GEAR_SETS[setName].description && (
+                                                    <li className="bg-dark-lighter p-2">
+                                                        {GEAR_SETS[setName].description}
+                                                    </li>
+                                                )}
+                                                {GEAR_SETS[setName].stats.map((stat) => (
+                                                    <li key={stat.name} className="mb-1">
+                                                        <StatDisplay
+                                                            key={index}
+                                                            stats={[stat]}
+                                                            className="p-0 bg-dark-lighter"
+                                                            compact
+                                                        />
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </>
+                                    ))}
+                                </Tooltip>
+                            </div>
                         )}
                         {Object.values(ship.equipment) && (
                             <Button

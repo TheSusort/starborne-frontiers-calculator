@@ -1,7 +1,7 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon } from '../ui';
+import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon, Tooltip } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../hooks/useInventory';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -12,6 +12,7 @@ import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
+import { StatDisplay } from '../stats/StatDisplay';
 
 interface Props {
     ship: Ship;
@@ -99,7 +100,7 @@ export const ShipDisplay: React.FC<Props> = memo(
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const navigate = useNavigate();
-
+        const [isTooltipVisible, setIsTooltipVisible] = useState(false);
         const statsBreakdown = useMemo(
             () =>
                 calculateTotalStats(
@@ -241,10 +242,33 @@ export const ShipDisplay: React.FC<Props> = memo(
 
                 <div className="px-4 pb-4 relative flex-grow">
                     <div className="space-y-1 text-sm">
-                        {ship.implants && variant === 'full' && (
-                            <div className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter">
-                                <span>Implants:</span>
-                                <span>{ship.implants?.length}</span>
+                        {ship.implants?.length > 0 && variant === 'full' && (
+                            <div className="relative">
+                                <div
+                                    className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter"
+                                    onMouseEnter={() => setIsTooltipVisible(true)}
+                                    onMouseLeave={() => setIsTooltipVisible(false)}
+                                >
+                                    <span>Implants:</span>
+                                    <span>{ship.implants?.length}</span>
+                                </div>
+                                <Tooltip
+                                    isVisible={isTooltipVisible}
+                                    className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                >
+                                    {ship.implants?.map((implant, index) => (
+                                        <StatDisplay
+                                            key={index}
+                                            stats={implant.stats}
+                                            className={`${
+                                                index < ship.implants.length - 1
+                                                    ? 'border-b border-dark-lighter pb-2'
+                                                    : ''
+                                            }`}
+                                            compact
+                                        />
+                                    ))}
+                                </Tooltip>
                             </div>
                         )}
                         <div className="flex items-center justify-between">
