@@ -11,6 +11,8 @@ import {
 import { auth } from '../config/firebase';
 import { useNotification } from '../hooks/useNotification';
 import { STORAGE_KEYS } from '../constants/storage';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
+import { Capacitor } from '@capacitor/core';
 
 interface AuthContextType {
     user: User | null;
@@ -29,18 +31,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { addNotification } = useNotification();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            setUser(user);
-            setLoading(false);
-        });
+        const setupAuth = async () => {
+            if (Capacitor.isNativePlatform()) {
+                // Setup native auth state listener
+                const unsubscribe = await FirebaseAuthentication.addListener(
+                    'authStateChange',
+                    async (change) => {
+                        setUser(change.user ? (change.user as unknown as User) : null);
+                        setLoading(false);
+                    }
+                );
 
-        return unsubscribe;
+                // Get initial auth state
+                const result = await FirebaseAuthentication.getCurrentUser();
+                setUser(result.user ? (result.user as unknown as User) : null);
+                setLoading(false);
+
+                return () => {
+                    unsubscribe.remove();
+                };
+            } else {
+                // Web platform - use existing Firebase auth
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    setUser(user);
+                    setLoading(false);
+                });
+
+                return unsubscribe;
+            }
+        };
+
+        setupAuth();
     }, []);
 
     const signInWithGoogle = async () => {
-        const provider = new GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
+            if (Capacitor.isNativePlatform()) {
+                // Native platform
+                await FirebaseAuthentication.signInWithGoogle();
+            } else {
+                // Web platform
+                const provider = new GoogleAuthProvider();
+                await signInWithPopup(auth, provider);
+            }
         } catch (error) {
             console.error('Error signing in with Google:', error);
             throw error;
@@ -49,7 +82,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signInWithEmail = async (email: string, password: string) => {
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            if (Capacitor.isNativePlatform()) {
+                await FirebaseAuthentication.signInWithEmailAndPassword({ email, password });
+            } else {
+                await signInWithEmailAndPassword(auth, email, password);
+            }
         } catch (error) {
             console.error('Error signing in with email:', error);
             throw error;
@@ -58,7 +95,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signUpWithEmail = async (email: string, password: string) => {
         try {
-            await createUserWithEmailAndPassword(auth, email, password);
+            if (Capacitor.isNativePlatform()) {
+                await FirebaseAuthentication.createUserWithEmailAndPassword({ email, password });
+            } else {
+                await createUserWithEmailAndPassword(auth, email, password);
+            }
         } catch (error) {
             console.error('Error signing up with email:', error);
             throw error;
@@ -67,10 +108,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const signOut = async () => {
         try {
-            await firebaseSignOut(auth);
+            if (Capacitor.isNativePlatform()) {
+                await FirebaseAuthentication.signOut();
+            } else {
+                await firebaseSignOut(auth);
+            }
             // Clear all local storage data
             Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
-
             addNotification('success', 'Logged out successfully');
         } catch (error) {
             console.error('Logout failed:', error);

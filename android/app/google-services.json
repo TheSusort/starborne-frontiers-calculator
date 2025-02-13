@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "239544020293",
+    "project_id": "starborne-planner",
+    "storage_bucket": "starborne-planner.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239544020293:android:78059065fa57748f3ea22c",
+        "android_client_info": {
+          "package_name": "com.susort.starborneplanner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "239544020293-f0npehoa4l18s7klckpu15t6o51kqqo8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZJ3_jrU94x-Xs-RGlSzop7z6WG0nRDG0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "239544020293-f0npehoa4l18s7klckpu15t6o51kqqo8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

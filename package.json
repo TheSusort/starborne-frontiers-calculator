@@ -4,6 +4,11 @@
     "type": "module",
     "private": true,
     "dependencies": {
+        "@capacitor-firebase/authentication": "^7.0.0",
+        "@capacitor-firebase/firestore": "^7.0.0",
+        "@capacitor/android": "^7.0.1",
+        "@capacitor/cli": "^7.0.1",
+        "@capacitor/core": "^7.0.1",
         "@firebase/auth": "^1.8.2",
         "@firebase/firestore": "^4.7.6",
         "@hotjar/browser": "^1.0.9",
