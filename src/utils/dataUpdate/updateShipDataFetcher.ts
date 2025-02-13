@@ -8,6 +8,7 @@ export interface ParsedShipData {
     type: string;
     rarity: string;
     affinity: string;
+    imageKey: string;
 }
 
 export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedShipData | null> {
@@ -22,7 +23,7 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            throw new Error(`HTTP error! status: ${response.statusText}`);
         }
 
         const html = await response.text();
@@ -77,6 +78,17 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
             ?.textContent?.trim()
             .toUpperCase();
 
+        // image urls looks like this: https://cdn.prod.website-files.com/660f1bf7e4aae68121d0ff5d/6623820e50414800d0262797_66231f1529e837f9924968de_Atlas_11_Portrait.png
+        // we want imageKey to be Atlas_11_Portrait.png
+        const imageName = doc
+            .querySelector('.database-page-item-image')
+            ?.getAttribute('src')
+            ?.split('/')
+            .pop();
+
+        // slice imageName by _ and take the last 3 elements
+        const imageKey = imageName?.split('_').slice(-3).join('_');
+
         if (!faction || !type || !rarity || !affinity) {
             console.error('Missing required ship data (faction, type, or rarity)');
             return null;
@@ -88,6 +100,7 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
             type,
             rarity,
             affinity,
+            imageKey: imageKey || '',
         };
     } catch (error) {
         console.error('Error fetching ship data:', error);
