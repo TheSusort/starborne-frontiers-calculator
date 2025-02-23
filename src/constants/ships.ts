@@ -878,7 +878,7 @@ export const SHIPS = {
         critRate: 9,
         critDamage: 46,
         speed: 84,
-        imageKey: '',
+        imageKey: 'Everliving_11_Portrait.png',
     },
     PANGUAN: {
         name: 'Panguan',
@@ -1182,7 +1182,7 @@ export const SHIPS = {
         critRate: 9,
         critDamage: 42,
         speed: 88,
-        imageKey: '',
+        imageKey: 'Tianchao_5_Portrait.png',
     },
     SHASHOU: {
         name: 'Shashou',
@@ -1406,7 +1406,7 @@ export const SHIPS = {
         critRate: 9,
         critDamage: 14,
         speed: 96,
-        imageKey: '',
+        imageKey: 'Legion_13_Portrait.png',
     },
     VINDICATOR: {
         name: 'Vindicator',

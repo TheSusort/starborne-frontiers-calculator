@@ -139,7 +139,7 @@ export const ShipCard: React.FC<Props> = ({
                                     className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
                                 >
                                     {activeSets.map((setName, index) => (
-                                        <>
+                                        <div key={`${setName}-${index}`}>
                                             <span className="text-sm flex items-center gap-2">
                                                 <img
                                                     key={`${setName}-${index}`}
@@ -172,7 +172,7 @@ export const ShipCard: React.FC<Props> = ({
                                                     </li>
                                                 ))}
                                             </ul>
-                                        </>
+                                        </div>
                                     ))}
                                 </Tooltip>
                             </div>

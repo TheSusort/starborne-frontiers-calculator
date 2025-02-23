@@ -18,6 +18,7 @@ export interface Ship {
     refits: Refit[];
     implants: Implant[];
     affinity?: AffinityName;
+    imageKey?: string;
 }
 
 export interface Faction {
