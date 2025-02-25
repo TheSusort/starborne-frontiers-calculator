@@ -72,20 +72,25 @@
     }
 
     .section-split-effect {
-        &::before {
+        margin-left: 6px;
+
+        &::after {
             content: '';
             height: 42px;
-            width: 0;
+            width: 6px;
             display: block;
             position: absolute;
-            right: calc(100% - 10px);
+            right: calc(100% - 1px);
             top: -1px;
-            background: theme('colors.dark.DEFAULT');
-            transition: width 0.2s ease-in-out;
+            background-color: inherit;
+            transition: all 0.2s ease-in-out;
+            border: inherit;
+            border-right: 0;
         }
 
-        &:hover::before {
-            width: 6px;
+        &:hover::after {
+            right: calc(100% + 6px);
+            border-right: inherit;
         }
     }
 

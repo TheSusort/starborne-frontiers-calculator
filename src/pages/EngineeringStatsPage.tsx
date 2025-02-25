@@ -5,9 +5,10 @@ import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { PageLayout, CollapsibleForm } from '../components/ui';
 import { useNotification } from '../hooks/useNotification';
 import { EngineeringStatsList } from '../components/engineering/EngineeringStatsList';
+import { Loader } from '../components/ui/Loader';
 
 export const EngineeringStatsPage: React.FC = () => {
-    const { engineeringStats, saveEngineeringStats } = useEngineeringStats();
+    const { engineeringStats, saveEngineeringStats, loading } = useEngineeringStats();
     const [editingStats, setEditingStats] = useState<EngineeringStat | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
@@ -37,6 +38,10 @@ export const EngineeringStatsPage: React.FC = () => {
         }
         addNotification('success', 'Engineering stats deleted successfully');
     };
+
+    if (loading) {
+        return <Loader />;
+    }
 
     return (
         <PageLayout

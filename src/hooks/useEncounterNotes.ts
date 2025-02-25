@@ -9,7 +9,7 @@ export const useEncounterNotes = () => {
     const {
         data: encounters = [],
         setData: setEncounters,
-        loading: isLoading,
+        loading,
     } = useStorage<EncounterNote[]>({ key: STORAGE_KEY, defaultValue: [] });
 
     const addEncounter = useCallback(
@@ -44,7 +44,7 @@ export const useEncounterNotes = () => {
 
     return {
         encounters,
-        isLoading,
+        loading,
         addEncounter,
         updateEncounter,
         deleteEncounter,

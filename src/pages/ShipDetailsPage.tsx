@@ -18,6 +18,7 @@ import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { useOrphanSetPieces } from '../hooks/useGear';
 import { useGearLookup } from '../hooks/useGear';
 import { StatDistributionChart } from '../components/stats/StatDistributionChart';
+import { Loader } from '../components/ui/Loader';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -32,6 +33,7 @@ export const ShipDetailsPage: React.FC = () => {
         handleRemoveShip: removeShip,
         handleLockEquipment: toggleEquipmentLock,
         handleUnequipAllGear,
+        loading,
     } = useShips({ getGearPiece });
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
@@ -78,6 +80,10 @@ export const ShipDetailsPage: React.FC = () => {
         ).final,
         orphanSetPieces
     );
+
+    if (loading) {
+        return <Loader />;
+    }
 
     return (
         <PageLayout

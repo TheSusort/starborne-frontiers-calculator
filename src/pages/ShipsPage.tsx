@@ -6,7 +6,7 @@ import { useShips } from '../hooks/useShips';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
 import { useNotification } from '../hooks/useNotification';
 import { Ship } from '../types/ship';
-
+import { Loader } from '../components/ui/Loader';
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
     const [isFormVisible, setIsFormVisible] = useState(false);
@@ -58,11 +58,7 @@ export const ShipsPage: React.FC = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center">
-                <div className="animate-pulse text-xl">Loading ships...</div>
-            </div>
-        );
+        return <Loader />;
     }
 
     return (

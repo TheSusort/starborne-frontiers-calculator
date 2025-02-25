@@ -3,16 +3,12 @@ import { useShipsData } from '../hooks/useShipsData';
 import { PageLayout } from '../components/ui';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { Image } from '../components/ui/Image';
-
+import { Loader } from '../components/ui/Loader';
 export const ShipIndexPage: React.FC = () => {
     const { ships, loading, error } = useShipsData();
 
     if (loading) {
-        return (
-            <div className="flex justify-center items-center min-h-[50vh]">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-            </div>
-        );
+        return <Loader />;
     }
 
     if (error) {
@@ -25,7 +21,7 @@ export const ShipIndexPage: React.FC = () => {
 
     return (
         <PageLayout
-            title="Ships Database"
+            title="Ship Database"
             description="Browse all available ships and their base statistics at level 60, no refits."
         >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

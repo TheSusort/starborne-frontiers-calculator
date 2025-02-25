@@ -8,8 +8,11 @@ import { STORAGE_KEYS } from '../constants/storage';
 const STORAGE_KEY = STORAGE_KEYS.ENGINEERING_STATS;
 
 export const useEngineeringStats = () => {
-    const { data: engineeringStats = { stats: [] }, setData: setEngineeringStats } =
-        useStorage<EngineeringStats>({ key: STORAGE_KEY, defaultValue: { stats: [] } });
+    const {
+        data: engineeringStats = { stats: [] },
+        setData: setEngineeringStats,
+        loading,
+    } = useStorage<EngineeringStats>({ key: STORAGE_KEY, defaultValue: { stats: [] } });
 
     const saveEngineeringStats = useCallback(
         (stats: EngineeringStats) => {
@@ -56,5 +59,6 @@ export const useEngineeringStats = () => {
         deleteEngineeringStats,
         getAllAllowedStats,
         getEngineeringStatsForShipType,
+        loading,
     };
 };

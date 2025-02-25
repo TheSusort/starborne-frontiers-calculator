@@ -7,9 +7,11 @@ import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../hooks/useEncounterNotes';
 import { useNotification } from '../hooks/useNotification';
+import { Loader } from '../components/ui/Loader';
 
 const EncounterNotesPage: React.FC = () => {
-    const { encounters, addEncounter, updateEncounter, deleteEncounter } = useEncounterNotes();
+    const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =
+        useEncounterNotes();
     const { addNotification } = useNotification();
     const [editingEncounter, setEditingEncounter] = useState<EncounterNote | null>(null);
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
@@ -46,6 +48,10 @@ const EncounterNotesPage: React.FC = () => {
         }
         addNotification('success', 'Encounter Deleted');
     };
+
+    if (loading) {
+        return <Loader />;
+    }
 
     return (
         <PageLayout

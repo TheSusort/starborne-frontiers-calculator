@@ -9,6 +9,7 @@ import { useNotification } from '../hooks/useNotification';
 import { useShips } from '../hooks/useShips';
 import { SHIP_TYPES } from '../constants';
 import { Tabs } from '../components/ui/layout/Tabs';
+import { Loader } from '../components/ui/Loader';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -89,13 +90,7 @@ export const GearPage: React.FC = () => {
     };
 
     if (loading) {
-        return (
-            <PageLayout title="Gear Management">
-                <div className="flex items-center justify-center">
-                    <div className="animate-pulse text-xl ">Loading inventory...</div>
-                </div>
-            </PageLayout>
-        );
+        return <Loader />;
     }
 
     return (

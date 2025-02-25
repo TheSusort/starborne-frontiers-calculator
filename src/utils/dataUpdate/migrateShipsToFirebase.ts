@@ -1,4 +1,3 @@
-import '../env'; // Load environment variables first
 import { adminDb } from '../../config/firebase-admin';
 import { SHIPS } from '../../constants/ships';
 import { QueryDocumentSnapshot } from 'firebase-admin/firestore';

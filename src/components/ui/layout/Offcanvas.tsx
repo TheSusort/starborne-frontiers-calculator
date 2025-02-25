@@ -10,6 +10,7 @@ interface Props {
     position?: 'left' | 'right';
     width?: string;
     hideCloseButton?: boolean;
+    className?: string;
 }
 
 export const Offcanvas: React.FC<Props> = ({
@@ -20,6 +21,7 @@ export const Offcanvas: React.FC<Props> = ({
     position = 'right',
     width = 'w-80',
     hideCloseButton = false,
+    className,
 }) => {
     const [isAnimating, setIsAnimating] = useState(false);
     const [shouldRender, setShouldRender] = useState(false);
@@ -91,9 +93,10 @@ export const Offcanvas: React.FC<Props> = ({
                 data-testid="offcanvas-panel"
                 className={`
                     fixed ${position}-0 top-0 h-full ${width}
-                    bg-dark-lighter p-6 shadow-lg
+                    bg-dark p-6 shadow-lg
                     transform transition-transform duration-300 ease-in-out overflow-y-auto
                     ${translateClass}
+                    ${className}
                 `}
                 onClick={(e) => e.stopPropagation()}
             >
