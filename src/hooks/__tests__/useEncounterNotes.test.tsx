@@ -54,7 +54,7 @@ describe('useEncounterNotes Hook', () => {
     test('initializes with empty encounters and loading state', () => {
         const { result } = renderHook(() => useEncounterNotes());
         expect(result.current.encounters).toEqual([]);
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.loading).toBe(false);
     });
 
     test('loads encounters from localStorage', () => {
@@ -62,7 +62,7 @@ describe('useEncounterNotes Hook', () => {
         const { result } = renderHook(() => useEncounterNotes());
 
         expect(result.current.encounters).toEqual(mockEncounters);
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.loading).toBe(false);
         expect(localStorageMock.getItem).toHaveBeenCalledWith('encounterNotes');
     });
 
@@ -140,7 +140,7 @@ describe('useEncounterNotes Hook', () => {
         const { result } = renderHook(() => useEncounterNotes());
 
         expect(result.current.encounters).toEqual([]);
-        expect(result.current.isLoading).toBe(false);
+        expect(result.current.loading).toBe(false);
 
         consoleError.mockRestore();
     });

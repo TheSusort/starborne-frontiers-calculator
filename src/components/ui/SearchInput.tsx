@@ -2,12 +2,20 @@ import React from 'react';
 import { SearchIcon } from './icons/SearchIcon';
 import { Input } from './Input';
 
-interface Props extends React.InputHTMLAttributes<HTMLInputElement> {
+interface Props {
     value: string;
     onChange: (value: string) => void;
+    className?: string;
+    placeholder?: string;
 }
 
-export const SearchInput: React.FC<Props> = ({ value, onChange, className = '', ...props }) => {
+export const SearchInput: React.FC<Props> = ({
+    value,
+    onChange,
+    className = '',
+    placeholder = 'Search...',
+    ...props
+}) => {
     return (
         <div className={`relative ${className}`}>
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -18,6 +26,7 @@ export const SearchInput: React.FC<Props> = ({ value, onChange, className = '', 
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 className="!pl-10"
+                placeholder={placeholder}
                 {...props}
             />
         </div>

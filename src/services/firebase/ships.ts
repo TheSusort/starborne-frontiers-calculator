@@ -34,9 +34,9 @@ interface FirebaseShip {
 }
 
 class ShipsService {
-    private cache: Map<string, CacheEntry<Ship[]>> = new Map();
+    private cache: Map<string, CacheEntry<Ship[] | Ship>> = new Map();
 
-    private isValidCache(entry: CacheEntry<Ship[]>): boolean {
+    private isValidCache(entry: CacheEntry<Ship[] | Ship>): boolean {
         return Date.now() - entry.timestamp < CACHE_DURATION;
     }
 
@@ -45,7 +45,7 @@ class ShipsService {
         const cachedData = this.cache.get(cacheKey);
 
         if (cachedData && this.isValidCache(cachedData)) {
-            return cachedData.data;
+            return cachedData.data as Ship[];
         }
 
         const shipsSnapshot = await getDocs(collection(db, SHIPS_COLLECTION));
@@ -69,7 +69,7 @@ class ShipsService {
         const cachedData = this.cache.get(cacheKey);
 
         if (cachedData && this.isValidCache(cachedData)) {
-            return cachedData.data;
+            return cachedData.data as Ship;
         }
 
         const shipDoc = await getDoc(doc(db, SHIPS_COLLECTION, id));
