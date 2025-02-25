@@ -10,7 +10,11 @@ const TEAM_LOADOUTS_STORAGE_KEY = STORAGE_KEYS.TEAM_LOADOUTS;
 
 export const useLoadouts = () => {
     const { addNotification } = useNotification();
-    const { data: loadouts = [], setData: setLoadouts } = useStorage<Loadout[]>({
+    const {
+        data: loadouts = [],
+        setData: setLoadouts,
+        loading,
+    } = useStorage<Loadout[]>({
         key: LOADOUTS_STORAGE_KEY,
         defaultValue: [],
     });
@@ -109,6 +113,7 @@ export const useLoadouts = () => {
 
     return {
         loadouts,
+        loading,
         addLoadout,
         updateLoadout,
         deleteLoadout,

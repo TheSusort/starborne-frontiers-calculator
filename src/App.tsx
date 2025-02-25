@@ -23,6 +23,7 @@ const LoadoutsPage = lazy(() => import('./pages/LoadoutsPage'));
 const EncounterNotesPage = lazy(() => import('./pages/EncounterNotesPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/ShipDetailsPage'));
+const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 
 // init hotjar
 const siteId = 5241833;
@@ -97,6 +98,10 @@ const App: React.FC = () => {
                                             <Route
                                                 path="/ships/:shipId"
                                                 element={<ShipDetailsPage />}
+                                            />
+                                            <Route
+                                                path="/ships/index"
+                                                element={<ShipIndexPage />}
                                             />
                                         </Routes>
                                     </Suspense>

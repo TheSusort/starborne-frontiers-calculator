@@ -4,6 +4,8 @@
     "type": "module",
     "private": true,
     "dependencies": {
+        "@cloudinary/react": "^1.13.1",
+        "@cloudinary/url-gen": "^1.21.0",
         "@firebase/auth": "^1.8.2",
         "@firebase/firestore": "^4.7.6",
         "@hotjar/browser": "^1.0.9",
@@ -23,7 +25,9 @@
         "vite": "^6.0.9",
         "vite-plugin-svgr": "^4.3.0",
         "vite-tsconfig-paths": "^5.1.4",
-        "web-vitals": "^2.1.4"
+        "web-vitals": "^2.1.4",
+        "dotenv": "^16.0.3",
+        "firebase-admin": "^11.0.0"
     },
     "scripts": {
         "start": "vite",
@@ -38,7 +42,8 @@
         "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
         "prepare": "husky install",
         "lint-staged": "lint-staged",
-        "update-ships": "tsx src/utils/dataUpdate/updateShipsData.ts"
+        "update-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
+        "migrate-ships": "tsx scripts/migrate-ships.ts"
     },
     "eslintConfig": {
         "extends": [

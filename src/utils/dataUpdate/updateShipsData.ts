@@ -29,6 +29,8 @@ async function updateShipsData(specificShip?: string) {
         const typedShip = ship;
 
         try {
+            // eslint-disable-next-line no-console
+            console.log(`Fetching data for ${typedShip.name}`);
             const newData = await fetchShipDataFromRocky(typedShip.name);
 
             if (!newData) {
@@ -52,6 +54,7 @@ async function updateShipsData(specificShip?: string) {
                 critRate: newData.baseStats.crit,
                 critDamage: newData.baseStats.critDamage,
                 speed: newData.baseStats.speed,
+                imageKey: newData.imageKey,
             };
 
             // Add a small delay to avoid rate limiting

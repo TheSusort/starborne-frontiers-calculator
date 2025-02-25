@@ -8,12 +8,14 @@ import { TeamLoadoutCard } from '../components/loadout/TeamLoadoutCard';
 import { useInventory } from '../hooks/useInventory';
 import { useNotification } from '../hooks/useNotification';
 import { useShips } from '../hooks/useShips';
+import { Loader } from '../components/ui/Loader';
 
 export const LoadoutsPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
     const {
         loadouts,
+        loading,
         addLoadout,
         updateLoadout,
         deleteLoadout,
@@ -28,6 +30,10 @@ export const LoadoutsPage: React.FC = () => {
 
     const existingLoadoutNames = loadouts.map((loadout) => loadout.name);
     const existingTeamNames = teamLoadouts.map((loadout) => loadout.name);
+
+    if (loading) {
+        return <Loader />;
+    }
 
     return (
         <PageLayout
