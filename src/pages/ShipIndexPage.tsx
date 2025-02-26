@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useShipsData } from '../hooks/useShipsData';
+import { useShips } from '../hooks/useShips';
 import { PageLayout } from '../components/ui';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { Image } from '../components/ui/Image';
@@ -9,9 +10,13 @@ import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
 import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES } from '../constants';
 import { SearchInput } from '../components/ui/SearchInput';
+import { Ship } from '../types/ship';
+import { useNotification } from '../hooks/useNotification';
 
 export const ShipIndexPage: React.FC = () => {
-    const { ships, loading, error } = useShipsData();
+    const { ships: templateShips, loading, error } = useShipsData();
+    const { handleSaveShip } = useShips();
+    const { addNotification } = useNotification();
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const { state, setState, clearFilters } = usePersistedFilters('ship-database-filters');
@@ -19,6 +24,7 @@ export const ShipIndexPage: React.FC = () => {
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0;
+    const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
 
     const setSelectedFactions = (factions: string[]) => {
         setState((prev) => ({
@@ -86,9 +92,9 @@ export const ShipIndexPage: React.FC = () => {
     ];
 
     const filteredAndSortedShips = useMemo(() => {
-        if (!ships) return [];
+        if (!templateShips) return [];
 
-        const filtered = ships.filter((ship) => {
+        const filtered = templateShips.filter((ship) => {
             const matchesFaction =
                 (state.filters.factions?.length ?? 0) === 0 ||
                 (state.filters.factions?.includes(ship.faction) ?? false);
@@ -123,7 +129,27 @@ export const ShipIndexPage: React.FC = () => {
                         : b.name.localeCompare(a.name);
             }
         });
-    }, [ships, state.filters, state.sort, searchQuery]);
+    }, [templateShips, state.filters, state.sort, searchQuery]);
+
+    const onQuickAdd = useCallback(
+        async (templateShip: Ship) => {
+            try {
+                const newShip: Ship = {
+                    ...templateShip,
+                    id: Date.now().toString(),
+                    equipment: {},
+                    equipmentLocked: false,
+                };
+                await handleSaveShip(newShip);
+                setAddedShips((prev) => new Set(prev).add(templateShip.name));
+                addNotification('success', `Added ${templateShip.name} to your fleet`);
+            } catch (error) {
+                addNotification('error', 'Failed to add ship');
+                console.error('Failed to add ship:', error);
+            }
+        },
+        [handleSaveShip, addNotification]
+    );
 
     if (loading) {
         return <Loader />;
@@ -173,7 +199,12 @@ export const ShipIndexPage: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {filteredAndSortedShips.length > 0 ? (
                         filteredAndSortedShips.map((ship) => (
-                            <ShipDisplay key={ship.name} ship={ship}>
+                            <ShipDisplay
+                                key={ship.name}
+                                ship={ship}
+                                onQuickAdd={onQuickAdd}
+                                isAdded={addedShips.has(ship.name)}
+                            >
                                 <div className="flex flex-col items-center justify-center border-b border-gray-700 pb-2 m-3">
                                     {ship.imageKey && <Image src={ship.imageKey} alt={ship.name} />}
                                 </div>

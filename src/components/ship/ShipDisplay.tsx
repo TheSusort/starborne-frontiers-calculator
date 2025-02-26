@@ -13,6 +13,7 @@ import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
 import { StatDisplay } from '../stats/StatDisplay';
+import { CheckIcon } from '../ui/icons/CheckIcon';
 
 interface Props {
     ship: Ship;
@@ -23,6 +24,8 @@ interface Props {
     onClick?: () => void;
     children?: React.ReactNode;
     onLockEquipment?: (ship: Ship) => Promise<void>;
+    onQuickAdd?: (ship: Ship) => Promise<void>;
+    isAdded?: boolean;
 }
 
 const ShipImage = memo(
@@ -96,6 +99,8 @@ export const ShipDisplay: React.FC<Props> = memo(
         onClick,
         children,
         onLockEquipment,
+        onQuickAdd,
+        isAdded,
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -147,7 +152,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                     className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}
                 >
                     <Header ship={ship} />
-                    {(onEdit || onRemove || onLockEquipment) && (
+                    {(onEdit || onRemove || onLockEquipment || onQuickAdd) && (
                         <div className="flex gap-1">
                             {onLockEquipment && (
                                 <Button
@@ -165,75 +170,91 @@ export const ShipDisplay: React.FC<Props> = memo(
                                     {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
                                 </Button>
                             )}
-                            <Dropdown
-                                trigger={
-                                    <Button variant="secondary" size="sm" aria-label="Ship actions">
-                                        <MenuIcon />
-                                    </Button>
-                                }
-                            >
-                                <Dropdown.Item onClick={() => {}}>
-                                    <Link
-                                        to={`/ships/${ship.id}`}
-                                        className="flex items-center gap-2"
-                                    >
-                                        <InfoIcon />
-                                        <span>Ship info</span>
-                                    </Link>
-                                </Dropdown.Item>
-
-                                <Dropdown.Item
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate(`/autogear?shipId=${ship.id}`);
-                                    }}
+                            {!onQuickAdd && (
+                                <Dropdown
+                                    trigger={
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            aria-label="Ship actions"
+                                        >
+                                            <MenuIcon />
+                                        </Button>
+                                    }
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <GearIcon />
-                                        <span>Optimize gear</span>
-                                    </div>
-                                </Dropdown.Item>
+                                    <Dropdown.Item onClick={() => {}}>
+                                        <Link
+                                            to={`/ships/${ship.id}`}
+                                            className="flex items-center gap-2"
+                                        >
+                                            <InfoIcon />
+                                            <span>Ship info</span>
+                                        </Link>
+                                    </Dropdown.Item>
 
-                                <Dropdown.Item
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigate(`/simulation?shipId=${ship.id}`);
-                                    }}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <ChartIcon />
-                                        <span>Simulate ship</span>
-                                    </div>
-                                </Dropdown.Item>
-
-                                {onEdit && (
                                     <Dropdown.Item
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onEdit(ship);
+                                            navigate(`/autogear?shipId=${ship.id}`);
                                         }}
                                     >
                                         <div className="flex items-center gap-2">
-                                            <EditIcon />
-                                            <span>Edit ship</span>
+                                            <GearIcon />
+                                            <span>Optimize gear</span>
                                         </div>
                                     </Dropdown.Item>
-                                )}
-                                {onRemove && (
+
                                     <Dropdown.Item
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            onRemove(ship.id);
+                                            navigate(`/simulation?shipId=${ship.id}`);
                                         }}
-                                        className="text-red-500"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <CloseIcon />
-                                            <span>Remove ship</span>
+                                            <ChartIcon />
+                                            <span>Simulate ship</span>
                                         </div>
                                     </Dropdown.Item>
-                                )}
-                            </Dropdown>
+
+                                    {onEdit && (
+                                        <Dropdown.Item
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onEdit(ship);
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <EditIcon />
+                                                <span>Edit ship</span>
+                                            </div>
+                                        </Dropdown.Item>
+                                    )}
+                                    {onRemove && (
+                                        <Dropdown.Item
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRemove(ship.id);
+                                            }}
+                                            className="text-red-500"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <CloseIcon />
+                                                <span>Remove ship</span>
+                                            </div>
+                                        </Dropdown.Item>
+                                    )}
+                                </Dropdown>
+                            )}
+                            {onQuickAdd && (
+                                <Button
+                                    onClick={() => !isAdded && onQuickAdd(ship)}
+                                    disabled={isAdded}
+                                    variant="secondary"
+                                    size="sm"
+                                >
+                                    {isAdded ? <CheckIcon /> : <div className="w-4 h-4">+</div>}
+                                </Button>
+                            )}
                         </div>
                     )}
                 </div>
