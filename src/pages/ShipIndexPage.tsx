@@ -175,7 +175,7 @@ export const ShipIndexPage: React.FC = () => {
                             value={searchQuery}
                             onChange={setSearchQuery}
                             placeholder="Search ships..."
-                            className="w-full"
+                            className="w-full mb-2"
                         />
                     </div>
                     {filteredAndSortedShips.length > 0 && (

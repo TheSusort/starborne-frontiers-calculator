@@ -68,6 +68,7 @@ export const GearPieceDisplay = memo(
                             {onEdit && (
                                 <Button
                                     aria-label="Edit gear piece"
+                                    title="Edit gear piece"
                                     variant="secondary"
                                     size="sm"
                                     className="ms-auto"
@@ -79,6 +80,7 @@ export const GearPieceDisplay = memo(
                             {onRemove && (
                                 <Button
                                     aria-label="Remove gear piece"
+                                    title="Remove gear piece"
                                     variant="danger"
                                     size="sm"
                                     onClick={handleRemove}
@@ -91,6 +93,7 @@ export const GearPieceDisplay = memo(
                         onEquip && (
                             <Button
                                 aria-label="Equip gear piece"
+                                title="Equip gear piece"
                                 variant="primary"
                                 size="sm"
                                 onClick={handleEquip}

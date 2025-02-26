@@ -98,7 +98,8 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         {onEquip && (
                             <Button
                                 aria-label="Equip loadout"
-                                variant="primary"
+                                title="Equip loadout"
+                                variant="secondary"
                                 className="ms-auto"
                                 size="sm"
                                 onClick={handleEquipLoadout}
@@ -109,6 +110,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         {onDelete && (
                             <Button
                                 aria-label="Delete loadout"
+                                title="Delete loadout"
                                 variant="danger"
                                 size="sm"
                                 onClick={onDelete}

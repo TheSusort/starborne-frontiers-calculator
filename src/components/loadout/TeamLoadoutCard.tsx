@@ -92,14 +92,16 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                 <div className="flex gap-2">
                     <Button
                         aria-label="Equip team loadout"
-                        variant="primary"
+                        title="Equip team loadout"
+                        variant="secondary"
                         size="sm"
                         onClick={handleEquipTeam}
                     >
                         Equip Team
                     </Button>
                     <Button
-                        aria-label="Delete loadout"
+                        aria-label="Delete team loadout"
+                        title="Delete team loadout"
                         variant="danger"
                         size="sm"
                         onClick={() => onDelete(teamLoadout.id)}

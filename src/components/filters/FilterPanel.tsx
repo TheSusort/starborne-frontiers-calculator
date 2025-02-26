@@ -77,7 +77,8 @@ export const FilterPanel: React.FC<Props> = ({
                     variant="secondary"
                     className="ml-auto"
                     onClick={onToggle}
-                    aria-label="Filter"
+                    aria-label="Filters and sorting"
+                    title="Filters and sorting"
                 >
                     <FilterIcon />
                 </Button>

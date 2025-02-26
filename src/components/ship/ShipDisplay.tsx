@@ -158,6 +158,9 @@ export const ShipDisplay: React.FC<Props> = memo(
                                 <Button
                                     variant="secondary"
                                     size="sm"
+                                    title={
+                                        ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'
+                                    }
                                     onClick={async (e) => {
                                         e.stopPropagation();
                                         try {
@@ -177,6 +180,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                                             variant="secondary"
                                             size="sm"
                                             aria-label="Ship actions"
+                                            title="Ship actions"
                                         >
                                             <MenuIcon />
                                         </Button>
@@ -251,6 +255,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                                     disabled={isAdded}
                                     variant="secondary"
                                     size="sm"
+                                    title={isAdded ? 'Remove from fleet' : 'Add to fleet'}
                                 >
                                     {isAdded ? <CheckIcon /> : <div className="w-4 h-4">+</div>}
                                 </Button>
