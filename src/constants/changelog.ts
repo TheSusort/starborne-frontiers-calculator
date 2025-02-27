@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.20.1';
+export const CURRENT_VERSION = '0.21.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.21.0',
+        date: '2025-02-27',
+        changes: ['Added gear set priority form to the autogear settings page'],
+    },
     {
         version: '0.20.1',
         date: '2025-02-26',
