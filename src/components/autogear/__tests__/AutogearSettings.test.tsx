@@ -45,6 +45,9 @@ describe('AutogearSettings Component', () => {
         onIgnoreEquippedChange: vi.fn(),
         onToggleSecondaryRequirements: vi.fn(),
         showSecondaryRequirements: false,
+        setPriorities: [],
+        onAddSetPriority: vi.fn(),
+        onRemoveSetPriority: vi.fn(),
     };
 
     beforeEach(() => {
