@@ -19,6 +19,10 @@ export interface Ship {
     implants: Implant[];
     affinity?: AffinityName;
     imageKey?: string;
+    activeSkillText?: string;
+    chargeSkillText?: string;
+    firstPassiveSkillText?: string;
+    secondPassiveSkillText?: string;
 }
 
 export interface Faction {

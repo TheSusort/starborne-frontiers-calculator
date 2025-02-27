@@ -9,6 +9,10 @@ export interface ParsedShipData {
     rarity: string;
     affinity: string;
     imageKey: string;
+    activeSkillText: string;
+    chargeSkillText: string;
+    firstPassiveSkillText: string;
+    secondPassiveSkillText: string;
 }
 
 export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedShipData | null> {
@@ -89,6 +93,19 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
         // slice imageName by _ and take the last 3 elements
         const imageKey = imageName?.split('_').slice(-3).join('_');
 
+        const activeSkillText = doc
+            .querySelector('.containerActive div:last-child .skilldescription')
+            ?.textContent?.trim();
+        const chargeSkillText = doc
+            .querySelector('.containerCharge div:last-child .skilldescription')
+            ?.textContent?.trim();
+        const firstPassiveSkillText = doc
+            .querySelector('.passive1 .skilldescription')
+            ?.textContent?.trim();
+        const secondPassiveSkillText = doc
+            .querySelector('.passive2 .skilldescription')
+            ?.textContent?.trim();
+
         if (!faction || !type || !rarity || !affinity) {
             console.error('Missing required ship data (faction, type, or rarity)');
             return null;
@@ -101,6 +118,10 @@ export async function fetchShipDataFromRocky(shipName: string): Promise<ParsedSh
             rarity,
             affinity,
             imageKey: imageKey || '',
+            activeSkillText: activeSkillText || '',
+            chargeSkillText: chargeSkillText || '',
+            firstPassiveSkillText: firstPassiveSkillText || '',
+            secondPassiveSkillText: secondPassiveSkillText || '',
         };
     } catch (error) {
         console.error('Error fetching ship data:', error);

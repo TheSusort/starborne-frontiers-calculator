@@ -31,6 +31,10 @@ interface FirebaseShip {
     speed: number;
     affinity: string;
     imageKey: string;
+    activeSkillText?: string;
+    chargeSkillText?: string;
+    firstPassiveSkillText?: string;
+    secondPassiveSkillText?: string;
 }
 
 class ShipsService {
@@ -120,6 +124,10 @@ class ShipsService {
             implants: [],
             affinity: ship.affinity.toLowerCase() as AffinityName,
             imageKey: ship.imageKey,
+            activeSkillText: ship.activeSkillText,
+            chargeSkillText: ship.chargeSkillText,
+            firstPassiveSkillText: ship.firstPassiveSkillText,
+            secondPassiveSkillText: ship.secondPassiveSkillText,
         }));
     }
 }

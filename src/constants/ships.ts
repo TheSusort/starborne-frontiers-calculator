@@ -1,4 +1,4 @@
-// Auto-generated on 2025-02-12T14:59:54.271Z
+// Auto-generated on 2025-02-26T20:15:27.753Z
 export const SHIPS = {
     AEGIS: {
         name: 'Aegis',
@@ -15,6 +15,14 @@ export const SHIPS = {
         critDamage: 4,
         speed: 98,
         imageKey: 'Atlas_11_Portrait.png',
+        activeSkillText:
+            'This Unit grants a shield equal to 21% of its Max HP and grants Hacking Up 3 and Atlas Coordination 3 for 2 turns.',
+        chargeSkillText:
+            'This Unit grants a Shield equal to 30% of its Max HP and cleanses 2 debuffs.',
+        firstPassiveSkillText:
+            'This unit grants Defense Up 2 for 1 turn when an ally within the active pattern has their shield destroyed.',
+        secondPassiveSkillText:
+            'This unit grants Defense Up 2 for 1 turn and cleanses all debuffs when an ally within the active pattern has their shield destroyed.',
     },
     APEX: {
         name: 'Apex',
@@ -31,6 +39,14 @@ export const SHIPS = {
         critDamage: 22,
         speed: 85,
         imageKey: 'Atlas_16_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 120% damage, bypassing enemy shield, and removes 30% of the enemy shield. It inflicts Speed Down 2 for 2 turns and Crit Power Down 3 for 2 turns.',
+        chargeSkillText:
+            'This unit deals 160% damage, bypassing the enemy shield, and inflicts Attack Down 2 for 2 turns and Out. Damage Down 2 for 2 turns. If this Unit has shield, it also inflicts Disable on the primary target for 1 turn.',
+        firstPassiveSkillText:
+            'This unit gains a shield equal to 3% of its max HP when an enemy gets debuffed.',
+        secondPassiveSkillText:
+            'This unit gains a shield equal to 3% of its max HP when an enemy gets debuffed. If that enemy has 3 or more debuffs, this unit also inflicts Block Shield for 1 turn.',
     },
     ANEMONE: {
         name: 'Anemone',
@@ -47,6 +63,13 @@ export const SHIPS = {
         critDamage: 0,
         speed: 69,
         imageKey: 'Gelecek_11_Portrait.png',
+        activeSkillText:
+            'This Unit deals 165% damage, inflicts Out. DoT Damage Down 2 for 2 turns, and Corrosion 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 215% damage and, if the enemy has a debuff, applies Provoke for 3 turns and inflicts Corrosion 3 on them for 2 turns.',
+        firstPassiveSkillText: 'This unit receives 15% less damage from debuffed enemies.',
+        secondPassiveSkillText:
+            'This unit receives 15% less damage from debuffed enemies. When an enemy takes damage from a damage over time effect, repairs 10% of damage dealt.',
     },
     ANJIAN: {
         name: 'Anjian',
@@ -63,6 +86,13 @@ export const SHIPS = {
         critDamage: 34,
         speed: 82,
         imageKey: 'Tianchao_3_Portrait.png',
+        activeSkillText: 'This Unit Deals 130% damage, ignoring Taunt and Provoke.',
+        chargeSkillText:
+            'This Unit deals 180% damage, ignores Taunt and Provoke, and inflicts Speed Down 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Stealth and Tianchao Precision 1 for 2 turns when dealing damage to a debuffer or supporter.',
+        secondPassiveSkillText:
+            'This unit gains Stealth and Tianchao Precision 2 for 3 turns when dealing damage to a debuffer or supporter.',
     },
     ARUM: {
         name: 'Arum',
@@ -79,6 +109,13 @@ export const SHIPS = {
         critDamage: 10,
         speed: 80,
         imageKey: 'Gelecek_8_Portrait.png',
+        activeSkillText: 'This Unit deals 135% damage and inflicts Attack Down 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 175% damage and inflicts Attack Down 3 and Crit Rate Down 3 on the target for 2 turns.',
+        firstPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit inflicts the enemy with Outgoing Damage Down 1 for 1 turn.',
+        secondPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit gains Gelecek Contagion 2 for 3 turns and inflicts the enemy with Outgoing Damage Down 1 for 1 turn.',
     },
     ASPHODEL: {
         name: 'Asphodel',
@@ -95,6 +132,12 @@ export const SHIPS = {
         critDamage: 54,
         speed: 86,
         imageKey: 'Gelecek_15_Portrait.png',
+        activeSkillText:
+            'This Unit grants Gelecek Contagion 2 for 3 turns to all allies and deals 195% damage.',
+        chargeSkillText: 'This Unit inflicts Inc. Damage Up 2 for 2 turns and deals 250% damage.',
+        firstPassiveSkillText: "This Unit's attacks are always critical.",
+        secondPassiveSkillText:
+            "This Unit's attacks are always critical hits and adds 1 charge to its charged skill after critically damaging an enemy.",
     },
     ASPHYXIATOR: {
         name: 'Asphyxiator',
@@ -111,6 +154,14 @@ export const SHIPS = {
         critDamage: 10,
         speed: 93,
         imageKey: 'Marauder_11_Portrait.png',
+        activeSkillText:
+            'This Unit inflicts Defense Down 3 to a target enemy for 1 turn before dealing 175% damage. Additionally, it inflicts the enemy and adjacent enemies with Inferno 3 for 3 turns.',
+        chargeSkillText:
+            'This Unit deals 215% damage and inflicts Inc. DoT Damage Up 3 for 3 turns and Inferno 3 for 3 turns. If the enemy or adjacent enemies have 3 or more debuffs, Stasis is inflicted for 2 turns on the targets and enemies adjacent to them.',
+        firstPassiveSkillText:
+            'At the start of the round, if an enemy has 3 or more debuffs, this Unit gains Overload with a limit of 10 and Marauder Rage 2 for 3 turns. Upon killing an enemy, this Unit loses Overload.',
+        secondPassiveSkillText:
+            'At the start of the round, if an enemy has 3 or more debuffs, this Unit gains Overload with a limit of 10 and Marauder Rage 2 for 3 turns. Upon killing an enemy, this Unit loses Overload. Additionally, after inflicting a debuff with a critical hit, the duration Newly Applied debuffs is extended by 1 turn.',
     },
     BERSERKER: {
         name: 'Berserker',
@@ -127,6 +178,12 @@ export const SHIPS = {
         critDamage: 38,
         speed: 81,
         imageKey: 'Marauder_3_Portrait.png',
+        activeSkillText: 'This Unit Deals 125% damage.',
+        chargeSkillText: 'This Unit deals 160% damage.',
+        firstPassiveSkillText:
+            'This Unit gains Marauder Rage 1 for 2 turns when hitting 3 or more enemies.',
+        secondPassiveSkillText:
+            'This Unit gains Marauder Rage 2 for 3 turns when hitting 3 or more enemies.',
     },
     BIZON: {
         name: 'Bizon',
@@ -143,6 +200,14 @@ export const SHIPS = {
         critDamage: 52,
         speed: 82,
         imageKey: 'XAOC_15_Portrait.png',
+        activeSkillText:
+            'This Unit deals 150% damage, inflicts Defense Down 2 for 1 turn and Speed Down 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 220% damage, inflicts Attack Down 3 for 3 turns, and inflicts Stasis for 2 turns.',
+        firstPassiveSkillText:
+            'Upon receiving direct damage, this unit gains XAOC Swiftness 2 for 1 turn.',
+        secondPassiveSkillText:
+            'Upon receiving direct damage, this unit gains XAOC Swiftness 2 for 1 turn. After dealing damage to an enemy with more than 2 debuffs this unit inflicts block buff for 1 turn.',
     },
     BUTCHER: {
         name: 'Butcher',
@@ -159,6 +224,13 @@ export const SHIPS = {
         critDamage: 38,
         speed: 83,
         imageKey: 'Marauder_5_Portrait.png',
+        activeSkillText: 'This Unit Deals 160% damage and inflicts Inferno 2 for 3 turns.',
+        chargeSkillText:
+            'This Unit deals 150% damage, with an additional 35% for each buff on the enemy, inflicts Inferno 3 for 3 turns, and inflicts Block Buff for 1 turn.',
+        firstPassiveSkillText:
+            'This Unit gains Overload every turn with a limit of 10 and loses Overload upon killing an enemy.',
+        secondPassiveSkillText:
+            'This Unit gains Overload every turn with a limit of 10, loses Overload upon killing an enemy, and gains Marauder Rage 2 for 3 turns upon applying a debuff.',
     },
     CINYA: {
         name: 'Cinya',
@@ -175,6 +247,12 @@ export const SHIPS = {
         critDamage: 20,
         speed: 60,
         imageKey: 'Terran_4_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 60% damage plus additional Damage equal to 60% of its Defense.',
+        chargeSkillText:
+            'This Unit deals 100% damage, plus additional damage equal to 70% of its Defense, and inflicts Attack Down 2 for 2 turns.',
+        firstPassiveSkillText: 'This unit repairs 3.5% of its max HP every turn.',
+        secondPassiveSkillText: 'This unit repairs 5% of its max HP every turn.',
     },
     CHIMEI: {
         name: 'Chimei',
@@ -190,6 +268,15 @@ export const SHIPS = {
         critRate: 14,
         critDamage: 24,
         speed: 97,
+        imageKey: '',
+        activeSkillText:
+            'This Unit repairs 9% of its max HP to all allies and grants Out. Detonation Damage Up 3 and Attack Up 3 to them for 1 turn.',
+        chargeSkillText:
+            "This Unit repairs 12% of its max HP to all allies and grants Rogue's Liberty for 2 turns to all allies.",
+        firstPassiveSkillText:
+            "At the end of the round, non-defender allies below 40% HP are granted Stealth for 1 turn. At the start of the round, allies with Stealth applied repairs 10% of this unit's max HP. When over-repairing a damaged ally, the ally with the lowest current health percentage repairs an amount equivalent to the over-repair.",
+        secondPassiveSkillText:
+            "This Unit starts combat fully charged. At the end of the round, non-defender allies below 40% HP are granted Stealth for 1 turn. At the start of the round, allies with Stealth applied repairs 10% of this unit's max HP. When over-repairing a damaged ally, the ally with the lowest current health percentage repairs an amount equivalent to the over-repair",
     },
     COBALT: {
         name: 'Cobalt',
@@ -206,6 +293,14 @@ export const SHIPS = {
         critDamage: 58,
         speed: 73,
         imageKey: 'MPL_15_Portrait.png',
+        activeSkillText:
+            "This Unit purges 1 buff from the enemy and deals 200% damage. If this Unit has more HP than the enemy, it additionally deals Damage equal to 25% of this Unit's Max HP.",
+        chargeSkillText:
+            'This Unit purges 1 buff from the enemy and deals 230% damage. If this Unit is at full HP, it deals additional damage equal to 30% of its Max HP.',
+        firstPassiveSkillText:
+            'At the beginning of its turn, if this unit has full HP, it gains 1 charge to its charged skill.',
+        secondPassiveSkillText:
+            'At the beginning of its turn, if this unit has full HP, it gains 1 charge to its charged skill and Out Damage Up 2 for 1 turn.',
     },
     CROCUS: {
         name: 'Crocus',
@@ -222,6 +317,13 @@ export const SHIPS = {
         critDamage: 18,
         speed: 89,
         imageKey: 'Gelecek_12_Portrait.png',
+        activeSkillText:
+            'This Unit deals 150% damage and inflicts Corrosion 2 for 2 turns. If the target has more than 3 Debuffs, it inflicts Stasis for 2 turns.',
+        chargeSkillText: 'This Unit deals 250% damage and detonates Corrosion effects.',
+        firstPassiveSkillText:
+            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs 3% of its Max HP.',
+        secondPassiveSkillText:
+            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs 3% of its Max HP and inflicts Corrosion 2 for 2 turns on that enemy.',
     },
     CRUCIALIS: {
         name: 'Crucialis',
@@ -238,6 +340,14 @@ export const SHIPS = {
         critDamage: 42,
         speed: 79,
         imageKey: 'Atlas_3_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 120% damage, bypassing enemy shield, with additional 130% damage on critical hits.',
+        chargeSkillText:
+            'This Unit deals 170% damage bypassing enemy Shield, with additional 160% Damage on critical hits.',
+        firstPassiveSkillText:
+            'At the start of combat, this unit gains a shield equal to 20% of its max HP and receives Atlas Coordination 1 for 6 turns.',
+        secondPassiveSkillText:
+            'At the start of combat, this unit gains a shield equal to 30% of its max HP and receives Atlas Coordination 2 for 12 turns.',
     },
     CULTIVATOR: {
         name: 'Cultivator',
@@ -254,6 +364,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 88,
         imageKey: 'Binderburg_9_Portrait.png',
+        activeSkillText: 'This Unit grants Defense Up 3 for 2 turns and Cleanses 1 debuff.',
+        chargeSkillText:
+            'This Unit grants Inc. Damage Down 3 for 3 turns and Binderburg Resilience 3 for 3 turns and Cleanses 1 debuff.',
+        firstPassiveSkillText:
+            "When this unit cleanses a debuff it also repairs 4% of this unit's max HP.",
+        secondPassiveSkillText:
+            "When this unit cleanses a debuff it also repairs 4% of this unit's max HP. Additionally, when an ally is directly damaged, this unit repairs 6% of this unit's max HP.",
     },
     CURATOR: {
         name: 'Curator',
@@ -270,6 +387,11 @@ export const SHIPS = {
         critDamage: 30,
         speed: 77,
         imageKey: 'Binderburg_12_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: 'This Unit deals 225% damage and inflicts Out. Damage Down 3 for 3 turns.',
+        firstPassiveSkillText: 'This unit deals 60% damage when an enemy uses their charged skill.',
+        secondPassiveSkillText:
+            'This unit deals 90% damage and inflicts Crit Rate Down 2 for 2 turns when an enemy uses their charged skill.',
     },
     DEFIANT: {
         name: 'Defiant',
@@ -286,6 +408,12 @@ export const SHIPS = {
         critDamage: 12,
         speed: 71,
         imageKey: 'Legion_10_Portrait.png',
+        activeSkillText: 'This Unit Deals 145% damage and applies Provoke for 1 turn.',
+        chargeSkillText: 'This Unit deals 195% damage and inflicts Stasis for 1 turn.',
+        firstPassiveSkillText:
+            'When this unit applies Stasis, it gains a shield equal to 30% of its maximum HP.',
+        secondPassiveSkillText:
+            'When this unit applies Stasis, it gains a shield equal to 30% of its maximum HP. Additionally, its maximum HP is increased by 20% when adjacent to a supporter.',
     },
     DEMOLISHER: {
         name: 'Demolisher',
@@ -302,6 +430,13 @@ export const SHIPS = {
         critDamage: 30,
         speed: 88,
         imageKey: 'Marauder_1_Portrait.png',
+        activeSkillText: 'This Unit Deals 170% damage and inflicts Bomb 3 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 240% damage, detonates Bomb effects, and inflicts Bomb 2 for 2 turns.',
+        firstPassiveSkillText:
+            "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill.",
+        secondPassiveSkillText:
+            "When a Bomb explodes on an enemy, this Unit removes 2 charges from the enemy's Charged Skill and deals 100% of the Bomb's damage to all adjacent enemies. This damage ignores defense and cannot result in a critical hit.",
     },
     FAUST: {
         name: 'Faust',
@@ -318,6 +453,14 @@ export const SHIPS = {
         critDamage: 20,
         speed: 88,
         imageKey: 'Everliving_6_Portrait.png',
+        activeSkillText:
+            'This Unit Repairs 22.5% of its Max HP and grants Security Up 2 for 1 turn.',
+        chargeSkillText:
+            'This unit repairs 30% of its max HP and grants Everliving Regeneration 2 and Defense Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit purges 2 buffs from the enemy when killed by direct damage.',
+        secondPassiveSkillText:
+            'This unit Purges 3 buffs from the enemy when killed by direct damage.',
     },
     FLAMEL: {
         name: 'Flamel',
@@ -334,6 +477,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 90,
         imageKey: 'Everliving_8_Portrait.png',
+        activeSkillText:
+            'This Unit Repairs 13% of its Max HP and grants Repair Over Time 1% for 2 turns.',
+        chargeSkillText:
+            'This Unit repairs 14.5% of its Max HP and grants Repair Over Time 2 for 3 turns.',
+        firstPassiveSkillText: 'This unit inflicts Speed Down 1 for 2 turns when directly damaged.',
+        secondPassiveSkillText:
+            'When directly damaged, this unit inflicts Speed Down 1 for 2 turns and Stasis for 1 turn.',
     },
     FRONTLINE: {
         name: 'Frontline',
@@ -350,6 +500,14 @@ export const SHIPS = {
         critDamage: 58,
         speed: 78,
         imageKey: 'Atlas_12_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 200% damage bypassing enemy shield and gains a shield equal to 10% of the damage dealt.',
+        chargeSkillText:
+            'This Unit deals 210% damage bypassing enemy shield and removes 1 charge from the enemy.',
+        firstPassiveSkillText:
+            'This unit gains Attack Up 3 for 2 turns after damaging an enemy with Affinity Advantage.',
+        secondPassiveSkillText:
+            'This unit gains Attack Up 3 for 2 turns after damaging an enemy with Affinity Advantage. Additionally, if this unit has a shield, it removes 1 charge from the enemy with the most charges on its charged skill.',
     },
     GALLANT: {
         name: 'Gallant',
@@ -366,6 +524,11 @@ export const SHIPS = {
         critDamage: 42,
         speed: 80,
         imageKey: 'Legion_4_Portrait.png',
+        activeSkillText: 'This unit Deals 115% damage, increased to 155% against Defenders.',
+        chargeSkillText:
+            'This Unit deals 175% damage, increased to 205% with additional Stasis applied for 1 turn against Defenders.',
+        firstPassiveSkillText: 'This unit Gains Legion Discipline 1 for 3 turns on kill.',
+        secondPassiveSkillText: 'This unit Gains Legion Discipline 2 for 4 turns on kill.',
     },
     GRIF: {
         name: 'Grif',
@@ -382,6 +545,14 @@ export const SHIPS = {
         critDamage: 34,
         speed: 90,
         imageKey: 'XAOC_12_Portrait.png',
+        activeSkillText:
+            '(All) allies are granted Out. Damage Up 3 for 2 turns and XAOC Swiftness 3 for 2 turns.',
+        chargeSkillText:
+            'This Unit grants (all) allies Crit Power 3 for 3 turns and Attack Up 3 for 3 turns.',
+        firstPassiveSkillText:
+            'When an enemy Cleanses a debuff, this unit deals 75% damage that cannot critically hit.',
+        secondPassiveSkillText:
+            'This unit increases its Defense by 20%. When an enemy Cleanses a debuff, this unit deals 75% damage that cannot critically hit.',
     },
     GUARDIAN: {
         name: 'Guardian',
@@ -398,6 +569,13 @@ export const SHIPS = {
         critDamage: 4,
         speed: 68,
         imageKey: 'Binderburg_14_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 165% damage, applies Provoke for 1 turn, and inflicts Crit Power Down 2 for 1 turn.',
+        chargeSkillText: 'This Unit deals 210% damage and inflicts Crit Rate Down 2 for 3 turns.',
+        firstPassiveSkillText:
+            'This unit gains Binderburg Resilience 1 for 1 turn when it gets critically hit.',
+        secondPassiveSkillText:
+            'This unit gains Binderburg Resilience 1 for 1 turn when it gets critically hit. When an ally gets critically hit, this unit applies Provoke for 1 turn on that enemy.',
     },
     HARVESTER: {
         name: 'Harvester',
@@ -414,6 +592,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 81,
         imageKey: 'Binderburg_6_Portrait.png',
+        activeSkillText:
+            'This Unit grants Crit Rate Up 2 and Attack Up 2 for 2 turns and Cleanses 1 debuff.',
+        chargeSkillText: 'This Unit grants Crit Power 3 and Attack Up 3 for 2 turns.',
+        firstPassiveSkillText:
+            'When an allied unit is destroyed, this unit gains 1 extra end of round action.',
+        secondPassiveSkillText:
+            'When an allied unit is destroyed, this unit gains 1 extra end of round action and speed up 1 for 6 turns.',
     },
     HAYYAN: {
         name: 'Hayyan',
@@ -430,6 +615,14 @@ export const SHIPS = {
         critDamage: 20,
         speed: 91,
         imageKey: 'Everliving_3_Portrait.png',
+        activeSkillText:
+            'This Unit Repairs 12% of its Max HP, grants Hacking Up 2 for 1 turn, and Cleanses 1 debuff from all allies.',
+        chargeSkillText:
+            'This Unit repairs 17% of its Max HP, grants Cheat Death to all allies, and adds 1 charge to its charged skill.',
+        firstPassiveSkillText:
+            "When cleansing a debuff from an ally, this unit repairs the ally for 4% of this unit's max HP.",
+        secondPassiveSkillText:
+            "When cleansing a debuff from an ally, this unit repairs the ally for 4% of this unit's max HP. When a debuff is inflicted on an ally, this unit repairs the ally for 6% of this unit's max HP.",
     },
     HELIODOR: {
         name: 'Heliodor',
@@ -446,6 +639,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 85,
         imageKey: 'MPL_10_Portrait.png',
+        activeSkillText: 'This Unit grants Inc. Damage Down 2 and Defense Up 3 for 1 turn.',
+        chargeSkillText:
+            'This Unit grants Security Up 3 for 2 turns and Defense Matrix for 4 turns.',
+        firstPassiveSkillText:
+            'When directly damaged, this unit reduces the duration of all active debuffs on itself by 1 turn and repairs itself for 8% of its max HP.',
+        secondPassiveSkillText:
+            'When directly damaged, this unit reduces the duration of all active debuffs on all allies by 1 turn and repairs them for 8% of its max HP.',
     },
     HERMES: {
         name: 'Hermes',
@@ -462,6 +662,13 @@ export const SHIPS = {
         critDamage: 36,
         speed: 79,
         imageKey: 'Everliving_9_Portrait.png',
+        activeSkillText: 'This Unit Repairs 27% of its Max HP.',
+        chargeSkillText:
+            'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
+        firstPassiveSkillText:
+            'When an ally critically hits an enemy, this unit gains 1 charge to its charged skill.',
+        secondPassiveSkillText:
+            "This unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when this unit critically repairs an ally, it cleanses 1 debuff from itself.",
     },
     HUANYING: {
         name: 'Huanying',
@@ -478,6 +685,14 @@ export const SHIPS = {
         critDamage: 22,
         speed: 83,
         imageKey: 'Tianchao_8_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 120% damage and inflicts Bomb 1 for 2 turns, ignoring Taunt and Provoke.',
+        chargeSkillText:
+            'This Unit ignores Taunt and Provoke during its attack to deal 150% damage, applies Concentrate Fire for 2 turns, inflicts Bomb 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Stealth and Tianchao Precision 1 for 2 turns when applying a debuff.',
+        secondPassiveSkillText:
+            'This unit gains Stealth and Tianchao Precision 2 for 2 turns when applying a debuff.',
     },
     INCINERATOR: {
         name: 'Incinerator',
@@ -494,6 +709,13 @@ export const SHIPS = {
         critDamage: 38,
         speed: 84,
         imageKey: 'Marauder_12_Portrait.png',
+        activeSkillText: 'This Unit Deals 185% damage and inflicts Inferno 3 for 3 turns.',
+        chargeSkillText:
+            'This Unit deals 225% damage, detonates Inferno effects, and inflicts Inferno 3 for 3 turns.',
+        firstPassiveSkillText:
+            'At the end of the round, this unit deals 100% damage to all enemies with Inferno.',
+        secondPassiveSkillText:
+            'At the end of the round, this Unit deals 100% damage to all enemies with Inferno. Additionally, this Unit deals 30% more direct damage to enemies afflicted with Inferno.',
     },
     IONSCORP: {
         name: 'Ionscorp',
@@ -510,6 +732,13 @@ export const SHIPS = {
         critDamage: 50,
         speed: 75,
         imageKey: 'Atlas_4_Portrait.png',
+        activeSkillText: 'This Unit Deals 150% damage.',
+        chargeSkillText:
+            'This Unit deals 190% damage, but when attacking a Defender, it deals 220% damage and inflicts Disable for 1 turn.',
+        firstPassiveSkillText:
+            'At the start of combat, this unit gains a shield  equal to 20% of its max HP and receives Atlas Coordination 1 for 6 turns.',
+        secondPassiveSkillText:
+            'At the start of combat, this unit gains a shield  equal to 30% of its max HP and receives Atlas Coordination 2 for 12 turns.',
     },
     IRIDIUM: {
         name: 'Iridium',
@@ -526,6 +755,14 @@ export const SHIPS = {
         critDamage: 4,
         speed: 63,
         imageKey: 'MPL_5_Portrait.png',
+        activeSkillText:
+            'This Unit deals 40% damage, with an additional damage equal to 9% of its Max HP bypassing enemy Shield, and repairs itself 15% of damage dealt.',
+        chargeSkillText:
+            'This Unit deals 70% damage with an additional Damage equal to 11% of its Max HP, bypassing enemy Shield, and inflicts Stasis for 2 turns.',
+        firstPassiveSkillText:
+            'This unit inflicts Speed Down 1 for 1 turn and Purges 1 buff from the enemy when directly damaged.',
+        secondPassiveSkillText:
+            'This unit inflicts Speed Down 2 for 1 turn and Purges 2 buffs from the enemy when directly damaged. At the start of combat, it gains Taunt for 1 turn. Additionally, this unit takes 35% less damage from Critical Hits, an effect that does not stack with similar effects.',
     },
     ISHA: {
         name: 'Isha',
@@ -540,8 +777,16 @@ export const SHIPS = {
         security: 49,
         critRate: 3,
         critDamage: 8,
-        speed: 69,
+        speed: 79,
         imageKey: 'Terran_16_Portrait.png',
+        activeSkillText:
+            'This Unit Taunts for 1 turn, deals 110% damage with additional Damage equal to 60% of its Defense.',
+        chargeSkillText:
+            'This Unit gains Titanite Plating up to 3 times, each with a limit of 5. It deals 120% damage with additional damage equal to 70% of its Defense.',
+        firstPassiveSkillText:
+            'At the start of a round, this unit gains Defensive Affinity Override. If Nayra is on the same team, this unit also gains Offensive Affinity Override.',
+        secondPassiveSkillText:
+            'At the start of a round, this unit gains Defensive Affinity Override. If Nayra is on the same team, this unit also gains Offensive Affinity Override. When directly damaged, this unit repairs 3% of its max HP but if the unit was a critical, this unit repairs 9% of its max HP instead.',
     },
     JUDGE: {
         name: 'Judge',
@@ -558,6 +803,13 @@ export const SHIPS = {
         critDamage: 50,
         speed: 87,
         imageKey: 'Legion_5_Portrait.png',
+        activeSkillText:
+            'This attack ignores Taunt and Provoke, deals 230% damage, and applies Concentrate Fire for 1 turn.',
+        chargeSkillText: 'This Unit deals 320% damage, ignoring Taunt and Provoke.',
+        firstPassiveSkillText:
+            'At the start of the round, this unit deals 60% damage to enemies with less than 50% HP.',
+        secondPassiveSkillText:
+            'At the start of the round, this unit deals 60% damage to enemies with less than 50% HP. This units attacks ignore 20% of the enemy units Defense',
     },
     KAFA: {
         name: 'Kafa',
@@ -574,6 +826,14 @@ export const SHIPS = {
         critDamage: 20,
         speed: 60,
         imageKey: 'Terran_3_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 50% damage plus additional Damage equal to 60% of its Defense and inflicts Defense Down 1 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 130% damage plus additional damage equal to 70% of its Defense, and inflicts Defense Down 2 for 2 turns, and Provoke for 1 turn.',
+        firstPassiveSkillText:
+            'This unit gains Terran Tenacity 1 for 3 turns when HP drops below 50%.',
+        secondPassiveSkillText:
+            'This unit gains Terran Tenacity 2 for 3 turns when HP drops below 50%.',
     },
     KINETIK: {
         name: 'Kinetik',
@@ -590,6 +850,11 @@ export const SHIPS = {
         critDamage: 4,
         speed: 64,
         imageKey: 'Atlas_9_Portrait.png',
+        activeSkillText: 'This Unit Deals 110% damage and inflicts Defense Down 1 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 140% damage, inflicts Defense Down 2 and Out. Damage Down 2 for 2 turns.',
+        firstPassiveSkillText: 'This unit gains a shield equal to 4% of its max HP every turn.',
+        secondPassiveSkillText: 'This unit gains a shield equal to 7% of its max HP every turn.',
     },
     LAIKA: {
         name: 'Laika',
@@ -606,6 +871,12 @@ export const SHIPS = {
         critDamage: 34,
         speed: 72,
         imageKey: 'XAOC_4_Portrait.png',
+        activeSkillText: 'This Unit cleanses 1 debuff and deals 110% damage.',
+        chargeSkillText: 'This Unit removes 40% of the enemy shield and deals 150% damage.',
+        firstPassiveSkillText:
+            'This unit gains a shield equal to 20% of its max HP upon removing shield from an enemy.',
+        secondPassiveSkillText:
+            'This unit gains a shield equal to 30% of its max HP upon removing shield from an enemy.',
     },
     LAKSPUR: {
         name: 'Lakspur',
@@ -622,6 +893,13 @@ export const SHIPS = {
         critDamage: 2,
         speed: 78,
         imageKey: 'Gelecek_7_Portrait.png',
+        activeSkillText: 'This Unit deals 110% damage and inflicts Inc. Repair Down 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 140% damage and inflicts Inc. Repair Down 3 and Inc. Damage Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit gains gelecek contagion 1 for 2 turns.',
+        secondPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit gains gelecek contagion 2 for 3 turns.',
     },
     LEV: {
         name: 'Lev',
@@ -638,6 +916,14 @@ export const SHIPS = {
         critDamage: 56,
         speed: 78,
         imageKey: 'XAOC_17_Portrait.png',
+        activeSkillText:
+            'This Unit cleanses 1 debuff and deals 180% damage with an additional 15% for each debuff on the enemy.',
+        chargeSkillText:
+            'This Unit deals 230% damage plus an additional 20% for each debuff on the enemy. If a critical hit occurs, all hit enemies have their debuffs extended by 1 turn and all allies are granted Crit Power Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            "This Unit is immune to charge loss effects. This Unit's crit rate and crit power are increased 20%.",
+        secondPassiveSkillText:
+            "This Unit is immune to charge loss effects. This Unit's crit rate and crit power are increased 20%. This Unit gains 1 stack of Blast every turn.",
     },
     LIBERATOR: {
         name: 'Liberator',
@@ -654,6 +940,12 @@ export const SHIPS = {
         critDamage: 50,
         speed: 87,
         imageKey: 'Legion_6_Portrait.png',
+        activeSkillText: 'This Unit Deals 170% damage, bypassing enemy Shields.',
+        chargeSkillText:
+            'This Unit grants Legion Discipline 3 to all allies for 1 turn and deals 220% damage, bypassing enemy Shield.',
+        firstPassiveSkillText: 'When an enemy dies, this unit grants 1 charge to all allies.',
+        secondPassiveSkillText:
+            'When an enemy dies, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
     },
     LIONHEART: {
         name: 'Lionheart',
@@ -670,6 +962,14 @@ export const SHIPS = {
         critDamage: 16,
         speed: 80,
         imageKey: 'Legion_12_Portrait.png',
+        activeSkillText:
+            'This Unit deals 170% damage and grants Defense Up 2 for 2 turns. If the hit is critical, it additionally grants Attack Up 2 to all adjacent allies for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 180% damage and applies Provoke for 1 turn. If the hit is critical, all adjacent allies are granted Attack Up 3 for 1 turn.',
+        firstPassiveSkillText:
+            'This Unit gives all adjacent allies 10% of its HP at the start of combat.',
+        secondPassiveSkillText:
+            'This Unit gives all adjacent allies 10% of its HP at the start of combat. Every round, the first direct hit taken by any ally is instead redirected to this unit.',
     },
     LODOLITE: {
         name: 'Lodolite',
@@ -686,6 +986,14 @@ export const SHIPS = {
         critDamage: 42,
         speed: 78,
         imageKey: 'MPL_14_Portrait.png',
+        activeSkillText:
+            'This Unit targets Stealthed enemies, dealing 240% damage plus an additional damage equal to 10% of its Max HP. If the target is not a Defender, Concentrate Fire is applied for 1 turn.',
+        chargeSkillText:
+            "This attack targets Stealthed enemies, deals 310% damage plus an additional 10% of this Unit's Max HP, and purges all buffs from the enemy with the most buffs.",
+        firstPassiveSkillText:
+            "This unit deals 10% more Crit Damage to Defenders and increases all allies' direct damage to enemies with Concentrate Fire by 15%.",
+        secondPassiveSkillText:
+            "This unit deals 10% more Crit Damage to Defenders and increases all allies' direct damage to enemies with Concentrate Fire by 15%. When this unit purges a buff from an enemy, it additionally removes 100% of the enemy shield.",
     },
     LOS: {
         name: 'Los',
@@ -702,6 +1010,13 @@ export const SHIPS = {
         critDamage: 56,
         speed: 78,
         imageKey: 'XAOC_6_Portrait.png',
+        activeSkillText: 'This Unit deals 205% damage.',
+        chargeSkillText:
+            'This Unit grants XAOC Swfitness 3 to all allies for 2 turns and deals 255% damage.',
+        firstPassiveSkillText:
+            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Block Damage for 1 turn.',
+        secondPassiveSkillText:
+            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Block Damage for 1 turn. Additionally, this unit starts combat with a fully charged charged skill.',
     },
     LUXX: {
         name: 'Luxx',
@@ -718,6 +1033,12 @@ export const SHIPS = {
         critDamage: 58,
         speed: 77,
         imageKey: 'Atlas_5_Portrait.png',
+        activeSkillText: 'This Unit Deals 130% damage, bypassing enemy shield.',
+        chargeSkillText:
+            'This Unit gains Atlas Coordination 2 for 2 turns and deals 150% damage, bypassing enemy shield.',
+        firstPassiveSkillText: 'Every turn, this unit gains blast with a limit of 4.',
+        secondPassiveSkillText:
+            'This unit gains blast every turn with a limit of 4 and gains a shield equal to 5% of its max HP every turn.',
     },
     MADAX: {
         name: 'Madax',
@@ -734,6 +1055,13 @@ export const SHIPS = {
         critDamage: 12,
         speed: 63,
         imageKey: 'Terran_6_Portrait.png',
+        activeSkillText:
+            'This Unit grants Taunt for 1 turn and deals Damage equal to 70% plus an additional 60% of its Defense.',
+        chargeSkillText:
+            "All allies are granted Terran Bolster 3 for 3 turns, while this Unit deals 130% damage, including additional damage equal to 80% of this Unit's Defense.",
+        firstPassiveSkillText: 'This unit repairs itself for 15% of its max HP when an enemy dies.',
+        secondPassiveSkillText:
+            "This unit repairs itself for 15% of its max HP when an enemy dies. When adjacent to a supporter, this unit receives 30% more repairs and increases that supporter's Defense by 20% of this unit's Defense.",
     },
     MAGNOLIA: {
         name: 'Magnolia',
@@ -750,6 +1078,12 @@ export const SHIPS = {
         critDamage: 22,
         speed: 85,
         imageKey: 'Gelecek_3_Portrait.png',
+        activeSkillText: 'This Unit deals 130% damage and inflicts Inferno 1 for 2 turns.',
+        chargeSkillText: 'This Unit deals 180% damage and inflicts Inferno 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit repairs itself for 20% of the damage it deals to enemies.',
+        secondPassiveSkillText:
+            'This unit repairs itself for 40% of the damage it deals to enemies.',
     },
     MAKOLI: {
         name: 'Makoli',
@@ -766,6 +1100,14 @@ export const SHIPS = {
         critDamage: 4,
         speed: 83,
         imageKey: 'Terran_15_Portrait.png',
+        activeSkillText:
+            'This Unit cleanses 1 debuff, repairs 5% of its max HP with an additional repair equal to 100% of its defense, and grants Inc. Damage Down 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit repairs 7% of its max HP and an additional amount equal to 120% of its defense, grants Defense Up 2 for 2 turns, and grants Terran Guard 2 for 2 turns.',
+        firstPassiveSkillText:
+            'When directly damaged while below 40% HP, this unit repairs 20% of its max HP.',
+        secondPassiveSkillText:
+            'When directly damaged while below 40% HP, this unit repairs 20% of its max HP and inflicts Disable for 1 turn.',
     },
     MANGLER: {
         name: 'Mangler',
@@ -782,6 +1124,12 @@ export const SHIPS = {
         critDamage: 30,
         speed: 85,
         imageKey: 'Marauder_4_Portrait.png',
+        activeSkillText: 'This Unit Deals 120% damage and inflicts Bomb 1 for 2 turns.',
+        chargeSkillText: 'This Unit deals 160% damage and inflicts Bomb 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This Unit gains Overload every turn, up to a limit of 10. Upon killing an enemy, this Unit loses Overload and gains Marauder Rage 1 for 2 turns.',
+        secondPassiveSkillText:
+            'This Unit gains Overload every turn, up to a limit of 10. Upon killing an enemy, this Unit loses Overload and gains Marauder Rage 2 for 3 turns.',
     },
     MEDVED: {
         name: 'Medved',
@@ -798,6 +1146,11 @@ export const SHIPS = {
         critDamage: 64,
         speed: 75,
         imageKey: 'XAOC_9_Portrait.png',
+        activeSkillText: 'This Unit deals 130% damage, bypassing enemy shield.',
+        chargeSkillText:
+            'This Unit deals 180% damage bypassing enemy shield and inflicts Stasis for 2 turns.',
+        firstPassiveSkillText: 'This unit gains XAOC Swiftness 1 for 2 turns on kill.',
+        secondPassiveSkillText: 'This unit gains XAOC Swiftness 2 for 3 turns on kill.',
     },
     MEIYING: {
         name: 'Meiying',
@@ -814,6 +1167,14 @@ export const SHIPS = {
         critDamage: 42,
         speed: 85,
         imageKey: 'Tianchao_6_Portrait.png',
+        activeSkillText:
+            'This Unit Attacks by dealing 200% damage, ignoring Taunt and Provoke effects. When targeting a Supporter, it deals an additional 100% damage.',
+        chargeSkillText:
+            'This Unit ignores Taunt and Provoke, dealing 250% damage and inflicting Stasis for 1 turn. When targeting a Supporter, this Unit deals an additional 125% damage.',
+        firstPassiveSkillText:
+            'Upon killing an enemy with a debuff, this unit inflicts Stasis on all adjacent enemies for 1 turn.',
+        secondPassiveSkillText:
+            'Upon killing an enemy with a debuff, this unit inflicts Stasis on all adjacent enemies for 1 turn. At the start of combat and every turn, this unit gains Stealth for 2 turns.',
     },
     MORAO: {
         name: 'Morao',
@@ -830,6 +1191,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 62,
         imageKey: 'Terran_5_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 70% damage with additional Damage equal to 60% of its Defense and applies Provoke for 1 turn.',
+        chargeSkillText:
+            'This Unit cleanses 2 debuffs and deals 110% damage, with additional Damage equal to 70% of its Defense.',
+        firstPassiveSkillText: 'This unit repairs 5% of its max HP every turn.',
+        secondPassiveSkillText:
+            'This unit repairs 5% of its max HP every turn and, upon cleansing a debuff, repairs an additional 50% of its max HP while gaining Defense Up 2 for 2 turns.',
     },
     NAYRA: {
         name: 'Nayra',
@@ -846,6 +1214,14 @@ export const SHIPS = {
         critDamage: 18,
         speed: 81,
         imageKey: 'Terran_17_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 130% damage, with additional Damage equal to 30% of its Defense, and inflicts Crit Rate Down 2 for 2 turns and Security Down 2 for 2 turns. If the target was repaired this round, this Unit inflicts Stasis for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 210% damage plus additional damage equal to 30% of its Defense and inflicts Crit Power Down 3 and Attack Down 2 on the target for 2 turns. If the target was repaired this round, this Unit inflicts Exposed and purges all buffs from the enemy.',
+        firstPassiveSkillText:
+            'Gains Offensive Affinity Override. If Isha is on the same team, this unit also gains Defensive Unit Override.',
+        secondPassiveSkillText:
+            'At the start of combat, this unit gains Offensive Affinity Override. If Isha is on the same team, this unit also gains Defensive Unit Override. When directly damaged, this unit gains Terran Bolster 3 for 1 turn. When an enemy performs a repair, this unit Grants Speed Up 1 to that enemy for 1 turn.',
     },
     NEMESIS: {
         name: 'Nemesis',
@@ -862,6 +1238,12 @@ export const SHIPS = {
         critDamage: 12,
         speed: 66,
         imageKey: 'Atlas_10_Portrait.png',
+        activeSkillText: 'This Unit Deals 170% damage and inflicts Attack Down 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit gains Atlas Readiness 2 for 2 turns, deals 220% damage, and inflicts Attack Down 3 for 2 turns.',
+        firstPassiveSkillText: 'This Unit gains 1 stack of Warding Screen every turn.',
+        secondPassiveSkillText:
+            'This Unit gains 1 stack of Warding Screen and a shield equal to 5% of its max HP every turn.',
     },
     NOSOROG: {
         name: 'Nosorog',
@@ -878,6 +1260,12 @@ export const SHIPS = {
         critDamage: 18,
         speed: 66,
         imageKey: 'XAOC_10_Portrait.png',
+        activeSkillText: 'This Unit Deals 160% damage.',
+        chargeSkillText: 'This Unit Deals 210% damage and Cleanses 1 debuff',
+        firstPassiveSkillText:
+            'This Unit reflects  40% of the damage taken back to the enemy when directly damaged as primary target.',
+        secondPassiveSkillText:
+            'This Unit reflects  40% of the damage taken back to the enemy when directly damaged as primary target. Additionally, when this unit removes a debuff, it gains Defense up II for 1 turn',
     },
     NUQTU: {
         name: 'Nuqtu',
@@ -894,6 +1282,14 @@ export const SHIPS = {
         critDamage: 58,
         speed: 78,
         imageKey: 'Terran_11_Portrait.png',
+        activeSkillText:
+            'This unit deals 140% Damage, with additional damage equal to 80% of its defense plus an extra 30% for each buff on the enemy. If the target has 3 or more buffs, the unit gains 2 charges to its charged skill.',
+        chargeSkillText:
+            'This Unit deals 200% damage, including additional damage equal to 80% of its defense, and an extra 40% for each buff on the enemy. If the target has 3 or more buffs, this unit grants itself 1 extra end of round action.',
+        firstPassiveSkillText:
+            'This Unit cleanses 1 debuff from itself(once per round), gains Terran Bolster 3 for 1 turn when an enemy gets buffed.',
+        secondPassiveSkillText:
+            'This Unit cleanses 1 debuff from itself(once per round), gains Terran Bolster 3 for 1 turn, and gains 1 stack of Core Charge 1 when an enemy gets buffed.',
     },
     NYXEN: {
         name: 'Nyxen',
@@ -910,6 +1306,12 @@ export const SHIPS = {
         critDamage: 4,
         speed: 83,
         imageKey: 'Atlas_15_Portrait.png',
+        activeSkillText:
+            'This Unit cleanses 2 bombs, grans shield equal to 15% of its max HP, and applies Atlas Readiness 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit cleanses 2 DoT debuffs and grants a shield equal to 19% of its max HP. It also grants Inc. Damage Down 2 for 1 turn.',
+        firstPassiveSkillText: 'This Unit deals 100% damage when its shield is directly damaged.',
+        secondPassiveSkillText: 'This Unit deals 200% damage when its shield is directly damaged.',
     },
     OBSIDIAN: {
         name: 'Obsidian',
@@ -926,6 +1328,12 @@ export const SHIPS = {
         critDamage: 50,
         speed: 70,
         imageKey: 'MPL_12_Portrait.png',
+        activeSkillText:
+            'This Unit purges 1 buff from the enemy and deals 200% damage, including additional damage equal to 20% of its Max HP.',
+        chargeSkillText:
+            'This Unit deals 250% damage, with additional Damage equal to 20% of its Max HP and increases Damage by 100% to enemies with less than 30% HP.',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     OLEANDER: {
         name: 'Oleander',
@@ -942,6 +1350,12 @@ export const SHIPS = {
         critDamage: 8,
         speed: 88,
         imageKey: 'Gelecek_13_Portrait.png',
+        activeSkillText:
+            'This Unit grants Hacking Up 3 for 2 turns and repairs 10% of its Max HP, with an additional 7% repair for each debuffed enemy.',
+        chargeSkillText:
+            'This Unit grants Repair Over Time 2 for 1 turn, grants Out. DoT Damage Up 3 for 3 turns, and grants Hit Mitigation for 3 turns.',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     OPAL: {
         name: 'Opal',
@@ -958,6 +1372,14 @@ export const SHIPS = {
         critDamage: 4,
         speed: 66,
         imageKey: 'MPL_4_Portrait.png',
+        activeSkillText:
+            'This Unit deals 40% damage with an additional Damage equal to 8% of its Max HP, and repairs 10% of Damage dealt. This attack bypasses enemy shield.',
+        chargeSkillText:
+            'This Unit deals 70% damage with an additional damage equal to 10% of its Max HP, and removes 2 charges from the enemy, bypassing enemy shield.',
+        firstPassiveSkillText:
+            'When this unit is directly damaged, it inflicts Attack Down 2 for 2 turns on that enemy.',
+        secondPassiveSkillText:
+            'When this unit is directly damaged, it inflicts Attack Down 2 for 3 turns on that enemy and gains Defense Up 2 for 1 turn.',
     },
     OREL: {
         name: 'Orel',
@@ -974,6 +1396,12 @@ export const SHIPS = {
         critDamage: 26,
         speed: 74,
         imageKey: 'XAOC_14_Portrait.png',
+        activeSkillText: 'This Unit deals 160% damage and applies Provoke for 1 turn.',
+        chargeSkillText: 'This Unit deals 210% damage and grants Taunt for 1 turn.',
+        firstPassiveSkillText:
+            'This unit Applies Damage Into DoT for 2 turns when directly damaged while having Taunt or by an enemy with Provoke.',
+        secondPassiveSkillText:
+            'This unit Applies Damage Into DoT for 3 turns when directly damaged while having Taunt or by an enemy with Provoke.',
     },
     PALLAS: {
         name: 'Pallas',
@@ -990,6 +1418,10 @@ export const SHIPS = {
         critDamage: 46,
         speed: 84,
         imageKey: 'Everliving_11_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     PANGUAN: {
         name: 'Panguan',
@@ -1006,6 +1438,13 @@ export const SHIPS = {
         critDamage: 50,
         speed: 81,
         imageKey: 'Tianchao_7_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 145% damage, increasing by 30% for each Unit adjacent to the enemy, and inflicts Bomb 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 195% damage, increasing by 40% for each Unit adjacent to the enemy, and inflicts Bomb 3 for 2 turns.',
+        firstPassiveSkillText: 'This unit gains Stealth for 2 turns when directly damaged.',
+        secondPassiveSkillText:
+            'This unit gains Stealth for 2 turns when directly damaged, and friendly stealthed units deal 40% more direct Damage.',
     },
     PANON: {
         name: 'Panon',
@@ -1022,6 +1461,14 @@ export const SHIPS = {
         critDamage: 4,
         speed: 71,
         imageKey: 'Terran_12_Portrait.png',
+        activeSkillText:
+            'This Unit grants all Allies Terran Guard 2 for 2 turns and deals 80% damage with additional Damage equal to 70% of its Defense. If this Unit is Provoked or Taunted, it instead grants all allies Terran Guard 2 for 2 turns and deals 120% damage with additional Damage equal to 90% of its Defense.',
+        chargeSkillText:
+            'This Unit deals 140% damage plus an additional 100% of its Defense. If this Unit is Provoked or Taunted, this Unit instead gains Block Attacks (1 hit) and deals 170% damage with an additional Damage equal to 130% of its Defense.',
+        firstPassiveSkillText:
+            'If this unit is directly damaged while not affected by Barrier Recharging, it gains Block Attacks for 1 hit and applies Barrier Recharging on itself for 3 turns.',
+        secondPassiveSkillText:
+            'When affected by Barrier Recharging, this unit reduces incoming damage by 20%. If this unit is directly damaged while not affected by Barrier Recharging, it gains Block Attacks for 1 hit and applies Barrier Recharging on itself for 3 turns.',
     },
     PARACELSUS: {
         name: 'Paracelsus',
@@ -1038,6 +1485,12 @@ export const SHIPS = {
         critDamage: 20,
         speed: 88,
         imageKey: 'Everliving_5_Portrait.png',
+        activeSkillText: 'This unit grants Attack Up 2 and Crit Power Up 2 for 2 turns.',
+        chargeSkillText: '',
+        firstPassiveSkillText:
+            'Upon being killed by direct damage, this unit deals damage equal to 50% of its max HP.',
+        secondPassiveSkillText:
+            'Upon being killed by direct damage, this unit deals damage equal to 50% of its max HP and grants allies Everliving regeneration 2 for 4 turns.',
     },
     PROSPECT: {
         name: 'Prospect',
@@ -1054,6 +1507,14 @@ export const SHIPS = {
         critDamage: 12,
         speed: 60,
         imageKey: 'MPL_3_Portrait.png',
+        activeSkillText:
+            'This Unit deals 30% damage with an additional damage equal to 8% of its max HP and inflicts Attack Down 1 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 70% damage with an additional damage equal to 9% of its max HP, and inflicts Attack Down 2 and Defense Down 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Incoming Damage Down 1 for 2 turns when it inflicts a debuff.',
+        secondPassiveSkillText:
+            'This unit gains Incoming Damage Down 2 for 3 turns when it inflicts a debuff.',
     },
     PROVIDER: {
         name: 'Provider',
@@ -1070,6 +1531,14 @@ export const SHIPS = {
         critDamage: 22,
         speed: 80,
         imageKey: 'Binderburg_15_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 175% damage and inflicts Hacking Down 2 and Security Down 1 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+        firstPassiveSkillText:
+            'When another ally debuffs an enemy, this unit deals 50% damage to that enemy. This attack cannot critically hit.',
+        secondPassiveSkillText:
+            'When another ally debuffs an enemy, this unit deals 50% damage and inflicts Crit Rate Down 2 for 1 turn on that enemy. This attack cannot critically hit.',
     },
     PURIFIER: {
         name: 'Purifier',
@@ -1086,6 +1555,11 @@ export const SHIPS = {
         critDamage: 20,
         speed: 81,
         imageKey: 'Binderburg_7_Portrait.png',
+        activeSkillText:
+            'This Unit grants Hacking Up 2 and Binderburg Resilience 2 for 1 turn and Cleanses 1 debuff.',
+        chargeSkillText: 'This Unit grants Hacking Up 3 and Security Up 3 for 1 turn.',
+        firstPassiveSkillText: 'This unit Cleanses 1 debuff when directly damaged.',
+        secondPassiveSkillText: 'This unit Cleanses 2 debuffs when directly damaged.',
     },
     QUIXILVER: {
         name: 'Quixilver',
@@ -1102,6 +1576,10 @@ export const SHIPS = {
         critDamage: 24,
         speed: 69,
         imageKey: 'Atlas_17_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     RAVAGER: {
         name: 'Ravager',
@@ -1118,6 +1596,13 @@ export const SHIPS = {
         critDamage: 30,
         speed: 88,
         imageKey: 'Marauder_6_Portrait.png',
+        activeSkillText: 'This Unit Deals 190% damage and inflicts Inferno 2 for 3 turns.',
+        chargeSkillText:
+            'This Unit deals 190% damage, increasing by 25% for each debuff on the enemy, and inflicts Inferno 3 for 3 turns.',
+        firstPassiveSkillText:
+            'This Unit gains Overload every turn up to a limit of 10. Upon killing an enemy, it loses Overload and gains Marauder Rage 3 for 3 turns.',
+        secondPassiveSkillText:
+            "This Unit gains Overload every turn up to a limit of 10. Upon killing an enemy, it loses Overload and gains Marauder Rage 3 for 3 turns. This Unit's attacks bypass 10% of the target's defense. When its debuff is resisted, it gains Hacking Module Overdrive for 1 turn.",
     },
     REDEEMER: {
         name: 'Redeemer',
@@ -1134,6 +1619,12 @@ export const SHIPS = {
         critDamage: 12,
         speed: 69,
         imageKey: 'Legion_9_Portrait.png',
+        activeSkillText: 'This Unit Deals 160% damage.',
+        chargeSkillText: 'This Unit gains Legion Discipline 2 for 2 turns and deals 200% damage.',
+        firstPassiveSkillText:
+            'This unit gains shield equal to 2.5% of its max HP every turn. When HP drops below 50% it gains Defense Up 2 for 4 turns.',
+        secondPassiveSkillText:
+            'This unit gains shield equal to 4% of its max HP every turn. When HP drops below 50% it gains Defense Up 3 for 4 turns.',
     },
     REFINE: {
         name: 'Refine',
@@ -1150,6 +1641,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 83,
         imageKey: 'MPL_8_Portrait.png',
+        activeSkillText: 'This Unit grants Supercharged 1 for 1 turn and Hacking Up 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit grants Supercharged 3 for 2 turns and Hacking Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit grants Incoming Damage Down 1 for 1 turn to an ally when they are Directly Damaged.',
+        secondPassiveSkillText:
+            'This unit grants Incoming Damage Down 1 for 2 turns to an ally when they are Directly Damaged.',
     },
     RHODIUM: {
         name: 'Rhodium',
@@ -1166,6 +1664,14 @@ export const SHIPS = {
         critDamage: 58,
         speed: 77,
         imageKey: 'MPL_16_Portrait.png',
+        activeSkillText:
+            'This Unit deals 140% damage, gains a charge and deals additional 22.5% damage for each buff on the enemy. This attack can target Stealthed enemies.',
+        chargeSkillText:
+            'This Unit deals 170% damage, plus additional 35% for each buff on the enemy. This attack can target Stealthed enemies.',
+        firstPassiveSkillText:
+            'At the end of the round, this unit purges 2 buffs from the enemy with the most buffs.',
+        secondPassiveSkillText:
+            'At the end of the round, this unit purges 2 buffs from the enemy with the most buffs, and deals 80% damage that cannot critically hit.',
     },
     RIKRA: {
         name: 'Rikra',
@@ -1182,6 +1688,14 @@ export const SHIPS = {
         critDamage: 50,
         speed: 71,
         imageKey: 'Terran_9_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 140% damage, with an additional 60% damage against Taunted or Provoked enemies.',
+        chargeSkillText:
+            'This Unit gains Defense Up 2 for 2 turns, and deals 180% damage with additional 80% damage against Taunted or Provoked enemies.',
+        firstPassiveSkillText:
+            'This unit repairs 30% of its max HP for each enemy unit destroyed by the attack upon killing them.',
+        secondPassiveSkillText:
+            'This unit repairs 60% of its max HP for each enemy unit destroyed by the attack upon killing them.',
     },
     RIPPER: {
         name: 'Ripper',
@@ -1198,6 +1712,14 @@ export const SHIPS = {
         critDamage: 10,
         speed: 88,
         imageKey: 'Marauder_9_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 165% damage and inflicts Incoming Repair Down 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 195% damage and inflicts Inc. Repair Down 3 for 3 turns and Inc. DoT Damage Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'Upon applying a debuff to an enemy, this unit receives Marauder Rage 2 for 3 turns.',
+        secondPassiveSkillText:
+            "Upon applying a debuff to an enemy, this Unit receives Marauder Rage 2 for 3 turns and also extends all allies' active Buffs by 1 turn.",
     },
     RUINER: {
         name: 'Ruiner',
@@ -1214,6 +1736,14 @@ export const SHIPS = {
         critDamage: 2,
         speed: 84,
         imageKey: 'Marauder_14_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 160% damage, inflicts Incoming Repair Down 2 for 2 turns, and inflicts Inferno 1 for 3 turns.',
+        chargeSkillText:
+            'This Unit deals 190% damage, inflicts Out. Repair Down 2 for 2 turns, and inflicts Inferno 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit inflicts Bomb 2 on any enemy performing a repair on themselves, effective for 2 turns, once per round per enemy.',
+        secondPassiveSkillText:
+            'This Unit Inflicts Bomb 2 for 2 turns and gains Overload with a limit of 5 when an enemy performs a repair on themselves, this effect is limited to once per round per enemy. Upon killing an enemy, this Unit loses Overload.',
     },
     RYS: {
         name: 'Rys',
@@ -1230,6 +1760,13 @@ export const SHIPS = {
         critDamage: 56,
         speed: 79,
         imageKey: 'XAOC_3_Portrait.png',
+        activeSkillText: 'This Unit deals 150% damage.',
+        chargeSkillText:
+            'This Unit gains Hacking Up 3 for 1 turn, deals 180% damage, and inflicts Speed Down 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains XAOC Swiftness 1 for 2 turns when damaging a Debuffer/Supporter.',
+        secondPassiveSkillText:
+            'This unit gains XAOC Swiftness 2 for 3 turns when damaging a Debuffer/Supporter.',
     },
     SALVATION: {
         name: 'Salvation',
@@ -1246,6 +1783,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 87,
         imageKey: 'Binderburg_8_Portrait.png',
+        activeSkillText:
+            'This Unit Repairs 25% of its Max HP and grants Binderburg Resilience 2 for 1 turn.',
+        chargeSkillText:
+            'This Unit repairs 30% of its Max HP and grants Inc. Damage Down 2 for 2 turns.',
+        firstPassiveSkillText: 'Upon death, this unit repairs all allies for 60% of its max HP.',
+        secondPassiveSkillText:
+            'Upon death, this unit repairs all allies for 80% of its max HP. Additionally, when a buff is purged from an ally, this unit repairs that ally for 5% of this units max HP.',
     },
     SANSI: {
         name: 'Sansi',
@@ -1262,6 +1806,13 @@ export const SHIPS = {
         critDamage: 12,
         speed: 82,
         imageKey: 'Tianchao_11_Portrait.png',
+        activeSkillText: 'This unit Deals 170% damage and applies Provoke for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 230% damage and grants Taunt for 1 turn and Block Attacks for 1 hit.',
+        firstPassiveSkillText:
+            'When directly damaged, this unit inflicts Block Repair for 1 turn on that enemy.',
+        secondPassiveSkillText:
+            'This unit stars combat with a fully charged charge skill. When directly damaged, this unit inflicts Block Repair for 1 turn on that enemy. Additionally, when an enemy is directly repaired, this unit repairs itself for 5% of its max HP.',
     },
     SEFUBA: {
         name: 'Sefuba',
@@ -1278,6 +1829,12 @@ export const SHIPS = {
         critDamage: 50,
         speed: 77,
         imageKey: 'Terran_10_Portrait.png',
+        activeSkillText: 'This Unit Deals 160% damage and Purges 1 buff from the enemy.',
+        chargeSkillText: 'This Unit deals 200% damage and removes 2 charges from the enemy.',
+        firstPassiveSkillText:
+            'When this unit purges a buff from an enemy, it repairs itself for 8% max HP.',
+        secondPassiveSkillText:
+            'When this unit purges a buff from an enemy, it repairs itself for 12% max HP and purges 1 more buff from the enemy.',
     },
     SENTINEL: {
         name: 'Sentinel',
@@ -1294,6 +1851,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 95,
         imageKey: 'Legion_11_Portrait.png',
+        activeSkillText:
+            'This unit grants Attack Up 3 for 1 turn, Crit Power Up 3, and Legion Discipline 3.',
+        chargeSkillText: 'This Unit grants Out. Damage Up 3 for 3 turns and Charged Override 2.',
+        firstPassiveSkillText:
+            'When an ally critically hits an enemy, this unit deals 40% damage to that enemy. This attack cannot critically hit.',
+        secondPassiveSkillText:
+            'When an ally critically hits an enemy, this unit repairs the ally for 5% of this units Max HP and deals 60% damage to that enemy. This attack cannot critically hit.',
     },
     SHA_XING: {
         name: 'Sha Xing',
@@ -1310,6 +1874,10 @@ export const SHIPS = {
         critDamage: 42,
         speed: 88,
         imageKey: 'Tianchao_5_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     SHASHOU: {
         name: 'Shashou',
@@ -1326,6 +1894,13 @@ export const SHIPS = {
         critDamage: 42,
         speed: 82,
         imageKey: 'Tianchao_4_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 90% damage and inflicts Incoming Repair Down 1 for 2 turns.',
+        chargeSkillText: 'This Unit deals 120% damage and inflicts Inc. Repair Down 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Stealth for 2 turns when dealing damage to a debuffer/supporter and gains Blast every turn with a limit of 4.',
+        secondPassiveSkillText:
+            'This unit gains Stealth for 3 turns when dealing damage to a debuffer/supporter and gains Blast every turn with a limit of 4.',
     },
     SHELTER: {
         name: 'Shelter',
@@ -1342,6 +1917,13 @@ export const SHIPS = {
         critDamage: 20,
         speed: 79,
         imageKey: 'MPL_9_Portrait.png',
+        activeSkillText:
+            'This Unit repairs 17.5% of its max HP and grants Hacking Up 1 for 1 turn.',
+        chargeSkillText: 'This Unit repairs 20% of its Max HP and grants Hacking Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Block Damage for 1 turn when HP drops below 20%, once per battle.',
+        secondPassiveSkillText:
+            'This unit gains Block Damage for 1 turn and Incoming Damage Down 2 for 3 turns when HP drops below 20%, once per battle.',
     },
     SHEPARD: {
         name: 'Shepard',
@@ -1358,6 +1940,12 @@ export const SHIPS = {
         critDamage: 12,
         speed: 66,
         imageKey: 'Binderburg_3_Portrait.png',
+        activeSkillText: 'This Unit Repairs 6% of its Max HP and Deals 125% damage.',
+        chargeSkillText: 'This Unit repairs 9% of its Max HP and deals 160% damage.',
+        firstPassiveSkillText:
+            'When directly damaged, this unit inflicts corrosion 1 and Attack Down 1 on its attacker for 1 turn.',
+        secondPassiveSkillText:
+            'When directly damaged, this unit inflicts corrosion 1 and Attack Down 1 on its attacker for 2 turns.',
     },
     SNAPDRAGON: {
         name: 'Snapdragon',
@@ -1374,6 +1962,11 @@ export const SHIPS = {
         critDamage: 38,
         speed: 83,
         imageKey: 'Gelecek_4_Portrait.png',
+        activeSkillText: 'This Unit inflicts Defense Down 2 for 2 turns and deals 160% damage.',
+        chargeSkillText:
+            'This Unit inflicts Inc. DoT Damage Up 2 for 2 turns and deals 180% damage.',
+        firstPassiveSkillText: 'This units Crit Rate is increased by 20%.',
+        secondPassiveSkillText: 'This units Crit Rate and Crit Power are increased by 20%.',
     },
     SOKOL: {
         name: 'Sokol',
@@ -1390,6 +1983,11 @@ export const SHIPS = {
         critDamage: 64,
         speed: 85,
         imageKey: 'XAOC_5_Portrait.png',
+        activeSkillText: 'This Unit deals 130% damage.',
+        chargeSkillText: 'This Unit deals 150% damage and extends active debuffs by 1 turn.',
+        firstPassiveSkillText: 'This unit gains Blast every turn, up to a limit of 4.',
+        secondPassiveSkillText:
+            'This unit gains Blast every turn, up to a limit of 4. Upon killing an enemy, once per round, it gains 1 extra end of round action.',
     },
     STALWART: {
         name: 'Stalwart',
@@ -1406,6 +2004,14 @@ export const SHIPS = {
         critDamage: 42,
         speed: 86,
         imageKey: 'Legion_8_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 200% damage, ignoring Taunt and Provoke, and applies Concentrate Fire for 1 turn.',
+        chargeSkillText:
+            'This Unit grants Legion Discipline 2 to all allies for 1 turn and deals 240% damage, ignoring Taunt and Provoke.',
+        firstPassiveSkillText:
+            'When this unit is directly damaged as a primary target, it deals 30% damage to that enemy and gains Legion Discipline 2 for 3 turns.',
+        secondPassiveSkillText:
+            'When this unit is directly damaged as a primary target, it deals 70% damage to that enemy and gains Legion Discipline 2 for 3 turns. Additionally, when this unit is adjacent to a supporter, this unit gains 20% Attack.',
     },
     SUSTAINER: {
         name: 'Sustainer',
@@ -1422,6 +2028,14 @@ export const SHIPS = {
         critDamage: 42,
         speed: 76,
         imageKey: 'Binderburg_11_Portrait.png',
+        activeSkillText:
+            'This Unit Cleanses 2 debuffs from itself and deals 160% damage, with an additional 25% for each buff on itself.',
+        chargeSkillText:
+            'This Unit deals 220% damage, with an additional 30% for each buff on itself. If this Unit has no Debuffs, it gains 1 Extra Action.',
+        firstPassiveSkillText:
+            'At the start of the round, if this unit has no debuffs, it gains Outgoing Damage Up 3 for 1 turn.',
+        secondPassiveSkillText:
+            'At the start of the round, if this unit has no debuffs, it gains Outgoing Damage Up 3 and Attack Up 3 for 1 turn.',
     },
     TITHONUS: {
         name: 'Tithonus',
@@ -1437,6 +2051,11 @@ export const SHIPS = {
         critRate: 14,
         critDamage: 54,
         speed: 81,
+        imageKey: '',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     THRESH: {
         name: 'Thresh',
@@ -1452,6 +2071,11 @@ export const SHIPS = {
         critRate: 8,
         critDamage: 50,
         speed: 78,
+        imageKey: '',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     TORCHER: {
         name: 'Torcher',
@@ -1468,6 +2092,13 @@ export const SHIPS = {
         critDamage: 10,
         speed: 82,
         imageKey: 'Marauder_8_Portrait.png',
+        activeSkillText: 'This Unit Deals 90% damage and inflicts Inferno 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 140% damage, inflicts Inferno 2 for 3 turns, and inflicts Speed Down 1 for 2 turns.',
+        firstPassiveSkillText:
+            'This Unit gains Marauder Rage 1 for 3 turns upon debuff application.',
+        secondPassiveSkillText:
+            'This Unit gains Marauder Rage 2 for 3 turns upon debuff application.',
     },
     TORMENTER: {
         name: 'Tormenter',
@@ -1484,6 +2115,13 @@ export const SHIPS = {
         critDamage: 16,
         speed: 76,
         imageKey: 'Marauder_13_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 160% damage with a guaranteed critical hit and grants Out. Damage Up 1 to itself and all adjacent allies for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 180% damage with a guaranteed critical hit. If its HP is below 50%, it gains 1 Extra Action.',
+        firstPassiveSkillText: 'This Unit always lands critical hits.',
+        secondPassiveSkillText:
+            'This Unit always lands critical hits and gains up to 30% damage reduction as its health decreases.',
     },
     TYCHO: {
         name: 'Tycho',
@@ -1500,6 +2138,12 @@ export const SHIPS = {
         critDamage: 4,
         speed: 69,
         imageKey: 'Everliving_10_Portrait.png',
+        activeSkillText: 'This Unit Deals 130% damage.',
+        chargeSkillText: 'This Unit deals 190% damage and applies Provoke for 2 turns.',
+        firstPassiveSkillText:
+            'At the start of combat, this unit gains Cheat Death and Everliving Regeneration 1 for 6 turns.',
+        secondPassiveSkillText:
+            'At the start of combat, this unit gains Cheat Death and Everliving Regeneration 1 for 9 turns. Once per battle, when HP drops below 40% it gains Block Damage for 1 turn.',
     },
     TYGR: {
         name: 'Tygr',
@@ -1516,6 +2160,13 @@ export const SHIPS = {
         critDamage: 44,
         speed: 83,
         imageKey: 'XAOC_13_Portrait.png',
+        activeSkillText:
+            'This Unit deals 180% damage and inflicts Security Down 2 for 2 turns. If it damages 2 or more enemies, it adds 1 active to its active skill.',
+        chargeSkillText: 'This Unit deals 210% damage and inflicts Stasis for 2 turns.',
+        firstPassiveSkillText:
+            "This Unit's attacks do not break Stasis and deal 20% more damage to enemies under Stasis or Disable.",
+        secondPassiveSkillText:
+            "This unit's attacks do not break stasis and deal 20% more damage to enemies under stasis or disable. After dealing damage to an enemy affected by stasis once per round, this unit is granted one extra action.",
     },
     VALERIAN: {
         name: 'Valerian',
@@ -1532,6 +2183,12 @@ export const SHIPS = {
         critDamage: 26,
         speed: 81,
         imageKey: 'Gelecek_9_Portrait.png',
+        activeSkillText: 'This Unit deals 145% damage and inflicts Corrosion 3 for 3 turns.',
+        chargeSkillText: 'This Unit deals 175% damage and inflicts Corrosion 3 for 3 turns.',
+        firstPassiveSkillText:
+            'This unit repairs 15% of damage dealt to enemies, including inflicted damage over time effects.',
+        secondPassiveSkillText:
+            'This unit repairs 15% of damage dealt to enemies, including inflicted damage over time effects. Upon applying corrosion with a critical hit, this unit extends the newly applied status for 1 turn, with chance to succeed equal to its Crit Power.',
     },
     VALIANT: {
         name: 'Valiant',
@@ -1548,6 +2205,13 @@ export const SHIPS = {
         critDamage: 50,
         speed: 84,
         imageKey: 'Legion_3_Portrait.png',
+        activeSkillText: 'This Unit Deals 110% damage.',
+        chargeSkillText:
+            'This Unit gains Legion Discipline 2 for 2 turns and deals 145% damage, increased by 22.5% for each buff on itself.',
+        firstPassiveSkillText:
+            'This unit gains 1 charge for its charged skill upon killing an enemy.',
+        secondPassiveSkillText:
+            'This unit gains 2 charges for its charged skill upon killing an enemy.',
     },
     VALKYRIE: {
         name: 'Valkyrie',
@@ -1564,6 +2228,10 @@ export const SHIPS = {
         critDamage: 14,
         speed: 96,
         imageKey: 'Legion_13_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     VINDICATOR: {
         name: 'Vindicator',
@@ -1580,6 +2248,14 @@ export const SHIPS = {
         critDamage: 12,
         speed: 65,
         imageKey: 'Binderburg_13_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 180% damage and to all adjacent enemies, applies Provoke for 1 turn.',
+        chargeSkillText:
+            'This Unit deals 190% damage and inflicts Corrosion 2 for 2 turns. Additionally, it inflicts Out. Damage Down 1 on all adjacent enemies for 2 turns.',
+        firstPassiveSkillText:
+            'At the start of combat, this unit gains Magnetized Shielding, which cannot be removed.',
+        secondPassiveSkillText:
+            "At the start of combat, this unit gains Magnetized Shielding, which cannot be removed. When this unit resists a debuff from an enemy, it deals damage equal to 30% of this unit's Max HP.",
     },
     VOLK: {
         name: 'Volk',
@@ -1596,6 +2272,13 @@ export const SHIPS = {
         critDamage: 26,
         speed: 89,
         imageKey: 'XAOC_16_Portrait.png',
+        activeSkillText: 'This Unit grants Crit Rate Up 3 for 2 turns and Attack Up 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit grants Crit Power 3 for 3 turns and Out. Damage Up 3 for 3 turns.',
+        firstPassiveSkillText:
+            'At the start of its turn, this unit repairs 30% of its max HP to the ally with the most missing Health.',
+        secondPassiveSkillText:
+            'At the start of its turn, this unit repairs 30% of its max HP to the ally with the most missing HP. At the end of its turn, it repairs itself for 30% of its max HP.',
     },
     VORON: {
         name: 'Voron',
@@ -1612,6 +2295,12 @@ export const SHIPS = {
         critDamage: 30,
         speed: 75,
         imageKey: 'XAOC_11_Portrait.png',
+        activeSkillText: 'This Unit deals 160% damage and inflicts Out. Damage Down 2 for 2 turns.',
+        chargeSkillText: 'This Unit deals 230% damage and purges 1 buff from the enemy.',
+        firstPassiveSkillText:
+            'When directly damaged, this unit transforms the damage into a Damage Over Time (DoT) effect lasting for 3 turns.',
+        secondPassiveSkillText:
+            'When directly damaged, this unit transforms the damage into a Damage Over Time (DoT) effect lasting for 3 turns. This unit takes 20% less damage from Damage Over Time (DoT) Effects.',
     },
     WARDEN: {
         name: 'Warden',
@@ -1628,6 +2317,12 @@ export const SHIPS = {
         critDamage: 4,
         speed: 64,
         imageKey: 'Binderburg_4_Portrait.png',
+        activeSkillText: 'This Unit Deals 165% damage and applies Provoke for 1 turn.',
+        chargeSkillText: 'This Unit deals 200% damage and inflicts Corrosion 3 for 3 turns.',
+        firstPassiveSkillText:
+            'When directly damaged, this unit inflicts corrosion 1 for 2 turns on that enemy and repairs itself 3% of its max HP.',
+        secondPassiveSkillText:
+            'When directly damaged, this unit inflicts corrosion 1 for 2 turns on that enemy and repairs itself 3% of its max HP. Additionally, when this unit applies a debuff, it inflicts Out. Damage down 2 for 1 turn.',
     },
     WISTERIA: {
         name: 'Wisteria',
@@ -1644,6 +2339,12 @@ export const SHIPS = {
         critDamage: 46,
         speed: 79,
         imageKey: 'Gelecek_14_Portrait.png',
+        activeSkillText: 'This Unit deals 155% damage and inflicts Corrosion 3 for 3 turns.',
+        chargeSkillText: 'This Unit deals 185% damage and inflicts Corrosion 3 for 3 turns.',
+        firstPassiveSkillText:
+            'After applying corrosion with a critical hit, this unit inflicts inferno 2 for 2 turns.',
+        secondPassiveSkillText:
+            'After applying corrosion with a critical hit, this unit inflicts inferno 2 for 2 turns and extends newly applied corrosion by 1 turn with a chance to hit equal to its Crit power after applying corrosion with a critical hit.',
     },
     WUSHENG: {
         name: 'Wusheng',
@@ -1660,6 +2361,10 @@ export const SHIPS = {
         critDamage: 62,
         speed: 83,
         imageKey: 'Tianchao_12_Portrait.png',
+        activeSkillText: '',
+        chargeSkillText: '',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText: '',
     },
     XCELLENCE: {
         name: 'Xcellence',
@@ -1676,6 +2381,13 @@ export const SHIPS = {
         critDamage: 34,
         speed: 82,
         imageKey: 'Atlas_6_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 200% damage bypassing enemy shield and inflicts Speed Down 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 260% damage that bypasses enemy Shield and inflicts Disable for 1 turn.',
+        firstPassiveSkillText: 'This unit gains a shield equal to 5.5% of its max HP every turn.',
+        secondPassiveSkillText:
+            'This unit gains a shield equal to 5.5% of its max HP every turn. When an enemy resists a debuff application, this unit deals 75% damage.',
     },
     YARROW: {
         name: 'Yarrow',
@@ -1692,6 +2404,12 @@ export const SHIPS = {
         critDamage: 2,
         speed: 82,
         imageKey: 'Gelecek_6_Portrait.png',
+        activeSkillText: 'This Unit deals 110% damage and inflicts Corrosion 1 for 2 turns.',
+        chargeSkillText: 'This Unit deals 130% damage and inflicts Corrosion 3 for 3 turns.',
+        firstPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit gains gelecek contagion 1 for 2 turns.',
+        secondPassiveSkillText:
+            'When an enemy cleanses a debuff, this unit gains gelecek contagion 2 for 3 turns.',
     },
     YAZID: {
         name: 'Yazid',
@@ -1708,6 +2426,13 @@ export const SHIPS = {
         critDamage: 12,
         speed: 71,
         imageKey: 'Everliving_4_Portrait.png',
+        activeSkillText: 'This Unit Repairs 8.5% of its Max HP and Deals 190% damage.',
+        chargeSkillText:
+            'This Unit gains Everliving Regeneration 2 for 2 turns and deals 250% damage.',
+        firstPassiveSkillText:
+            'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death.',
+        secondPassiveSkillText:
+            'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death. Once per battle, when Cheat Death activates, this unit repairs itself for 60% of its max HP and gains Block Damage for 1 turn.',
     },
     YUYAN: {
         name: 'Yuyan',
@@ -1724,6 +2449,13 @@ export const SHIPS = {
         critDamage: 30,
         speed: 81,
         imageKey: 'Tianchao_9_Portrait.png',
+        activeSkillText:
+            'This attack ignores Taunt and Provoke, deals 190% damage, applies Concentrate Fire for 1 turn, and inflicts Defense Down 2 for 2 turns.',
+        chargeSkillText:
+            'This attack ignores Taunt and Provoke, deals 210% damage, and inflicts Disable for 1 turn.',
+        firstPassiveSkillText: 'This unit gains stealth for 2 turns when applying a debuff.',
+        secondPassiveSkillText:
+            'This unit gains stealth for 2 turns and tianchao precision 2 for 3 turns when applying a debuff.',
     },
     ZEOLITE: {
         name: 'Zeolite',
@@ -1740,6 +2472,13 @@ export const SHIPS = {
         critDamage: 30,
         speed: 83,
         imageKey: 'MPL_13_Portrait.png',
+        activeSkillText:
+            'This Unit purges 1 buff from the enemy, inflicts Defense Down 2 for 2 turns, and deals 150% damage.',
+        chargeSkillText: 'This Unit inflicts Inc. Damage Up 3 for 2 turns and deals 190% damage.',
+        firstPassiveSkillText:
+            'This unit purges 1 buff from the enemy defender when dealing damage.',
+        secondPassiveSkillText:
+            "This unit's damage is increased by 30% when hitting a Defender and purges 1 buff from the enemy upon dealing damage.",
     },
     ZOSIMOS: {
         name: 'Zosimos',
@@ -1756,5 +2495,13 @@ export const SHIPS = {
         critDamage: 22,
         speed: 88,
         imageKey: 'Everliving_7_Portrait.png',
+        activeSkillText:
+            'This Unit Deals 180% damage and inflicts Incoming Repair Down 2 for 2 turns and Incoming Damage Up 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 300% damage, inflicts Block Repair for 2 turns, and Inc. DoT Damage Up 2 for 2 turns.',
+        firstPassiveSkillText:
+            'When an enemy repairs, this unit gains a charge to its charged skill.',
+        secondPassiveSkillText:
+            "When an enemy repairs, this unit gains a charge to its charged skill. Additionally, this unit decreases that enemy's charge by one for every second repair they perform.",
     },
 };

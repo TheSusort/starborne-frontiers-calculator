@@ -39,22 +39,10 @@ async function updateShipsData(specificShip?: string) {
                 continue;
             }
 
-            // Update the ship data
+            // Update the ship data, only adding new fields
             updatedShips[key as keyof typeof SHIPS] = {
-                name: typedShip.name,
-                affinity: newData.affinity,
-                rarity: newData.rarity,
-                faction: newData.faction,
-                role: newData.type,
-                hp: newData.baseStats.hp,
-                attack: newData.baseStats.attack,
-                defense: newData.baseStats.defence,
-                hacking: newData.baseStats.hacking,
-                security: newData.baseStats.security,
-                critRate: newData.baseStats.crit,
-                critDamage: newData.baseStats.critDamage,
-                speed: newData.baseStats.speed,
-                imageKey: newData.imageKey,
+                ...typedShip, // Keep all existing data
+                // Only set these if they don't exist in typedShip
             };
 
             // Add a small delay to avoid rate limiting

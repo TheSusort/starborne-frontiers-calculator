@@ -12,6 +12,9 @@ import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES } from '../constants';
 import { SearchInput } from '../components/ui/SearchInput';
 import { Ship } from '../types/ship';
 import { useNotification } from '../hooks/useNotification';
+import { Button } from '../components/ui/Button';
+import { Tooltip } from '../components/ui/layout/Tooltip';
+import { SkillTooltip } from '../components/ship/SkillTooltip';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -25,6 +28,10 @@ export const ShipIndexPage: React.FC = () => {
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0;
     const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
+    const [activeHover, setActiveHover] = useState('');
+    const [chargeHover, setChargeHover] = useState('');
+    const [passive1Hover, setPassive1Hover] = useState('');
+    const [passive2Hover, setPassive2Hover] = useState('');
 
     const setSelectedFactions = (factions: string[]) => {
         setState((prev) => ({
@@ -196,7 +203,7 @@ export const ShipIndexPage: React.FC = () => {
                     />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {filteredAndSortedShips.length > 0 ? (
                         filteredAndSortedShips.map((ship) => (
                             <ShipDisplay
@@ -206,7 +213,87 @@ export const ShipIndexPage: React.FC = () => {
                                 isAdded={addedShips.has(ship.name)}
                             >
                                 <div className="flex flex-col items-center justify-center border-b border-gray-700 pb-2 m-3">
-                                    {ship.imageKey && <Image src={ship.imageKey} alt={ship.name} />}
+                                    {ship.imageKey && (
+                                        <Image
+                                            src={ship.imageKey}
+                                            alt={ship.name}
+                                            className="max-w-full max-h-full w-[152px] h-[206px]"
+                                        />
+                                    )}
+                                    <div className="mt-2 flex gap-2">
+                                        {ship.activeSkillText && (
+                                            <div className="relative">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="xs"
+                                                    onMouseEnter={() => setActiveHover(ship.name)}
+                                                    onMouseLeave={() => setActiveHover('')}
+                                                >
+                                                    Active
+                                                </Button>
+                                                <Tooltip isVisible={activeHover === ship.name}>
+                                                    <SkillTooltip
+                                                        skillText={ship.activeSkillText}
+                                                        skillType="Active Skill"
+                                                    />
+                                                </Tooltip>
+                                            </div>
+                                        )}
+                                        {ship.chargeSkillText && (
+                                            <div className="relative">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="xs"
+                                                    onMouseEnter={() => setChargeHover(ship.name)}
+                                                    onMouseLeave={() => setChargeHover('')}
+                                                >
+                                                    Charge
+                                                </Button>
+                                                <Tooltip isVisible={chargeHover === ship.name}>
+                                                    <SkillTooltip
+                                                        skillText={ship.chargeSkillText}
+                                                        skillType="Charge Skill"
+                                                    />
+                                                </Tooltip>
+                                            </div>
+                                        )}
+                                        {ship.firstPassiveSkillText && (
+                                            <div className="relative">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="xs"
+                                                    onMouseEnter={() => setPassive1Hover(ship.name)}
+                                                    onMouseLeave={() => setPassive1Hover('')}
+                                                >
+                                                    Passive 1
+                                                </Button>
+                                                <Tooltip isVisible={passive1Hover === ship.name}>
+                                                    <SkillTooltip
+                                                        skillText={ship.firstPassiveSkillText}
+                                                        skillType="Passive Skill"
+                                                    />
+                                                </Tooltip>
+                                            </div>
+                                        )}
+                                        {ship.secondPassiveSkillText && (
+                                            <div className="relative">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="xs"
+                                                    onMouseEnter={() => setPassive2Hover(ship.name)}
+                                                    onMouseLeave={() => setPassive2Hover('')}
+                                                >
+                                                    Passive 2
+                                                </Button>
+                                                <Tooltip isVisible={passive2Hover === ship.name}>
+                                                    <SkillTooltip
+                                                        skillText={ship.secondPassiveSkillText}
+                                                        skillType="Passive Skill Upgraded"
+                                                    />
+                                                </Tooltip>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </ShipDisplay>
                         ))
