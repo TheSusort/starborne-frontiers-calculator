@@ -1,12 +1,19 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const GearIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const GearIcon: React.FC<IconProps> = ({ className = '', ...props }) => (
     <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         className={`w-4 h-4 ${className}`}
+        role="img"
+        aria-hidden="true"
+        {...props}
     >
         <path
             strokeLinecap="round"

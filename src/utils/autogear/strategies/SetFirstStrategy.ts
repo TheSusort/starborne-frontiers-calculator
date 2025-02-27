@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats } from '../../../types/stats';
@@ -37,7 +37,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        ignoreEquipped?: boolean
+        ignoreEquipped?: boolean,
+        setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
         const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
@@ -47,8 +48,20 @@ export class SetFirstStrategy extends BaseStrategy {
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            setPriorities
         );
+
+        // Sort set groups by priority
+        setGroups.sort((a, b) => {
+            const aHasPriority = setPriorities?.some((p) => p.setName === a.setName) ? 1 : 0;
+            const bHasPriority = setPriorities?.some((p) => p.setName === b.setName) ? 1 : 0;
+            if (aHasPriority !== bHasPriority) {
+                return bHasPriority - aHasPriority;
+            }
+            return b.score - a.score;
+        });
+
         // Initialize progress (set evaluations + remaining slots)
         const totalOperations =
             setGroups.length * availableInventory.length + Object.keys(GEAR_SLOTS).length;
@@ -68,7 +81,8 @@ export class SetFirstStrategy extends BaseStrategy {
                 equipment,
                 getGearPiece,
                 getEngineeringStatsForShipType,
-                shipRole
+                shipRole,
+                setPriorities
             );
 
             setPieces.forEach((piece) => {
@@ -87,7 +101,8 @@ export class SetFirstStrategy extends BaseStrategy {
             priorities,
             getGearPiece,
             getEngineeringStatsForShipType,
-            shipRole
+            shipRole,
+            setPriorities
         );
 
         // Ensure progress is complete
@@ -107,7 +122,8 @@ export class SetFirstStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        setPriorities?: SetPriority[]
     ): SetGroup[] {
         const setGroups: Record<string, GearPiece[]> = {};
 
@@ -187,7 +203,7 @@ export class SetFirstStrategy extends BaseStrategy {
         );
     }
 
-    private findBestSetCombination(
+    private async findBestSetCombination(
         pieces: GearPiece[],
         usedSlots: Set<GearSlotName>,
         ship: Ship,
@@ -195,14 +211,19 @@ export class SetFirstStrategy extends BaseStrategy {
         currentEquipment: Partial<Record<GearSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
-    ): GearPiece[] {
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[]
+    ): Promise<GearPiece[]> {
         const availableSlots = pieces.map((p) => p.slot).filter((slot) => !usedSlots.has(slot));
 
         if (availableSlots.length < 2) return []; // Need at least 2 pieces for a set
 
         const bestCombination: GearPiece[] = [];
         let bestScore = -Infinity;
+
+        // Get set priority if it exists
+        const setPriority = setPriorities?.find((p) => p.setName === pieces[0].setBonus);
+        const priorityMultiplier = setPriority ? 1.5 : 1.15; // Higher multiplier for required sets
 
         // Try different combinations of pieces
         for (let i = 0; i < pieces.length; i++) {
@@ -229,7 +250,13 @@ export class SetFirstStrategy extends BaseStrategy {
                 );
 
                 const score =
-                    this.calculateStatScore(totalStats.final, priorities, shipRole) * 1.15;
+                    this.calculateStatScore(
+                        totalStats.final,
+                        priorities,
+                        shipRole,
+                        undefined,
+                        setPriorities
+                    ) * priorityMultiplier;
 
                 if (score > bestScore) {
                     bestScore = score;
@@ -250,7 +277,8 @@ export class SetFirstStrategy extends BaseStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[]
     ): Promise<void> {
         for (const slotKey of Object.keys(GEAR_SLOTS)) {
             const slot = slotKey as GearSlotName;
@@ -275,7 +303,13 @@ export class SetFirstStrategy extends BaseStrategy {
                         getEngineeringStatsForShipType(ship.type)
                     );
 
-                    const score = this.calculateStatScore(totalStats.final, priorities, shipRole);
+                    const score = this.calculateStatScore(
+                        totalStats.final,
+                        priorities,
+                        shipRole,
+                        undefined,
+                        setPriorities
+                    );
                     if (score > bestScore) {
                         bestScore = score;
                         bestGearId = gear.id;
@@ -294,8 +328,9 @@ export class SetFirstStrategy extends BaseStrategy {
         stats: BaseStats,
         priorities: StatPriority[],
         shipRole?: ShipTypeName,
-        setCount?: Record<string, number>
+        setCount?: Record<string, number>,
+        setPriorities?: SetPriority[]
     ): number {
-        return calculatePriorityScore(stats, priorities, shipRole, setCount);
+        return calculatePriorityScore(stats, priorities, shipRole, setCount, setPriorities);
     }
 }

@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const CheckIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const CheckIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             viewBox="0 0 48 48"
@@ -9,6 +13,7 @@ export const CheckIcon: React.FC<{ className?: string }> = ({ className = '' }) 
             className={`w-4 h-4 ${className}`}
             role="img"
             aria-hidden="true"
+            {...props}
         >
             <g id="SVGRepo_bgCarrier" strokeWidth="0"></g>
             <g id="SVGRepo_tracerCarrier" strokeLinecap="round" strokeLinejoin="round"></g>

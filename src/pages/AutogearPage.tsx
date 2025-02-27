@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useShips } from '../hooks/useShips';
 import { useInventory } from '../hooks/useInventory';
-import { GearSuggestion, StatPriority } from '../types/autogear';
+import { GearSuggestion, StatPriority, SetPriority } from '../types/autogear';
 import { GearPiece } from '../types/gear';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { PageLayout, ProgressBar } from '../components/ui';
@@ -25,7 +25,7 @@ export const AutogearPage: React.FC = () => {
     const { addNotification } = useNotification();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
-    const [priorities, setPriorities] = useState<StatPriority[]>([]);
+    const [statPriorities, setStatPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -45,6 +45,7 @@ export const AutogearPage: React.FC = () => {
     const selectedShip = getShipById(selectedShipId);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
     const [searchParams] = useSearchParams();
+    const [setPriorities, setSetPriorities] = useState<SetPriority[]>([]);
 
     // Add effect to handle URL parameters
     useEffect(() => {
@@ -58,12 +59,20 @@ export const AutogearPage: React.FC = () => {
         }
     }, [searchParams, getShipById]);
 
-    const handleAddPriority = (priority: StatPriority) => {
-        setPriorities([...priorities, priority]);
+    const handleAddStatPriority = (priority: StatPriority) => {
+        setStatPriorities([...statPriorities, priority]);
     };
 
-    const handleRemovePriority = (index: number) => {
-        setPriorities(priorities.filter((_, i) => i !== index));
+    const handleRemoveStatPriority = (index: number) => {
+        setStatPriorities(statPriorities.filter((_, i) => i !== index));
+    };
+
+    const handleAddSetPriority = (priority: SetPriority) => {
+        setSetPriorities([...setPriorities, priority]);
+    };
+
+    const handleRemoveSetPriority = (index: number) => {
+        setSetPriorities(setPriorities.filter((_, i) => i !== index));
     };
 
     const handleAutogear = async () => {
@@ -97,12 +106,13 @@ export const AutogearPage: React.FC = () => {
         const newSuggestions = await Promise.resolve(
             strategy.findOptimalGear(
                 selectedShip,
-                priorities,
-                availableInventory, // Use filtered inventory
+                statPriorities,
+                availableInventory,
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 selectedShipRole || undefined,
-                ignoreEquipped
+                ignoreEquipped,
+                setPriorities
             )
         );
 
@@ -241,17 +251,20 @@ export const AutogearPage: React.FC = () => {
                     selectedShip={selectedShip || null}
                     selectedShipRole={selectedShipRole}
                     selectedAlgorithm={selectedAlgorithm}
-                    priorities={priorities}
+                    priorities={statPriorities}
                     ignoreEquipped={ignoreEquipped}
                     onIgnoreEquippedChange={setIgnoreEquipped}
                     onShipSelect={(ship) => setSelectedShipId(ship.id)}
                     onRoleSelect={handleRoleChange}
                     onAlgorithmSelect={setSelectedAlgorithm}
-                    onAddPriority={handleAddPriority}
-                    onRemovePriority={handleRemovePriority}
+                    onAddPriority={handleAddStatPriority}
+                    onRemovePriority={handleRemoveStatPriority}
                     onFindOptimalGear={handleAutogear}
                     showSecondaryRequirements={showSecondaryRequirements}
                     onToggleSecondaryRequirements={setShowSecondaryRequirements}
+                    setPriorities={setPriorities}
+                    onAddSetPriority={handleAddSetPriority}
+                    onRemoveSetPriority={handleRemoveSetPriority}
                 />
 
                 {suggestions.length > 0 && (

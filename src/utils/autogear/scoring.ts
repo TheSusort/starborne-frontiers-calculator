@@ -1,10 +1,11 @@
 import { BaseStats } from '../../types/stats';
-import { StatPriority } from '../../types/autogear';
+import { StatPriority, SetPriority } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
+import { GearSetName } from '../../constants/gearSets';
 
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
@@ -30,7 +31,8 @@ export function calculatePriorityScore(
     stats: BaseStats,
     priorities: StatPriority[],
     shipRole?: ShipTypeName,
-    setCount?: Record<string, number>
+    setCount?: Record<string, number>,
+    setPriorities?: SetPriority[]
 ): number {
     let penalties = 0;
 
@@ -51,6 +53,19 @@ export function calculatePriorityScore(
                 // Calculate penalty as the percentage above maximum
                 const diff = (statValue - priority.maxLimit) / priority.maxLimit;
                 penalties += diff * 100;
+            }
+        }
+    }
+
+    // Calculate set requirement penalties
+    if (setPriorities && setPriorities.length > 0 && setCount) {
+        for (const setPriority of setPriorities) {
+            const currentCount = setCount[setPriority.setName] || 0;
+            if (currentCount < setPriority.count) {
+                // Calculate penalty as percentage below required count
+                // Multiply by 2 to make set requirements more important
+                const diff = (setPriority.count - currentCount) / setPriority.count;
+                penalties += diff * 200;
             }
         }
     }
@@ -92,7 +107,7 @@ function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): nu
         const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
         const normalizedValue = statValue / normalizer;
         const orderMultiplier = Math.pow(2, priorities.length - index - 1);
-        totalScore += normalizedValue * priority.weight * orderMultiplier;
+        totalScore += normalizedValue * (priority.weight || 1) * orderMultiplier;
     });
     return totalScore;
 }
@@ -153,14 +168,15 @@ function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number
     return speedScore + boostScore + ehpScore;
 }
 
-// Update calculateTotalScore to include shipRole
+// Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
     equipment: Partial<Record<GearSlotName, string>>,
     priorities: StatPriority[],
     getGearPiece: (id: string) => GearPiece | undefined,
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-    shipRole?: ShipTypeName
+    shipRole?: ShipTypeName,
+    setPriorities?: SetPriority[]
 ): number {
     const totalStats = calculateTotalStats(
         ship.baseStats,
@@ -180,7 +196,13 @@ export function calculateTotalScore(
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
     });
 
-    const score = calculatePriorityScore(totalStats.final, priorities, shipRole, setCount);
+    const score = calculatePriorityScore(
+        totalStats.final,
+        priorities,
+        shipRole,
+        setCount,
+        setPriorities
+    );
 
     return score;
 }

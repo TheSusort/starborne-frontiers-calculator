@@ -40,7 +40,7 @@ const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDel
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 p-2">
             <h2 className="text-xl font-semibold text-white mb-4">Saved Encounters</h2>
             {encounters.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4" role="encounter-list">

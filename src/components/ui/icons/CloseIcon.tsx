@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const CloseIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const CloseIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             className={`w-4 h-4 ${className}`}
@@ -9,6 +13,7 @@ export const CloseIcon: React.FC<{ className?: string }> = ({ className = '' }) 
             stroke="currentColor"
             role="img"
             aria-hidden="true"
+            {...props}
         >
             <path
                 strokeLinecap="round"

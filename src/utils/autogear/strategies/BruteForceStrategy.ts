@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat, StatName } from '../../../types/stats';
 import { calculateTotalScore } from '../scoring';
@@ -35,7 +35,8 @@ export class BruteForceStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        ignoreEquipped?: boolean
+        ignoreEquipped?: boolean,
+        setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
         const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
@@ -51,10 +52,11 @@ export class BruteForceStrategy extends BaseStrategy {
             priorities,
             inventoryBySlot,
             {},
-            this.getOptimizedSlotOrder(inventoryBySlot),
+            this.getOptimizedSlotOrder(inventoryBySlot, setPriorities),
             getGearPiece,
             getEngineeringStatsForShipType,
-            shipRole
+            shipRole,
+            setPriorities
         );
 
         return Object.entries(bestConfig.equipment)
@@ -67,9 +69,28 @@ export class BruteForceStrategy extends BaseStrategy {
     }
 
     private getOptimizedSlotOrder(
-        inventoryBySlot: Record<GearSlotName, GearPiece[]>
+        inventoryBySlot: Record<GearSlotName, GearPiece[]>,
+        setPriorities?: SetPriority[]
     ): GearSlotName[] {
-        // Process slots with fewer options first to reduce branching
+        // Process slots with set pieces first if we have set priorities
+        if (setPriorities && setPriorities.length > 0) {
+            return Object.entries(inventoryBySlot)
+                .sort(([, a], [, b]) => {
+                    const aSetPieces = a.filter((gear) =>
+                        setPriorities.some((p) => p.setName === gear.setBonus)
+                    ).length;
+                    const bSetPieces = b.filter((gear) =>
+                        setPriorities.some((p) => p.setName === gear.setBonus)
+                    ).length;
+                    if (aSetPieces !== bSetPieces) {
+                        return bSetPieces - aSetPieces;
+                    }
+                    return a.length - b.length;
+                })
+                .map(([slot]) => slot as GearSlotName);
+        }
+
+        // Fall back to original ordering
         return Object.entries(inventoryBySlot)
             .sort(([, a], [, b]) => a.length - b.length)
             .map(([slot]) => slot as GearSlotName);
@@ -129,7 +150,8 @@ export class BruteForceStrategy extends BaseStrategy {
         remainingSlots: GearSlotName[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[]
     ): Promise<GearConfiguration> {
         return new Promise((resolve) => {
             let batchCount = 0;
@@ -159,7 +181,8 @@ export class BruteForceStrategy extends BaseStrategy {
                             priorities,
                             getGearPiece,
                             getEngineeringStatsForShipType,
-                            shipRole
+                            shipRole,
+                            setPriorities
                         );
 
                         this.scoreCache.set(cacheKey, score);

@@ -2,9 +2,14 @@ import { StatName } from './stats';
 
 export interface StatPriority {
     stat: StatName;
-    maxLimit?: number;
+    weight?: number;
     minLimit?: number;
-    weight: number;
+    maxLimit?: number;
+}
+
+export interface SetPriority {
+    setName: string;
+    count: number;
 }
 
 export interface GearSuggestion {

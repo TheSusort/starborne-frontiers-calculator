@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const ChevronUpIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const ChevronUpIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -13,6 +17,7 @@ export const ChevronUpIcon: React.FC<{ className?: string }> = ({ className = ''
             className={`w-4 h-4 ${className}`}
             role="img"
             aria-hidden="true"
+            {...props}
         >
             <path d="m18 15-6-6-6 6" />
         </svg>

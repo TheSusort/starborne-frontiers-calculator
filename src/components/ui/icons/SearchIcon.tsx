@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-interface Props {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
     className?: string;
-}
+};
 
-export const SearchIcon: React.FC<Props> = ({ className = 'w-6 h-6' }) => {
+export const SearchIcon: React.FC<IconProps> = ({ className = 'w-6 h-6', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -13,6 +13,9 @@ export const SearchIcon: React.FC<Props> = ({ className = 'w-6 h-6' }) => {
             strokeWidth={1.5}
             stroke="currentColor"
             className={className}
+            role="img"
+            aria-hidden="true"
+            {...props}
         >
             <path
                 strokeLinecap="round"

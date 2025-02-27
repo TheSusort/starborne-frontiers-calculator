@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const FilterIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const FilterIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -13,6 +17,7 @@ export const FilterIcon: React.FC<{ className?: string }> = ({ className = '' })
             className={`w-4 h-4 ${className}`}
             role="img"
             aria-hidden="true"
+            {...props}
         >
             <path d="M21 6H3" />
             <path d="M10 12H21" />

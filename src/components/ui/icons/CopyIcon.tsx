@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const CopyIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const CopyIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -11,6 +15,9 @@ export const CopyIcon: React.FC<{ className?: string }> = ({ className = '' }) =
             strokeLinecap="round"
             strokeLinejoin="round"
             className={`w-4 h-4 ${className}`}
+            role="img"
+            aria-hidden="true"
+            {...props}
         >
             <path d="m 3.75,4.25 h 14 c 1.108,0 2,0.892 2,2 v 14 c 0,1.108 -0.892,2 -2,2 h -14 c -1.108,0 -2,-0.892 -2,-2 v -14 c 0,-1.108 0.892,-2 2,-2 z m 2.5,-2.5 h 14 c 1.108,0 2,0.892 2,2 v 14" />
         </svg>

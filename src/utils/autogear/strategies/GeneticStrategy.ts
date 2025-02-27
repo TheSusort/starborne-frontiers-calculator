@@ -1,7 +1,7 @@
 import { AutogearStrategy } from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import { calculateTotalScore } from '../scoring';
@@ -42,7 +42,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        ignoreEquipped?: boolean
+        ignoreEquipped?: boolean,
+        setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
         const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
@@ -51,14 +52,15 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const totalOperations = this.POPULATION_SIZE * this.GENERATIONS;
         this.initializeProgress(totalOperations);
 
-        let population = this.initializePopulation(availableInventory);
+        let population = this.initializePopulation(availableInventory, getGearPiece, setPriorities);
         population = this.evaluatePopulation(
             population,
             ship,
             priorities,
             getGearPiece,
             getEngineeringStatsForShipType,
-            shipRole
+            shipRole,
+            setPriorities
         );
 
         for (let generation = 0; generation < this.GENERATIONS; generation++) {
@@ -69,7 +71,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
-                this.mutate(child, availableInventory);
+                this.mutate(child, availableInventory, getGearPiece, setPriorities);
                 newPopulation.push(child);
                 this.incrementProgress();
             }
@@ -80,7 +82,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 priorities,
                 getGearPiece,
                 getEngineeringStatsForShipType,
-                shipRole
+                shipRole,
+                setPriorities
             );
 
             // Allow UI to update
@@ -100,22 +103,25 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             }));
     }
 
-    private initializePopulation(inventory: GearPiece[]): Individual[] {
+    private initializePopulation(
+        inventory: GearPiece[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        setPriorities?: SetPriority[]
+    ): Individual[] {
         const population: Individual[] = [];
 
-        // Create random individuals
         for (let i = 0; i < this.POPULATION_SIZE; i++) {
             const equipment: Partial<Record<GearSlotName, string>> = {};
 
-            // Fill each slot with random piece
             Object.keys(GEAR_SLOTS).forEach((slotKey) => {
                 const slot = slotKey as GearSlotName;
-                const availablePieces = inventory.filter((gear) => gear.slot === slot);
-                if (availablePieces.length > 0) {
-                    const randomPiece =
-                        availablePieces[Math.floor(Math.random() * availablePieces.length)];
-                    equipment[slot] = randomPiece.id;
-                }
+                equipment[slot] = this.getPreferredGearForSlot(
+                    slot,
+                    inventory,
+                    equipment,
+                    getGearPiece,
+                    setPriorities
+                );
             });
 
             population.push({ equipment, fitness: 0 });
@@ -130,7 +136,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[]
     ): Individual[] {
         return population
             .map((individual) => ({
@@ -141,7 +148,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     priorities,
                     getGearPiece,
                     getEngineeringStatsForShipType,
-                    shipRole
+                    shipRole,
+                    setPriorities
                 ),
             }))
             .sort((a, b) => b.fitness - a.fitness);
@@ -153,7 +161,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[]
     ): number {
         return calculateTotalScore(
             ship,
@@ -161,7 +170,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             priorities,
             getGearPiece,
             getEngineeringStatsForShipType,
-            shipRole
+            shipRole,
+            setPriorities
         );
     }
 
@@ -189,17 +199,70 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         return { equipment: childEquipment, fitness: 0 };
     }
 
-    private mutate(individual: Individual, inventory: GearPiece[]): void {
+    private mutate(
+        individual: Individual,
+        inventory: GearPiece[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        setPriorities?: SetPriority[]
+    ): void {
         Object.keys(GEAR_SLOTS).forEach((slotKey) => {
             const slot = slotKey as GearSlotName;
             if (Math.random() < this.MUTATION_RATE) {
-                const availablePieces = inventory.filter((gear) => gear.slot === slot);
-                if (availablePieces.length > 0) {
-                    const randomPiece =
-                        availablePieces[Math.floor(Math.random() * availablePieces.length)];
-                    individual.equipment[slot] = randomPiece.id;
-                }
+                individual.equipment[slot] = this.getPreferredGearForSlot(
+                    slot,
+                    inventory,
+                    individual.equipment,
+                    getGearPiece,
+                    setPriorities
+                );
             }
         });
+    }
+
+    private getPreferredGearForSlot(
+        slot: GearSlotName,
+        inventory: GearPiece[],
+        currentEquipment: Partial<Record<GearSlotName, string>>,
+        getGearPiece: (id: string) => GearPiece | undefined,
+        setPriorities?: SetPriority[]
+    ): string | undefined {
+        const availablePieces = inventory.filter((gear) => gear.slot === slot);
+        if (availablePieces.length === 0) return undefined;
+
+        if (!setPriorities || setPriorities.length === 0 || Math.random() < 0.5) {
+            // Sometimes pick random piece to maintain diversity
+            return availablePieces[Math.floor(Math.random() * availablePieces.length)].id;
+        }
+
+        // Count current sets
+        const setCount: Record<string, number> = {};
+        Object.values(currentEquipment).forEach((gearId) => {
+            if (!gearId) return;
+            const gear = getGearPiece(gearId);
+            if (!gear?.setBonus) return;
+            setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
+        });
+
+        // Find pieces that would contribute to desired sets
+        const piecesWithSetScore = availablePieces.map((piece) => {
+            let score = 0;
+            if (piece.setBonus) {
+                const currentCount = setCount[piece.setBonus] || 0;
+                const relevantPriority = setPriorities.find((p) => p.setName === piece.setBonus);
+                if (relevantPriority && currentCount < relevantPriority.count) {
+                    score = 1;
+                }
+            }
+            return { piece, score };
+        });
+
+        // Prefer pieces that contribute to desired sets
+        const bestPieces = piecesWithSetScore.filter((p) => p.score > 0);
+        if (bestPieces.length > 0) {
+            return bestPieces[Math.floor(Math.random() * bestPieces.length)].piece.id;
+        }
+
+        // Fall back to random piece if no good set pieces found
+        return availablePieces[Math.floor(Math.random() * availablePieces.length)].id;
     }
 }

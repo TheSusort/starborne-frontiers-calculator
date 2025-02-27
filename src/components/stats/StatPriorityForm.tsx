@@ -55,8 +55,8 @@ export const StatPriorityForm: React.FC<Props> = ({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4" role="form">
-            <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="bg-dark p-4" role="form">
+            <div className="space-y-2 flex gap-4 items-end">
                 <Select
                     label="Stat"
                     value={selectedStat}
@@ -66,12 +66,24 @@ export const StatPriorityForm: React.FC<Props> = ({
                         label: STATS[stat].label,
                     }))}
                 />
+                {!hideWeight && (
+                    <div className="w-32">
+                        <Input
+                            label="Weight"
+                            type="number"
+                            value={weight}
+                            onChange={(e) => setWeight(Number(e.target.value))}
+                            placeholder="Enter weight"
+                            className="mt-4"
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="space-y-2 grid grid-cols-2 gap-4 items-end">
                 {!hideMinLimit && (
                     <Input
-                        label="Min Limit (Optional)"
+                        label="Min Limit"
                         type="number"
                         value={minLimit}
                         onChange={(e) => setMinLimit(e.target.value)}
@@ -80,7 +92,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                 )}
                 {!hideMaxLimit && (
                     <Input
-                        label="Max Limit (Optional)"
+                        label="Max Limit"
                         type="number"
                         value={maxLimit}
                         onChange={(e) => setMaxLimit(e.target.value)}
@@ -89,20 +101,11 @@ export const StatPriorityForm: React.FC<Props> = ({
                 )}
             </div>
 
-            {!hideWeight && (
-                <Input
-                    label="Weight"
-                    type="number"
-                    value={weight}
-                    onChange={(e) => setWeight(Number(e.target.value))}
-                    placeholder="Enter weight"
-                    className="mt-4"
-                />
-            )}
-
-            <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
-                Add Priority
-            </Button>
+            <div className="grow mt-4">
+                <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
+                    Add
+                </Button>
+            </div>
         </form>
     );
 };

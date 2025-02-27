@@ -1,5 +1,10 @@
-import React from 'react';
-export const UnlockedLockIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+import React, { ComponentPropsWithoutRef } from 'react';
+
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const UnlockedLockIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -8,6 +13,9 @@ export const UnlockedLockIcon: React.FC<{ className?: string }> = ({ className =
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
+            role="img"
+            aria-hidden="true"
+            {...props}
         >
             <svg
                 fill="none"

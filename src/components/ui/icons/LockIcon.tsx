@@ -1,6 +1,10 @@
-import React from 'react';
+import React, { ComponentPropsWithoutRef } from 'react';
 
-export const LockIcon: React.FC<{ className?: string }> = ({ className = '' }) => {
+type IconProps = ComponentPropsWithoutRef<'svg'> & {
+    className?: string;
+};
+
+export const LockIcon: React.FC<IconProps> = ({ className = '', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -9,6 +13,9 @@ export const LockIcon: React.FC<{ className?: string }> = ({ className = '' }) =
             fill="currentColor"
             stroke="currentColor"
             strokeWidth={2}
+            role="img"
+            aria-hidden="true"
+            {...props}
         >
             <path d="m8 11v-4c0-5.3333 8-5.3333 8 0v4h2c1.1046 0 2 0.89543 2 2v7c0 1.1046-0.89543 2-2 2h-12c-1.1046 0-2-0.89543-2-2v-7c0-1.1046 0.89543-2 2-2zm8.0466-3.9873c-0.016275-5.096-8.0033-4.9871-8.0233 0.019012-0.005291 1.3228-0.015873 3.9683-0.015873 3.9683h8.0519s-0.0085-2.6582-0.01273-3.9873z" />
         </svg>

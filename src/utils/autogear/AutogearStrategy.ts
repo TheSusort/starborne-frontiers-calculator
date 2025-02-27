@@ -1,6 +1,6 @@
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { StatPriority, GearSuggestion } from '../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { EngineeringStat } from '../../types/stats';
 
@@ -14,7 +14,8 @@ export interface AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        ignoreEquipped?: boolean
+        ignoreEquipped?: boolean,
+        setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> | GearSuggestion[];
     setProgressCallback(
         callback: (progress: { current: number; total: number; percentage: number }) => void
