@@ -1,8 +1,10 @@
+import { ShipData } from '../types/ship';
+
 // Auto-generated on 2025-02-26T20:15:27.753Z
-export const SHIPS = {
+export const SHIPS: Record<string, ShipData> = {
     AEGIS: {
         name: 'Aegis',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'SUPPORTER',
@@ -26,7 +28,7 @@ export const SHIPS = {
     },
     APEX: {
         name: 'Apex',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'DEBUFFER',
@@ -50,7 +52,7 @@ export const SHIPS = {
     },
     ANEMONE: {
         name: 'Anemone',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'GELECEK',
         role: 'DEFENDER',
@@ -73,7 +75,7 @@ export const SHIPS = {
     },
     ANJIAN: {
         name: 'Anjian',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -96,7 +98,7 @@ export const SHIPS = {
     },
     ARUM: {
         name: 'Arum',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'GELECEK',
         role: 'DEBUFFER',
@@ -119,7 +121,7 @@ export const SHIPS = {
     },
     ASPHODEL: {
         name: 'Asphodel',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'GELECEK',
         role: 'ATTACKER',
@@ -141,7 +143,7 @@ export const SHIPS = {
     },
     ASPHYXIATOR: {
         name: 'Asphyxiator',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'MARAUDERS',
         role: 'DEBUFFER',
@@ -165,7 +167,7 @@ export const SHIPS = {
     },
     BERSERKER: {
         name: 'Berserker',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -187,7 +189,7 @@ export const SHIPS = {
     },
     BIZON: {
         name: 'Bizon',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'epic',
         faction: 'XAOC',
         role: 'DEBUFFER',
@@ -211,7 +213,7 @@ export const SHIPS = {
     },
     BUTCHER: {
         name: 'Butcher',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -234,7 +236,7 @@ export const SHIPS = {
     },
     CINYA: {
         name: 'Cinya',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'rare',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -256,7 +258,7 @@ export const SHIPS = {
     },
     CHIMEI: {
         name: 'Chimei',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'TIANCHAO',
         role: 'SUPPORTER',
@@ -280,7 +282,7 @@ export const SHIPS = {
     },
     COBALT: {
         name: 'Cobalt',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'MPL',
         role: 'ATTACKER',
@@ -304,7 +306,7 @@ export const SHIPS = {
     },
     CROCUS: {
         name: 'Crocus',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'GELECEK',
         role: 'DEBUFFER',
@@ -327,7 +329,7 @@ export const SHIPS = {
     },
     CRUCIALIS: {
         name: 'Crucialis',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
@@ -340,6 +342,7 @@ export const SHIPS = {
         critDamage: 42,
         speed: 79,
         imageKey: 'Atlas_3_Portrait.png',
+        shield: 20,
         activeSkillText:
             'This Unit Deals 120% damage, bypassing enemy shield, with additional 130% damage on critical hits.',
         chargeSkillText:
@@ -351,7 +354,7 @@ export const SHIPS = {
     },
     CULTIVATOR: {
         name: 'Cultivator',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'SUPPORTER',
@@ -363,6 +366,7 @@ export const SHIPS = {
         critRate: 4,
         critDamage: 20,
         speed: 88,
+        hpRegen: 6,
         imageKey: 'Binderburg_9_Portrait.png',
         activeSkillText: 'This Unit grants Defense Up 3 for 2 turns and Cleanses 1 debuff.',
         chargeSkillText:
@@ -374,7 +378,7 @@ export const SHIPS = {
     },
     CURATOR: {
         name: 'Curator',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'DEBUFFER',
@@ -395,7 +399,7 @@ export const SHIPS = {
     },
     DEFIANT: {
         name: 'Defiant',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'FRONTIER_LEGION',
         role: 'DEFENDER',
@@ -417,7 +421,7 @@ export const SHIPS = {
     },
     DEMOLISHER: {
         name: 'Demolisher',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -440,7 +444,7 @@ export const SHIPS = {
     },
     FAUST: {
         name: 'Faust',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -464,7 +468,7 @@ export const SHIPS = {
     },
     FLAMEL: {
         name: 'Flamel',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'epic',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -487,7 +491,7 @@ export const SHIPS = {
     },
     FRONTLINE: {
         name: 'Frontline',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
@@ -511,7 +515,7 @@ export const SHIPS = {
     },
     GALLANT: {
         name: 'Gallant',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'FRONTIER_LEGION',
         role: 'ATTACKER',
@@ -532,7 +536,7 @@ export const SHIPS = {
     },
     GRIF: {
         name: 'Grif',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'XAOC',
         role: 'SUPPORTER',
@@ -556,7 +560,7 @@ export const SHIPS = {
     },
     GUARDIAN: {
         name: 'Guardian',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'BINDERBURG',
         role: 'DEFENDER',
@@ -579,7 +583,7 @@ export const SHIPS = {
     },
     HARVESTER: {
         name: 'Harvester',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'BINDERBURG',
         role: 'SUPPORTER',
@@ -602,7 +606,7 @@ export const SHIPS = {
     },
     HAYYAN: {
         name: 'Hayyan',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -626,7 +630,7 @@ export const SHIPS = {
     },
     HELIODOR: {
         name: 'Heliodor',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'MPL',
         role: 'SUPPORTER',
@@ -638,6 +642,7 @@ export const SHIPS = {
         critRate: 7,
         critDamage: 20,
         speed: 85,
+        hpRegen: 8,
         imageKey: 'MPL_10_Portrait.png',
         activeSkillText: 'This Unit grants Inc. Damage Down 2 and Defense Up 3 for 1 turn.',
         chargeSkillText:
@@ -649,7 +654,7 @@ export const SHIPS = {
     },
     HERMES: {
         name: 'Hermes',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -672,7 +677,7 @@ export const SHIPS = {
     },
     HUANYING: {
         name: 'Huanying',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'TIANCHAO',
         role: 'DEBUFFER',
@@ -696,7 +701,7 @@ export const SHIPS = {
     },
     INCINERATOR: {
         name: 'Incinerator',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -719,7 +724,7 @@ export const SHIPS = {
     },
     IONSCORP: {
         name: 'Ionscorp',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
@@ -736,13 +741,13 @@ export const SHIPS = {
         chargeSkillText:
             'This Unit deals 190% damage, but when attacking a Defender, it deals 220% damage and inflicts Disable for 1 turn.',
         firstPassiveSkillText:
-            'At the start of combat, this unit gains a shield  equal to 20% of its max HP and receives Atlas Coordination 1 for 6 turns.',
+            'At the start of combat, this unit gains a shield equal to 20% of its max HP and receives Atlas Coordination 1 for 6 turns.',
         secondPassiveSkillText:
-            'At the start of combat, this unit gains a shield  equal to 30% of its max HP and receives Atlas Coordination 2 for 12 turns.',
+            'At the start of combat, this unit gains a shield equal to 30% of its max HP and receives Atlas Coordination 2 for 12 turns.',
     },
     IRIDIUM: {
         name: 'Iridium',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'MPL',
         role: 'DEFENDER',
@@ -766,7 +771,7 @@ export const SHIPS = {
     },
     ISHA: {
         name: 'Isha',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -790,7 +795,7 @@ export const SHIPS = {
     },
     JUDGE: {
         name: 'Judge',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'FRONTIER_LEGION',
         role: 'ATTACKER',
@@ -813,7 +818,7 @@ export const SHIPS = {
     },
     KAFA: {
         name: 'Kafa',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -837,7 +842,7 @@ export const SHIPS = {
     },
     KINETIK: {
         name: 'Kinetik',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'ATLAS_SYNDICATE',
         role: 'DEFENDER',
@@ -849,6 +854,7 @@ export const SHIPS = {
         critRate: 2,
         critDamage: 4,
         speed: 64,
+        shield: 4,
         imageKey: 'Atlas_9_Portrait.png',
         activeSkillText: 'This Unit Deals 110% damage and inflicts Defense Down 1 for 1 turn.',
         chargeSkillText:
@@ -858,7 +864,7 @@ export const SHIPS = {
     },
     LAIKA: {
         name: 'Laika',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'XAOC',
         role: 'DEFENDER',
@@ -880,7 +886,7 @@ export const SHIPS = {
     },
     LAKSPUR: {
         name: 'Lakspur',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'GELECEK',
         role: 'DEBUFFER',
@@ -903,7 +909,7 @@ export const SHIPS = {
     },
     LEV: {
         name: 'Lev',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'XAOC',
         role: 'ATTACKER',
@@ -927,7 +933,7 @@ export const SHIPS = {
     },
     LIBERATOR: {
         name: 'Liberator',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'FRONTIER_LEGION',
         role: 'ATTACKER',
@@ -949,7 +955,7 @@ export const SHIPS = {
     },
     LIONHEART: {
         name: 'Lionheart',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'FRONTIER_LEGION',
         role: 'DEFENDER',
@@ -973,7 +979,7 @@ export const SHIPS = {
     },
     LODOLITE: {
         name: 'Lodolite',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'MPL',
         role: 'ATTACKER',
@@ -997,7 +1003,7 @@ export const SHIPS = {
     },
     LOS: {
         name: 'Los',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'XAOC',
         role: 'ATTACKER',
@@ -1020,7 +1026,7 @@ export const SHIPS = {
     },
     LUXX: {
         name: 'Luxx',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'epic',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
@@ -1042,7 +1048,7 @@ export const SHIPS = {
     },
     MADAX: {
         name: 'Madax',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -1065,7 +1071,7 @@ export const SHIPS = {
     },
     MAGNOLIA: {
         name: 'Magnolia',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'GELECEK',
         role: 'ATTACKER',
@@ -1087,7 +1093,7 @@ export const SHIPS = {
     },
     MAKOLI: {
         name: 'Makoli',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'TERRAN_COMBINE',
         role: 'SUPPORTER',
@@ -1111,7 +1117,7 @@ export const SHIPS = {
     },
     MANGLER: {
         name: 'Mangler',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -1133,7 +1139,7 @@ export const SHIPS = {
     },
     MEDVED: {
         name: 'Medved',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'XAOC',
         role: 'ATTACKER',
@@ -1154,7 +1160,7 @@ export const SHIPS = {
     },
     MEIYING: {
         name: 'Meiying',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -1178,7 +1184,7 @@ export const SHIPS = {
     },
     MORAO: {
         name: 'Morao',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -1201,7 +1207,7 @@ export const SHIPS = {
     },
     NAYRA: {
         name: 'Nayra',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'TERRAN_COMBINE',
         role: 'DEBUFFER',
@@ -1225,7 +1231,7 @@ export const SHIPS = {
     },
     NEMESIS: {
         name: 'Nemesis',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'ATLAS_SYNDICATE',
         role: 'DEFENDER',
@@ -1247,7 +1253,7 @@ export const SHIPS = {
     },
     NOSOROG: {
         name: 'Nosorog',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'XAOC',
         role: 'DEFENDER',
@@ -1269,7 +1275,7 @@ export const SHIPS = {
     },
     NUQTU: {
         name: 'Nuqtu',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'TERRAN_COMBINE',
         role: 'ATTACKER',
@@ -1293,7 +1299,7 @@ export const SHIPS = {
     },
     NYXEN: {
         name: 'Nyxen',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'ATLAS_SYNDICATE',
         role: 'SUPPORTER',
@@ -1307,7 +1313,7 @@ export const SHIPS = {
         speed: 83,
         imageKey: 'Atlas_15_Portrait.png',
         activeSkillText:
-            'This Unit cleanses 2 bombs, grans shield equal to 15% of its max HP, and applies Atlas Readiness 2 for 1 turn.',
+            'This Unit cleanses 2 bombs, grants shield equal to 15% of its max HP, and applies Atlas Readiness 2 for 1 turn.',
         chargeSkillText:
             'This Unit cleanses 2 DoT debuffs and grants a shield equal to 19% of its max HP. It also grants Inc. Damage Down 2 for 1 turn.',
         firstPassiveSkillText: 'This Unit deals 100% damage when its shield is directly damaged.',
@@ -1315,7 +1321,7 @@ export const SHIPS = {
     },
     OBSIDIAN: {
         name: 'Obsidian',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'MPL',
         role: 'ATTACKER',
@@ -1337,7 +1343,7 @@ export const SHIPS = {
     },
     OLEANDER: {
         name: 'Oleander',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'GELECEK',
         role: 'SUPPORTER',
@@ -1359,7 +1365,7 @@ export const SHIPS = {
     },
     OPAL: {
         name: 'Opal',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'MPL',
         role: 'DEFENDER',
@@ -1383,7 +1389,7 @@ export const SHIPS = {
     },
     OREL: {
         name: 'Orel',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'epic',
         faction: 'XAOC',
         role: 'SUPPORTER',
@@ -1405,7 +1411,7 @@ export const SHIPS = {
     },
     PALLAS: {
         name: 'Pallas',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'EVERLIVING',
         role: 'ATTACKER',
@@ -1425,7 +1431,7 @@ export const SHIPS = {
     },
     PANGUAN: {
         name: 'Panguan',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -1448,7 +1454,7 @@ export const SHIPS = {
     },
     PANON: {
         name: 'Panon',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'TERRAN_COMBINE',
         role: 'DEFENDER',
@@ -1472,7 +1478,7 @@ export const SHIPS = {
     },
     PARACELSUS: {
         name: 'Paracelsus',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -1494,7 +1500,7 @@ export const SHIPS = {
     },
     PROSPECT: {
         name: 'Prospect',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'MPL',
         role: 'DEFENDER',
@@ -1518,7 +1524,7 @@ export const SHIPS = {
     },
     PROVIDER: {
         name: 'Provider',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'epic',
         faction: 'BINDERBURG',
         role: 'DEBUFFER',
@@ -1542,7 +1548,7 @@ export const SHIPS = {
     },
     PURIFIER: {
         name: 'Purifier',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'BINDERBURG',
         role: 'SUPPORTER',
@@ -1563,7 +1569,7 @@ export const SHIPS = {
     },
     QUIXILVER: {
         name: 'Quixilver',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'ATLAS_SYNDICATE',
         role: 'DEFENDER',
@@ -1583,7 +1589,7 @@ export const SHIPS = {
     },
     RAVAGER: {
         name: 'Ravager',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
@@ -1606,7 +1612,7 @@ export const SHIPS = {
     },
     REDEEMER: {
         name: 'Redeemer',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'FRONTIER_LEGION',
         role: 'DEFENDER',
@@ -1628,7 +1634,7 @@ export const SHIPS = {
     },
     REFINE: {
         name: 'Refine',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'MPL',
         role: 'SUPPORTER',
@@ -1651,7 +1657,7 @@ export const SHIPS = {
     },
     RHODIUM: {
         name: 'Rhodium',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'MPL',
         role: 'ATTACKER',
@@ -1675,7 +1681,7 @@ export const SHIPS = {
     },
     RIKRA: {
         name: 'Rikra',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'TERRAN_COMBINE',
         role: 'ATTACKER',
@@ -1699,7 +1705,7 @@ export const SHIPS = {
     },
     RIPPER: {
         name: 'Ripper',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'MARAUDERS',
         role: 'DEBUFFER',
@@ -1723,7 +1729,7 @@ export const SHIPS = {
     },
     RUINER: {
         name: 'Ruiner',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'MARAUDERS',
         role: 'DEBUFFER',
@@ -1747,7 +1753,7 @@ export const SHIPS = {
     },
     RYS: {
         name: 'Rys',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'XAOC',
         role: 'ATTACKER',
@@ -1770,7 +1776,7 @@ export const SHIPS = {
     },
     SALVATION: {
         name: 'Salvation',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'BINDERBURG',
         role: 'SUPPORTER',
@@ -1793,7 +1799,7 @@ export const SHIPS = {
     },
     SANSI: {
         name: 'Sansi',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'TIANCHAO',
         role: 'DEFENDER',
@@ -1816,7 +1822,7 @@ export const SHIPS = {
     },
     SEFUBA: {
         name: 'Sefuba',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'TERRAN_COMBINE',
         role: 'ATTACKER',
@@ -1838,7 +1844,7 @@ export const SHIPS = {
     },
     SENTINEL: {
         name: 'Sentinel',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'FRONTIER_LEGION',
         role: 'SUPPORTER',
@@ -1861,7 +1867,7 @@ export const SHIPS = {
     },
     SHA_XING: {
         name: 'Sha Xing',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -1881,7 +1887,7 @@ export const SHIPS = {
     },
     SHASHOU: {
         name: 'Shashou',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'rare',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -1904,7 +1910,7 @@ export const SHIPS = {
     },
     SHELTER: {
         name: 'Shelter',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'MPL',
         role: 'SUPPORTER',
@@ -1927,7 +1933,7 @@ export const SHIPS = {
     },
     SHEPARD: {
         name: 'Shepard',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'BINDERBURG',
         role: 'DEFENDER',
@@ -1949,7 +1955,7 @@ export const SHIPS = {
     },
     SNAPDRAGON: {
         name: 'Snapdragon',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'GELECEK',
         role: 'ATTACKER',
@@ -1970,7 +1976,7 @@ export const SHIPS = {
     },
     SOKOL: {
         name: 'Sokol',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'XAOC',
         role: 'ATTACKER',
@@ -1991,7 +1997,7 @@ export const SHIPS = {
     },
     STALWART: {
         name: 'Stalwart',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'FRONTIER_LEGION',
         role: 'ATTACKER',
@@ -2015,7 +2021,7 @@ export const SHIPS = {
     },
     SUSTAINER: {
         name: 'Sustainer',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'ATTACKER',
@@ -2039,7 +2045,7 @@ export const SHIPS = {
     },
     TITHONUS: {
         name: 'Tithonus',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'EVERLIVING',
         role: 'ATTACKER',
@@ -2059,7 +2065,7 @@ export const SHIPS = {
     },
     THRESH: {
         name: 'Thresh',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'ATTACKER',
@@ -2079,7 +2085,7 @@ export const SHIPS = {
     },
     TORCHER: {
         name: 'Torcher',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'rare',
         faction: 'MARAUDERS',
         role: 'DEBUFFER',
@@ -2102,7 +2108,7 @@ export const SHIPS = {
     },
     TORMENTER: {
         name: 'Tormenter',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'MARAUDERS',
         role: 'DEFENDER',
@@ -2125,7 +2131,7 @@ export const SHIPS = {
     },
     TYCHO: {
         name: 'Tycho',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'rare',
         faction: 'EVERLIVING',
         role: 'DEFENDER',
@@ -2147,7 +2153,7 @@ export const SHIPS = {
     },
     TYGR: {
         name: 'Tygr',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'legendary',
         faction: 'XAOC',
         role: 'DEBUFFER',
@@ -2170,7 +2176,7 @@ export const SHIPS = {
     },
     VALERIAN: {
         name: 'Valerian',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'GELECEK',
         role: 'DEBUFFER',
@@ -2192,7 +2198,7 @@ export const SHIPS = {
     },
     VALIANT: {
         name: 'Valiant',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'rare',
         faction: 'FRONTIER_LEGION',
         role: 'ATTACKER',
@@ -2215,7 +2221,7 @@ export const SHIPS = {
     },
     VALKYRIE: {
         name: 'Valkyrie',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'FRONTIER_LEGION',
         role: 'DEBUFFER',
@@ -2235,7 +2241,7 @@ export const SHIPS = {
     },
     VINDICATOR: {
         name: 'Vindicator',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'DEFENDER',
@@ -2259,7 +2265,7 @@ export const SHIPS = {
     },
     VOLK: {
         name: 'Volk',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'XAOC',
         role: 'SUPPORTER',
@@ -2282,7 +2288,7 @@ export const SHIPS = {
     },
     VORON: {
         name: 'Voron',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'XAOC',
         role: 'DEFENDER',
@@ -2304,7 +2310,7 @@ export const SHIPS = {
     },
     WARDEN: {
         name: 'Warden',
-        affinity: 'THERMAL',
+        affinity: 'thermal',
         rarity: 'epic',
         faction: 'BINDERBURG',
         role: 'DEFENDER',
@@ -2326,7 +2332,7 @@ export const SHIPS = {
     },
     WISTERIA: {
         name: 'Wisteria',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'epic',
         faction: 'GELECEK',
         role: 'ATTACKER',
@@ -2348,7 +2354,7 @@ export const SHIPS = {
     },
     WUSHENG: {
         name: 'Wusheng',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'TIANCHAO',
         role: 'ATTACKER',
@@ -2368,7 +2374,7 @@ export const SHIPS = {
     },
     XCELLENCE: {
         name: 'Xcellence',
-        affinity: 'CHEMICAL',
+        affinity: 'chemical',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
@@ -2380,6 +2386,7 @@ export const SHIPS = {
         critRate: 12,
         critDamage: 34,
         speed: 82,
+        shield: 5.5,
         imageKey: 'Atlas_6_Portrait.png',
         activeSkillText:
             'This Unit Deals 200% damage bypassing enemy shield and inflicts Speed Down 2 for 2 turns.',
@@ -2391,7 +2398,7 @@ export const SHIPS = {
     },
     YARROW: {
         name: 'Yarrow',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'rare',
         faction: 'GELECEK',
         role: 'DEBUFFER',
@@ -2413,7 +2420,7 @@ export const SHIPS = {
     },
     YAZID: {
         name: 'Yazid',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'EVERLIVING',
         role: 'SUPPORTER',
@@ -2436,7 +2443,7 @@ export const SHIPS = {
     },
     YUYAN: {
         name: 'Yuyan',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'epic',
         faction: 'TIANCHAO',
         role: 'DEBUFFER',
@@ -2459,7 +2466,7 @@ export const SHIPS = {
     },
     ZEOLITE: {
         name: 'Zeolite',
-        affinity: 'ELECTRIC',
+        affinity: 'electric',
         rarity: 'legendary',
         faction: 'MPL',
         role: 'DEBUFFER',
@@ -2482,7 +2489,7 @@ export const SHIPS = {
     },
     ZOSIMOS: {
         name: 'Zosimos',
-        affinity: 'ANTIMATTER',
+        affinity: 'antimatter',
         rarity: 'legendary',
         faction: 'EVERLIVING',
         role: 'DEBUFFER',

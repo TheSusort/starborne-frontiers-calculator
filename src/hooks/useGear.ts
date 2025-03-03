@@ -4,7 +4,7 @@ import { GearPiece } from '../types/gear';
 import { GEAR_SETS } from '../constants/gearSets';
 
 // Helper type for the gear lookup
-type GearLookup = Record<string, GearPiece | undefined>;
+export type GearLookup = Record<string, GearPiece | undefined>;
 
 /**
  * Creates a memoized lookup object for gear pieces based on equipment IDs
@@ -29,7 +29,10 @@ export const useGearLookup = (
  * Calculates active gear set bonuses based on equipped gear
  * Returns an array of set names, with each name repeated for every complete set (2 pieces)
  */
-export const useGearSets = (equipment: Ship['equipment'], gearLookup: GearLookup): string[] => {
+export const useGearSets = (
+    equipment: Partial<Record<string, string>>,
+    gearLookup: GearLookup
+): string[] => {
     return useMemo(() => {
         const setCount = Object.values(equipment).reduce(
             (acc, gearId) => {

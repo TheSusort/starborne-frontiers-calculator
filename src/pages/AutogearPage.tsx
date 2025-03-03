@@ -10,7 +10,7 @@ import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
 import { StatList } from '../components/stats/StatList';
-import { GearSlotName, SHIP_TYPES, ShipTypeName } from '../constants';
+import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../constants';
 import { AutogearSettings } from '../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../components/autogear/GearSuggestions';
 import { SimulationResults } from '../components/simulation/SimulationResults';
@@ -18,17 +18,33 @@ import { useNotification } from '../hooks/useNotification';
 import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 import { GEAR_SLOTS } from '../constants';
 import { useSearchParams } from 'react-router-dom';
+import { Ship } from '../types/ship';
 
 export const AutogearPage: React.FC = () => {
+    // Helper functions (before hooks)
+    const getSuggestedEquipment = (suggestions: GearSuggestion[], ship: Ship | null) => {
+        if (!ship) return {};
+        const equipment = { ...ship.equipment };
+        suggestions.forEach((suggestion) => {
+            equipment[suggestion.slotName] = suggestion.gearId;
+        });
+        return equipment;
+    };
+
+    // All hooks
     const { getGearPiece, inventory, saveInventory } = useInventory();
     const { getShipById, ships, handleEquipMultipleGear } = useShips();
     const { addNotification } = useNotification();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const [searchParams] = useSearchParams();
+
+    // useState hooks
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
     const [statPriorities, setStatPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
-    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const [setPriorities, setSetPriorities] = useState<SetPriority[]>([]);
     const [selectedAlgorithm, setSelectedAlgorithm] = useState<AutogearAlgorithm>(
         AutogearAlgorithm.Genetic
     );
@@ -42,12 +58,12 @@ export const AutogearPage: React.FC = () => {
     const [ignoreEquipped, setIgnoreEquipped] = useState(true);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
-    const selectedShip = getShipById(selectedShipId);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
-    const [searchParams] = useSearchParams();
-    const [setPriorities, setSetPriorities] = useState<SetPriority[]>([]);
 
-    // Add effect to handle URL parameters
+    // Derived state
+    const selectedShip = getShipById(selectedShipId);
+
+    // useEffect hooks
     useEffect(() => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
@@ -59,6 +75,7 @@ export const AutogearPage: React.FC = () => {
         }
     }, [searchParams, getShipById]);
 
+    // Helper functions
     const handleAddStatPriority = (priority: StatPriority) => {
         setStatPriorities([...statPriorities, priority]);
     };
@@ -116,16 +133,62 @@ export const AutogearPage: React.FC = () => {
             )
         );
 
-        // Calculate stats using the new suggestions directly
+        // Create new equipment objects
+        const currentEquipment = selectedShip.equipment;
+        const suggestedEquipment = getSuggestedEquipment(newSuggestions, selectedShip);
+
+        // Get active sets
+        const currentSets = Object.values(currentEquipment).reduce(
+            (acc, gearId) => {
+                if (!gearId) return acc;
+                const gear = getGearPiece(gearId);
+                if (!gear?.setBonus) return acc;
+                acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>
+        );
+
+        const suggestedSets = Object.values(suggestedEquipment).reduce(
+            (acc, gearId) => {
+                if (!gearId) return acc;
+                const gear = getGearPiece(gearId);
+                if (!gear?.setBonus) return acc;
+                acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>
+        );
+
+        // Calculate stats and run simulations
         const currentStats = getCurrentStats();
         const suggestedStats = calculateSuggestedStats(newSuggestions);
 
         if (currentStats && suggestedStats) {
-            setCurrentSimulation(runSimulation(currentStats.final, selectedShipRole));
-            setSuggestedSimulation(runSimulation(suggestedStats.final, selectedShipRole));
+            const currentSimulation = runSimulation(
+                currentStats.final,
+                selectedShipRole,
+                Object.entries(currentSets).flatMap(([setName, count]) => {
+                    const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
+                    return Array(completeSets).fill(setName);
+                })
+            );
+
+            const suggestedSimulation = runSimulation(
+                suggestedStats.final,
+                selectedShipRole,
+                Object.entries(suggestedSets).flatMap(([setName, count]) => {
+                    const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
+                    return Array(completeSets).fill(setName);
+                })
+            );
+
+            setCurrentSimulation(currentSimulation);
+            setSuggestedSimulation(suggestedSimulation);
         }
 
         setSuggestions(newSuggestions);
+        setOptimizationProgress(null);
     };
 
     const calculateSuggestedStats = (newSuggestions: GearSuggestion[]) => {

@@ -44,3 +44,26 @@ export interface Implant {
     stats: Stat[];
     description?: string;
 }
+
+export interface ShipData {
+    name: string;
+    affinity: AffinityName;
+    rarity: RarityName;
+    faction: FactionName;
+    role: ShipTypeName;
+    hp: number;
+    attack: number;
+    defense: number;
+    hacking: number;
+    security: number;
+    critRate: number;
+    critDamage: number;
+    speed: number;
+    hpRegen?: number;
+    shield?: number;
+    imageKey?: string;
+    activeSkillText?: string;
+    chargeSkillText?: string;
+    firstPassiveSkillText?: string;
+    secondPassiveSkillText?: string;
+}

@@ -1,7 +1,12 @@
 import { BaseStats } from '../../types/stats';
 import { ShipTypeName } from '../../constants';
-import { calculateDamageReduction } from '../autogear/scoring';
-
+import { calculateDamageReduction, calculateHealingPerHit } from '../autogear/scoring';
+import {
+    ENEMY_ATTACK,
+    ENEMY_COUNT,
+    ENEMY_SECURITY,
+    BASE_HEAL_PERCENT,
+} from '../../constants/simulation';
 export interface SimulationSummary {
     // Common
     averageDamage?: number;
@@ -11,9 +16,12 @@ export interface SimulationSummary {
 
     // Defender specific
     effectiveHP?: number;
-    attacksWithstood?: number;
+    survivedRounds?: number;
     damageReduction?: number;
-
+    shieldPerRound?: number;
+    healingPerHit?: number;
+    hp?: number;
+    hpRegen?: number;
     // Debuffer specific
     hackSuccessRate?: number;
 
@@ -27,10 +35,7 @@ export interface SimulationSummary {
     activeSets?: string[];
 }
 
-const SIMULATION_ITERATIONS = 1000;
-const ENEMY_ATTACK = 15000; // For defender simulations
-const ENEMY_SECURITY = 170; // For debuffer simulations
-const BASE_HEAL_PERCENT = 0.15; // 15% of max HP
+export const SIMULATION_ITERATIONS = 1000;
 
 export function runSimulation(
     stats: BaseStats,
@@ -41,7 +46,10 @@ export function runSimulation(
         case 'Attacker':
             return runDamageSimulation(stats);
         case 'Defender':
-            return runDefenderSimulation(stats);
+            return {
+                ...runDefenderSimulation(stats),
+                activeSets: activeSets,
+            };
         case 'Debuffer':
             return runDebufferSimulation(stats);
         case 'Supporter':
@@ -84,15 +92,36 @@ export function runDamageSimulation(stats: BaseStats): SimulationSummary {
 function runDefenderSimulation(stats: BaseStats): SimulationSummary {
     const damageReduction = calculateDamageReduction(stats.defence || 0);
     const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    let survivalRounds = 0;
+    // Calculate average damage taken per hit, now from multiple enemies
+    const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
 
-    // Calculate average damage taken per hit
-    const averageDamageTaken = ENEMY_ATTACK * ((100 - damageReduction) / 100);
-    const attacksWithstood = Math.floor(effectiveHP / averageDamageTaken);
+    // Calculate shield generation
+    const shieldPerRound = stats.shield
+        ? Math.min((stats.hp || 0) * (stats.shield / 100), stats.hp || 0)
+        : 0;
 
+    // Calculate healing per hit, now multiplied by number of enemies
+    const healingPerHit = stats.hpRegen ? calculateHealingPerHit(stats) : 0;
+    const healingPerRound = healingPerHit * ENEMY_COUNT;
+    const healingWithShieldPerRound = healingPerRound + shieldPerRound;
+
+    // Calculate survival rounds
+    // If healing >= damage, technically infinite survival
+    if (healingWithShieldPerRound >= damagePerRound) {
+        survivalRounds = Number.MAX_SAFE_INTEGER;
+    } else {
+        // Recalculate effective survivability including shield and healing against multiple enemies
+        survivalRounds = effectiveHP / (damagePerRound - healingWithShieldPerRound);
+    }
     return {
         effectiveHP: Math.round(effectiveHP),
-        attacksWithstood,
         damageReduction: Math.round(damageReduction * 100) / 100,
+        shieldPerRound: Math.round(shieldPerRound),
+        healingPerHit: Math.round(healingPerHit),
+        survivedRounds: survivalRounds,
+        hp: stats.hp,
+        hpRegen: stats.hpRegen,
     };
 }
 

@@ -87,7 +87,8 @@ export function analyzeStatDistribution(
 
             if (contribution !== 0) {
                 const percentage =
-                    (contribution / (totalValue - ship.baseStats[statName as keyof BaseStats])) *
+                    (contribution /
+                        (totalValue - (ship.baseStats[statName as keyof BaseStats] ?? 0))) *
                     100;
                 statContributions.push({
                     statName,

@@ -1,8 +1,9 @@
-import { BaseStats, EngineeringStat, Stat } from '../../types/stats';
+import { BaseStats, EngineeringStat, PERCENTAGE_ONLY_STATS, Stat } from '../../types/stats';
 import { Implant, Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
+import { PercentageOnlyStats } from '../../types/stats';
 
 export interface StatBreakdown {
     base: BaseStats;
@@ -115,13 +116,15 @@ export const calculateTotalStats = (
 
     // Updated addStatModifier to take baseStats parameter
     function addStatModifier(stat: Stat, target: BaseStats, base: BaseStats) {
-        const isPercentageOnlyStat = ['crit', 'critDamage', 'healModifier'].includes(stat.name);
+        const isPercentageOnlyStat = PERCENTAGE_ONLY_STATS.includes(
+            stat.name as PercentageOnlyStats
+        );
 
         if (isPercentageOnlyStat) {
             target[stat.name] = (target[stat.name] || 0) + stat.value;
         } else if (stat.type === 'percentage') {
             const baseValue = base[stat.name];
-            const bonus = baseValue * (stat.value / 100);
+            const bonus = (baseValue ?? 0) * (stat.value / 100);
             target[stat.name] += bonus;
         } else {
             target[stat.name] = (target[stat.name] || 0) + stat.value;

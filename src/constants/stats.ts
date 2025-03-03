@@ -49,13 +49,6 @@ export const STATS: Record<
         engineeringAllowedTypes: ['percentage'],
         maxValue: { percentage: MAX_PERCENTAGE_VALUE, flat: 0 },
     },
-    healModifier: {
-        label: 'Heal Modifier',
-        shortLabel: 'HM',
-        allowedTypes: ['percentage'],
-        engineeringAllowedTypes: [],
-        maxValue: { percentage: MAX_PERCENTAGE_VALUE, flat: 0 },
-    },
     speed: {
         label: 'Speed',
         shortLabel: 'SPD',
@@ -76,6 +69,27 @@ export const STATS: Record<
         allowedTypes: ['flat', 'percentage'],
         engineeringAllowedTypes: ['flat'],
         maxValue: { flat: MAX_FLAT_VALUE, percentage: 0 },
+    },
+    healModifier: {
+        label: 'Heal Modifier',
+        shortLabel: 'HM',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
+    },
+    shield: {
+        label: 'Shield',
+        shortLabel: 'SH',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
+    },
+    hpRegen: {
+        label: 'HP Regen',
+        shortLabel: 'HPR',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
     },
 };
 

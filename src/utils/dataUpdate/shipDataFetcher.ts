@@ -26,11 +26,12 @@ export async function fetchShipData(shipName: string): Promise<ParsedShipData | 
             critDamage: shipData.critDamage,
             speed: shipData.speed,
             healModifier: 0,
+            hpRegen: shipData.hpRegen || 0,
         },
         faction: shipData.faction.toUpperCase().replace(' ', '_'),
         type: shipData.role.toUpperCase(),
         rarity: shipData.rarity.toLowerCase(),
-        affinity: shipData.affinity.toUpperCase(),
+        affinity: shipData.affinity,
     };
 
     return parsedShipData;

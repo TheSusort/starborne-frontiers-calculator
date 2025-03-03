@@ -260,7 +260,9 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Object.entries(baseStats).map(
                         ([stat, value]) =>
-                            stat !== 'healModifier' && (
+                            stat !== 'healModifier' &&
+                            stat !== 'hpRegen' &&
+                            stat !== 'shield' && (
                                 <Input
                                     key={stat}
                                     type="number"
@@ -303,6 +305,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                             }}
                             maxStats={2}
                             defaultExpanded={editingShip ? false : true}
+                            excludedStats={[{ name: 'healModifier', type: 'percentage' }]}
                         />
                     </div>
                 ))}
@@ -342,6 +345,10 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                             }}
                             maxStats={2}
                             defaultExpanded={editingShip ? false : true}
+                            excludedStats={[
+                                { name: 'shield', type: 'percentage' },
+                                { name: 'hpRegen', type: 'percentage' },
+                            ]}
                         />
                     </div>
                 ))}

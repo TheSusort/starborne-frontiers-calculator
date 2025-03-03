@@ -1,7 +1,13 @@
 import { ShipTypeName } from '../constants';
 
 // Stats that can only be percentage-based
-export const PERCENTAGE_ONLY_STATS = ['crit', 'critDamage', 'healModifier'] as const;
+export const PERCENTAGE_ONLY_STATS = [
+    'crit',
+    'critDamage',
+    'healModifier',
+    'shield',
+    'hpRegen',
+] as const;
 
 export type PercentageOnlyStats = (typeof PERCENTAGE_ONLY_STATS)[number];
 
@@ -38,6 +44,8 @@ export interface BaseStats {
     critDamage: number;
     speed: number;
     healModifier: number;
+    hpRegen?: number; // Percentage of HP healed per hit
+    shield?: number; // Percentage of shield generated per round
 }
 
 export interface EngineeringStats {

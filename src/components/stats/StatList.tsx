@@ -1,5 +1,5 @@
 import React from 'react';
-import { BaseStats, PercentageOnlyStats, StatName, PERCENTAGE_ONLY_STATS } from '../../types/stats';
+import { BaseStats, PercentageOnlyStats, PERCENTAGE_ONLY_STATS } from '../../types/stats';
 import { STATS } from '../../constants';
 
 interface StatListProps {
@@ -26,6 +26,7 @@ export const StatList: React.FC<StatListProps> = ({
         'critDamage',
         'speed',
         'healModifier',
+        'shield',
     ] satisfies (keyof BaseStats)[];
 
     return (
@@ -34,20 +35,20 @@ export const StatList: React.FC<StatListProps> = ({
             {orderedStatNames.map((statName) => {
                 const value = stats[statName];
 
-                if (statName === 'healModifier' && value <= 0) {
+                if ((statName === 'healModifier' || statName === 'shield') && (value ?? 0) <= 0) {
                     return null;
                 }
 
                 const comparisonValue = comparisonStats?.[statName];
                 const difference =
-                    comparisonValue !== undefined ? value - comparisonValue : undefined;
+                    comparisonValue !== undefined ? (value ?? 0) - comparisonValue : undefined;
 
                 return (
                     <div key={statName} className="flex justify-between items-center">
                         <span className="capitalize">{STATS[statName].label}</span>
                         <div className="flex items-center gap-2">
                             <span>
-                                {Math.round(value)}
+                                {Math.round(value ?? 0)}
                                 {PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)
                                     ? '%'
                                     : ''}

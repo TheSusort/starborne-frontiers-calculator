@@ -64,6 +64,8 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                 </thead>
                 <tbody>
                     {orderedStatNames.map((statName) => {
+                        if (statName === 'hpRegen') return null;
+
                         const baseValue = breakdown.base[statName] || 0;
                         const refitValue = refitDiff[statName];
                         const engineeringValue = engineeringDiff[statName];

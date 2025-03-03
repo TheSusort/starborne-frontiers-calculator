@@ -5,8 +5,7 @@ import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
-import { GearSetName } from '../../constants/gearSets';
-
+import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
     const a = 88.3505;
@@ -21,10 +20,17 @@ export function calculateEffectiveHP(hp: number, defense: number): number {
     return hp * (100 / (100 - damageReduction));
 }
 
-function calculateDPS(stats: BaseStats): number {
+export function calculateDPS(stats: BaseStats): number {
+    return (stats.attack || 0) * calculateCritMultiplier(stats);
+}
+
+export function calculateHealingPerHit(stats: BaseStats): number {
+    return (stats.hp || 0) * ((stats.hpRegen || 0) / 100) * calculateCritMultiplier(stats);
+}
+
+export function calculateCritMultiplier(stats: BaseStats): number {
     const crit = stats.crit >= 100 ? 1 : stats.crit / 100;
-    const critMultiplier = 1 + crit * ((stats.critDamage || 0) / 100);
-    return (stats.attack || 0) * critMultiplier;
+    return 1 + crit * (1 + (stats.critDamage || 0) / 100);
 }
 
 export function calculatePriorityScore(
@@ -117,8 +123,31 @@ function calculateAttackerScore(stats: BaseStats): number {
 }
 
 function calculateDefenderScore(stats: BaseStats): number {
-    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    return effectiveHP;
+    const damageReduction = calculateDamageReduction(stats.defence || 0);
+    const totalEffectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    // Calculate incoming damage per round
+    const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
+
+    // Calculate healing and shield per round
+    const shieldPerRound = stats.shield
+        ? Math.min((stats.hp || 0) * (stats.shield / 100), stats.hp || 0)
+        : 0;
+
+    const healingPerHit = stats.hpRegen ? calculateHealingPerHit(stats) : 0;
+    const healingPerRound = healingPerHit * ENEMY_COUNT;
+    const healingWithShieldPerRound = healingPerRound + shieldPerRound;
+
+    // Calculate survival rounds
+    // If healing >= damage, technically infinite survival
+    if (healingWithShieldPerRound >= damagePerRound) {
+        return Number.MAX_SAFE_INTEGER;
+    }
+
+    // Otherwise, calculate rounds until death
+    // totalEffectiveHP / (damagePerRound - healingWithShieldPerRound)
+    const survivalRounds = totalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
+
+    return Math.max(survivalRounds * 1000, 0); // Multiply by 1000 to make the score more meaningful
 }
 
 function calculateDebufferScore(stats: BaseStats): number {
@@ -129,11 +158,10 @@ function calculateDebufferScore(stats: BaseStats): number {
 }
 
 function calculateHealerScore(stats: BaseStats): number {
-    const baseHealing = (stats.hp || 0) * 0.15; // 15% of HP
+    const baseHealing = (stats.hp || 0) * BASE_HEAL_PERCENT; // 15% of HP
 
     // Use same crit calculation as DPS
-    const crit = stats.crit >= 100 ? 1 : (stats.crit || 0) / 100;
-    const critMultiplier = 1 + crit * ((stats.critDamage || 0) / 100);
+    const critMultiplier = calculateCritMultiplier(stats);
 
     // Apply heal modifier after crit calculations
     const healModifier = stats.healModifier || 0;
@@ -147,12 +175,7 @@ function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
 
     // Calculate speed score with diminishing returns after 180
-    let speedScore;
-    if (speed <= 180) {
-        speedScore = speed * 10; // Base weight for speed
-    } else {
-        speedScore = 180 * 10 + Math.sqrt(speed - 180) * 20; // Diminishing returns
-    }
+    const speedScore = speed * 10; // Base weight for speed
 
     // Boost set scoring (4 pieces needed for set bonus)
     // Heavily reward having the full set

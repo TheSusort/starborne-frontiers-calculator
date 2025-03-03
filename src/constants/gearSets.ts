@@ -93,7 +93,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
     SHIELD: {
         name: 'Shield',
-        stats: [],
+        stats: [{ name: 'shield', value: 4, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063619739816037.webp',
         description: 'Generate 4% shield each turn',
     },

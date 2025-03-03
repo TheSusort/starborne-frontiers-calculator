@@ -1,6 +1,7 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { ShipTypeName } from '../../constants';
+import { GEAR_SETS, ShipTypeName } from '../../constants';
+import { ENEMY_COUNT } from '../../constants/simulation';
 
 interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
@@ -54,68 +55,147 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
         </>
     );
 
-    const renderDefenderStats = (simulation: SimulationSummary, isComparison = false) => (
-        <>
-            <div>
-                <span className="text-gray-400">Effective HP:</span>
-                <span className="ml-2">
-                    {simulation.effectiveHP?.toLocaleString()}
-                    {isComparison && suggestedSimulation && (
-                        <span
-                            className={`ml-2 ${suggestedSimulation.effectiveHP! > currentSimulation.effectiveHP! ? 'text-green-500' : 'text-red-500'}`}
-                        >
-                            (
-                            {(
-                                ((suggestedSimulation.effectiveHP! -
-                                    currentSimulation.effectiveHP!) /
-                                    currentSimulation.effectiveHP!) *
-                                100
-                            ).toFixed(1)}
-                            %)
+    const renderDefenderStats = (simulation: SimulationSummary, isComparison = false) => {
+        const shieldGenerated = Math.round(
+            ((Math.floor(simulation.survivedRounds || 0) *
+                (GEAR_SETS['SHIELD']?.stats[0].value || 0) *
+                (simulation.activeSets?.filter((set) => set === 'SHIELD').length || 0)) /
+                100) *
+                (simulation.hp || 0)
+        );
+        const currentShieldGenerated = Math.round(
+            ((Math.floor(currentSimulation.survivedRounds || 0) *
+                (GEAR_SETS['SHIELD']?.stats[0].value || 0) *
+                (currentSimulation.activeSets?.filter((set) => set === 'SHIELD').length || 0)) /
+                100) *
+                (currentSimulation.hp || 0)
+        );
+        const suggestedShieldGenerated = Math.round(
+            ((Math.floor(suggestedSimulation?.survivedRounds || 0) *
+                (GEAR_SETS['SHIELD']?.stats[0].value || 0) *
+                (suggestedSimulation?.activeSets?.filter((set) => set === 'SHIELD').length || 0)) /
+                100) *
+                (suggestedSimulation?.hp || 0)
+        );
+        const healedOnHit = Math.round(
+            (simulation.survivedRounds || 0) * ENEMY_COUNT * (simulation.healingPerHit || 0)
+        );
+        const currentHealedOnHit = Math.round(
+            (currentSimulation.survivedRounds || 0) *
+                ENEMY_COUNT *
+                (currentSimulation.healingPerHit || 0)
+        );
+        const suggestedHealedOnHit = Math.round(
+            (suggestedSimulation?.survivedRounds || 0) *
+                ENEMY_COUNT *
+                (suggestedSimulation?.healingPerHit || 0)
+        );
+
+        return (
+            <>
+                <div>
+                    <span className="text-gray-400">Effective HP:</span>
+                    <span className="ml-2">
+                        {simulation.effectiveHP?.toLocaleString()}
+                        {isComparison && suggestedSimulation && (
+                            <span
+                                className={`ml-2 ${suggestedSimulation.effectiveHP! > currentSimulation.effectiveHP! ? 'text-green-500' : 'text-red-500'}`}
+                            >
+                                (
+                                {(
+                                    ((suggestedSimulation.effectiveHP! -
+                                        currentSimulation.effectiveHP!) /
+                                        currentSimulation.effectiveHP!) *
+                                    100
+                                ).toFixed(1)}
+                                %)
+                            </span>
+                        )}
+                    </span>
+                </div>
+                <div>
+                    <span className="text-gray-400">Damage Reduction:</span>
+                    <span className="ml-2">
+                        {simulation.damageReduction}%
+                        {isComparison && suggestedSimulation && (
+                            <span
+                                className={`ml-2 ${suggestedSimulation.damageReduction! > currentSimulation.damageReduction! ? 'text-green-500' : 'text-red-500'}`}
+                            >
+                                (
+                                {(
+                                    suggestedSimulation.damageReduction! -
+                                    currentSimulation.damageReduction!
+                                ).toFixed(1)}
+                                %)
+                            </span>
+                        )}
+                    </span>
+                </div>
+                <div>
+                    <span className="text-gray-400">Rounds Survived:</span>
+                    <span className="ml-2">
+                        {Math.floor(simulation.survivedRounds!)}
+                        {isComparison && suggestedSimulation && (
+                            <span
+                                className={`ml-2 ${suggestedSimulation.survivedRounds! > currentSimulation.survivedRounds! ? 'text-green-500' : 'text-red-500'}`}
+                            >
+                                (
+                                {(
+                                    ((suggestedSimulation.survivedRounds! -
+                                        currentSimulation.survivedRounds!) /
+                                        currentSimulation.survivedRounds!) *
+                                    100
+                                ).toFixed(1)}
+                                %)
+                            </span>
+                        )}
+                    </span>
+                </div>
+                {shieldGenerated > 0 && (
+                    <div>
+                        <span className="text-gray-400">Shield generated:</span>
+                        <span className="ml-2">
+                            {shieldGenerated.toLocaleString()}
+                            {isComparison && suggestedSimulation && (
+                                <span
+                                    className={`ml-2 ${suggestedShieldGenerated! > currentShieldGenerated! ? 'text-green-500' : 'text-red-500'}`}
+                                >
+                                    (
+                                    {(
+                                        ((suggestedShieldGenerated! - currentShieldGenerated!) /
+                                            currentShieldGenerated!) *
+                                        100
+                                    ).toFixed(1)}
+                                    %)
+                                </span>
+                            )}
                         </span>
-                    )}
-                </span>
-            </div>
-            <div>
-                <span className="text-gray-400">Damage Reduction:</span>
-                <span className="ml-2">
-                    {simulation.damageReduction}%
-                    {isComparison && suggestedSimulation && (
-                        <span
-                            className={`ml-2 ${suggestedSimulation.damageReduction! > currentSimulation.damageReduction! ? 'text-green-500' : 'text-red-500'}`}
-                        >
-                            (
-                            {(
-                                suggestedSimulation.damageReduction! -
-                                currentSimulation.damageReduction!
-                            ).toFixed(1)}
-                            %)
+                    </div>
+                )}
+                {healedOnHit > 0 && (
+                    <div>
+                        <span className="text-gray-400">Healed on hit:</span>
+                        <span className="ml-2">
+                            {healedOnHit.toLocaleString()}
+                            {isComparison && suggestedSimulation && (
+                                <span
+                                    className={`ml-2 ${suggestedHealedOnHit! > currentHealedOnHit! ? 'text-green-500' : 'text-red-500'}`}
+                                >
+                                    (
+                                    {(
+                                        ((suggestedHealedOnHit! - currentHealedOnHit!) /
+                                            currentHealedOnHit!) *
+                                        100
+                                    ).toFixed(1)}
+                                    %)
+                                </span>
+                            )}
                         </span>
-                    )}
-                </span>
-            </div>
-            <div>
-                <span className="text-gray-400">Attacks Withstood:</span>
-                <span className="ml-2">
-                    {simulation.attacksWithstood}
-                    {isComparison && suggestedSimulation && (
-                        <span
-                            className={`ml-2 ${suggestedSimulation.attacksWithstood! > currentSimulation.attacksWithstood! ? 'text-green-500' : 'text-red-500'}`}
-                        >
-                            (
-                            {(
-                                ((suggestedSimulation.attacksWithstood! -
-                                    currentSimulation.attacksWithstood!) /
-                                    currentSimulation.attacksWithstood!) *
-                                100
-                            ).toFixed(1)}
-                            %)
-                        </span>
-                    )}
-                </span>
-            </div>
-        </>
-    );
+                    </div>
+                )}
+            </>
+        );
+    };
 
     const renderDebufferStats = (simulation: SimulationSummary, isComparison = false) => (
         <>

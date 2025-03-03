@@ -13,7 +13,7 @@ describe('SimulationResults', () => {
     const mockDefenderSimulation: SimulationSummary = {
         effectiveHP: 10000,
         damageReduction: 25,
-        attacksWithstood: 10,
+        survivedRounds: 10,
     };
 
     const mockDebufferSimulation: SimulationSummary = {

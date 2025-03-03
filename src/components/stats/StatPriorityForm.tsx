@@ -11,9 +11,10 @@ const AVAILABLE_STATS: StatName[] = [
     'speed',
     'crit',
     'critDamage',
-    'healModifier',
     'hacking',
     'security',
+    'healModifier',
+    'shield',
 ];
 
 interface Props {

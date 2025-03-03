@@ -42,7 +42,6 @@ async function updateShipsData(specificShip?: string) {
             // Update the ship data, only adding new fields
             updatedShips[key as keyof typeof SHIPS] = {
                 ...typedShip, // Keep all existing data
-                // Only set these if they don't exist in typedShip
             };
 
             // Add a small delay to avoid rate limiting

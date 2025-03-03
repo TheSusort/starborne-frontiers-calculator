@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.21.0';
+export const CURRENT_VERSION = '0.22.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.22.0',
+        date: '2025-03-03',
+        changes: [
+            'Added shield and hp regen(heal on hit) stats',
+            'Redid defender calculations to be more accurate, by increasing the number and strength of enemies in the simulation. Defender score is now based on how many rounds survived, rather than effective hp. This is done to be able to calculate the effect of shield set, and healing on hit on some ships.',
+            "Units such as Heliodor and Cultivator can be reimported or for Isha added as a refit value to reflect the healing on hit into calculations. I've called this new stat HP Regen.",
+        ],
+    },
     {
         version: '0.21.0',
         date: '2025-02-27',
