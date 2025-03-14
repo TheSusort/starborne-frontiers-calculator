@@ -43,7 +43,8 @@
         "prepare": "husky install",
         "lint-staged": "lint-staged",
         "update-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
-        "migrate-ships": "tsx scripts/migrate-ships.ts"
+        "migrate-ships": "tsx scripts/migrate-ships.ts",
+        "migrate-users": "tsx scripts/migrate.ts"
     },
     "eslintConfig": {
         "extends": [

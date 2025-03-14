@@ -8,10 +8,11 @@ import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../hooks/useEncounterNotes';
 import { useNotification } from '../hooks/useNotification';
 import { Loader } from '../components/ui/Loader';
-
+import { useShips } from '../hooks/useShips';
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =
         useEncounterNotes();
+    const { ships, loading: shipsLoading } = useShips();
     const { addNotification } = useNotification();
     const [editingEncounter, setEditingEncounter] = useState<EncounterNote | null>(null);
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
@@ -49,7 +50,7 @@ const EncounterNotesPage: React.FC = () => {
         addNotification('success', 'Encounter Deleted');
     };
 
-    if (loading) {
+    if (loading || shipsLoading) {
         return <Loader />;
     }
 
@@ -81,6 +82,7 @@ const EncounterNotesPage: React.FC = () => {
                 encounters={encounters}
                 onEdit={handleEdit}
                 onDelete={handleDeleteClick}
+                ships={ships}
             />
 
             <ConfirmModal

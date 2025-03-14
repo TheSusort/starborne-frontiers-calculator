@@ -8,7 +8,7 @@ import { useNotification } from '../hooks/useNotification';
 import { Ship } from '../types/ship';
 import { Loader } from '../components/ui/Loader';
 export const ShipsPage: React.FC = () => {
-    const { inventory } = useInventory();
+    const { inventory, loading: inventoryLoading } = useInventory();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteShip, setPendingDeleteShip] = useState<Ship | null>(null);
@@ -57,7 +57,7 @@ export const ShipsPage: React.FC = () => {
         setPendingDeleteShip(null);
     };
 
-    if (loading) {
+    if (loading || inventoryLoading) {
         return <Loader />;
     }
 

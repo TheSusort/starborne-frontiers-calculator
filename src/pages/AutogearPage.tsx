@@ -33,8 +33,7 @@ export const AutogearPage: React.FC = () => {
 
     // All hooks
     const { getGearPiece, inventory, saveInventory } = useInventory();
-    const { getShipById, ships, handleEquipMultipleGear } = useShips();
-    const { addNotification } = useNotification();
+    const { getShipById, ships, handleEquipMultipleGear, handleLockEquipment } = useShips();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
 
@@ -59,6 +58,9 @@ export const AutogearPage: React.FC = () => {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
+    const [lockOnEquip, setLockOnEquip] = useState(false);
+    const { addNotification } = useNotification();
+    const [isEquipping, setIsEquipping] = useState(false);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -251,7 +253,7 @@ export const AutogearPage: React.FC = () => {
         }
     };
 
-    const applyGearSuggestions = () => {
+    const applyGearSuggestions = async () => {
         if (!selectedShip) return;
 
         const gearAssignments = suggestions.map((suggestion) => ({
@@ -260,7 +262,7 @@ export const AutogearPage: React.FC = () => {
         }));
 
         // Update ships equipment
-        handleEquipMultipleGear(selectedShip.id, gearAssignments);
+        await handleEquipMultipleGear(selectedShip.id, gearAssignments, lockOnEquip);
 
         // Update inventory state
         const newInventory = inventory.map((gear) => {
@@ -278,8 +280,9 @@ export const AutogearPage: React.FC = () => {
             return gear;
         });
 
-        saveInventory(newInventory);
+        await saveInventory(newInventory);
         addNotification('success', 'Suggested gear equipped successfully');
+
         setSuggestions([]);
         setOptimizationProgress(null);
         setShowConfirmModal(false);
@@ -337,6 +340,9 @@ export const AutogearPage: React.FC = () => {
                         hoveredGear={hoveredGear}
                         onHover={setHoveredGear}
                         onEquip={handleEquipSuggestions}
+                        lockOnEquip={lockOnEquip}
+                        onLockToggle={() => setLockOnEquip(!lockOnEquip)}
+                        isLoading={isEquipping}
                     />
                 )}
 

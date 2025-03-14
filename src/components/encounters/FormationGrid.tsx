@@ -1,13 +1,14 @@
 import React from 'react';
 import { Position, ShipPosition } from '../../types/encounters';
-import { useShips } from '../../hooks/useShips';
 import { HexButton } from '../ui/HexButton';
+import { Ship } from '../../types/ship';
 
 interface FormationGridProps {
     formation: ShipPosition[];
     onPositionSelect?: (position: Position) => void;
     selectedPosition?: Position;
     onRemoveShip?: (position: Position) => void;
+    ships: Ship[];
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -15,14 +16,13 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onPositionSelect,
     selectedPosition,
     onRemoveShip,
+    ships,
 }) => {
-    const { ships } = useShips();
     const rows: Position[][] = [
         ['T1', 'T2', 'T3', 'T4'],
         ['M1', 'M2', 'M3', 'M4'],
         ['B1', 'B2', 'B3', 'B4'],
     ];
-
     const getShipForPosition = (pos: Position) => {
         const shipPosition = formation.find((ship) => ship.position === pos);
         if (!shipPosition) return null;

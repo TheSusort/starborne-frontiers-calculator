@@ -4,6 +4,9 @@ import { Button } from '../ui';
 import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
 import { GearSuggestion } from '../../types/autogear';
+import { LockIcon } from '../ui/icons/LockIcon';
+import { UnlockedLockIcon } from '../ui/icons/UnlockedLockIcon';
+import { Loader } from '../ui/Loader';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -11,6 +14,9 @@ interface GearSuggestionsProps {
     hoveredGear: GearPiece | null;
     onHover: (gear: GearPiece | null) => void;
     onEquip: () => void;
+    lockOnEquip: boolean;
+    onLockToggle: () => void;
+    isLoading?: boolean;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -19,6 +25,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     hoveredGear,
     onHover,
     onEquip,
+    lockOnEquip,
+    onLockToggle,
+    isLoading = false,
 }) => {
     const getSuggestionForSlot = (slotName: GearSlotName) => {
         return suggestions.find((s) => s.slotName === slotName);
@@ -50,9 +59,32 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                     </div>
                 </div>
 
-                <div className="flex justify-end pt-4">
-                    <Button aria-label="Equip all suggestions" variant="primary" onClick={onEquip}>
-                        Equip All Suggestions
+                <div className="flex gap-2 justify-end">
+                    <Button onClick={onEquip} variant="primary" disabled={isLoading}>
+                        {isLoading ? (
+                            <div className="flex items-center gap-2">
+                                <Loader size="sm" />
+                                <span>Equipping...</span>
+                            </div>
+                        ) : (
+                            'Equip Suggestions'
+                        )}
+                    </Button>
+                    <Button
+                        variant="secondary"
+                        onClick={onLockToggle}
+                        title={
+                            lockOnEquip
+                                ? 'Ship will be locked after equipping'
+                                : 'Ship will remain unlocked after equipping'
+                        }
+                        disabled={isLoading}
+                    >
+                        {lockOnEquip ? (
+                            <LockIcon className="w-5 h-5" />
+                        ) : (
+                            <UnlockedLockIcon className="w-5 h-5" />
+                        )}
                     </Button>
                 </div>
             </div>

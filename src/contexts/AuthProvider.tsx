@@ -41,36 +41,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
+            addNotification('success', 'Logged in successfully');
         } catch (error) {
-            console.error('Error signing in with Google:', error);
-            throw error;
+            console.error('Google sign in failed:', error);
+            addNotification('error', 'Failed to log in with Google');
         }
     };
 
     const signInWithEmail = async (email: string, password: string) => {
         try {
             await signInWithEmailAndPassword(auth, email, password);
+            addNotification('success', 'Logged in successfully');
         } catch (error) {
-            console.error('Error signing in with email:', error);
-            throw error;
+            console.error('Email sign in failed:', error);
+            addNotification('error', 'Failed to log in');
         }
     };
 
     const signUpWithEmail = async (email: string, password: string) => {
         try {
             await createUserWithEmailAndPassword(auth, email, password);
+            addNotification('success', 'Account created successfully');
         } catch (error) {
-            console.error('Error signing up with email:', error);
-            throw error;
+            console.error('Email sign up failed:', error);
+            addNotification('error', 'Failed to create account');
         }
     };
 
     const signOut = async () => {
         try {
-            await firebaseSignOut(auth);
-            // Clear all local storage data
-            Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
+            // Clear all storage keys
+            Object.values(STORAGE_KEYS).forEach((key) => {
+                console.log('Clearing storage key:', key);
+                localStorage.removeItem(key);
+            });
 
+            // Sign out from Firebase
+            await firebaseSignOut(auth);
             addNotification('success', 'Logged out successfully');
         } catch (error) {
             console.error('Logout failed:', error);

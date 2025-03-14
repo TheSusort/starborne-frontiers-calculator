@@ -12,7 +12,11 @@ export const useEngineeringStats = () => {
         data: engineeringStats = { stats: [] },
         setData: setEngineeringStats,
         loading,
-    } = useStorage<EngineeringStats>({ key: STORAGE_KEY, defaultValue: { stats: [] } });
+    } = useStorage<EngineeringStats>({
+        key: STORAGE_KEY,
+        defaultValue: { stats: [] },
+        useRealtime: false, // Metadata doesn't need real-time updates
+    });
 
     const saveEngineeringStats = useCallback(
         (stats: EngineeringStats) => {

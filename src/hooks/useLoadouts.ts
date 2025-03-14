@@ -17,11 +17,13 @@ export const useLoadouts = () => {
     } = useStorage<Loadout[]>({
         key: LOADOUTS_STORAGE_KEY,
         defaultValue: [],
+        useRealtime: true,
     });
 
     const { data: teamLoadouts = [], setData: setTeamLoadouts } = useStorage<TeamLoadout[]>({
         key: TEAM_LOADOUTS_STORAGE_KEY,
         defaultValue: [],
+        useRealtime: true,
     });
 
     const addLoadout = useCallback(

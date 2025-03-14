@@ -73,16 +73,36 @@ export const GearPage: React.FC = () => {
     };
 
     const handleSavePiece = async (piece: GearPiece) => {
+        console.log('handleSavePiece called with:', {
+            piece,
+            isEditing: !!editingPiece,
+            currentInventoryLength: inventory.length,
+        });
+
         let newInventory;
         if (editingPiece) {
             // Update existing piece
             newInventory = inventory.map((p) => (p.id === piece.id ? piece : p));
+            console.log('Updating existing piece:', {
+                pieceId: piece.id,
+                newInventoryLength: newInventory.length,
+            });
         } else {
             // Add new piece
             newInventory = [...inventory, piece];
+            console.log('Adding new piece:', {
+                pieceId: piece.id,
+                newInventoryLength: newInventory.length,
+            });
         }
 
+        console.log('Calling saveInventory with:', {
+            newInventoryLength: newInventory.length,
+            firstItem: newInventory[0],
+        });
         await saveInventory(newInventory);
+        console.log('saveInventory completed');
+
         setEditingPiece(undefined);
         setIsFormVisible(false);
         window.scrollTo({ top: 0, behavior: 'smooth' });

@@ -4,14 +4,16 @@ import { EncounterNote } from '../../types/encounters';
 import { Button, CloseIcon, EditIcon, CopyIcon } from '../ui';
 import FormationGrid from './FormationGrid';
 import { useNotification } from '../../hooks/useNotification';
+import { Ship } from '../../types/ship';
 
 interface EncounterListProps {
     encounters: EncounterNote[];
     onEdit: (encounter: EncounterNote) => void;
     onDelete: (encounterId: string) => void;
+    ships: Ship[];
 }
 
-const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDelete }) => {
+const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDelete, ships }) => {
     const { addNotification } = useNotification();
 
     const createAndCopyImage = async (encounterId: string) => {
@@ -39,8 +41,10 @@ const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDel
         }
     };
 
+    console.log(encounters);
+
     return (
-        <div className="space-y-4 p-2">
+        <div className="space-y-4 p-2 overflow-hidden">
             <h2 className="text-xl font-semibold text-white mb-4">Saved Encounters</h2>
             {encounters.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4" role="encounter-list">
@@ -83,7 +87,7 @@ const EncounterList: React.FC<EncounterListProps> = ({ encounters, onEdit, onDel
                             {encounter.description && (
                                 <p className="text-white text-sm px-4">{encounter.description}</p>
                             )}
-                            <FormationGrid formation={encounter.formation} />
+                            <FormationGrid formation={encounter.formation} ships={ships} />
                         </div>
                     ))}
                 </div>

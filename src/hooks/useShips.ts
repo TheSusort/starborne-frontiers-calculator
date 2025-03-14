@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { Ship } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
 import { GearPiece } from '../types/gear';
@@ -16,14 +16,19 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         data: ships = [],
         setData: setShips,
         loading,
-    } = useStorage<Ship[]>({ key: STORAGE_KEY, defaultValue: [] });
+        reload,
+    } = useStorage<Ship[]>({
+        key: STORAGE_KEY,
+        defaultValue: [],
+        useRealtime: true, // Enable real-time updates
+    });
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
 
     const handleEquipGear = useCallback(
         async (shipId: string, slot: GearSlotName, gearId: string) => {
-            setShips(
+            await setShips(
                 ships.map((ship) => {
-                    // First check if the gear is equipped on a locked ship
+                    // Check if the gear is equipped on a locked ship
                     if (
                         ship.id !== shipId &&
                         ship.equipmentLocked &&
@@ -80,8 +85,8 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     );
 
     const handleRemoveGear = useCallback(
-        (shipId: string, slot: GearSlotName) => {
-            setShips(
+        async (shipId: string, slot: GearSlotName) => {
+            await setShips(
                 ships.map((ship) => {
                     if (ship.id === shipId) {
                         const newEquipment = { ...ship.equipment };
@@ -100,17 +105,18 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
     const handleRemoveShip = useCallback(
         async (id: string) => {
-            setShips(ships.filter((ship) => ship.id !== id));
+            await setShips(ships.filter((ship) => ship.id !== id));
         },
         [ships, setShips]
     );
 
     const handleSaveShip = useCallback(
         async (ship: Ship) => {
-            const newShips = ships.some((s) => s.id === ship.id)
-                ? ships.map((s) => (s.id === ship.id ? ship : s))
-                : [...ships, ship];
-            await setShips(newShips);
+            await setShips(
+                ships.some((s) => s.id === ship.id)
+                    ? ships.map((s) => (s.id === ship.id ? ship : s))
+                    : [...ships, ship]
+            );
             setEditingShip(undefined);
         },
         [ships, setShips]
@@ -118,69 +124,27 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
     const getShipById = useCallback((id: string) => ships.find((ship) => ship.id === id), [ships]);
 
-    const updateShip = useCallback(
-        async (updatedShip: Ship) => {
-            const newShips = ships.map((ship) =>
-                ship.id === updatedShip.id
-                    ? {
-                          ...updatedShip,
-                      }
-                    : ship
-            );
-            await setShips(newShips);
-        },
-        [ships, setShips]
-    );
-
     const handleLockEquipment = useCallback(
         async (ship: Ship) => {
             try {
                 const newLockState = !ship.equipmentLocked;
-                await updateShip({ ...ship, equipmentLocked: newLockState });
+                await setShips(
+                    ships.map((s) =>
+                        s.id === ship.id ? { ...ship, equipmentLocked: newLockState } : s
+                    )
+                );
                 return newLockState;
             } catch (error) {
                 console.error('Failed to update equipment lock state:', error);
                 throw error;
             }
         },
-        [updateShip]
+        [ships, setShips]
     );
-
-    const validateGearAssignments = useCallback(() => {
-        if (!getGearPiece) return;
-
-        const newShips = ships.map((ship) => {
-            const newEquipment = { ...ship.equipment };
-            let hasChanges = false;
-
-            Object.entries(newEquipment).forEach(([slot, gearId]) => {
-                if (gearId) {
-                    const gear = getGearPiece(gearId);
-                    if (!gear || (gear.shipId && gear.shipId !== ship.id)) {
-                        delete newEquipment[slot];
-                        hasChanges = true;
-                    }
-                }
-            });
-
-            return hasChanges ? { ...ship, equipment: newEquipment } : ship;
-        });
-
-        if (JSON.stringify(newShips) !== JSON.stringify(ships)) {
-            setShips(newShips);
-        }
-    }, [ships, getGearPiece, setShips]);
-
-    // Run validation when ships change or getGearPiece is provided
-    useEffect(() => {
-        if (getGearPiece && !loading) {
-            validateGearAssignments();
-        }
-    }, [getGearPiece, loading, validateGearAssignments]);
 
     const handleUnequipAllGear = useCallback(
         async (shipId: string) => {
-            setShips(
+            await setShips(
                 ships.map((ship) => {
                     if (ship.id === shipId) {
                         // Get all equipped gear IDs before clearing
@@ -201,7 +165,6 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
                             }
                         });
 
-                        // Clear all equipment at once
                         return {
                             ...ship,
                             equipment: {},
@@ -215,10 +178,14 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     );
 
     const handleEquipMultipleGear = useCallback(
-        async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
-            setShips(
+        async (
+            shipId: string,
+            gearAssignments: { slot: GearSlotName; gearId: string }[],
+            lockOnEquip: boolean = false
+        ) => {
+            await setShips(
                 ships.map((ship) => {
-                    // First check if any of the gear is equipped on a locked ship
+                    // Check if any of the gear is equipped on a locked ship
                     const lockedAssignments = gearAssignments.filter(({ gearId }) =>
                         ships.some(
                             (s) =>
@@ -238,7 +205,11 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
                         gearAssignments.forEach(({ slot, gearId }) => {
                             newEquipment[slot] = gearId;
                         });
-                        return { ...ship, equipment: newEquipment };
+                        return {
+                            ...ship,
+                            equipment: newEquipment,
+                            equipmentLocked: lockOnEquip ? true : ship.equipmentLocked,
+                        };
                     }
 
                     // Remove gear from other unlocked ships
@@ -292,8 +263,6 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         handleRemoveShip,
         handleSaveShip,
         getShipById,
-        updateShip,
-        validateGearAssignments,
         handleLockEquipment,
         handleUnequipAllGear,
         handleEquipMultipleGear,

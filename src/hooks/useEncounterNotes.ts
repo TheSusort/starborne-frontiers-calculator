@@ -10,13 +10,17 @@ export const useEncounterNotes = () => {
         data: encounters = [],
         setData: setEncounters,
         loading,
-    } = useStorage<EncounterNote[]>({ key: STORAGE_KEY, defaultValue: [] });
+    } = useStorage<EncounterNote[]>({
+        key: STORAGE_KEY,
+        defaultValue: [],
+        useRealtime: true,
+    });
 
     const addEncounter = useCallback(
         (encounter: Omit<EncounterNote, 'id' | 'createdAt'>) => {
             const newEncounter: EncounterNote = {
                 ...encounter,
-                id: Date.now().toString(),
+                id: crypto.randomUUID(),
                 createdAt: Date.now(),
             };
             setEncounters([...encounters, newEncounter]);
