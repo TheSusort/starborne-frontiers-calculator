@@ -30,7 +30,7 @@ export function calculateHealingPerHit(stats: BaseStats): number {
 
 export function calculateCritMultiplier(stats: BaseStats): number {
     const crit = stats.crit >= 100 ? 1 : stats.crit / 100;
-    return 1 + crit * (1 + (stats.critDamage || 0) / 100);
+    return 1 + (crit * (stats.critDamage || 0)) / 100;
 }
 
 export function calculatePriorityScore(
