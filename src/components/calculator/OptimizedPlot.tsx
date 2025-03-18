@@ -2,6 +2,20 @@ import React, { useEffect, useState } from 'react';
 import type { Data, Layout } from 'plotly.js-cartesian-dist-min';
 import { Loader } from '../ui/Loader';
 
+// Define Config interface to fix type errors
+interface Config {
+    responsive?: boolean;
+}
+
+// Define PlotParams interface to fix type error
+interface PlotParams {
+    data: Data[];
+    layout: Partial<Layout>;
+    style?: React.CSSProperties;
+    useResizeHandler?: boolean;
+    config?: Partial<Config>;
+}
+
 interface OptimizedPlotProps {
     data: Data[];
     layout: Partial<Layout>;

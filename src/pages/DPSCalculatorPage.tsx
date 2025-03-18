@@ -53,7 +53,8 @@ const DPSCalculatorPage: React.FC = () => {
             setConfigs(initialConfigs);
             return;
         }
-    }, []); // Empty dependency array to run only once
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Empty dependency array - we only want this to run once
 
     // Add a new ship configuration
     const addConfig = () => {
@@ -310,6 +311,7 @@ const DPSCalculatorPage: React.FC = () => {
                         <DPSHeatmap
                             ships={configs.map((config) => ({
                                 ...config,
+                                critRate: config.crit,
                                 isBest: bestConfig ? config.id === bestConfig.id : false,
                             }))}
                         />

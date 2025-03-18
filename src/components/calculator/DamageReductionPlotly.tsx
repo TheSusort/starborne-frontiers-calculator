@@ -57,7 +57,7 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
             mode: 'markers+text',
             name: ship.name,
             text: [ship.name],
-            textposition: 'top',
+            textposition: 'top center',
             marker: {
                 size: 10,
                 symbol: ship.isHighlighted ? 'star' : 'circle',
