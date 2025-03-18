@@ -7,6 +7,13 @@ interface DPSCalculatorTableProps {
     critDamageValues?: number[];
 }
 
+const ErrorFallback = () => (
+    <div className="bg-dark p-4 border border-red-500 rounded">
+        <h3 className="text-lg font-bold text-red-500 mb-2">Table Error</h3>
+        <p>There was an error rendering the DPS calculation table.</p>
+    </div>
+);
+
 export const DPSCalculatorTable: React.FC<DPSCalculatorTableProps> = ({
     attack,
     critDamageValues = [100, 125, 150, 175, 200, 225, 250],
@@ -19,24 +26,41 @@ export const DPSCalculatorTable: React.FC<DPSCalculatorTableProps> = ({
 
     // Generate the table data with memoization
     const tableData = useMemo(() => {
-        return fixedAttackValues.map((attackValue) => {
-            const row = critDamageValues.map((critDamage) => {
-                const stats: BaseStats = {
-                    attack: attackValue,
-                    crit: 100, // Fixed at 100%
-                    critDamage,
-                    hp: 0,
-                    defence: 0,
-                    hacking: 0,
-                    security: 0,
-                    speed: 0,
-                    healModifier: 0,
-                };
-                return attackValue * calculateCritMultiplier(stats);
+        try {
+            return fixedAttackValues.map((attackValue) => {
+                const row = critDamageValues.map((critDamage) => {
+                    try {
+                        const stats: BaseStats = {
+                            attack: attackValue,
+                            crit: 100, // Fixed at 100%
+                            critDamage,
+                            hp: 0,
+                            defence: 0,
+                            hacking: 0,
+                            security: 0,
+                            speed: 0,
+                            healModifier: 0,
+                        };
+                        return attackValue * calculateCritMultiplier(stats);
+                    } catch (error) {
+                        console.error(
+                            `Error calculating DPS for attack ${attackValue} and crit damage ${critDamage}:`,
+                            error
+                        );
+                        return 0; // Return 0 for this cell in case of error
+                    }
+                });
+                return { attack: attackValue, values: row };
             });
-            return { attack: attackValue, values: row };
-        });
+        } catch (error) {
+            console.error('Error generating DPS table data:', error);
+            return [];
+        }
     }, [fixedAttackValues, critDamageValues]);
+
+    if (tableData.length === 0) {
+        return <ErrorFallback />;
+    }
 
     return (
         <div className="overflow-x-auto">

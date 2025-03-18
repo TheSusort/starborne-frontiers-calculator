@@ -4,7 +4,7 @@ import { calculateDPS, calculateCritMultiplier } from '../utils/autogear/scoring
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { DPSCalculatorTable } from '../components/calculator/DPSCalculatorTable';
-import { DPSHeatmap } from '../components/calculator/DPSHeatmap';
+import { DPSChart } from '../components/calculator/DPSChart';
 import { BaseStats } from '../types/stats';
 
 // Define the type for a ship configuration
@@ -23,7 +23,7 @@ const DPSCalculatorPage: React.FC = () => {
     ]);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
-    const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
+    const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('table');
 
     // Calculate DPS for all configs
     useEffect(() => {
@@ -293,9 +293,10 @@ const DPSCalculatorPage: React.FC = () => {
                 <div className="bg-dark p-4 border border-dark-border">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-bold">DPS Comparison</h3>
+                        {/**
                         <Button variant="secondary" onClick={toggleViewMode}>
                             Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
-                        </Button>
+                        </Button>*/}
                     </div>
                     <p className="text-sm text-gray-400 mb-4">
                         This visualization shows DPS values at 100% crit rate for different attack
@@ -308,7 +309,7 @@ const DPSCalculatorPage: React.FC = () => {
                     {viewMode === 'table' ? (
                         <DPSCalculatorTable attack={bestConfig ? bestConfig.attack : 5000} />
                     ) : (
-                        <DPSHeatmap
+                        <DPSChart
                             ships={configs.map((config) => ({
                                 ...config,
                                 critRate: config.crit,

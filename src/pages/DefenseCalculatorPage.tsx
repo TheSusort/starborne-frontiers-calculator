@@ -3,7 +3,7 @@ import { CloseIcon, PageLayout } from '../components/ui';
 import { calculateDamageReduction, calculateEffectiveHP } from '../utils/autogear/scoring';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { DamageReductionPlotly } from '../components/calculator/DamageReductionPlotly';
+import { DamageReductionChart } from '../components/calculator/DamageReductionChart';
 import { DamageReductionTable } from '../components/calculator/DamageReductionTable';
 
 // Define the type for a ship configuration
@@ -242,7 +242,7 @@ const DefenseCalculatorPage: React.FC = () => {
                         your ship configurations.
                     </p>
 
-                    <DamageReductionPlotly
+                    <DamageReductionChart
                         height={400}
                         maxDefense={26000}
                         ships={configs.map((config) => ({

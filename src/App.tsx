@@ -10,7 +10,6 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { STORAGE_KEYS } from './constants/storage';
 import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
-import ErrorBoundary from './components/error/ErrorBoundary';
 
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
@@ -26,13 +25,9 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 
-// Calculator pages with Plotly (in a separate chunk)
-const DefenseCalculatorPage = lazy(
-    () => import(/* webpackChunkName: "calculator-pages" */ './pages/DefenseCalculatorPage')
-);
-const DPSCalculatorPage = lazy(
-    () => import(/* webpackChunkName: "calculator-pages" */ './pages/DPSCalculatorPage')
-);
+// Calculator pages
+const DefenseCalculatorPage = lazy(() => import('./pages/DefenseCalculatorPage'));
+const DPSCalculatorPage = lazy(() => import('./pages/DPSCalculatorPage'));
 
 // init hotjar
 const siteId = 5241833;
@@ -114,20 +109,9 @@ const App: React.FC = () => {
                                             />
                                             <Route
                                                 path="/defense"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <DefenseCalculatorPage />
-                                                    </ErrorBoundary>
-                                                }
+                                                element={<DefenseCalculatorPage />}
                                             />
-                                            <Route
-                                                path="/damage"
-                                                element={
-                                                    <ErrorBoundary>
-                                                        <DPSCalculatorPage />
-                                                    </ErrorBoundary>
-                                                }
-                                            />
+                                            <Route path="/damage" element={<DPSCalculatorPage />} />
                                         </Routes>
                                     </Suspense>
                                 </div>

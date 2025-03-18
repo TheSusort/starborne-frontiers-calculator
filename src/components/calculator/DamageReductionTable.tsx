@@ -5,6 +5,13 @@ interface DamageReductionTableProps {
     defenseValues?: number[];
 }
 
+const ErrorFallback = () => (
+    <div className="bg-dark p-4 border border-red-500 rounded">
+        <h3 className="text-lg font-bold text-red-500 mb-2">Table Error</h3>
+        <p>There was an error rendering the damage reduction table.</p>
+    </div>
+);
+
 export const DamageReductionTable: React.FC<DamageReductionTableProps> = ({
     defenseValues = [
         0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000, 14000,
@@ -12,11 +19,20 @@ export const DamageReductionTable: React.FC<DamageReductionTableProps> = ({
     ],
 }) => {
     const tableData = useMemo(() => {
-        return defenseValues.map((defense) => ({
-            defense,
-            reduction: calculateDamageReduction(defense),
-        }));
+        try {
+            return defenseValues.map((defense) => ({
+                defense,
+                reduction: calculateDamageReduction(defense),
+            }));
+        } catch (error) {
+            console.error('Error calculating damage reduction values:', error);
+            return [];
+        }
     }, [defenseValues]);
+
+    if (tableData.length === 0) {
+        return <ErrorFallback />;
+    }
 
     return (
         <div className="overflow-x-auto">
