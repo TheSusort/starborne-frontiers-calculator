@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.22.0';
+export const CURRENT_VERSION = '0.23.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.23.0',
+        date: '2025-03-18',
+        changes: [
+            'Added navigation levels',
+            'Added DPS calculator',
+            'Added Effective HP calculator',
+        ],
+    },
     {
         version: '0.22.0',
         date: '2025-03-03',

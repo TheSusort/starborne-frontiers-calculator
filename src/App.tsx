@@ -25,6 +25,14 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 
+// Calculator pages with Plotly (in a separate chunk)
+const DefenseCalculatorPage = lazy(
+    () => import(/* webpackChunkName: "calculator-pages" */ './pages/DefenseCalculatorPage')
+);
+const DPSCalculatorPage = lazy(
+    () => import(/* webpackChunkName: "calculator-pages" */ './pages/DPSCalculatorPage')
+);
+
 // init hotjar
 const siteId = 5241833;
 const hotjarVersion = 6;
@@ -103,6 +111,11 @@ const App: React.FC = () => {
                                                 path="/ships/index"
                                                 element={<ShipIndexPage />}
                                             />
+                                            <Route
+                                                path="/defense"
+                                                element={<DefenseCalculatorPage />}
+                                            />
+                                            <Route path="/damage" element={<DPSCalculatorPage />} />
                                         </Routes>
                                     </Suspense>
                                 </div>

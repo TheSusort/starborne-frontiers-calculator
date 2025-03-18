@@ -34,14 +34,33 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: {
-                    vendor: ['react', 'react-dom', 'react-router-dom'],
-                    ui: ['./src/components/ui'],
-                    'ships-data': ['./src/constants/ships'],
-                    'stat-values': ['./src/constants/mainStatValues'],
+                manualChunks: (id) => {
+                    if (id.includes('plotly') || id.includes('react-plotly')) {
+                        return 'plotly';
+                    }
+
+                    if (
+                        id.includes('node_modules/react') ||
+                        id.includes('node_modules/react-dom') ||
+                        id.includes('node_modules/react-router-dom')
+                    ) {
+                        return 'vendor';
+                    }
+
+                    if (id.includes('/src/components/ui')) {
+                        return 'ui';
+                    }
+
+                    if (id.includes('/src/constants/ships')) {
+                        return 'ships-data';
+                    }
+
+                    if (id.includes('/src/constants/mainStatValues')) {
+                        return 'stat-values';
+                    }
                 },
             },
         },
-        chunkSizeWarningLimit: 500,
+        chunkSizeWarningLimit: 1000,
     },
 });
