@@ -115,7 +115,7 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
                 coloring: 'heatmap',
                 showlabels: true,
                 labelfont: {
-                    family: 'Raleway',
+                    family: 'sans-serif',
                     size: 12,
                     color: 'white',
                 },
@@ -124,7 +124,7 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
         };
 
         // Create traces for each ship
-        const shipTraces: Partial<Data>[] = ships.map((ship) => {
+        const shipTraces = ships.map((ship) => {
             const stats: BaseStats = {
                 attack: ship.attack,
                 crit: ship.critRate,
@@ -147,13 +147,17 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
                 marker: {
                     size: 12,
                     symbol: ship.isBest ? 'star' : 'circle',
-                    color: ship.isBest ? '#FF4560' : '#c2c2c2',
+                    color: ship.isBest ? '#111827' : '#fff',
+                    line: {
+                        color: ship.isBest ? '#fff' : '#111827',
+                        width: 1,
+                    },
                 },
                 text: [`${ship.name} (DPS: ${Math.round(dps).toLocaleString()})`],
                 hovertemplate: '%{text}<extra></extra>',
                 showlegend: false,
             };
-        });
+        }) as unknown as Partial<Data>[];
 
         return [contourTrace, ...shipTraces];
     }, [ships, attackValues, critDamageValues]);
@@ -163,7 +167,7 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
         title: {
             text: 'DPS by Attack and Crit Damage (100% Crit Rate)',
             font: {
-                family: 'Raleway',
+                family: 'sans-serif',
                 size: 18,
             },
         },
@@ -171,7 +175,7 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
             title: {
                 text: 'Crit Damage (%)',
                 font: {
-                    family: 'Raleway',
+                    family: 'sans-serif',
                     size: 14,
                 },
             },
@@ -181,7 +185,7 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
             title: {
                 text: 'Attack',
                 font: {
-                    family: 'Raleway',
+                    family: 'sans-serif',
                     size: 14,
                 },
             },
@@ -199,29 +203,6 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
             t: 90,
         },
         hovermode: 'closest',
-        annotations: ships
-            .filter((ship) => ship.isBest)
-            .map(
-                (ship): Partial<Plotly.Annotations> => ({
-                    x: ship.critDamage,
-                    y: ship.attack,
-                    xref: 'x',
-                    yref: 'y',
-                    text: 'Best Ship',
-                    showarrow: true,
-                    arrowhead: 2,
-                    arrowsize: 1,
-                    arrowwidth: 1,
-                    arrowcolor: '#FF4560',
-                    ax: 0,
-                    ay: -30,
-                    font: {
-                        family: 'Raleway',
-                        size: 12,
-                        color: '#FF4560',
-                    },
-                })
-            ),
     };
 
     return (

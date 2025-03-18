@@ -43,14 +43,14 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
             mode: 'lines',
             name: 'Damage Reduction Curve',
             line: {
-                color: '#2563eb',
+                color: '#f97316',
                 width: 2,
             },
             hovertemplate: 'Defense: %{x}<br>Damage Reduction: %{y:.2f}%<extra></extra>',
         };
 
         // Create traces for each ship
-        const shipTraces: Partial<Data>[] = ships.map((ship) => ({
+        const shipTraces = ships.map((ship) => ({
             x: [ship.defense],
             y: [ship.damageReduction],
             type: 'scatter',
@@ -61,19 +61,19 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
             marker: {
                 size: 10,
                 symbol: ship.isHighlighted ? 'star' : 'circle',
-                color: ship.isHighlighted ? '#f97316' : '#94a3b8',
+                color: ship.isHighlighted ? '#f97316' : '#fff',
                 line: {
                     color: 'white',
                     width: 1,
                 },
             },
             textfont: {
-                color: ship.isHighlighted ? '#f97316' : '#94a3b8',
+                color: ship.isHighlighted ? '#f97316' : '#fff',
                 size: 10,
             },
             hovertemplate:
                 '<b>%{text}</b><br>Defense: %{x}<br>Damage Reduction: %{y:.2f}%<extra></extra>',
-        }));
+        })) as unknown as Partial<Data>[];
 
         return [curveTrace, ...shipTraces];
     }, [ships, maxDefense]);
@@ -82,7 +82,7 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
         title: {
             text: 'Damage Reduction Curve',
             font: {
-                family: 'Raleway',
+                family: 'sans-serif',
                 size: 18,
             },
         },
@@ -90,7 +90,7 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
             title: {
                 text: 'Defense',
                 font: {
-                    family: 'Raleway',
+                    family: 'sans-serif',
                     size: 14,
                 },
             },
@@ -101,7 +101,7 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
             title: {
                 text: 'Damage Reduction (%)',
                 font: {
-                    family: 'Raleway',
+                    family: 'sans-serif',
                     size: 14,
                 },
             },
