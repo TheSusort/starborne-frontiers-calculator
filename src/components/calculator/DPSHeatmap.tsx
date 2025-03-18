@@ -3,6 +3,7 @@ import type { Data, Layout } from 'plotly.js-cartesian-dist-min';
 import StaticChart from './StaticChart';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
+import ErrorBoundary from '../error/ErrorBoundary';
 
 interface ShipConfig {
     id: string;
@@ -15,157 +16,179 @@ interface ShipConfig {
 
 interface DPSHeatmapProps {
     ships: ShipConfig[];
-    minAttack?: number;
-    maxAttack?: number;
-    minCritDamage?: number;
-    maxCritDamage?: number;
 }
 
-export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
-    ships = [],
-    minAttack,
-    maxAttack,
-    minCritDamage,
-    maxCritDamage,
-}) => {
-    // Use interface rather than any for these values
-    const _width = 800;
-    const _height = 500;
-
-    // If no baseAttack is provided, use the best ship's attack or the first ship's attack
-    const bestShip = ships.find((ship) => ship.isBest);
-
-    const referenceAttack = useMemo(() => {
-        if (maxAttack) return maxAttack;
-        if (bestShip) return bestShip.attack;
-        if (ships.length > 0) return ships[0].attack;
-        return 5000; // Fallback
-    }, [ships, bestShip, maxAttack]);
-
-    // Create fixed attack values at various percentages of base attack
-    const attackMultipliers = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-    const attackValues = attackMultipliers.map((multiplier) =>
-        Math.round(referenceAttack * multiplier)
-    );
-
-    // Create fixed crit damage values
-    const critDamageValues =
-        minCritDamage && maxCritDamage
-            ? Array.from(
-                  { length: 7 },
-                  (_, i) => minCritDamage + ((maxCritDamage - minCritDamage) / 6) * i
-              )
-            : [100, 150, 200, 250, 300, 350, 400];
-
-    // Generate data for the contour plot
+// Use a simpler approach without complex visualizations
+export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({ ships = [] }) => {
     const data = useMemo(() => {
-        // Generate a grid of DPS values
-        const x: number[] = []; // Crit Damage values
-        const y: number[] = []; // Attack values
-        const z: number[][] = []; // DPS values
+        try {
+            // Create just a basic visualization - skip the heatmap entirely for now
+            // Just outline the important areas with isolines
 
-        // Generate data points with step size of 5 for a smoother gradient
-        const stepSize = 5;
-        const numXPoints =
-            Math.floor(
-                (critDamageValues[critDamageValues.length - 1] - critDamageValues[0]) / stepSize
-            ) + 1;
-        const numYPoints =
-            Math.floor((attackValues[attackValues.length - 1] - attackValues[0]) / stepSize) + 1;
+            // Generate grid lines for various DPS levels
+            const lines: Partial<Data>[] = [];
 
-        // Generate x values (crit damage %)
-        for (let i = 0; i < numXPoints; i++) {
-            x.push(critDamageValues[0] + i * stepSize);
-        }
+            // Get the min/max values for the chart axes
+            const attackValues = ships.map((ship) => ship.attack);
+            const critDamageValues = ships.map((ship) => ship.critDamage);
+            const minAttack = Math.min(...attackValues) || 1000;
+            const maxAttack = Math.max(...attackValues) * 1.5 || 10000;
+            const minCritDmg = Math.min(...critDamageValues) || 50;
+            const maxCritDmg = Math.max(...critDamageValues) * 1.5 || 300;
 
-        // Generate y values (attack)
-        for (let i = 0; i < numYPoints; i++) {
-            const attack = attackValues[0] + i * stepSize;
-            y.push(attack);
-            z.push([]);
-
-            // Calculate DPS for each x value (crit damage)
-            for (let j = 0; j < numXPoints; j++) {
-                const critDamage = critDamageValues[0] + j * stepSize;
+            // Find max DPS to create reference lines
+            let maxDps = 0;
+            ships.forEach((ship) => {
                 const stats: BaseStats = {
-                    attack: 0, // Not used in calculation
-                    crit: 100, // Fixed 100% crit rate
-                    critDamage: critDamage,
+                    attack: ship.attack,
+                    crit: ship.critRate,
+                    critDamage: ship.critDamage,
                     hp: 0,
                     defence: 0,
                     hacking: 0,
-                    security: 0, // Add security which was missing
+                    security: 0,
                     speed: 0,
                     healModifier: 0,
                 };
                 const critMultiplier = calculateCritMultiplier(stats);
-                const dps = attack * critMultiplier;
-                z[i].push(dps);
-            }
-        }
+                const dps = ship.attack * critMultiplier;
+                maxDps = Math.max(maxDps, dps);
+            });
 
-        // Create trace for the contour plot
-        const contourTrace: Partial<Data> = {
-            x,
-            y,
-            z,
-            type: 'contour',
-            colorscale: 'Plasma',
-            contours: {
-                coloring: 'heatmap',
-                showlabels: true,
-                labelfont: {
-                    family: 'sans-serif',
-                    size: 12,
-                    color: 'white',
-                },
-            },
-            hovertemplate: 'Attack: %{y}<br>Crit Damage: %{x}%<br>DPS: %{z}<extra></extra>',
-        };
+            // Create reference DPS lines
+            const dpsLevels = [
+                maxDps * 0.25,
+                maxDps * 0.5,
+                maxDps * 0.75,
+                maxDps,
+                maxDps * 1.25,
+                maxDps * 1.5,
+            ];
 
-        // Create traces for each ship
-        const shipTraces = ships.map((ship) => {
-            const stats: BaseStats = {
-                attack: ship.attack,
-                crit: ship.critRate,
-                critDamage: ship.critDamage,
-                hp: 0,
-                defence: 0,
-                hacking: 0,
-                security: 0, // Add security which was missing
-                speed: 0,
-                healModifier: 0,
-            };
-            const critMultiplier = calculateCritMultiplier(stats);
-            const dps = ship.attack * critMultiplier;
+            // Create lines for each DPS level
+            dpsLevels.forEach((targetDps, index) => {
+                const x: number[] = [];
+                const y: number[] = [];
+                const step = (maxCritDmg - minCritDmg) / 20;
 
-            return {
-                x: [ship.critDamage],
-                y: [ship.attack],
-                type: 'scatter',
-                mode: 'markers',
-                marker: {
-                    size: 12,
-                    symbol: ship.isBest ? 'star' : 'circle',
-                    color: ship.isBest ? '#111827' : '#fff',
-                    line: {
-                        color: ship.isBest ? '#fff' : '#111827',
-                        width: 1,
+                // Generate points for this line
+                for (let critDmg = minCritDmg; critDmg <= maxCritDmg; critDmg += step) {
+                    // For each crit damage, what attack value gives this DPS?
+                    // DPS = attack * (1 + critDamage/100)
+                    // attack = DPS / (1 + critDamage/100)
+                    const critMultiplier = 1 + critDmg / 100;
+                    const attackForDps = targetDps / critMultiplier;
+
+                    // Only add points within our attack range
+                    if (attackForDps >= minAttack && attackForDps <= maxAttack) {
+                        x.push(critDmg);
+                        y.push(attackForDps);
+                    }
+                }
+
+                // Add a line for this DPS level
+                if (x.length > 1) {
+                    lines.push({
+                        x,
+                        y,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: `DPS: ${Math.round(targetDps).toLocaleString()}`,
+                        line: {
+                            color: index === 3 ? '#ec8c37' : '#888', // Highlight the max DPS line
+                            width: index === 3 ? 3 : 1.5,
+                            dash: index < 3 ? 'dash' : 'solid',
+                        },
+                        hovertemplate:
+                            'DPS: ' + Math.round(targetDps).toLocaleString() + '<extra></extra>',
+                    });
+                }
+            });
+
+            // Create traces for each ship
+            const shipTraces = ships.map((ship) => {
+                const stats: BaseStats = {
+                    attack: ship.attack,
+                    crit: ship.critRate,
+                    critDamage: ship.critDamage,
+                    hp: 0,
+                    defence: 0,
+                    hacking: 0,
+                    security: 0,
+                    speed: 0,
+                    healModifier: 0,
+                };
+                const critMultiplier = calculateCritMultiplier(stats);
+                const dps = ship.attack * critMultiplier;
+
+                return {
+                    x: [ship.critDamage],
+                    y: [ship.attack],
+                    type: 'scatter',
+                    mode: 'markers+text',
+                    marker: {
+                        size: 12,
+                        symbol: ship.isBest ? 'star' : 'circle',
+                        color: ship.isBest ? '#ec8c37' : '#c2c2c2',
+                        line: {
+                            color: 'white',
+                            width: 1,
+                        },
                     },
-                },
-                text: [`${ship.name} (DPS: ${Math.round(dps).toLocaleString()})`],
-                hovertemplate: '%{text}<extra></extra>',
-                showlegend: false,
-            };
-        }) as unknown as Partial<Data>[];
+                    text: [ship.name],
+                    textposition: 'top center',
+                    textfont: {
+                        family: 'sans-serif',
+                        size: 10,
+                        color: ship.isBest ? '#ec8c37' : '#c2c2c2',
+                    },
+                    hovertemplate: `${ship.name}<br>Attack: ${ship.attack.toLocaleString()}<br>Crit Damage: ${ship.critDamage}%<br>DPS: ${Math.round(dps).toLocaleString()}<extra></extra>`,
+                    showlegend: true,
+                };
+            }) as unknown as Partial<Data>[];
 
-        return [contourTrace, ...shipTraces];
-    }, [ships, attackValues, critDamageValues]);
+            return [...lines, ...shipTraces];
+        } catch (error) {
+            console.error('Error generating DPS chart:', error);
 
-    // Define explicit layout type instead of using any
+            // Return just the ship points if there's an error
+            return ships.map((ship) => {
+                const stats: BaseStats = {
+                    attack: ship.attack,
+                    crit: ship.critRate,
+                    critDamage: ship.critDamage,
+                    hp: 0,
+                    defence: 0,
+                    hacking: 0,
+                    security: 0,
+                    speed: 0,
+                    healModifier: 0,
+                };
+                const critMultiplier = calculateCritMultiplier(stats);
+                const dps = ship.attack * critMultiplier;
+
+                return {
+                    x: [ship.critDamage],
+                    y: [ship.attack],
+                    type: 'scatter',
+                    mode: 'markers+text',
+                    marker: {
+                        size: 12,
+                        symbol: ship.isBest ? 'star' : 'circle',
+                        color: ship.isBest ? '#ec8c37' : '#c2c2c2',
+                    },
+                    text: [ship.name],
+                    textposition: 'top center',
+                    hovertemplate: `${ship.name}<br>DPS: ${Math.round(dps).toLocaleString()}<extra></extra>`,
+                    showlegend: false,
+                };
+            }) as unknown as Partial<Data>[];
+        }
+    }, [ships]);
+
     const layout: Partial<Layout> = {
         title: {
-            text: 'DPS by Attack and Crit Damage (100% Crit Rate)',
+            text: 'DPS Analysis',
             font: {
                 family: 'sans-serif',
                 size: 18,
@@ -198,16 +221,22 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({
         },
         margin: {
             l: 65,
-            r: 50,
+            r: 80,
             b: 65,
             t: 90,
         },
         hovermode: 'closest',
+        legend: {
+            orientation: 'h',
+            y: -0.15,
+        },
     };
 
     return (
         <div className="dps-heatmap">
-            <StaticChart data={data} layout={layout} height={500} title="DPS Contour Map" />
+            <ErrorBoundary>
+                <StaticChart data={data} layout={layout} height={500} _title="DPS Analysis" />
+            </ErrorBoundary>
         </div>
     );
 };

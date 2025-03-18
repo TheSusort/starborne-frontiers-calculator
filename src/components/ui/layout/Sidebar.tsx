@@ -51,10 +51,8 @@ const NavigationItem: React.FC<{
 
     // Update expanded state when initialExpanded prop changes
     useEffect(() => {
-        if (initialExpanded !== isExpanded) {
-            setIsExpanded(initialExpanded);
-        }
-    }, [initialExpanded, isExpanded]);
+        setIsExpanded(initialExpanded);
+    }, [initialExpanded]);
 
     const toggleExpanded = useCallback(() => {
         setIsExpanded((prev) => !prev);
@@ -116,6 +114,11 @@ const NavigationItem: React.FC<{
                         item={child}
                         depth={depth + 1}
                         isActive={isActive}
+                        initialExpanded={
+                            isActive(child.path) ||
+                            (child.children &&
+                                child.children.some((grandchild) => isActive(grandchild.path)))
+                        }
                         setIsMobileMenuOpen={setIsMobileMenuOpen}
                     />
                 ))}

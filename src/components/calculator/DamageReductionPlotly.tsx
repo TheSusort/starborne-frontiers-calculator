@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import type { Data, Layout } from 'plotly.js-cartesian-dist-min';
 import StaticChart from './StaticChart';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
+import ErrorBoundary from '../error/ErrorBoundary';
 
 interface Ship {
     id: string;
@@ -124,13 +125,15 @@ export const DamageReductionPlotly: React.FC<DamageReductionPlotlyProps> = ({
 
     return (
         <div className="damage-reduction-plot">
-            <StaticChart
-                data={data}
-                layout={layout}
-                height={height}
-                width={width}
-                title="Damage Reduction vs Defense"
-            />
+            <ErrorBoundary>
+                <StaticChart
+                    data={data}
+                    layout={layout}
+                    height={height}
+                    _width={width}
+                    _title="Damage Reduction vs Defense"
+                />
+            </ErrorBoundary>
         </div>
     );
 };

@@ -1,44 +1,35 @@
-import React, { useEffect, useRef, useState } from 'react';
-import type { Data, Layout } from 'plotly.js-cartesian-dist-min';
-import OptimizedPlot from './OptimizedPlot';
+import React, { useState, useEffect } from 'react';
 import { Loader } from '../ui/Loader';
+import type { Data, Layout } from 'plotly.js-cartesian-dist-min';
 
 interface StaticChartProps {
     data: Data[];
     layout: Partial<Layout>;
-    width?: number;
     height?: number;
-    title?: string;
+    _width?: number; // Marked as unused
+    _title?: string; // Marked as unused
 }
 
-const StaticChart: React.FC<StaticChartProps> = ({
-    data,
-    layout,
-    width = 800,
-    height = 500,
-    title,
-}) => {
+const StaticChart: React.FC<StaticChartProps> = ({ data, layout, height = 400 }) => {
     const [isVisible, setIsVisible] = useState(false);
-    const placeholderRef = useRef<HTMLDivElement>(null);
+    const [hasError, setHasError] = useState(false);
 
+    // We track visibility separately from loading state
     useEffect(() => {
-        // Create an intersection observer to detect when the chart area is visible
+        // Use IntersectionObserver to load the chart only when it's visible
         const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0].isIntersecting) {
+            ([entry]) => {
+                if (entry.isIntersecting) {
                     setIsVisible(true);
-                    // Disconnect the observer after triggering load
                     observer.disconnect();
                 }
             },
-            {
-                rootMargin: '200px', // Load a bit before it's actually visible
-                threshold: 0.01,
-            }
+            { threshold: 0.1 }
         );
 
-        if (placeholderRef.current) {
-            observer.observe(placeholderRef.current);
+        const element = document.getElementById('chart-container');
+        if (element) {
+            observer.observe(element);
         }
 
         return () => {
@@ -46,21 +37,43 @@ const StaticChart: React.FC<StaticChartProps> = ({
         };
     }, []);
 
+    // Wrapper to safely render chart
+    const OptimizedPlot = React.lazy(() =>
+        import('./OptimizedPlot').catch((error) => {
+            console.error('Failed to load Plotly:', error);
+            setHasError(true);
+            // Return a minimal component to avoid breaking the app
+            return { default: () => <div className="text-red-500">Chart could not be loaded</div> };
+        })
+    );
+
+    // Ensure data is valid
+    const safeData = Array.isArray(data) ? data : [];
+    const safeLayout = layout || {};
+
     return (
-        <div
-            ref={placeholderRef}
-            style={{ width: '100%', height: `${height}px` }}
-            className="static-chart-container"
-        >
+        <div id="chart-container" className="w-full relative" style={{ height: `${height}px` }}>
             {!isVisible ? (
-                <Loader />
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <Loader />
+                </div>
+            ) : hasError ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-red-500 bg-dark p-4 rounded">
+                        Failed to load chart. Please try refreshing the page.
+                    </div>
+                </div>
             ) : (
-                <OptimizedPlot
-                    data={data}
-                    layout={layout}
-                    style={{ width: '100%', height: '100%' }}
-                    useResizeHandler={true}
-                />
+                <React.Suspense fallback={<Loader />}>
+                    <div className="w-full h-full">
+                        <OptimizedPlot
+                            data={safeData}
+                            layout={safeLayout}
+                            useResizeHandler={true}
+                            style={{ width: '100%', height: '100%' }}
+                        />
+                    </div>
+                </React.Suspense>
             )}
         </div>
     );

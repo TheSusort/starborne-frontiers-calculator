@@ -10,6 +10,7 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { STORAGE_KEYS } from './constants/storage';
 import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
+import ErrorBoundary from './components/error/ErrorBoundary';
 
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
@@ -113,9 +114,20 @@ const App: React.FC = () => {
                                             />
                                             <Route
                                                 path="/defense"
-                                                element={<DefenseCalculatorPage />}
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <DefenseCalculatorPage />
+                                                    </ErrorBoundary>
+                                                }
                                             />
-                                            <Route path="/damage" element={<DPSCalculatorPage />} />
+                                            <Route
+                                                path="/damage"
+                                                element={
+                                                    <ErrorBoundary>
+                                                        <DPSCalculatorPage />
+                                                    </ErrorBoundary>
+                                                }
+                                            />
                                         </Routes>
                                     </Suspense>
                                 </div>
