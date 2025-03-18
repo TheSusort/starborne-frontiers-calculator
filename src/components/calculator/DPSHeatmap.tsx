@@ -100,7 +100,9 @@ export const DPSHeatmap: React.FC<DPSHeatmapProps> = ({ ships = [] }) => {
                             dash: index < 3 ? 'dash' : 'solid',
                         },
                         hovertemplate:
-                            'DPS: ' + Math.round(targetDps).toLocaleString() + '<extra></extra>',
+                            'DPS: ' +
+                            Math.round(targetDps).toLocaleString() +
+                            '<br>Attack: %{y:.2f}<br>Crit Damage: %{x}<extra></extra>',
                     });
                 }
             });
