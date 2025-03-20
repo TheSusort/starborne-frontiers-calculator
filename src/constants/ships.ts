@@ -137,7 +137,8 @@ export const SHIPS: Record<string, ShipData> = {
         activeSkillText:
             'This Unit grants Gelecek Contagion 2 for 3 turns to all allies and deals 195% damage.',
         chargeSkillText: 'This Unit inflicts Inc. Damage Up 2 for 2 turns and deals 250% damage.',
-        firstPassiveSkillText: "This Unit's attacks are always critical.",
+        firstPassiveSkillText:
+            "This Unit's attacks adds 1 charge to its charged skill after critically damaging an enemy.",
         secondPassiveSkillText:
             "This Unit's attacks are always critical hits and adds 1 charge to its charged skill after critically damaging an enemy.",
     },
@@ -270,7 +271,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 24,
         speed: 97,
-        imageKey: '',
+        imageKey: 'Tianchao_13_Portrait.png',
         activeSkillText:
             'This Unit repairs 9% of its max HP to all allies and grants Out. Detonation Damage Up 3 and Attack Up 3 to them for 1 turn.',
         chargeSkillText:
@@ -1114,6 +1115,29 @@ export const SHIPS: Record<string, ShipData> = {
             'When directly damaged while below 40% HP, this unit repairs 20% of its max HP.',
         secondPassiveSkillText:
             'When directly damaged while below 40% HP, this unit repairs 20% of its max HP and inflicts Disable for 1 turn.',
+    },
+    MALVEX: {
+        name: 'Malvex',
+        affinity: 'thermal',
+        rarity: 'epic',
+        faction: 'ATLAS_SYNDICATE',
+        role: 'DEFENDER',
+        hp: 16764,
+        attack: 2678,
+        defense: 2956,
+        hacking: 84,
+        security: 31,
+        critRate: 6,
+        critDamage: 16,
+        speed: 72,
+        imageKey: 'Atlas_14_Portrait.png',
+        activeSkillText:
+            'This Unit deals 140% damage with additional damage equal to 7% of its current shield, bypassing enemy shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
+        chargeSkillText:
+            'This Unit deals 170% damage with additional damage equal to 9% of its current shield, bypassing enemy shield and removes 30% of the enemy shield. If the target has a shield this unit gains grants itself Block Attacks for 1 hit.',
+        firstPassiveSkillText: 'This unit takes 10% less damage when shielded.',
+        secondPassiveSkillText:
+            'This unit takes 10% less damage when shielded. This unit gains a shield equal to 15% of the damage dealt when directly damaged as a primary target.',
     },
     MANGLER: {
         name: 'Mangler',
@@ -2057,7 +2081,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 54,
         speed: 81,
-        imageKey: '',
+        imageKey: 'Everliving_13_Portrait.png',
         activeSkillText: '',
         chargeSkillText: '',
         firstPassiveSkillText: '',
@@ -2077,7 +2101,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 50,
         speed: 78,
-        imageKey: '',
+        imageKey: 'Binderburg_16_Portrait.png',
         activeSkillText: '',
         chargeSkillText: '',
         firstPassiveSkillText: '',

@@ -173,7 +173,7 @@ export const ShipIndexPage: React.FC = () => {
     return (
         <PageLayout
             title="Ship Database"
-            description="Browse all ships I've bothered to add and their base statistics at level 60, no refits."
+            description="Browse all ships I've bothered to add and their base statistics at level 60, no refits. If you have entered engineering stats, they will be included in the stats displayed."
         >
             <div className="space-y-6">
                 <div className="flex flex-col">
