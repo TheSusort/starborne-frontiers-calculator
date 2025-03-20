@@ -1,16 +1,12 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
-    LineChart,
-    Line,
+    ScatterChart,
+    Scatter,
     XAxis,
     YAxis,
-    CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    Scatter,
     Legend,
-    ComposedChart,
-    ReferenceDot,
     LabelList,
 } from 'recharts';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
@@ -30,6 +26,14 @@ interface DPSChartProps {
     height?: number;
 }
 
+// DPS heatmap data point
+interface HeatmapPoint {
+    x: number; // crit damage
+    y: number; // attack
+    z: number; // DPS
+    fill: string; // Color for the point
+}
+
 const ErrorFallback = () => (
     <div className="bg-dark p-4 border border-red-500 rounded">
         <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
@@ -39,7 +43,22 @@ const ErrorFallback = () => (
 );
 
 // Custom tooltip component
-const CustomTooltip = ({ active, payload }: any) => {
+interface TooltipProps {
+    active?: boolean;
+    payload?: Array<{
+        payload: {
+            x: number;
+            y: number;
+            z: number;
+            fill?: string;
+            name?: string;
+            isShipPoint?: boolean;
+            isBest?: boolean;
+        };
+    }>;
+}
+
+const CustomTooltip = ({ active, payload }: TooltipProps) => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
 
@@ -47,19 +66,20 @@ const CustomTooltip = ({ active, payload }: any) => {
             // Ship point tooltip
             return (
                 <div className="bg-dark-lighter p-2 border border-dark-border text-white">
+                    <p className="text-xs text-gray-400">{data.isBest ? 'Best DPS' : ''}</p>
                     <p className="font-bold">{data.name}</p>
-                    <p>Attack: {(data.attack / 1000).toFixed(1)}k</p>
-                    <p>Crit Damage: {data.critDamage}%</p>
-                    <p>DPS: {(data.dps / 1000).toFixed(1)}k</p>
+                    <p>Attack: {(data.y / 1000).toFixed(1)}k</p>
+                    <p>Crit Damage: {data.x.toFixed(0)}%</p>
+                    <p>DPS: {(data.z / 1000).toFixed(1)}k</p>
                 </div>
             );
         } else {
-            // DPS line tooltip
+            // DPS heatmap tooltip
             return (
                 <div className="bg-dark-lighter p-2 border border-dark-border text-white">
-                    <p>DPS Level: {(Math.round(data.dps || 0) / 1000).toFixed(1)}k</p>
-                    <p>Attack: {(Math.round(data.attack || 0) / 1000).toFixed(1)}k</p>
-                    <p>Crit Damage: {Math.round(data.critDamage || 0)}%</p>
+                    <p>Crit Damage: {data.x.toFixed(0)}%</p>
+                    <p>Attack: {(data.y / 1000).toFixed(1)}k</p>
+                    <p>DPS: {(data.z / 1000).toFixed(1)}k</p>
                 </div>
             );
         }
@@ -67,14 +87,131 @@ const CustomTooltip = ({ active, payload }: any) => {
     return null;
 };
 
-export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) => {
-    const chartContainerRef = useRef<HTMLDivElement>(null);
-    const [mousePosition, setMousePosition] = useState<{
+// Generate color for DPS value
+const getDPSColor = (dps: number, maxDps: number): string => {
+    // Use a gradient from blue (low) to orange/red (high)
+    const ratio = dps / maxDps;
+
+    // Use HSL for smoother transitions
+    if (ratio < 0.2) {
+        return '#00008B'; // Dark blue
+    } else if (ratio < 0.4) {
+        return '#0000CD'; // Medium blue
+    } else if (ratio < 0.6) {
+        return '#1E90FF'; // Dodger blue
+    } else if (ratio < 0.8) {
+        return '#00BFFF'; // Deep sky blue
+    } else if (ratio < 1.0) {
+        return '#87CEEB'; // Sky blue
+    } else if (ratio < 1.25) {
+        return '#FFD700'; // Gold
+    } else if (ratio < 1.5) {
+        return '#FFA500'; // Orange
+    } else {
+        return '#FF4500'; // Orange red
+    }
+};
+
+// Define interfaces for the custom shape props
+interface CustomShapeProps {
+    cx: number;
+    cy: number;
+    fill?: string;
+    payload?: {
         x: number;
         y: number;
-        critDamage: number | null;
-        attack: number | null;
-    } | null>(null);
+        z: number;
+        isShipPoint?: boolean;
+        isBest?: boolean;
+        name?: string;
+    };
+}
+
+// Custom shape for scatter points (rectangles for heatmap)
+const CustomHeatmapRect = (props: CustomShapeProps) => {
+    const { cx, cy, fill } = props;
+    // Use a slightly larger rectangle to ensure no gaps between cells
+    const size = 10;
+
+    return <rect x={cx} y={cy - size} width={26} height={size} fill={fill} stroke="none" />;
+};
+
+// Custom shape for ship points (stars)
+const CustomShipShape = (props: CustomShapeProps) => {
+    const { cx, cy, payload } = props;
+
+    if (!payload) return null;
+
+    const size = payload.isBest ? 12 : 6; // Size of the star
+    const starColor = payload.isBest ? '#000' : '#c2c2c2';
+
+    // Create a 5-pointed star shape
+    const points = [
+        [cx, cy - size],
+        [cx + size * 0.3, cy - size * 0.3],
+        [cx + size, cy],
+        [cx + size * 0.3, cy + size * 0.3],
+        [cx, cy + size],
+        [cx - size * 0.3, cy + size * 0.3],
+        [cx - size, cy],
+        [cx - size * 0.3, cy - size * 0.3],
+        [cx, cy - size],
+    ]
+        .map((point) => point.join(','))
+        .join(' ');
+
+    return <path d={`M ${points}`} fill={starColor} stroke="#fff" strokeWidth={1} />;
+};
+
+// Generate legend items for DPS values
+const getLegendData = () => {
+    return [
+        { value: '< 20% max DPS', color: '#00008B', type: 'rect' as const, id: 'legend-1' },
+        { value: '20-40% max DPS', color: '#0000CD', type: 'rect' as const, id: 'legend-2' },
+        { value: '40-60% max DPS', color: '#1E90FF', type: 'rect' as const, id: 'legend-3' },
+        { value: '60-80% max DPS', color: '#00BFFF', type: 'rect' as const, id: 'legend-4' },
+        { value: '80-100% max DPS', color: '#87CEEB', type: 'rect' as const, id: 'legend-5' },
+        { value: '100-125% max DPS', color: '#FFD700', type: 'rect' as const, id: 'legend-6' },
+        { value: '125-150% max DPS', color: '#FFA500', type: 'rect' as const, id: 'legend-7' },
+        { value: '> 150% max DPS', color: '#FF4500', type: 'rect' as const, id: 'legend-8' },
+    ];
+};
+
+// Custom legend to show DPS value ranges
+const CustomLegend = () => {
+    return (
+        <div className="custom-legend flex flex-wrap justify-center mt-4 gap-2 bg-dark-lighter p-2 rounded">
+            {getLegendData().map((item) => (
+                <div key={item.id} className="flex items-center mr-4">
+                    <div className="w-3 h-3 mr-1" style={{ backgroundColor: item.color }} />
+                    <span className="text-xs text-white">{item.value}</span>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+// Define a type for the shape callback props
+interface ShapeCallbackProps {
+    cx?: number;
+    cy?: number;
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+    name?: string;
+    payload?: {
+        x: number;
+        y: number;
+        z: number;
+        fill?: string;
+        name?: string;
+        isShipPoint?: boolean;
+        isBest?: boolean;
+    };
+}
+
+export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) => {
+    const chartContainerRef = useRef<HTMLDivElement>(null);
 
     // Calculate DPS for ships and find max DPS
     const { shipPoints, maxDps } = useMemo(() => {
@@ -99,18 +236,17 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                 const dps = ship.attack * critMultiplier;
 
                 return {
-                    name: ship.name,
                     id: ship.id,
-                    attack: ship.attack,
-                    critDamage: ship.critDamage,
-                    critRate: ship.critRate,
-                    dps,
+                    name: ship.name,
+                    x: ship.critDamage,
+                    y: ship.attack,
+                    z: dps,
                     isBest: ship.isBest,
                     isShipPoint: true,
                 };
             });
 
-            const maxDpsValue = Math.max(...points.map((p) => p.dps));
+            const maxDpsValue = Math.max(...points.map((p) => p.z));
             return { shipPoints: points, maxDps: maxDpsValue };
         } catch (error) {
             console.error('Error generating DPS chart data:', error);
@@ -118,57 +254,51 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
         }
     }, [ships]);
 
-    // Generate simple data for isolines
-    const isolineData = useMemo(() => {
+    // Generate heatmap data
+    const heatmapData = useMemo(() => {
         if (maxDps === 0 || shipPoints.length === 0) return [];
 
-        // Create isoline data points
-        // We'll create simplified isoline data
-        const allData: Array<{
-            name: string;
-            values: Array<{ critDamage: number; attack: number; dps: number }>;
-            color: string;
-            dash: boolean;
-        }> = [];
+        const critDamageRange = { min: 0, max: 275 };
+        const attackRange = { min: 0, max: 30000 };
 
-        // DPS levels as percentages of the max
-        const dpsLevels = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5];
+        // Even finer resolution for complete coverage
+        const critDamageStep = 6.25; // Smaller steps for complete coverage
+        const attackStep = 750; // Smaller steps for complete coverage
 
-        // Get min/max values for axes
-        const attackValues = shipPoints.map((ship) => ship.attack);
-        const critDamageValues = shipPoints.map((ship) => ship.critDamage);
-        const minAttack = Math.min(...attackValues) * 0.5 || 1000;
-        const maxAttack = Math.max(...attackValues) * 1.5 || 10000;
-        const minCritDmg = Math.min(...critDamageValues) * 0.8 || 50;
-        const maxCritDmg = Math.max(...critDamageValues) * 1.2 || 300;
+        const heatmapPoints: HeatmapPoint[] = [];
 
-        dpsLevels.forEach((level, index) => {
-            const dpsValue = maxDps * level;
-            const values = [];
+        // For each grid point in our heatmap
+        for (
+            let critDamage = critDamageRange.min;
+            critDamage <= critDamageRange.max;
+            critDamage += critDamageStep
+        ) {
+            for (let attack = attackRange.min; attack <= attackRange.max; attack += attackStep) {
+                const stats: BaseStats = {
+                    attack: attack || 1, // Avoid division by zero
+                    crit: 100, // Assuming 100% crit rate for the heatmap
+                    critDamage,
+                    hp: 0,
+                    defence: 0,
+                    hacking: 0,
+                    security: 0,
+                    speed: 0,
+                    healModifier: 0,
+                };
 
-            // Create points for this isoline
-            for (let critDmg = minCritDmg; critDmg <= maxCritDmg; critDmg += 10) {
-                const critMultiplier = 1 + critDmg / 100;
-                const attackForDps = dpsValue / critMultiplier;
+                const critMultiplier = calculateCritMultiplier(stats);
+                const dps = attack * critMultiplier;
 
-                if (attackForDps >= minAttack && attackForDps <= maxAttack) {
-                    values.push({
-                        critDamage: critDmg,
-                        attack: attackForDps,
-                        dps: dpsValue,
-                    });
-                }
+                heatmapPoints.push({
+                    x: critDamage,
+                    y: attack,
+                    z: dps,
+                    fill: getDPSColor(dps, maxDps * 1.5), // Using 1.5x maxDps for color scaling
+                });
             }
+        }
 
-            allData.push({
-                name: `DPS: ${Math.round(dpsValue).toLocaleString()}`,
-                values,
-                color: level === 1.0 ? '#ec8c37' : '#888',
-                dash: level < 1.0,
-            });
-        });
-
-        return allData;
+        return heatmapPoints;
     }, [maxDps, shipPoints]);
 
     // If no data or error, show fallback
@@ -176,119 +306,80 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
         return <ErrorFallback />;
     }
 
-    // Mouse move handler for the transparent overlay
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (!chartContainerRef.current) return;
-
-        // Get chart container position
-        const rect = chartContainerRef.current.getBoundingClientRect();
-
-        // Calculate position relative to chart container
-        const relativeX = e.clientX - rect.left;
-        const relativeY = e.clientY - rect.top;
-
-        // Skip if mouse is outside the main chart area (adjust for margins)
-        if (
-            relativeX < 40 ||
-            relativeX > rect.width - 20 ||
-            relativeY < 20 ||
-            relativeY > rect.height - 40
-        ) {
-            return;
-        }
-
-        // Calculate effective chart area
-        const chartWidth = rect.width - 60; // Left and right margins
-        const chartHeight = rect.height - 60; // Top and bottom margins
-
-        // Calculate position within the actual data area
-        const xRatio = (relativeX - 40) / chartWidth;
-        const yRatio = (relativeY - 20) / chartHeight;
-
-        // Map to data range
-        const critDamage = Math.round(50 + xRatio * (275 - 50));
-        const attack = Math.round(30000 * (1 - yRatio));
-
-        setMousePosition({
-            x: relativeX,
-            y: relativeY,
-            critDamage,
-            attack,
-        });
-    };
-
-    const handleMouseLeave = () => {
-        setMousePosition(null);
-    };
-
-    // Calculate DPS based on estimated position
-    const dps =
-        mousePosition?.attack && mousePosition?.critDamage
-            ? mousePosition.attack * (1 + mousePosition.critDamage / 100)
-            : null;
-
     return (
         <div className="dps-chart">
-            <h2 className="text-xl font-bold mb-4">DPS Analysis</h2>
-            <div ref={chartContainerRef} style={{ width: '100%', height, position: 'relative' }}>
+            <h2 className="text-xl font-bold mb-4">DPS Analysis Heatmap</h2>
+            <div
+                ref={chartContainerRef}
+                style={{
+                    width: '100%',
+                    height,
+                    position: 'relative',
+                    backgroundColor: '#111827', // Dark background to match cells
+                }}
+            >
                 {/* The chart container */}
                 <ResponsiveContainer>
-                    <ComposedChart margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                    <ScatterChart>
                         <XAxis
                             type="number"
-                            dataKey="critDamage"
+                            dataKey="x"
                             name="Crit Damage"
+                            domain={[0, 275]}
+                            ticks={[0, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275]}
                             label={{
                                 value: 'Crit Damage (%)',
-                                position: 'insideBottomRight',
+                                position: 'insideBottom',
                                 offset: -10,
                                 fill: '#fff',
                             }}
                             tick={{ fill: '#fff' }}
-                            domain={['auto', 'auto']}
                         />
                         <YAxis
                             type="number"
-                            dataKey="attack"
+                            dataKey="y"
                             name="Attack"
+                            domain={[0, 30000]}
+                            ticks={[0, 5000, 10000, 15000, 20000, 25000, 30000]}
+                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                             label={{
                                 value: 'Attack',
                                 angle: -90,
                                 position: 'insideLeft',
+                                offset: 10,
                                 fill: '#fff',
                             }}
                             tick={{ fill: '#fff' }}
-                            domain={['auto', 'auto']}
                         />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
+                        <Tooltip content={<CustomTooltip />} cursor={false} />
+                        <Legend content={<CustomLegend />} />
 
-                        {/* Render the isolines */}
-                        {isolineData.map((line, index) => (
-                            <Line
-                                key={`isoline-${index}`}
-                                data={line.values}
-                                dataKey="attack"
-                                type="monotone"
-                                name={line.name}
-                                stroke={line.color}
-                                strokeWidth={line.name.includes('100%') ? 3 : 1.5}
-                                strokeDasharray={line.dash ? '5 5' : '0'}
-                                dot={false}
-                                activeDot={{ r: 6, fill: line.color, stroke: '#fff' }}
-                                isAnimationActive={false}
-                            />
-                        ))}
+                        {/* Render the heatmap */}
+                        <Scatter
+                            name="DPS Heatmap"
+                            data={heatmapData}
+                            shape={(props: ShapeCallbackProps) => (
+                                <CustomHeatmapRect
+                                    cx={props.cx || 0}
+                                    cy={props.cy || 0}
+                                    fill={props.fill}
+                                />
+                            )}
+                            isAnimationActive={false}
+                        />
 
                         {/* Render ship points */}
                         <Scatter
                             name="Ships"
                             data={shipPoints}
-                            fill="#c2c2c2"
-                            stroke="#fff"
-                            strokeWidth={1}
-                            dataKey="critDamage"
+                            shape={(props: ShapeCallbackProps) => (
+                                <CustomShipShape
+                                    cx={props.cx || 0}
+                                    cy={props.cy || 0}
+                                    payload={props.payload}
+                                />
+                            )}
+                            zAxisId={1}
                         >
                             <LabelList
                                 dataKey="name"
@@ -298,48 +389,8 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                                 width={100}
                             />
                         </Scatter>
-
-                        {/* Add special markers for best ships */}
-                        {shipPoints
-                            .filter((ship) => ship.isBest)
-                            .map((ship) => (
-                                <ReferenceDot
-                                    key={ship.id}
-                                    x={ship.critDamage}
-                                    y={ship.attack}
-                                    r={8}
-                                    fill="#ec8c37"
-                                    stroke="white"
-                                    strokeWidth={1}
-                                />
-                            ))}
-                    </ComposedChart>
+                    </ScatterChart>
                 </ResponsiveContainer>
-
-                {/* Transparent overlay for mouse tracking */}
-                <div
-                    className="absolute inset-0"
-                    style={{ pointerEvents: 'all', zIndex: 20 }}
-                    onMouseMove={handleMouseMove}
-                    onMouseLeave={handleMouseLeave}
-                />
-
-                {/* Display coordinate info on hover */}
-                {mousePosition && (
-                    <div
-                        className="absolute bg-dark-lighter p-2 border border-dark-border text-white text-sm"
-                        style={{
-                            left: (mousePosition.x || 0) + 10,
-                            top: (mousePosition.y || 0) + 10,
-                            zIndex: 30,
-                            pointerEvents: 'none',
-                        }}
-                    >
-                        <p>Crit Damage: {mousePosition.critDamage}%</p>
-                        <p>Attack: {((mousePosition.attack || 0) / 1000).toFixed(1)}k</p>
-                        <p>Est. DPS: {((dps || 0) / 1000).toFixed(1)}k</p>
-                    </div>
-                )}
             </div>
         </div>
     );

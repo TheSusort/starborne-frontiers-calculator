@@ -79,16 +79,24 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
             }));
     }, [ships]);
 
-    console.log(regularShips);
-    console.log(highlightedShips);
-
     // If no data or error, show fallback
     if (curveData.length === 0) {
         return <ErrorFallback />;
     }
 
     // Custom tooltip component
-    const CustomTooltip = ({ active, payload }: any) => {
+    interface TooltipProps {
+        active?: boolean;
+        payload?: Array<{
+            payload: {
+                defense: number;
+                reduction: number;
+                name?: string;
+            };
+        }>;
+    }
+
+    const CustomTooltip = ({ active, payload }: TooltipProps) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
 

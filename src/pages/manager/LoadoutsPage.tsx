@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { PageLayout, CollapsibleForm, Tabs } from '../components/ui';
-import { useLoadouts } from '../hooks/useLoadouts';
-import { LoadoutForm } from '../components/loadout/LoadoutForm';
-import { LoadoutList } from '../components/loadout/LoadoutList';
-import { TeamLoadoutForm } from '../components/loadout/TeamLoadoutForm';
-import { TeamLoadoutCard } from '../components/loadout/TeamLoadoutCard';
-import { useInventory } from '../hooks/useInventory';
-import { useNotification } from '../hooks/useNotification';
-import { useShips } from '../hooks/useShips';
-import { Loader } from '../components/ui/Loader';
+import { PageLayout, CollapsibleForm, Tabs } from '../../components/ui';
+import { useLoadouts } from '../../hooks/useLoadouts';
+import { LoadoutForm } from '../../components/loadout/LoadoutForm';
+import { LoadoutList } from '../../components/loadout/LoadoutList';
+import { TeamLoadoutForm } from '../../components/loadout/TeamLoadoutForm';
+import { TeamLoadoutCard } from '../../components/loadout/TeamLoadoutCard';
+import { useInventory } from '../../hooks/useInventory';
+import { useNotification } from '../../hooks/useNotification';
+import { useShips } from '../../hooks/useShips';
+import { Loader } from '../../components/ui/Loader';
 
 export const LoadoutsPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);

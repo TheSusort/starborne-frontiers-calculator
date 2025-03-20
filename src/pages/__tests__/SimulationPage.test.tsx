@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '../../test-utils/test-utils';
-import { SimulationPage } from '../SimulationPage';
+import { SimulationPage } from '../manager/SimulationPage';
 import { Ship } from '../../types/ship';
 import { vi } from 'vitest';
 import React from 'react';

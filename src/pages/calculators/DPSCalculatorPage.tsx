@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloseIcon, PageLayout } from '../components/ui';
-import { calculateDPS, calculateCritMultiplier } from '../utils/autogear/scoring';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { DPSCalculatorTable } from '../components/calculator/DPSCalculatorTable';
-import { DPSChart } from '../components/calculator/DPSChart';
-import { BaseStats } from '../types/stats';
+import { CloseIcon, PageLayout } from '../../components/ui';
+import { calculateDPS, calculateCritMultiplier } from '../../utils/autogear/scoring';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
+import { DPSChart } from '../../components/calculator/DPSChart';
+import { BaseStats } from '../../types/stats';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -19,11 +19,11 @@ interface ShipConfig {
 
 const DPSCalculatorPage: React.FC = () => {
     const [configs, setConfigs] = useState<ShipConfig[]>([
-        { id: '1', name: 'Ship 1', attack: 5000, crit: 100, critDamage: 100 },
+        { id: '1', name: 'Ship 1', attack: 15000, crit: 100, critDamage: 125 },
     ]);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
-    const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('table');
+    const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
 
     // Calculate DPS for all configs
     useEffect(() => {
@@ -61,7 +61,7 @@ const DPSCalculatorPage: React.FC = () => {
         const newConfig: ShipConfig = {
             id: nextId.toString(),
             name: `Ship ${nextId}`,
-            attack: 5000,
+            attack: 15000,
             crit: 100,
             critDamage: 150,
         };
@@ -293,10 +293,9 @@ const DPSCalculatorPage: React.FC = () => {
                 <div className="bg-dark p-4 border border-dark-border">
                     <div className="flex justify-between items-center mb-2">
                         <h3 className="text-lg font-bold">DPS Comparison</h3>
-                        {/**
                         <Button variant="secondary" onClick={toggleViewMode}>
                             Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
-                        </Button>*/}
+                        </Button>
                     </div>
                     <p className="text-sm text-gray-400 mb-4">
                         This visualization shows DPS values at 100% crit rate for different attack

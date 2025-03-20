@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '../../test-utils/test-utils';
-import { AutogearPage } from '../AutogearPage';
+import { AutogearPage } from '../manager/AutogearPage';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { vi } from 'vitest';

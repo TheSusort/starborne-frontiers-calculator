@@ -1,12 +1,12 @@
 import React, { useState, useCallback } from 'react';
-import { ShipForm } from '../components/ship/ShipForm';
-import { ShipInventory } from '../components/ship/ShipInventory';
-import { useInventory } from '../hooks/useInventory';
-import { useShips } from '../hooks/useShips';
-import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
-import { useNotification } from '../hooks/useNotification';
-import { Ship } from '../types/ship';
-import { Loader } from '../components/ui/Loader';
+import { ShipForm } from '../../components/ship/ShipForm';
+import { ShipInventory } from '../../components/ship/ShipInventory';
+import { useInventory } from '../../hooks/useInventory';
+import { useShips } from '../../hooks/useShips';
+import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
+import { useNotification } from '../../hooks/useNotification';
+import { Ship } from '../../types/ship';
+import { Loader } from '../../components/ui/Loader';
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
     const [isFormVisible, setIsFormVisible] = useState(false);

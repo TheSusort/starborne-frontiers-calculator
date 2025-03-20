@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '../../test-utils/test-utils';
-import { EngineeringStatsPage } from '../EngineeringStatsPage';
+import { EngineeringStatsPage } from '../manager/EngineeringStatsPage';
 import { EngineeringStats, EngineeringStat } from '../../types/stats';
 import { vi } from 'vitest';
 import React from 'react';

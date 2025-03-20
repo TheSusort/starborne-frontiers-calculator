@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { useShips } from '../hooks/useShips';
-import { useInventory } from '../hooks/useInventory';
-import { GearSuggestion, StatPriority, SetPriority } from '../types/autogear';
-import { GearPiece } from '../types/gear';
-import { calculateTotalStats } from '../utils/ship/statsCalculator';
-import { PageLayout, ProgressBar } from '../components/ui';
-import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
-import { getAutogearStrategy } from '../utils/autogear/getStrategy';
-import { runSimulation, SimulationSummary } from '../utils/simulation/simulationCalculator';
-import { StatList } from '../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../constants';
-import { AutogearSettings } from '../components/autogear/AutogearSettings';
-import { GearSuggestions } from '../components/autogear/GearSuggestions';
-import { SimulationResults } from '../components/simulation/SimulationResults';
-import { useNotification } from '../hooks/useNotification';
-import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
-import { GEAR_SLOTS } from '../constants';
+import { useShips } from '../../hooks/useShips';
+import { useInventory } from '../../hooks/useInventory';
+import { GearSuggestion, StatPriority, SetPriority } from '../../types/autogear';
+import { GearPiece } from '../../types/gear';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { PageLayout, ProgressBar } from '../../components/ui';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
+import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
+import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
+import { StatList } from '../../components/stats/StatList';
+import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { AutogearSettings } from '../../components/autogear/AutogearSettings';
+import { GearSuggestions } from '../../components/autogear/GearSuggestions';
+import { SimulationResults } from '../../components/simulation/SimulationResults';
+import { useNotification } from '../../hooks/useNotification';
+import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
+import { GEAR_SLOTS } from '../../constants';
 import { useSearchParams } from 'react-router-dom';
-import { Ship } from '../types/ship';
+import { Ship } from '../../types/ship';
 
 export const AutogearPage: React.FC = () => {
     // Helper functions (before hooks)

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '../../test-utils/test-utils';
-import { LoadoutsPage } from '../LoadoutsPage';
+import { LoadoutsPage } from '../manager/LoadoutsPage';
 import { Loadout, TeamLoadout } from '../../types/loadout';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';

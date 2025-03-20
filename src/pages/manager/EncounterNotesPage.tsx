@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { EncounterNote } from '../types/encounters';
-import EncounterForm from '../components/encounters/EncounterForm';
-import EncounterList from '../components/encounters/EncounterList';
-import { PageLayout } from '../components/ui/layout/PageLayout';
-import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
-import { CollapsibleForm } from '../components/ui/layout/CollapsibleForm';
-import { useEncounterNotes } from '../hooks/useEncounterNotes';
-import { useNotification } from '../hooks/useNotification';
-import { Loader } from '../components/ui/Loader';
+import { EncounterNote } from '../../types/encounters';
+import EncounterForm from '../../components/encounters/EncounterForm';
+import EncounterList from '../../components/encounters/EncounterList';
+import { PageLayout } from '../../components/ui/layout/PageLayout';
+import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
+import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
+import { useEncounterNotes } from '../../hooks/useEncounterNotes';
+import { useNotification } from '../../hooks/useNotification';
+import { Loader } from '../../components/ui/Loader';
 
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =

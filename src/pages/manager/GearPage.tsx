@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { PageLayout, CollapsibleForm, ConfirmModal } from '../components/ui';
-import { GearPieceForm } from '../components/gear/GearPieceForm';
-import { GearInventory } from '../components/gear/GearInventory';
-import { GearUpgradeAnalysis } from '../components/gear/GearUpgradeAnalysis';
-import { GearPiece } from '../types/gear';
-import { useInventory } from '../hooks/useInventory';
-import { useNotification } from '../hooks/useNotification';
-import { useShips } from '../hooks/useShips';
-import { SHIP_TYPES } from '../constants';
-import { Tabs } from '../components/ui/layout/Tabs';
-import { Loader } from '../components/ui/Loader';
+import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
+import { GearPieceForm } from '../../components/gear/GearPieceForm';
+import { GearInventory } from '../../components/gear/GearInventory';
+import { GearUpgradeAnalysis } from '../../components/gear/GearUpgradeAnalysis';
+import { GearPiece } from '../../types/gear';
+import { useInventory } from '../../hooks/useInventory';
+import { useNotification } from '../../hooks/useNotification';
+import { useShips } from '../../hooks/useShips';
+import { SHIP_TYPES } from '../../constants';
+import { Tabs } from '../../components/ui/layout/Tabs';
+import { Loader } from '../../components/ui/Loader';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();

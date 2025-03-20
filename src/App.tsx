@@ -14,20 +14,20 @@ import { ChangelogState } from './types/changelog';
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
-const ShipsPage = lazy(() => import('./pages/ShipsPage'));
-const GearPage = lazy(() => import('./pages/GearPage'));
-const SimulationPage = lazy(() => import('./pages/SimulationPage'));
-const AutogearPage = lazy(() => import('./pages/AutogearPage'));
-const EngineeringStatsPage = lazy(() => import('./pages/EngineeringStatsPage'));
-const LoadoutsPage = lazy(() => import('./pages/LoadoutsPage'));
-const EncounterNotesPage = lazy(() => import('./pages/EncounterNotesPage'));
+const ShipsPage = lazy(() => import('./pages/manager/ShipsPage'));
+const GearPage = lazy(() => import('./pages/manager/GearPage'));
+const SimulationPage = lazy(() => import('./pages/manager/SimulationPage'));
+const AutogearPage = lazy(() => import('./pages/manager/AutogearPage'));
+const EngineeringStatsPage = lazy(() => import('./pages/manager/EngineeringStatsPage'));
+const LoadoutsPage = lazy(() => import('./pages/manager/LoadoutsPage'));
+const EncounterNotesPage = lazy(() => import('./pages/manager/EncounterNotesPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
-const ShipDetailsPage = lazy(() => import('./pages/ShipDetailsPage'));
+const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 
 // Calculator pages
-const DefenseCalculatorPage = lazy(() => import('./pages/DefenseCalculatorPage'));
-const DPSCalculatorPage = lazy(() => import('./pages/DPSCalculatorPage'));
+const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
+const DPSCalculatorPage = lazy(() => import('./pages/calculators/DPSCalculatorPage'));
 
 // init hotjar
 const siteId = 5241833;
