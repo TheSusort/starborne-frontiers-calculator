@@ -2391,10 +2391,13 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 62,
         speed: 83,
         imageKey: 'Tianchao_12_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText: 'This unit gains Crit Power Up 2 for 1 turn, then deals 200% damage.',
+        chargeSkillText:
+            'This unit grants Tianchao Precision 2 for 3 turns to all allies with stealth and deals 220% damage with affinity advantage.',
+        firstPassiveSkillText:
+            'This unit gains Stealth for 1 turn after critically damaging an enemy. If directly damaged while stealthed, this unit reduces that damage by 25% but loses stealth.',
+        secondPassiveSkillText:
+            'This unit starts combat fully charged. This unit gains Stealth for 1 turn after critically damaging an enemy. If directly damaged while stealthed, this unit reduces that damage by 25% but loses stealth.',
     },
     XCELLENCE: {
         name: 'Xcellence',

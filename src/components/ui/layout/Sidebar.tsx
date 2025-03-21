@@ -140,11 +140,7 @@ export const Sidebar: React.FC = () => {
         (item: NavigationItem): boolean => {
             if (isActive(item.path)) return true;
             if (item.children) {
-                return item.children.some(
-                    (child) =>
-                        location.pathname === child.path ||
-                        location.pathname.startsWith(child.path + '/')
-                );
+                return item.children.some((child) => location.pathname === child.path);
             }
             return false;
         },

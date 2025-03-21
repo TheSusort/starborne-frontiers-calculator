@@ -151,7 +151,7 @@ const DPSCalculatorPage: React.FC = () => {
     return (
         <PageLayout
             title="DPS Calculator"
-            description="Compare damage per second calculations for different ship configurations"
+            description="Compare damage per hit calculations for different ship configurations."
             action={{
                 label: 'Add Ship',
                 onClick: addConfig,
