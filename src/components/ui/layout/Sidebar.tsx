@@ -170,6 +170,7 @@ export const Sidebar: React.FC = () => {
             children: [
                 { path: '/defense', label: 'Defense Calculator' },
                 { path: '/damage', label: 'Damage Calculator' },
+                { path: '/healing', label: 'Healing Calculator' },
             ],
         },
     ];

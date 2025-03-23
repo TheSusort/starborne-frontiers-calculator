@@ -64,6 +64,20 @@ const HomePage: React.FC = () => {
                     </li>
                     <li>Encounter notes and tracking, for saving and sharing fleet formations</li>
                     <li>Engineering stats, I just wanted to achieve 100% stat coverage</li>
+                    <li>
+                        Specialized calculators for{' '}
+                        <Link to="/defense" className="text-primary hover:text-primary-hover">
+                            Defense
+                        </Link>
+                        ,{' '}
+                        <Link to="/damage" className="text-primary hover:text-primary-hover">
+                            Damage
+                        </Link>
+                        , and{' '}
+                        <Link to="/healing" className="text-primary hover:text-primary-hover">
+                            Healing
+                        </Link>
+                    </li>
                 </ul>
             </section>
 
