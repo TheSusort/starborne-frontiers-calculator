@@ -1,5 +1,5 @@
 import { BaseStats } from '../../types/stats';
-import { SHIPS } from '../../constants/ships';
+import { shipsService } from '../../services/firebase/ships';
 export interface ParsedShipData {
     baseStats: BaseStats;
     faction: string;
@@ -9,30 +9,39 @@ export interface ParsedShipData {
 }
 
 export async function fetchShipData(shipName: string): Promise<ParsedShipData | null> {
-    // fetch ship data from constant ships
-    const shipData = SHIPS[shipName.toUpperCase().replace(' ', '_') as keyof typeof SHIPS];
-    if (!shipData) {
+    if (!shipName || shipName.trim() === '') {
+        console.error('Invalid ship name provided');
         return null;
     }
 
-    const parsedShipData: ParsedShipData = {
-        baseStats: {
-            hp: shipData.hp,
-            attack: shipData.attack,
-            defence: shipData.defense,
-            hacking: shipData.hacking,
-            security: shipData.security,
-            crit: shipData.critRate,
-            critDamage: shipData.critDamage,
-            speed: shipData.speed,
-            healModifier: 0,
-            hpRegen: shipData.hpRegen || 0,
-        },
-        faction: shipData.faction.toUpperCase().replace(' ', '_'),
-        type: shipData.role.toUpperCase(),
-        rarity: shipData.rarity.toLowerCase(),
-        affinity: shipData.affinity,
-    };
+    try {
+        // Fetch the ship directly by name from Firestore
+        const shipData = await shipsService.getShipByName(shipName);
 
-    return parsedShipData;
+        if (!shipData) {
+            // eslint-disable-next-line no-console
+            console.warn(`Ship not found in Firestore: ${shipName}`);
+            return null;
+        }
+
+        const parsedShipData: ParsedShipData = {
+            baseStats: {
+                ...shipData.baseStats,
+                // Ensure all required properties are present
+                healModifier: shipData.baseStats.healModifier || 0,
+                hpRegen: shipData.baseStats.hpRegen || 0,
+            },
+            faction: shipData.faction,
+            type: shipData.type,
+            rarity: shipData.rarity,
+            affinity: shipData.affinity || 'chemical', // Default to chemical if not available
+        };
+
+        // eslint-disable-next-line no-console
+        console.log(`Successfully fetched ship data for: ${shipName}`);
+        return parsedShipData;
+    } catch (error) {
+        console.error(`Error fetching ship data from Firestore for ${shipName}:`, error);
+        return null;
+    }
 }

@@ -7,7 +7,7 @@ import { FACTIONS } from '../../../constants/factions';
 import { fetchShipData } from '../../../utils/dataUpdate/shipDataFetcher';
 
 // Mock fetch ship data utility
-vi.mock('../../../utils/shipDataFetcher', () => ({
+vi.mock('../../../utils/dataUpdate/shipDataFetcher', () => ({
     fetchShipData: vi.fn(),
 }));
 

@@ -1,5 +1,5 @@
 import { db } from '../../config/firebase';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
 import { BaseStats } from '../../types/stats';
 import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
@@ -44,6 +44,11 @@ class ShipsService {
         return Date.now() - entry.timestamp < CACHE_DURATION;
     }
 
+    // Helper method to format ship name into a consistent ID format
+    private formatShipId(name: string): string {
+        return name.toUpperCase().replace(/\s+/g, '_');
+    }
+
     async getAllShips(): Promise<Ship[]> {
         const cacheKey = 'all_ships_array';
         const cachedData = this.cache.get(cacheKey);
@@ -85,6 +90,64 @@ class ShipsService {
         const firebaseShip = {
             id: shipDoc.id,
             ...shipDoc.data(),
+        } as FirebaseShip;
+
+        const transformedShip = this.transformShipsData([firebaseShip])[0];
+
+        this.cache.set(cacheKey, {
+            data: transformedShip,
+            timestamp: Date.now(),
+        });
+
+        return transformedShip;
+    }
+
+    async getShipByName(name: string): Promise<Ship | null> {
+        const cacheKey = `ship_name_${name.toLowerCase()}`;
+        const cachedData = this.cache.get(cacheKey);
+
+        if (cachedData && this.isValidCache(cachedData)) {
+            return cachedData.data as Ship;
+        }
+
+        // First try to get the ship by ID (uppercase version of name)
+        const shipId = this.formatShipId(name);
+        const shipById = await this.getShipById(shipId);
+
+        if (shipById) {
+            this.cache.set(cacheKey, {
+                data: shipById,
+                timestamp: Date.now(),
+            });
+            return shipById;
+        }
+
+        // If not found by ID, create a query against the collection to find the ship by name
+        const q = query(collection(db, SHIPS_COLLECTION), where('name', '==', name), limit(1));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            // Try a case-insensitive search as a fallback by getting all ships
+            const allShips = await this.getAllShips();
+            const shipMatch = allShips.find(
+                (ship) => ship.name.toLowerCase() === name.toLowerCase()
+            );
+
+            if (!shipMatch) {
+                return null;
+            }
+
+            this.cache.set(cacheKey, {
+                data: shipMatch,
+                timestamp: Date.now(),
+            });
+
+            return shipMatch;
+        }
+
+        const firebaseShip = {
+            id: querySnapshot.docs[0].id,
+            ...querySnapshot.docs[0].data(),
         } as FirebaseShip;
 
         const transformedShip = this.transformShipsData([firebaseShip])[0];

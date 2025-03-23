@@ -16,7 +16,7 @@ export interface FilterState {
 }
 
 const DEFAULT_STATE: FilterState = {
-    sort: { field: 'id', direction: 'desc' },
+    sort: { field: 'name', direction: 'asc' },
     filters: {
         factions: [],
         shipTypes: [],
