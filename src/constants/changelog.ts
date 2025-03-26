@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.23.0';
+export const CURRENT_VERSION = '0.24.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.24.0',
+        date: '2025-03-26',
+        changes: ['Added healing calculator', 'Added hit deconstruction calculator'],
+    },
     {
         version: '0.23.0',
         date: '2025-03-18',
