@@ -171,6 +171,7 @@ export const Sidebar: React.FC = () => {
                 { path: '/defense', label: 'Defense Calculator' },
                 { path: '/damage', label: 'Damage Calculator' },
                 { path: '/healing', label: 'Healing Calculator' },
+                { path: '/damage-deconstruction', label: 'Hit Deconstruction' },
             ],
         },
     ];

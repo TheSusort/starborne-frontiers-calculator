@@ -73,9 +73,16 @@ const HomePage: React.FC = () => {
                         <Link to="/damage" className="text-primary hover:text-primary-hover">
                             Damage
                         </Link>
-                        , and{' '}
+                        ,{' '}
                         <Link to="/healing" className="text-primary hover:text-primary-hover">
                             Healing
+                        </Link>
+                        , and{' '}
+                        <Link
+                            to="/damage-deconstruction"
+                            className="text-primary hover:text-primary-hover"
+                        >
+                            Damage Deconstruction
                         </Link>
                     </li>
                 </ul>

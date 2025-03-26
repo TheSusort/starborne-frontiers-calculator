@@ -29,6 +29,7 @@ const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
 const DPSCalculatorPage = lazy(() => import('./pages/calculators/DPSCalculatorPage'));
 const HealingCalculatorPage = lazy(() => import('./pages/calculators/HealingCalculatorPage'));
+const DamageDeconstructionPage = lazy(() => import('./pages/calculators/DamageDeconstructionPage'));
 
 // init hotjar
 const siteId = 5241833;
@@ -116,6 +117,10 @@ const App: React.FC = () => {
                                             <Route
                                                 path="/healing"
                                                 element={<HealingCalculatorPage />}
+                                            />
+                                            <Route
+                                                path="/damage-deconstruction"
+                                                element={<DamageDeconstructionPage />}
                                             />
                                         </Routes>
                                     </Suspense>
