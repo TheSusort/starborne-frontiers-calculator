@@ -114,7 +114,16 @@ export const ShipIndexPage: React.FC = () => {
                 (state.filters.rarities?.length ?? 0) === 0 ||
                 (state.filters.rarities?.includes(ship.rarity) ?? false);
             const matchesSearch =
-                searchQuery === '' || ship.name.toLowerCase().includes(searchQuery.toLowerCase());
+                searchQuery === '' ||
+                ship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (ship.activeSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                    false) ||
+                (ship.chargeSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                    false) ||
+                (ship.firstPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                    false) ||
+                (ship.secondPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                    false);
             return matchesFaction && matchesType && matchesRarity && matchesSearch;
         });
 
@@ -185,7 +194,7 @@ export const ShipIndexPage: React.FC = () => {
                             <SearchInput
                                 value={searchQuery}
                                 onChange={setSearchQuery}
-                                placeholder="Search ships..."
+                                placeholder="Search ships by name or skills..."
                                 className="w-full mb-2"
                             />
                         </div>
