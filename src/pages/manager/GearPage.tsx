@@ -10,6 +10,8 @@ import { useShips } from '../../hooks/useShips';
 import { SHIP_TYPES } from '../../constants';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 export const GearPage: React.FC = () => {
     const { inventory, loading, error, saveInventory } = useInventory();
@@ -94,60 +96,66 @@ export const GearPage: React.FC = () => {
     }
 
     return (
-        <PageLayout
-            title="Gear Management"
-            description="Manage your gear and its stats."
-            action={{
-                label: isFormVisible ? 'Hide Form' : 'Create',
-                onClick: () => {
-                    if (editingPiece) {
-                        setEditingPiece(undefined);
-                    }
-                    setIsFormVisible(!isFormVisible);
-                },
-                variant: isFormVisible ? 'secondary' : 'primary',
-            }}
-        >
-            {error && (
-                <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700">
-                    {error}
-                </div>
-            )}
-
-            <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
-                <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
-            </CollapsibleForm>
-
-            <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-            {activeTab === 'inventory' ? (
-                <>
-                    <GearInventory
-                        inventory={inventory}
-                        onRemove={handleRemovePiece}
-                        onEdit={handleEditPiece}
-                    />
-                </>
-            ) : (
-                <GearUpgradeAnalysis inventory={inventory} shipRoles={Object.keys(SHIP_TYPES)} />
-            )}
-
-            <ConfirmModal
-                isOpen={showDeleteConfirm}
-                onClose={() => {
-                    setShowDeleteConfirm(false);
-                    setPendingDeleteId(null);
+        <>
+            <Seo {...SEO_CONFIG.gear} />
+            <PageLayout
+                title="Gear Management"
+                description="Manage your gear and its stats."
+                action={{
+                    label: isFormVisible ? 'Hide Form' : 'Create',
+                    onClick: () => {
+                        if (editingPiece) {
+                            setEditingPiece(undefined);
+                        }
+                        setIsFormVisible(!isFormVisible);
+                    },
+                    variant: isFormVisible ? 'secondary' : 'primary',
                 }}
-                onConfirm={() => pendingDeleteId && deleteGearPiece(pendingDeleteId)}
-                title="Delete Gear Piece"
-                message={
-                    pendingDeletePieceEquipped
-                        ? 'This gear piece is currently equipped. Are you sure you want to delete it?'
-                        : 'Are you sure you want to delete this gear piece?'
-                }
-                confirmLabel="Delete"
-                cancelLabel="Cancel"
-            />
-        </PageLayout>
+            >
+                {error && (
+                    <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700">
+                        {error}
+                    </div>
+                )}
+
+                <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
+                    <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
+                </CollapsibleForm>
+
+                <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                {activeTab === 'inventory' ? (
+                    <>
+                        <GearInventory
+                            inventory={inventory}
+                            onRemove={handleRemovePiece}
+                            onEdit={handleEditPiece}
+                        />
+                    </>
+                ) : (
+                    <GearUpgradeAnalysis
+                        inventory={inventory}
+                        shipRoles={Object.keys(SHIP_TYPES)}
+                    />
+                )}
+
+                <ConfirmModal
+                    isOpen={showDeleteConfirm}
+                    onClose={() => {
+                        setShowDeleteConfirm(false);
+                        setPendingDeleteId(null);
+                    }}
+                    onConfirm={() => pendingDeleteId && deleteGearPiece(pendingDeleteId)}
+                    title="Delete Gear Piece"
+                    message={
+                        pendingDeletePieceEquipped
+                            ? 'This gear piece is currently equipped. Are you sure you want to delete it?'
+                            : 'Are you sure you want to delete this gear piece?'
+                    }
+                    confirmLabel="Delete"
+                    cancelLabel="Cancel"
+                />
+            </PageLayout>
+        </>
     );
 };
 

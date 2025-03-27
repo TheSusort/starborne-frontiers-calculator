@@ -19,6 +19,8 @@ import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
 import { GEAR_SLOTS } from '../../constants';
 import { useSearchParams } from 'react-router-dom';
 import { Ship } from '../../types/ship';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 export const AutogearPage: React.FC = () => {
     // Helper functions (before hooks)
@@ -308,79 +310,86 @@ export const AutogearPage: React.FC = () => {
     const suggestedStats = calculateSuggestedStats(suggestions);
 
     return (
-        <PageLayout title="Autogear" description="Find the best gear for your ship.">
-            <div className="md:grid md:grid-cols-2 gap-4">
-                <AutogearSettings
-                    selectedShip={selectedShip || null}
-                    selectedShipRole={selectedShipRole}
-                    selectedAlgorithm={selectedAlgorithm}
-                    priorities={statPriorities}
-                    ignoreEquipped={ignoreEquipped}
-                    onIgnoreEquippedChange={setIgnoreEquipped}
-                    onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                    onRoleSelect={handleRoleChange}
-                    onAlgorithmSelect={setSelectedAlgorithm}
-                    onAddPriority={handleAddStatPriority}
-                    onRemovePriority={handleRemoveStatPriority}
-                    onFindOptimalGear={handleAutogear}
-                    showSecondaryRequirements={showSecondaryRequirements}
-                    onToggleSecondaryRequirements={setShowSecondaryRequirements}
-                    setPriorities={setPriorities}
-                    onAddSetPriority={handleAddSetPriority}
-                    onRemoveSetPriority={handleRemoveSetPriority}
-                />
+        <>
+            <Seo {...SEO_CONFIG.autogear} />
+            <PageLayout title="Autogear" description="Find the best gear for your ship.">
+                <div className="md:grid md:grid-cols-2 gap-4">
+                    <AutogearSettings
+                        selectedShip={selectedShip || null}
+                        selectedShipRole={selectedShipRole}
+                        selectedAlgorithm={selectedAlgorithm}
+                        priorities={statPriorities}
+                        ignoreEquipped={ignoreEquipped}
+                        onIgnoreEquippedChange={setIgnoreEquipped}
+                        onShipSelect={(ship) => setSelectedShipId(ship.id)}
+                        onRoleSelect={handleRoleChange}
+                        onAlgorithmSelect={setSelectedAlgorithm}
+                        onAddPriority={handleAddStatPriority}
+                        onRemovePriority={handleRemoveStatPriority}
+                        onFindOptimalGear={handleAutogear}
+                        showSecondaryRequirements={showSecondaryRequirements}
+                        onToggleSecondaryRequirements={setShowSecondaryRequirements}
+                        setPriorities={setPriorities}
+                        onAddSetPriority={handleAddSetPriority}
+                        onRemoveSetPriority={handleRemoveSetPriority}
+                    />
 
-                {suggestions.length > 0 && (
-                    <GearSuggestions
-                        suggestions={suggestions}
-                        getGearPiece={getGearPiece}
-                        hoveredGear={hoveredGear}
-                        onHover={setHoveredGear}
-                        onEquip={handleEquipSuggestions}
+                    {suggestions.length > 0 && (
+                        <GearSuggestions
+                            suggestions={suggestions}
+                            getGearPiece={getGearPiece}
+                            hoveredGear={hoveredGear}
+                            onHover={setHoveredGear}
+                            onEquip={handleEquipSuggestions}
+                        />
+                    )}
+
+                    {/* Show progress bar for any strategy when optimizing */}
+                    {optimizationProgress && (
+                        <div className="col-span-2 p-4 bg-dark">
+                            <ProgressBar
+                                current={optimizationProgress.current}
+                                total={optimizationProgress.total}
+                                percentage={optimizationProgress.percentage}
+                            />
+                        </div>
+                    )}
+                </div>
+                {currentSimulation && suggestedSimulation && suggestions.length > 0 && (
+                    <SimulationResults
+                        currentSimulation={currentSimulation}
+                        suggestedSimulation={suggestedSimulation}
+                        role={selectedShipRole}
                     />
                 )}
 
-                {/* Show progress bar for any strategy when optimizing */}
-                {optimizationProgress && (
-                    <div className="col-span-2 p-4 bg-dark">
-                        <ProgressBar
-                            current={optimizationProgress.current}
-                            total={optimizationProgress.total}
-                            percentage={optimizationProgress.percentage}
+                {currentStats && suggestedStats && suggestions.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
+                        <StatList
+                            stats={currentStats.final}
+                            title="Current Stats"
+                            className="p-4"
+                        />
+                        <StatList
+                            stats={suggestedStats.final}
+                            comparisonStats={currentStats.final}
+                            title="Stats with Suggested Gear"
+                            className="p-4"
                         />
                     </div>
                 )}
-            </div>
-            {currentSimulation && suggestedSimulation && suggestions.length > 0 && (
-                <SimulationResults
-                    currentSimulation={currentSimulation}
-                    suggestedSimulation={suggestedSimulation}
-                    role={selectedShipRole}
+
+                <ConfirmModal
+                    isOpen={showConfirmModal}
+                    onClose={() => setShowConfirmModal(false)}
+                    onConfirm={applyGearSuggestions}
+                    title="Move Gear"
+                    message={modalMessage}
+                    confirmLabel="Move"
+                    cancelLabel="Cancel"
                 />
-            )}
-
-            {currentStats && suggestedStats && suggestions.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
-                    <StatList stats={currentStats.final} title="Current Stats" className="p-4" />
-                    <StatList
-                        stats={suggestedStats.final}
-                        comparisonStats={currentStats.final}
-                        title="Stats with Suggested Gear"
-                        className="p-4"
-                    />
-                </div>
-            )}
-
-            <ConfirmModal
-                isOpen={showConfirmModal}
-                onClose={() => setShowConfirmModal(false)}
-                onConfirm={applyGearSuggestions}
-                title="Move Gear"
-                message={modalMessage}
-                confirmLabel="Move"
-                cancelLabel="Cancel"
-            />
-        </PageLayout>
+            </PageLayout>
+        </>
     );
 };
 

@@ -7,6 +7,9 @@ import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { useNotification } from '../../hooks/useNotification';
 import { Ship } from '../../types/ship';
 import { Loader } from '../../components/ui/Loader';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
+
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
     const [isFormVisible, setIsFormVisible] = useState(false);
@@ -62,72 +65,75 @@ export const ShipsPage: React.FC = () => {
     }
 
     return (
-        <PageLayout
-            title="Ship Management"
-            description="Manage your ships and their equipment."
-            action={{
-                label: isFormVisible ? 'Hide Form' : 'Create',
-                onClick: () => {
-                    if (editingShip) {
-                        setEditingShip(undefined);
-                    }
-                    setIsFormVisible(!isFormVisible);
-                },
-                variant: isFormVisible ? 'secondary' : 'primary',
-            }}
-        >
-            <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
-                <ShipForm
-                    onSubmit={async (ship) => {
-                        await handleSaveShip(ship);
-                        setIsFormVisible(false);
+        <>
+            <Seo {...SEO_CONFIG.ships} />
+            <PageLayout
+                title="Ship Management"
+                description="Manage your ships and their equipment."
+                action={{
+                    label: isFormVisible ? 'Hide Form' : 'Create',
+                    onClick: () => {
+                        if (editingShip) {
+                            setEditingShip(undefined);
+                        }
+                        setIsFormVisible(!isFormVisible);
+                    },
+                    variant: isFormVisible ? 'secondary' : 'primary',
+                }}
+            >
+                <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
+                    <ShipForm
+                        onSubmit={async (ship) => {
+                            await handleSaveShip(ship);
+                            setIsFormVisible(false);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            setEditingShip(undefined);
+                            addNotification('success', 'Ship saved successfully');
+                        }}
+                        editingShip={editingShip}
+                    />
+                </CollapsibleForm>
+
+                <ShipInventory
+                    ships={ships}
+                    onRemove={handleShipDelete}
+                    onEdit={(ship) => {
+                        setEditingShip(ship);
+                        setIsFormVisible(true);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
-                        setEditingShip(undefined);
-                        addNotification('success', 'Ship saved successfully');
                     }}
-                    editingShip={editingShip}
+                    onLockEquipment={async (ship) => {
+                        const updatedLockState = await handleLockEquipment(ship);
+                        addNotification(
+                            'success',
+                            `Equipment lock state on ${ship.name} set to ${updatedLockState}`
+                        );
+                    }}
+                    onEquipGear={handleEquipGear}
+                    onRemoveGear={handleRemoveGear}
+                    onUnequipAll={handleUnequipAllGear}
+                    availableGear={inventory}
                 />
-            </CollapsibleForm>
 
-            <ShipInventory
-                ships={ships}
-                onRemove={handleShipDelete}
-                onEdit={(ship) => {
-                    setEditingShip(ship);
-                    setIsFormVisible(true);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                onLockEquipment={async (ship) => {
-                    const updatedLockState = await handleLockEquipment(ship);
-                    addNotification(
-                        'success',
-                        `Equipment lock state on ${ship.name} set to ${updatedLockState}`
-                    );
-                }}
-                onEquipGear={handleEquipGear}
-                onRemoveGear={handleRemoveGear}
-                onUnequipAll={handleUnequipAllGear}
-                availableGear={inventory}
-            />
-
-            <ConfirmModal
-                isOpen={showDeleteConfirm}
-                onClose={() => {
-                    setShowDeleteConfirm(false);
-                    setPendingDeleteShip(null);
-                }}
-                onConfirm={confirmShipDelete}
-                title="Delete Ship"
-                message={
-                    pendingDeleteShip?.equipment &&
-                    Object.values(pendingDeleteShip.equipment).some((id) => id)
-                        ? `This ship has equipped gear that will be unequipped. Are you sure you want to delete ${pendingDeleteShip.name}?`
-                        : `Are you sure you want to delete ${pendingDeleteShip?.name}?`
-                }
-                confirmLabel="Delete"
-                cancelLabel="Cancel"
-            />
-        </PageLayout>
+                <ConfirmModal
+                    isOpen={showDeleteConfirm}
+                    onClose={() => {
+                        setShowDeleteConfirm(false);
+                        setPendingDeleteShip(null);
+                    }}
+                    onConfirm={confirmShipDelete}
+                    title="Delete Ship"
+                    message={
+                        pendingDeleteShip?.equipment &&
+                        Object.values(pendingDeleteShip.equipment).some((id) => id)
+                            ? `This ship has equipped gear that will be unequipped. Are you sure you want to delete ${pendingDeleteShip.name}?`
+                            : `Are you sure you want to delete ${pendingDeleteShip?.name}?`
+                    }
+                    confirmLabel="Delete"
+                    cancelLabel="Cancel"
+                />
+            </PageLayout>
+        </>
     );
 };
 

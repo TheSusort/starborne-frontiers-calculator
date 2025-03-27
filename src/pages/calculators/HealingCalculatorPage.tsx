@@ -16,6 +16,8 @@ import {
     Scatter,
     ZAxis,
 } from 'recharts';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 // Base heal percent from constants
 const BASE_HEAL_PERCENT = 0.15; // 15% of HP
@@ -293,333 +295,346 @@ const HealingCalculatorPage: React.FC = () => {
     );
 
     return (
-        <PageLayout
-            title="Healing Calculator"
-            description="Calculate effective healing based on HP, crit chance, crit power, and heal modifier"
-            action={{
-                label: 'Add Healer',
-                onClick: addConfig,
-                variant: 'primary',
-            }}
-        >
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {configs.map((config) => (
-                        <div
-                            key={config.id}
-                            className={`p-4 bg-dark border border-dark-border relative ${
-                                bestHealer && bestHealer.id === config.id ? 'border-primary' : ''
-                            }`}
-                        >
-                            <div className="flex justify-between items-center mb-4">
-                                <Input
-                                    value={config.name}
-                                    onChange={(e) =>
-                                        updateConfig(config.id, 'name', e.target.value)
-                                    }
-                                    className="font-bold"
-                                />
-                                <Button
-                                    variant="danger"
-                                    onClick={() => removeConfig(config.id)}
-                                    aria-label="Remove healer"
-                                >
-                                    <CloseIcon />
-                                </Button>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Input
-                                        label="HP"
-                                        type="number"
-                                        value={config.hp}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'hp',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        label="Crit Chance (%)"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={config.crit}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'crit',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        label="Crit Power (%)"
-                                        type="number"
-                                        min="0"
-                                        max="200"
-                                        value={config.critDamage}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'critDamage',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
-                                    <Select
-                                        label="Heal Modifier (%)"
-                                        className="w-fit"
-                                        value={config.healModifier.toString()}
-                                        options={healModifierOptions}
-                                        onChange={(value) =>
-                                            updateConfig(
-                                                config.id,
-                                                'healModifier',
-                                                parseInt(value) || 0
-                                            )
-                                        }
-                                    />
-                                </div>
-
-                                <div className="mt-4 pt-4 border-t border-dark-border">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-gray-400">Base Healing:</span>
-                                        <span>{config.healing?.toLocaleString()} HP</span>
-                                    </div>
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-gray-400">Healing with Crits:</span>
-                                        <span>{config.healingWithCrit?.toLocaleString()} HP</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Effective Healing:</span>
-                                        <span
-                                            className={
-                                                bestHealer && bestHealer.id === config.id
-                                                    ? 'text-primary font-bold'
-                                                    : ''
-                                            }
-                                        >
-                                            {config.effectiveHealing?.toLocaleString()} HP
-                                        </span>
-                                    </div>
-                                    {bestHealer &&
-                                        bestHealer.id !== config.id &&
-                                        bestHealer.effectiveHealing &&
-                                        config.effectiveHealing && (
-                                            <div className="flex justify-between mt-2">
-                                                <span className="text-gray-400">
-                                                    Compared to best:
-                                                </span>
-                                                <span className="text-red-500">
-                                                    {(
-                                                        ((config.effectiveHealing -
-                                                            bestHealer.effectiveHealing) /
-                                                            bestHealer.effectiveHealing) *
-                                                        100
-                                                    ).toFixed(2)}
-                                                    %
-                                                </span>
-                                            </div>
-                                        )}
-                                </div>
-
-                                {bestHealer && bestHealer.id === config.id && (
-                                    <div className="text-primary text-sm mt-2 text-center">
-                                        Best healer configuration
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-dark p-4 border border-dark-border">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold w-full">Healing Comparison Chart</h2>
-                        <Select
-                            value={activeComparisonChart}
-                            options={comparisonChartOptions}
-                            onChange={(value) =>
-                                setActiveComparisonChart(
-                                    value as 'hp' | 'crit' | 'critDamage' | 'healModifier'
-                                )
-                            }
-                            className="w-60"
-                        />
-                    </div>
-                    <p className="mb-4">
-                        This chart shows how changing {getActiveComparisonLabel()} affects healing
-                        output, while keeping other values constant.
-                    </p>
-
-                    <div className="h-96">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart
-                                data={getActiveComparisonData()}
-                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        <>
+            <Seo {...SEO_CONFIG.healing} />
+            <PageLayout
+                title="Healing Calculator"
+                description="Calculate effective healing based on HP, crit chance, crit power, and heal modifier"
+                action={{
+                    label: 'Add Healer',
+                    onClick: addConfig,
+                    variant: 'primary',
+                }}
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {configs.map((config) => (
+                            <div
+                                key={config.id}
+                                className={`p-4 bg-dark border border-dark-border relative ${
+                                    bestHealer && bestHealer.id === config.id
+                                        ? 'border-primary'
+                                        : ''
+                                }`}
                             >
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis
-                                    dataKey={activeComparisonChart}
-                                    label={{
-                                        value: getActiveComparisonLabel(),
-                                        position: 'insideBottomRight',
-                                        offset: -10,
-                                    }}
-                                />
-                                <YAxis
-                                    label={{
-                                        value: 'Healing (HP)',
-                                        angle: -90,
-                                        position: 'insideLeft',
-                                    }}
-                                />
-                                <Tooltip
-                                    formatter={(value) =>
-                                        Math.round(value as number).toLocaleString()
-                                    }
-                                />
-                                <Legend />
-                                {configs.map((config) => (
-                                    <Line
-                                        key={config.id}
-                                        type="monotone"
-                                        dataKey={config.name}
-                                        stroke={
-                                            config.id === bestHealer?.id ? '#8884d8' : '#82ca9d'
+                                <div className="flex justify-between items-center mb-4">
+                                    <Input
+                                        value={config.name}
+                                        onChange={(e) =>
+                                            updateConfig(config.id, 'name', e.target.value)
                                         }
-                                        strokeWidth={config.id === bestHealer?.id ? 2 : 1}
-                                        activeDot={{ r: 8 }}
+                                        className="font-bold"
                                     />
-                                ))}
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-
-                    <div className="mt-6 flex justify-center">
-                        <Button
-                            variant="secondary"
-                            onClick={() => setShowBubbleChart(!showBubbleChart)}
-                        >
-                            {showBubbleChart ? 'Hide 3D Chart' : 'Show 3D Chart'}
-                        </Button>
-                    </div>
-
-                    {showBubbleChart && (
-                        <div className="mt-4">
-                            <h3 className="text-lg font-bold mb-2">
-                                3D Relationship Visualization
-                            </h3>
-                            <p className="mb-4">
-                                This chart visualizes the relationship between HP (x-axis), Crit
-                                Chance (y-axis), and healing amount (bubble size). Each bubble
-                                represents a healer configuration.
-                            </p>
-                            <div className="h-96">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ScatterChart
-                                        margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                                    <Button
+                                        variant="danger"
+                                        onClick={() => removeConfig(config.id)}
+                                        aria-label="Remove healer"
                                     >
-                                        <CartesianGrid />
-                                        <XAxis
+                                        <CloseIcon />
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input
+                                            label="HP"
                                             type="number"
-                                            dataKey="hp"
-                                            name="HP"
-                                            label={{
-                                                value: 'HP',
-                                                position: 'insideBottomRight',
-                                                offset: -10,
-                                            }}
+                                            value={config.hp}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'hp',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
                                         />
-                                        <YAxis
+                                        <Input
+                                            label="Crit Chance (%)"
                                             type="number"
-                                            dataKey="crit"
-                                            name="Crit Chance"
-                                            label={{
-                                                value: 'Crit Chance (%)',
-                                                angle: -90,
-                                                position: 'insideLeft',
-                                            }}
+                                            min="0"
+                                            max="100"
+                                            value={config.crit}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'crit',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
                                         />
-                                        <ZAxis
+                                        <Input
+                                            label="Crit Power (%)"
                                             type="number"
-                                            dataKey="healing"
-                                            range={[100, 1000]}
-                                            name="Healing"
+                                            min="0"
+                                            max="200"
+                                            value={config.critDamage}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'critDamage',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
                                         />
-                                        <Tooltip
-                                            cursor={{ strokeDasharray: '3 3' }}
-                                            formatter={(value, name) => {
-                                                if (name === 'Healing') {
-                                                    return [
-                                                        Math.round(
-                                                            value as number
-                                                        ).toLocaleString() + ' HP',
-                                                        name,
-                                                    ];
+                                        <Select
+                                            label="Heal Modifier (%)"
+                                            className="w-fit"
+                                            value={config.healModifier.toString()}
+                                            options={healModifierOptions}
+                                            onChange={(value) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'healModifier',
+                                                    parseInt(value) || 0
+                                                )
+                                            }
+                                        />
+                                    </div>
+
+                                    <div className="mt-4 pt-4 border-t border-dark-border">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-gray-400">Base Healing:</span>
+                                            <span>{config.healing?.toLocaleString()} HP</span>
+                                        </div>
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-gray-400">
+                                                Healing with Crits:
+                                            </span>
+                                            <span>
+                                                {config.healingWithCrit?.toLocaleString()} HP
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">
+                                                Effective Healing:
+                                            </span>
+                                            <span
+                                                className={
+                                                    bestHealer && bestHealer.id === config.id
+                                                        ? 'text-primary font-bold'
+                                                        : ''
                                                 }
-                                                return [value, name];
-                                            }}
-                                        />
-                                        <Legend />
-                                        <Scatter
-                                            name="Healers"
-                                            data={generateBubbleChartData()}
-                                            fill="#8884d8"
-                                        />
-                                    </ScatterChart>
-                                </ResponsiveContainer>
+                                            >
+                                                {config.effectiveHealing?.toLocaleString()} HP
+                                            </span>
+                                        </div>
+                                        {bestHealer &&
+                                            bestHealer.id !== config.id &&
+                                            bestHealer.effectiveHealing &&
+                                            config.effectiveHealing && (
+                                                <div className="flex justify-between mt-2">
+                                                    <span className="text-gray-400">
+                                                        Compared to best:
+                                                    </span>
+                                                    <span className="text-red-500">
+                                                        {(
+                                                            ((config.effectiveHealing -
+                                                                bestHealer.effectiveHealing) /
+                                                                bestHealer.effectiveHealing) *
+                                                            100
+                                                        ).toFixed(2)}
+                                                        %
+                                                    </span>
+                                                </div>
+                                            )}
+                                    </div>
+
+                                    {bestHealer && bestHealer.id === config.id && (
+                                        <div className="text-primary text-sm mt-2 text-center">
+                                            Best healer configuration
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold w-full">Healing Comparison Chart</h2>
+                            <Select
+                                value={activeComparisonChart}
+                                options={comparisonChartOptions}
+                                onChange={(value) =>
+                                    setActiveComparisonChart(
+                                        value as 'hp' | 'crit' | 'critDamage' | 'healModifier'
+                                    )
+                                }
+                                className="w-60"
+                            />
                         </div>
-                    )}
-                </div>
+                        <p className="mb-4">
+                            This chart shows how changing {getActiveComparisonLabel()} affects
+                            healing output, while keeping other values constant.
+                        </p>
 
-                <div className="bg-dark p-4 border border-dark-border">
-                    <h2 className="text-xl font-bold mb-4">Healing Formula Explanation</h2>
-                    <p className="mb-2">
-                        Healing is calculated based on the healer&apos;s HP, critical hit chance,
-                        critical hit power, and healing modifier. We are using 15% as an example.
-                    </p>
-                    <p className="mb-2">The formula for calculating Effective Healing is:</p>
-                    <p className="mb-2 font-mono bg-dark-lighter p-2">
-                        Base Healing = HP × 15%
-                        <br />
-                        Crit Multiplier = 1 + (Crit Chance% × Crit Power%) / 10000
-                        <br />
-                        Effective Healing = Base Healing × Crit Multiplier × (1 + Heal Modifier% /
-                        100)
-                    </p>
-                    <p>
-                        For example, a ship with 40,000 HP, 50% crit chance, 100% crit power, and
-                        20% heal modifier has an effective healing of 7,200 HP per heal.
-                    </p>
-                </div>
+                        <div className="h-96">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart
+                                    data={getActiveComparisonData()}
+                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis
+                                        dataKey={activeComparisonChart}
+                                        label={{
+                                            value: getActiveComparisonLabel(),
+                                            position: 'insideBottomRight',
+                                            offset: -10,
+                                        }}
+                                    />
+                                    <YAxis
+                                        label={{
+                                            value: 'Healing (HP)',
+                                            angle: -90,
+                                            position: 'insideLeft',
+                                        }}
+                                    />
+                                    <Tooltip
+                                        formatter={(value) =>
+                                            Math.round(value as number).toLocaleString()
+                                        }
+                                    />
+                                    <Legend />
+                                    {configs.map((config) => (
+                                        <Line
+                                            key={config.id}
+                                            type="monotone"
+                                            dataKey={config.name}
+                                            stroke={
+                                                config.id === bestHealer?.id ? '#8884d8' : '#82ca9d'
+                                            }
+                                            strokeWidth={config.id === bestHealer?.id ? 2 : 1}
+                                            activeDot={{ r: 8 }}
+                                        />
+                                    ))}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
 
-                <div className="bg-dark p-4 border border-dark-border">
-                    <h2 className="text-xl font-bold mb-4">Optimization Recommendations</h2>
-                    <ul className="list-disc pl-5 space-y-2">
-                        <li>
-                            <strong>HP:</strong> Increasing HP provides the most consistent
-                            improvement to healing output.
-                        </li>
-                        <li>
-                            <strong>Crit Stats:</strong> Balancing crit chance and crit power yields
-                            better results than maximizing only one of them. For optimal results,
-                            try to maintain a 1:2 ratio between crit chance and crit power.
-                        </li>
-                        <li>
-                            <strong>Heal Modifier:</strong> This stat applies multiplicatively after
-                            all other calculations, making it extremely valuable. Prioritize gear
-                            with heal modifiers when possible.
-                        </li>
-                    </ul>
+                        <div className="mt-6 flex justify-center">
+                            <Button
+                                variant="secondary"
+                                onClick={() => setShowBubbleChart(!showBubbleChart)}
+                            >
+                                {showBubbleChart ? 'Hide 3D Chart' : 'Show 3D Chart'}
+                            </Button>
+                        </div>
+
+                        {showBubbleChart && (
+                            <div className="mt-4">
+                                <h3 className="text-lg font-bold mb-2">
+                                    3D Relationship Visualization
+                                </h3>
+                                <p className="mb-4">
+                                    This chart visualizes the relationship between HP (x-axis), Crit
+                                    Chance (y-axis), and healing amount (bubble size). Each bubble
+                                    represents a healer configuration.
+                                </p>
+                                <div className="h-96">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ScatterChart
+                                            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                                        >
+                                            <CartesianGrid />
+                                            <XAxis
+                                                type="number"
+                                                dataKey="hp"
+                                                name="HP"
+                                                label={{
+                                                    value: 'HP',
+                                                    position: 'insideBottomRight',
+                                                    offset: -10,
+                                                }}
+                                            />
+                                            <YAxis
+                                                type="number"
+                                                dataKey="crit"
+                                                name="Crit Chance"
+                                                label={{
+                                                    value: 'Crit Chance (%)',
+                                                    angle: -90,
+                                                    position: 'insideLeft',
+                                                }}
+                                            />
+                                            <ZAxis
+                                                type="number"
+                                                dataKey="healing"
+                                                range={[100, 1000]}
+                                                name="Healing"
+                                            />
+                                            <Tooltip
+                                                cursor={{ strokeDasharray: '3 3' }}
+                                                formatter={(value, name) => {
+                                                    if (name === 'Healing') {
+                                                        return [
+                                                            Math.round(
+                                                                value as number
+                                                            ).toLocaleString() + ' HP',
+                                                            name,
+                                                        ];
+                                                    }
+                                                    return [value, name];
+                                                }}
+                                            />
+                                            <Legend />
+                                            <Scatter
+                                                name="Healers"
+                                                data={generateBubbleChartData()}
+                                                fill="#8884d8"
+                                            />
+                                        </ScatterChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">Healing Formula Explanation</h2>
+                        <p className="mb-2">
+                            Healing is calculated based on the healer&apos;s HP, critical hit
+                            chance, critical hit power, and healing modifier. We are using 15% as an
+                            example.
+                        </p>
+                        <p className="mb-2">The formula for calculating Effective Healing is:</p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            Base Healing = HP × 15%
+                            <br />
+                            Crit Multiplier = 1 + (Crit Chance% × Crit Power%) / 10000
+                            <br />
+                            Effective Healing = Base Healing × Crit Multiplier × (1 + Heal Modifier%
+                            / 100)
+                        </p>
+                        <p>
+                            For example, a ship with 40,000 HP, 50% crit chance, 100% crit power,
+                            and 20% heal modifier has an effective healing of 7,200 HP per heal.
+                        </p>
+                    </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">Optimization Recommendations</h2>
+                        <ul className="list-disc pl-5 space-y-2">
+                            <li>
+                                <strong>HP:</strong> Increasing HP provides the most consistent
+                                improvement to healing output.
+                            </li>
+                            <li>
+                                <strong>Crit Stats:</strong> Balancing crit chance and crit power
+                                yields better results than maximizing only one of them. For optimal
+                                results, try to maintain a 1:2 ratio between crit chance and crit
+                                power.
+                            </li>
+                            <li>
+                                <strong>Heal Modifier:</strong> This stat applies multiplicatively
+                                after all other calculations, making it extremely valuable.
+                                Prioritize gear with heal modifiers when possible.
+                            </li>
+                        </ul>
+                    </div>
                 </div>
-            </div>
-        </PageLayout>
+            </PageLayout>
+        </>
     );
 };
 

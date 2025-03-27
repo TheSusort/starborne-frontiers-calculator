@@ -19,6 +19,8 @@ import { useOrphanSetPieces } from '../../hooks/useGear';
 import { useGearLookup } from '../../hooks/useGear';
 import { StatDistributionChart } from '../../components/stats/StatDistributionChart';
 import { Loader } from '../../components/ui/Loader';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -86,111 +88,118 @@ export const ShipDetailsPage: React.FC = () => {
     }
 
     return (
-        <PageLayout
-            title={`${ship.name} Details`}
-            action={{
-                label: 'Back to Ships',
-                onClick: () => navigate('/ships'),
-                variant: 'secondary',
-            }}
-        >
-            <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
-                <ShipForm
-                    onSubmit={async (updatedShip) => {
-                        await updateShip(updatedShip);
-                        setIsFormVisible(false);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                        setEditingShip(undefined);
-                        addNotification('success', 'Ship saved successfully');
-                    }}
-                    editingShip={editingShip}
-                />
-            </CollapsibleForm>
-            <div className="grid lg:grid-cols-2 gap-6">
-                <div className="space-y-6">
-                    <ShipCard
-                        variant="extended"
-                        ship={ship}
-                        allShips={ships}
-                        hoveredGear={hoveredGear}
-                        availableGear={availableGear}
-                        getGearPiece={getGearPiece}
-                        onRemove={(id) => {
-                            removeShip(id);
-                            navigate('/ships');
-                        }}
-                        onLockEquipment={async (ship) => {
-                            await toggleEquipmentLock(ship);
-                        }}
-                        onEquipGear={(_, slot, gearId) => {
-                            const updatedShip = { ...ship };
-                            updatedShip.equipment[slot] = gearId;
-                            updateShip(updatedShip);
-                        }}
-                        onRemoveGear={(_, slot) => {
-                            const updatedShip = { ...ship };
-                            delete updatedShip.equipment[slot];
-                            updateShip(updatedShip);
-                        }}
-                        onUnequipAll={() => {
-                            handleUnequipAllGear(ship.id);
-                        }}
-                        onHoverGear={setHoveredGear}
-                        onEdit={() => {
-                            setIsFormVisible(true);
-                            setEditingShip(ship);
+        <>
+            <Seo
+                title={`${ship.name} Details`}
+                description={`View and manage ${ship.name} details and stats.`}
+                keywords={`${ship.name}, ship details, stats, gear, refits, implants`}
+            />
+            <PageLayout
+                title={`${ship.name} Details`}
+                action={{
+                    label: 'Back to Ships',
+                    onClick: () => navigate('/ships'),
+                    variant: 'secondary',
+                }}
+            >
+                <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
+                    <ShipForm
+                        onSubmit={async (updatedShip) => {
+                            await updateShip(updatedShip);
+                            setIsFormVisible(false);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
+                            setEditingShip(undefined);
+                            addNotification('success', 'Ship saved successfully');
                         }}
+                        editingShip={editingShip}
                     />
+                </CollapsibleForm>
+                <div className="grid lg:grid-cols-2 gap-6">
+                    <div className="space-y-6">
+                        <ShipCard
+                            variant="extended"
+                            ship={ship}
+                            allShips={ships}
+                            hoveredGear={hoveredGear}
+                            availableGear={availableGear}
+                            getGearPiece={getGearPiece}
+                            onRemove={(id) => {
+                                removeShip(id);
+                                navigate('/ships');
+                            }}
+                            onLockEquipment={async (ship) => {
+                                await toggleEquipmentLock(ship);
+                            }}
+                            onEquipGear={(_, slot, gearId) => {
+                                const updatedShip = { ...ship };
+                                updatedShip.equipment[slot] = gearId;
+                                updateShip(updatedShip);
+                            }}
+                            onRemoveGear={(_, slot) => {
+                                const updatedShip = { ...ship };
+                                delete updatedShip.equipment[slot];
+                                updateShip(updatedShip);
+                            }}
+                            onUnequipAll={() => {
+                                handleUnequipAllGear(ship.id);
+                            }}
+                            onHoverGear={setHoveredGear}
+                            onEdit={() => {
+                                setIsFormVisible(true);
+                                setEditingShip(ship);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                        />
 
-                    <section className="bg-dark p-4">
-                        <h3 className="mb-4">Refits ({ship.refits.length}/6)</h3>
-                        {ship.refits.length > 0 ? (
-                            <div className="space-y-2">
-                                {ship.refits.map((refit, index) => (
-                                    <StatDisplay
-                                        key={index}
-                                        stats={refit.stats}
-                                        className="p-2 bg-dark-lighter"
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-gray-400">No refits installed</p>
-                        )}
-                    </section>
+                        <section className="bg-dark p-4">
+                            <h3 className="mb-4">Refits ({ship.refits.length}/6)</h3>
+                            {ship.refits.length > 0 ? (
+                                <div className="space-y-2">
+                                    {ship.refits.map((refit, index) => (
+                                        <StatDisplay
+                                            key={index}
+                                            stats={refit.stats}
+                                            className="p-2 bg-dark-lighter"
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-400">No refits installed</p>
+                            )}
+                        </section>
 
-                    <section className="bg-dark p-4">
-                        <h3 className="mb-4">Implants ({ship.implants.length})</h3>
-                        {ship.implants.length > 0 ? (
-                            <div className="space-y-2">
-                                {ship.implants.map((implant, index) => (
-                                    <StatDisplay
-                                        key={index}
-                                        stats={implant.stats}
-                                        className="p-2 bg-dark-lighter"
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-gray-400">No implants installed</p>
-                        )}
-                    </section>
+                        <section className="bg-dark p-4">
+                            <h3 className="mb-4">Implants ({ship.implants.length})</h3>
+                            {ship.implants.length > 0 ? (
+                                <div className="space-y-2">
+                                    {ship.implants.map((implant, index) => (
+                                        <StatDisplay
+                                            key={index}
+                                            stats={implant.stats}
+                                            className="p-2 bg-dark-lighter"
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-gray-400">No implants installed</p>
+                            )}
+                        </section>
+                    </div>
+
+                    <div className="space-y-6">
+                        <StatDistributionChart
+                            contributions={analyzeStatDistribution(
+                                ship.equipment,
+                                getGearPiece,
+                                ship,
+                                getEngineeringStatsForShipType
+                            )}
+                        />
+                        <UpgradeSuggestions suggestions={upgradeSuggestions} />
+                    </div>
                 </div>
-
-                <div className="space-y-6">
-                    <StatDistributionChart
-                        contributions={analyzeStatDistribution(
-                            ship.equipment,
-                            getGearPiece,
-                            ship,
-                            getEngineeringStatsForShipType
-                        )}
-                    />
-                    <UpgradeSuggestions suggestions={upgradeSuggestions} />
-                </div>
-            </div>
-        </PageLayout>
+            </PageLayout>
+        </>
     );
 };
 

@@ -8,6 +8,8 @@ import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useNotification } from '../../hooks/useNotification';
 import { Loader } from '../../components/ui/Loader';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =
@@ -54,44 +56,50 @@ const EncounterNotesPage: React.FC = () => {
     }
 
     return (
-        <PageLayout
-            title="Encounter Notes"
-            description="Save and manage your successful fleet formations for different encounters"
-            action={{
-                label: isFormVisible ? 'Hide Form' : 'Add Encounter',
-                onClick: () => {
-                    if (editingEncounter) {
-                        setEditingEncounter(null);
-                    }
-                    setIsFormVisible(!isFormVisible);
-                },
-                variant: isFormVisible ? 'secondary' : 'primary',
-            }}
-        >
-            <CollapsibleForm isVisible={isFormVisible}>
-                <div className="bg-dark p-4 mb-6">
-                    <h2 className="text-xl font-semibold text-white mb-4">
-                        {editingEncounter ? 'Edit Encounter' : 'Add New Encounter'}
-                    </h2>
-                    <EncounterForm onSubmit={handleSubmit} initialEncounter={editingEncounter} />
-                </div>
-            </CollapsibleForm>
+        <>
+            <Seo {...SEO_CONFIG.encounters} />
+            <PageLayout
+                title="Encounter Notes"
+                description="Save and manage your successful fleet formations for different encounters"
+                action={{
+                    label: isFormVisible ? 'Hide Form' : 'Add Encounter',
+                    onClick: () => {
+                        if (editingEncounter) {
+                            setEditingEncounter(null);
+                        }
+                        setIsFormVisible(!isFormVisible);
+                    },
+                    variant: isFormVisible ? 'secondary' : 'primary',
+                }}
+            >
+                <CollapsibleForm isVisible={isFormVisible}>
+                    <div className="bg-dark p-4 mb-6">
+                        <h2 className="text-xl font-semibold text-white mb-4">
+                            {editingEncounter ? 'Edit Encounter' : 'Add New Encounter'}
+                        </h2>
+                        <EncounterForm
+                            onSubmit={handleSubmit}
+                            initialEncounter={editingEncounter}
+                        />
+                    </div>
+                </CollapsibleForm>
 
-            <EncounterList
-                encounters={encounters}
-                onEdit={handleEdit}
-                onDelete={handleDeleteClick}
-            />
+                <EncounterList
+                    encounters={encounters}
+                    onEdit={handleEdit}
+                    onDelete={handleDeleteClick}
+                />
 
-            <ConfirmModal
-                isOpen={!!deletingEncounterId}
-                onClose={() => setDeletingEncounterId(null)}
-                onConfirm={handleConfirmDelete}
-                title="Delete Encounter"
-                message="Are you sure you want to delete this encounter? This action cannot be undone."
-                confirmLabel="Delete"
-            />
-        </PageLayout>
+                <ConfirmModal
+                    isOpen={!!deletingEncounterId}
+                    onClose={() => setDeletingEncounterId(null)}
+                    onConfirm={handleConfirmDelete}
+                    title="Delete Encounter"
+                    message="Are you sure you want to delete this encounter? This action cannot be undone."
+                    confirmLabel="Delete"
+                />
+            </PageLayout>
+        </>
     );
 };
 

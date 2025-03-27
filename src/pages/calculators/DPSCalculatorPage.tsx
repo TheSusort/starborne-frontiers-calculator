@@ -6,6 +6,8 @@ import { Input } from '../../components/ui/Input';
 import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { BaseStats } from '../../types/stats';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -149,200 +151,204 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     return (
-        <PageLayout
-            title="DPS Calculator"
-            description="Compare damage per hit calculations for different ship configurations."
-            action={{
-                label: 'Add Ship',
-                onClick: addConfig,
-                variant: 'primary',
-            }}
-        >
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {configs.map((config) => (
-                        <div
-                            key={config.id}
-                            className={`
+        <>
+            <Seo {...SEO_CONFIG.damage} />
+            <PageLayout
+                title="DPS Calculator"
+                description="Compare damage per hit calculations for different ship configurations."
+                action={{
+                    label: 'Add Ship',
+                    onClick: addConfig,
+                    variant: 'primary',
+                }}
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {configs.map((config) => (
+                            <div
+                                key={config.id}
+                                className={`
                                 p-4 bg-dark border
                                 ${bestConfig && bestConfig.id === config.id ? 'border-primary' : 'border-dark-border'}
                             `}
-                        >
-                            <div className="flex justify-between items-center mb-4">
-                                <Input
-                                    value={config.name}
-                                    onChange={(e) =>
-                                        updateConfig(config.id, 'name', e.target.value)
-                                    }
-                                    className="font-bold"
-                                />
-                                <Button
-                                    variant="danger"
-                                    onClick={() => removeConfig(config.id)}
-                                    aria-label="Remove ship"
-                                >
-                                    <CloseIcon />
-                                </Button>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex gap-4">
+                            >
+                                <div className="flex justify-between items-center mb-4">
                                     <Input
-                                        label="Attack"
-                                        type="number"
-                                        value={config.attack}
+                                        value={config.name}
                                         onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'attack',
-                                                parseInt(e.target.value) || 0
-                                            )
+                                            updateConfig(config.id, 'name', e.target.value)
                                         }
+                                        className="font-bold"
                                     />
-                                </div>
-                                <div className="flex gap-4">
-                                    <Input
-                                        label="Crit Rate (%)"
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={config.crit}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'crit',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        label="Crit Damage (%)"
-                                        type="number"
-                                        min="0"
-                                        value={config.critDamage}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'critDamage',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
+                                    <Button
+                                        variant="danger"
+                                        onClick={() => removeConfig(config.id)}
+                                        aria-label="Remove ship"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t border-dark-border">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-gray-400">Crit Multiplier:</span>
-                                        <span>
-                                            {calculateCritMultiplier({
-                                                attack: config.attack,
-                                                crit: config.crit,
-                                                critDamage: config.critDamage,
-                                                hp: 0,
-                                                defence: 0,
-                                                hacking: 0,
-                                                security: 0,
-                                                speed: 0,
-                                                healModifier: 0,
-                                            }).toFixed(2)}
-                                            x
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">DPS:</span>
-                                        <span
-                                            className={
-                                                bestConfig && bestConfig.id === config.id
-                                                    ? 'text-primary font-bold'
-                                                    : ''
+                                <div className="space-y-4">
+                                    <div className="flex gap-4">
+                                        <Input
+                                            label="Attack"
+                                            type="number"
+                                            value={config.attack}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'attack',
+                                                    parseInt(e.target.value) || 0
+                                                )
                                             }
-                                        >
-                                            {config.dps?.toLocaleString()}
-                                        </span>
+                                        />
                                     </div>
-                                    {bestConfig &&
-                                        bestConfig.id !== config.id &&
-                                        bestConfig.dps &&
-                                        config.dps && (
-                                            <div className="flex justify-between mt-2">
-                                                <span className="text-gray-400">
-                                                    Compared to best:
-                                                </span>
-                                                <span className="text-red-500">
-                                                    {(
-                                                        ((config.dps - bestConfig.dps) /
-                                                            bestConfig.dps) *
-                                                        100
-                                                    ).toFixed(2)}
-                                                    %
-                                                </span>
-                                            </div>
-                                        )}
+                                    <div className="flex gap-4">
+                                        <Input
+                                            label="Crit Rate (%)"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={config.crit}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'crit',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
+                                        <Input
+                                            label="Crit Damage (%)"
+                                            type="number"
+                                            min="0"
+                                            value={config.critDamage}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'critDamage',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
+                                    </div>
+
+                                    <div className="mt-4 pt-4 border-t border-dark-border">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-gray-400">Crit Multiplier:</span>
+                                            <span>
+                                                {calculateCritMultiplier({
+                                                    attack: config.attack,
+                                                    crit: config.crit,
+                                                    critDamage: config.critDamage,
+                                                    hp: 0,
+                                                    defence: 0,
+                                                    hacking: 0,
+                                                    security: 0,
+                                                    speed: 0,
+                                                    healModifier: 0,
+                                                }).toFixed(2)}
+                                                x
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">DPS:</span>
+                                            <span
+                                                className={
+                                                    bestConfig && bestConfig.id === config.id
+                                                        ? 'text-primary font-bold'
+                                                        : ''
+                                                }
+                                            >
+                                                {config.dps?.toLocaleString()}
+                                            </span>
+                                        </div>
+                                        {bestConfig &&
+                                            bestConfig.id !== config.id &&
+                                            bestConfig.dps &&
+                                            config.dps && (
+                                                <div className="flex justify-between mt-2">
+                                                    <span className="text-gray-400">
+                                                        Compared to best:
+                                                    </span>
+                                                    <span className="text-red-500">
+                                                        {(
+                                                            ((config.dps - bestConfig.dps) /
+                                                                bestConfig.dps) *
+                                                            100
+                                                        ).toFixed(2)}
+                                                        %
+                                                    </span>
+                                                </div>
+                                            )}
+                                    </div>
+
+                                    {bestConfig && bestConfig.id === config.id && (
+                                        <div className="text-primary text-sm mt-2 text-center">
+                                            Best ship configuration
+                                        </div>
+                                    )}
                                 </div>
-
-                                {bestConfig && bestConfig.id === config.id && (
-                                    <div className="text-primary text-sm mt-2 text-center">
-                                        Best ship configuration
-                                    </div>
-                                )}
                             </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-dark p-4 border border-dark-border">
-                    <div className="flex justify-between items-center mb-2">
-                        <h3 className="text-lg font-bold">DPS Comparison</h3>
-                        <Button variant="secondary" onClick={toggleViewMode}>
-                            Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
-                        </Button>
+                        ))}
                     </div>
-                    <p className="text-sm text-gray-400 mb-4">
-                        This visualization shows DPS values at 100% crit rate for different attack
-                        values (relative to your current attack) and crit damage percentages.
-                        {viewMode === 'table'
-                            ? ' Each row shows how your DPS would scale with different attack values, and each column shows how it scales with different crit damage values.'
-                            : ' The contour lines show combinations of attack and crit damage that produce equal DPS values. Follow these lines to find stat combinations that result in the same damage output.'}
-                    </p>
 
-                    {viewMode === 'table' ? (
-                        <DPSCalculatorTable attack={bestConfig ? bestConfig.attack : 5000} />
-                    ) : (
-                        <DPSChart
-                            ships={configs.map((config) => ({
-                                ...config,
-                                critRate: config.crit,
-                                isBest: bestConfig ? config.id === bestConfig.id : false,
-                            }))}
-                        />
-                    )}
-                </div>
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-lg font-bold">DPS Comparison</h3>
+                            <Button variant="secondary" onClick={toggleViewMode}>
+                                Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
+                            </Button>
+                        </div>
+                        <p className="text-sm text-gray-400 mb-4">
+                            This visualization shows DPS values at 100% crit rate for different
+                            attack values (relative to your current attack) and crit damage
+                            percentages.
+                            {viewMode === 'table'
+                                ? ' Each row shows how your DPS would scale with different attack values, and each column shows how it scales with different crit damage values.'
+                                : ' The contour lines show combinations of attack and crit damage that produce equal DPS values. Follow these lines to find stat combinations that result in the same damage output.'}
+                        </p>
 
-                <div className="bg-dark p-4 border border-dark-border">
-                    <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
-                    <p className="mb-2">
-                        DPS (Damage Per Second) is calculated based on your attack value and crit
-                        stats using the formula:
-                    </p>
-                    <p className="mb-2 font-mono bg-dark-lighter p-2">
-                        DPS = Attack × (1 + (CritRate/100) × (CritDamage/100))
-                    </p>
-                    <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
-                    <p className="mb-2 font-mono bg-dark-lighter p-2">
-                        DPS = Attack × (1 + CritDamage/100)
-                    </p>
-                    <p className="mb-2">
-                        For example, with 5,000 attack, 100% crit rate, and 150% crit damage, your
-                        DPS would be 5,000 × (1 + 1.5) = 12,500.
-                    </p>
-                    <p>
-                        The visualization shows that while both attack and crit damage increase your
-                        DPS linearly, the ideal balance depends on your current stats and available
-                        gear options.
-                    </p>
+                        {viewMode === 'table' ? (
+                            <DPSCalculatorTable attack={bestConfig ? bestConfig.attack : 5000} />
+                        ) : (
+                            <DPSChart
+                                ships={configs.map((config) => ({
+                                    ...config,
+                                    critRate: config.crit,
+                                    isBest: bestConfig ? config.id === bestConfig.id : false,
+                                }))}
+                            />
+                        )}
+                    </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
+                        <p className="mb-2">
+                            DPS (Damage Per Second) is calculated based on your attack value and
+                            crit stats using the formula:
+                        </p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100))
+                        </p>
+                        <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            DPS = Attack × (1 + CritDamage/100)
+                        </p>
+                        <p className="mb-2">
+                            For example, with 5,000 attack, 100% crit rate, and 150% crit damage,
+                            your DPS would be 5,000 × (1 + 1.5) = 12,500.
+                        </p>
+                        <p>
+                            The visualization shows that while both attack and crit damage increase
+                            your DPS linearly, the ideal balance depends on your current stats and
+                            available gear options.
+                        </p>
+                    </div>
                 </div>
-            </div>
-        </PageLayout>
+            </PageLayout>
+        </>
     );
 };
 

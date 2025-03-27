@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { CloseIcon, PageLayout } from '../../components/ui';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 interface BuffDebuff {
     value: number;
@@ -191,128 +193,135 @@ const DamageDeconstructionPage: React.FC = () => {
     );
 
     return (
-        <PageLayout
-            title="(BETA) Damage Deconstruction Calculator"
-            description="
+        <>
+            <Seo {...SEO_CONFIG.damageDeconstruction} />
+            <PageLayout
+                title="(BETA) Damage Deconstruction Calculator"
+                description="
                 Estimate the enemy defense based on the damage reduction.
                 Enter all buffs and debuffs on both attacker and defender.
                 Remember affinity disadvantage/advantage on the attacker.
             "
-        >
-            <div className="mb-6 bg-dark p-4">
-                <div className="space-y-4">
-                    <h4 className="text-lg font-bold">Attacker</h4>
-                    <Input
-                        label="Actual Damage Dealt"
-                        type="number"
-                        value={form.actualDamage}
-                        onChange={(e) =>
-                            setForm((prev) => ({
-                                ...prev,
-                                actualDamage: Number(e.target.value),
-                            }))
-                        }
-                    />
+            >
+                <div className="mb-6 bg-dark p-4">
+                    <div className="space-y-4">
+                        <h4 className="text-lg font-bold">Attacker</h4>
+                        <Input
+                            label="Actual Damage Dealt"
+                            type="number"
+                            value={form.actualDamage}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    actualDamage: Number(e.target.value),
+                                }))
+                            }
+                        />
 
-                    <Input
-                        label="Ship Base Attack"
-                        type="number"
-                        value={form.shipAttack}
-                        onChange={(e) =>
-                            setForm((prev) => ({ ...prev, shipAttack: Number(e.target.value) }))
-                        }
-                    />
+                        <Input
+                            label="Ship Base Attack"
+                            type="number"
+                            value={form.shipAttack}
+                            onChange={(e) =>
+                                setForm((prev) => ({ ...prev, shipAttack: Number(e.target.value) }))
+                            }
+                        />
 
-                    <Input
-                        label="Skill Attack %"
-                        type="number"
-                        value={form.skillAttackPercent}
-                        onChange={(e) =>
-                            setForm((prev) => ({
-                                ...prev,
-                                skillAttackPercent: Number(e.target.value),
-                            }))
-                        }
-                    />
+                        <Input
+                            label="Skill Attack %"
+                            type="number"
+                            value={form.skillAttackPercent}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    skillAttackPercent: Number(e.target.value),
+                                }))
+                            }
+                        />
 
-                    <Input
-                        label="Defense Penetration %"
-                        type="number"
-                        value={form.defensePenetration}
-                        onChange={(e) =>
-                            setForm((prev) => ({
-                                ...prev,
-                                defensePenetration: Number(e.target.value),
-                            }))
-                        }
-                    />
+                        <Input
+                            label="Defense Penetration %"
+                            type="number"
+                            value={form.defensePenetration}
+                            onChange={(e) =>
+                                setForm((prev) => ({
+                                    ...prev,
+                                    defensePenetration: Number(e.target.value),
+                                }))
+                            }
+                        />
 
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 mt-5">
-                            <input
-                                type="checkbox"
-                                checked={form.isCrit}
-                                onChange={(e) =>
-                                    setForm((prev) => ({ ...prev, isCrit: e.target.checked }))
-                                }
-                                className="w-4 h-4 text-primary border-dark-border rounded focus:ring-primary"
-                            />
-                            Critical Hit
-                        </label>
-                        {form.isCrit && (
-                            <Input
-                                label="Critical Damage %"
-                                type="number"
-                                value={form.critDamagePercent}
-                                onChange={(e) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        critDamagePercent: Number(e.target.value),
-                                    }))
-                                }
-                            />
+                        <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 mt-5">
+                                <input
+                                    type="checkbox"
+                                    checked={form.isCrit}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({ ...prev, isCrit: e.target.checked }))
+                                    }
+                                    className="w-4 h-4 text-primary border-dark-border rounded focus:ring-primary"
+                                />
+                                Critical Hit
+                            </label>
+                            {form.isCrit && (
+                                <Input
+                                    label="Critical Damage %"
+                                    type="number"
+                                    value={form.critDamagePercent}
+                                    onChange={(e) =>
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            critDamagePercent: Number(e.target.value),
+                                        }))
+                                    }
+                                />
+                            )}
+                        </div>
+
+                        {renderBuffDebuffSection('Attack Buffs/Debuffs %', 'attackBuffs')}
+
+                        {renderBuffDebuffSection(
+                            'Outgoing Damage Buffs/Debuffs %',
+                            'outgoingDamageBuffs'
                         )}
                     </div>
-
-                    {renderBuffDebuffSection('Attack Buffs/Debuffs %', 'attackBuffs')}
-
-                    {renderBuffDebuffSection(
-                        'Outgoing Damage Buffs/Debuffs %',
-                        'outgoingDamageBuffs'
-                    )}
                 </div>
-            </div>
-            <div className="mb-6 bg-dark p-4">
-                <div className="space-y-4">
-                    <h4 className="text-lg font-bold">Defender</h4>
-                    {renderBuffDebuffSection('Enemy Defense Buffs/Debuffs %', 'enemyDefenseBuffs')}
-                    {renderBuffDebuffSection(
-                        'Enemy Incoming Damage Buffs/Debuffs %',
-                        'enemyIncomingDamageBuffs'
-                    )}
-
-                    <Button onClick={calculateDamage} variant="primary" fullWidth>
-                        Calculate
-                    </Button>
-                </div>
-            </div>
-
-            {results && (
                 <div className="mb-6 bg-dark p-4">
-                    <h2 className="text-xl font-bold mb-4">Results</h2>
-                    <div className="space-y-2">
-                        <p>Damage Reduction: {results.damageReduction.toFixed(2)}%</p>
-                        <p>Enemy Defense Estimation: {Math.round(results.enemyDefense)}</p>
+                    <div className="space-y-4">
+                        <h4 className="text-lg font-bold">Defender</h4>
+                        {renderBuffDebuffSection(
+                            'Enemy Defense Buffs/Debuffs %',
+                            'enemyDefenseBuffs'
+                        )}
+                        {renderBuffDebuffSection(
+                            'Enemy Incoming Damage Buffs/Debuffs %',
+                            'enemyIncomingDamageBuffs'
+                        )}
 
-                        <p className="text-sm text-gray-500">
-                            <span className="font-bold">Note:</span> This is an estimation based on
-                            an approximation of the damage reduction, and most likely not 100%
-                            accurate. The worst result I&apos;ve seen has been so far is 1.5% off.
-                        </p>
+                        <Button onClick={calculateDamage} variant="primary" fullWidth>
+                            Calculate
+                        </Button>
                     </div>
                 </div>
-            )}
-        </PageLayout>
+
+                {results && (
+                    <div className="mb-6 bg-dark p-4">
+                        <h2 className="text-xl font-bold mb-4">Results</h2>
+                        <div className="space-y-2">
+                            <p>Damage Reduction: {results.damageReduction.toFixed(2)}%</p>
+                            <p>Enemy Defense Estimation: {Math.round(results.enemyDefense)}</p>
+
+                            <p className="text-sm text-gray-500">
+                                <span className="font-bold">Note:</span> This is an estimation based
+                                on an approximation of the damage reduction, and most likely not
+                                100% accurate. The worst result I&apos;ve seen has been so far is
+                                1.5% off.
+                            </p>
+                        </div>
+                    </div>
+                )}
+            </PageLayout>
+        </>
     );
 };
 

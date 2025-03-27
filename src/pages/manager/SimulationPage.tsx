@@ -18,6 +18,8 @@ import { GearPiece } from '../../types/gear';
 import { ImplantTesting } from '../../components/simulation/ImplantTesting';
 import { Implant } from '../../types/ship';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 interface SimulationState {
     current: SimulationSummary;
@@ -149,102 +151,105 @@ export const SimulationPage: React.FC = () => {
     }, [selectedShip]);
 
     return (
-        <PageLayout
-            title="Simulation"
-            description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear and implants to see how they affect the simulation. Choose the ship role to choose scenario. "
-        >
-            <SimulationInfo />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-4">
-                    <SimulationSettings
-                        selectedShip={selectedShip || null}
-                        selectedRole={selectedRole}
-                        onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                        onRoleSelect={handleRoleChange}
-                        onRunSimulation={handleRunSimulation}
-                    />
-
-                    <Button
-                        aria-label="Run Simulation"
-                        variant="primary"
-                        onClick={handleRunSimulation}
-                        disabled={!selectedShip}
-                        fullWidth
-                    >
-                        Run Simulation
-                    </Button>
-
-                    {simulation && (
-                        <SimulationResults
-                            currentSimulation={simulation.current}
-                            suggestedSimulation={simulation.temporary || undefined}
-                            role={selectedRole}
-                            alwaysColumn
+        <>
+            <Seo {...SEO_CONFIG.simulation} />
+            <PageLayout
+                title="Simulation"
+                description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear and implants to see how they affect the simulation. Choose the ship role to choose scenario. "
+            >
+                <SimulationInfo />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                        <SimulationSettings
+                            selectedShip={selectedShip || null}
+                            selectedRole={selectedRole}
+                            onShipSelect={(ship) => setSelectedShipId(ship.id)}
+                            onRoleSelect={handleRoleChange}
+                            onRunSimulation={handleRunSimulation}
                         />
+
+                        <Button
+                            aria-label="Run Simulation"
+                            variant="primary"
+                            onClick={handleRunSimulation}
+                            disabled={!selectedShip}
+                            fullWidth
+                        >
+                            Run Simulation
+                        </Button>
+
+                        {simulation && (
+                            <SimulationResults
+                                currentSimulation={simulation.current}
+                                suggestedSimulation={simulation.temporary || undefined}
+                                role={selectedRole}
+                                alwaysColumn
+                            />
+                        )}
+                    </div>
+                    {selectedShip && (
+                        <div className="space-y-4">
+                            <h3 className="text-xl font-bold">Quick Swap</h3>
+                            <div className="bg-dark p-4 space-y-4">
+                                <GearTesting
+                                    ship={selectedShip}
+                                    temporaryGear={temporaryGear}
+                                    getGearPiece={getGearPiece}
+                                    hoveredGear={hoveredGear}
+                                    onGearHover={setHoveredGear}
+                                    onSelectSlot={setSelectedSlot}
+                                    onRemoveGear={(slot) => {
+                                        setTemporaryGear((prev) => {
+                                            const next = { ...prev };
+                                            delete next[slot];
+                                            return next;
+                                        });
+                                    }}
+                                    onSaveChanges={handleSaveGearChanges}
+                                    onResetChanges={handleResetGearChanges}
+                                    hasChanges={hasGearChanges()}
+                                />
+
+                                <hr className="border-gray-700" />
+
+                                <ImplantTesting
+                                    ship={selectedShip}
+                                    temporaryImplants={temporaryImplants}
+                                    onImplantsChange={setTemporaryImplants}
+                                    onSaveChanges={handleSaveImplantChanges}
+                                    onResetChanges={handleResetImplantChanges}
+                                    hasChanges={hasImplantChanges()}
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
-                {selectedShip && (
-                    <div className="space-y-4">
-                        <h3 className="text-xl font-bold">Quick Swap</h3>
-                        <div className="bg-dark p-4 space-y-4">
-                            <GearTesting
-                                ship={selectedShip}
-                                temporaryGear={temporaryGear}
-                                getGearPiece={getGearPiece}
-                                hoveredGear={hoveredGear}
-                                onGearHover={setHoveredGear}
-                                onSelectSlot={setSelectedSlot}
-                                onRemoveGear={(slot) => {
-                                    setTemporaryGear((prev) => {
-                                        const next = { ...prev };
-                                        delete next[slot];
-                                        return next;
-                                    });
-                                }}
-                                onSaveChanges={handleSaveGearChanges}
-                                onResetChanges={handleResetGearChanges}
-                                hasChanges={hasGearChanges()}
-                            />
 
-                            <hr className="border-gray-700" />
-
-                            <ImplantTesting
-                                ship={selectedShip}
-                                temporaryImplants={temporaryImplants}
-                                onImplantsChange={setTemporaryImplants}
-                                onSaveChanges={handleSaveImplantChanges}
-                                onResetChanges={handleResetImplantChanges}
-                                hasChanges={hasImplantChanges()}
-                            />
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <Modal
-                isOpen={selectedSlot !== null}
-                onClose={() => setSelectedSlot(null)}
-                title={`Select ${selectedSlot} for ${selectedShip?.name}`}
-            >
-                <GearInventory
-                    inventory={inventory.filter(
-                        (gear) => selectedSlot && gear.slot === selectedSlot
-                    )}
-                    mode="select"
-                    onEquip={(gear) => {
-                        if (selectedSlot) {
-                            setTemporaryGear((prev) => ({
-                                ...prev,
-                                [selectedSlot]: gear.id,
-                            }));
-                            setSelectedSlot(null);
-                        }
-                    }}
-                    onRemove={() => {}}
-                    onEdit={() => {}}
-                />
-            </Modal>
-        </PageLayout>
+                <Modal
+                    isOpen={selectedSlot !== null}
+                    onClose={() => setSelectedSlot(null)}
+                    title={`Select ${selectedSlot} for ${selectedShip?.name}`}
+                >
+                    <GearInventory
+                        inventory={inventory.filter(
+                            (gear) => selectedSlot && gear.slot === selectedSlot
+                        )}
+                        mode="select"
+                        onEquip={(gear) => {
+                            if (selectedSlot) {
+                                setTemporaryGear((prev) => ({
+                                    ...prev,
+                                    [selectedSlot]: gear.id,
+                                }));
+                                setSelectedSlot(null);
+                            }
+                        }}
+                        onRemove={() => {}}
+                        onEdit={() => {}}
+                    />
+                </Modal>
+            </PageLayout>
+        </>
     );
 };
 

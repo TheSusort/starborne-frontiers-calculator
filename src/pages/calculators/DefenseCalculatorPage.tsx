@@ -5,6 +5,8 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { DamageReductionChart } from '../../components/calculator/DamageReductionChart';
 import { DamageReductionTable } from '../../components/calculator/DamageReductionTable';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -118,157 +120,161 @@ const DefenseCalculatorPage: React.FC = () => {
     );
 
     return (
-        <PageLayout
-            title="Defense Calculator"
-            description="Calculate effective HP and damage reduction based on HP and defense values"
-            action={{
-                label: 'Add Ship',
-                onClick: addConfig,
-                variant: 'primary',
-            }}
-        >
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {configs.map((config) => (
-                        <div
-                            key={config.id}
-                            className={`p-4 bg-dark border border-dark-border relative ${
-                                bestShip && bestShip.id === config.id ? 'border-primary' : ''
-                            }`}
-                        >
-                            <div className="flex justify-between items-center mb-4">
-                                <Input
-                                    value={config.name}
-                                    onChange={(e) =>
-                                        updateConfig(config.id, 'name', e.target.value)
-                                    }
-                                    className="font-bold"
-                                />
-                                <Button
-                                    variant="danger"
-                                    onClick={() => removeConfig(config.id)}
-                                    aria-label="Remove ship"
-                                >
-                                    <CloseIcon />
-                                </Button>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex gap-4">
+        <>
+            <Seo {...SEO_CONFIG.defense} />
+            <PageLayout
+                title="Defense Calculator"
+                description="Calculate effective HP and damage reduction based on HP and defense values"
+                action={{
+                    label: 'Add Ship',
+                    onClick: addConfig,
+                    variant: 'primary',
+                }}
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {configs.map((config) => (
+                            <div
+                                key={config.id}
+                                className={`p-4 bg-dark border border-dark-border relative ${
+                                    bestShip && bestShip.id === config.id ? 'border-primary' : ''
+                                }`}
+                            >
+                                <div className="flex justify-between items-center mb-4">
                                     <Input
-                                        label="HP"
-                                        type="number"
-                                        value={config.hp}
+                                        value={config.name}
                                         onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'hp',
-                                                parseInt(e.target.value) || 0
-                                            )
+                                            updateConfig(config.id, 'name', e.target.value)
                                         }
+                                        className="font-bold"
                                     />
-                                    <Input
-                                        label="Defense"
-                                        type="number"
-                                        value={config.defense}
-                                        onChange={(e) =>
-                                            updateConfig(
-                                                config.id,
-                                                'defense',
-                                                parseInt(e.target.value) || 0
-                                            )
-                                        }
-                                    />
+                                    <Button
+                                        variant="danger"
+                                        onClick={() => removeConfig(config.id)}
+                                        aria-label="Remove ship"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
                                 </div>
 
-                                <div className="mt-4 pt-4 border-t border-dark-border">
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-gray-400">Damage Reduction:</span>
-                                        <span>{config.damageReduction?.toFixed(2)}%</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-400">Effective HP:</span>
-                                        <span
-                                            className={
-                                                bestShip && bestShip.id === config.id
-                                                    ? 'text-primary font-bold'
-                                                    : ''
+                                <div className="space-y-4">
+                                    <div className="flex gap-4">
+                                        <Input
+                                            label="HP"
+                                            type="number"
+                                            value={config.hp}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'hp',
+                                                    parseInt(e.target.value) || 0
+                                                )
                                             }
-                                        >
-                                            {config.effectiveHP?.toLocaleString()}
-                                        </span>
+                                        />
+                                        <Input
+                                            label="Defense"
+                                            type="number"
+                                            value={config.defense}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'defense',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
                                     </div>
-                                    <div className="flex justify-between mt-2">
-                                        <span className="text-gray-400">HP Multiplier:</span>
-                                        <span>
-                                            {((config.effectiveHP || 0) / config.hp).toFixed(2)}x
-                                        </span>
+
+                                    <div className="mt-4 pt-4 border-t border-dark-border">
+                                        <div className="flex justify-between mb-2">
+                                            <span className="text-gray-400">Damage Reduction:</span>
+                                            <span>{config.damageReduction?.toFixed(2)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-400">Effective HP:</span>
+                                            <span
+                                                className={
+                                                    bestShip && bestShip.id === config.id
+                                                        ? 'text-primary font-bold'
+                                                        : ''
+                                                }
+                                            >
+                                                {config.effectiveHP?.toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between mt-2">
+                                            <span className="text-gray-400">HP Multiplier:</span>
+                                            <span>
+                                                {((config.effectiveHP || 0) / config.hp).toFixed(2)}
+                                                x
+                                            </span>
+                                        </div>
                                     </div>
+
+                                    {bestShip && bestShip.id === config.id && (
+                                        <div className="text-primary text-sm mt-2 text-center">
+                                            Best ship configuration
+                                        </div>
+                                    )}
                                 </div>
-
-                                {bestShip && bestShip.id === config.id && (
-                                    <div className="text-primary text-sm mt-2 text-center">
-                                        Best ship configuration
-                                    </div>
-                                )}
                             </div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-dark p-4 border border-dark-border">
-                    <h2 className="text-xl font-bold mb-4">Effective HP Explanation</h2>
-                    <p className="mb-2">
-                        Effective HP represents how much raw damage your ship can take before being
-                        destroyed, taking damage reduction into account.
-                    </p>
-                    <p className="mb-2">The formula for calculating Effective HP is:</p>
-                    <p className="mb-2 font-mono bg-dark-lighter p-2">
-                        Effective HP = HP / (1 - (Damage Reduction / 100))
-                    </p>
-                    <p>
-                        For example, a ship with 10,000 HP and 70% damage reduction has an effective
-                        HP of 33,333, meaning it can take more than three times as much damage as
-                        its raw HP value.
-                    </p>
-                </div>
-
-                <div className="bg-dark p-4 border border-dark-border">
-                    <h2 className="text-xl font-bold mb-4">Damage Reduction Curve</h2>
-                    <p className="mb-4">
-                        Damage reduction follows a curve where higher defense values have
-                        diminishing returns. The interactive chart below shows how damage reduction
-                        increases with defense values from 0 to 26,000, and marks the position of
-                        your ship configurations.
-                    </p>
-
-                    <DamageReductionChart
-                        height={400}
-                        maxDefense={26000}
-                        ships={configs.map((config) => ({
-                            id: config.id,
-                            name: config.name,
-                            defense: config.defense,
-                            damageReduction: config.damageReduction || 0,
-                            isHighlighted: bestShip ? config.id === bestShip.id : false,
-                        }))}
-                    />
-
-                    <div className="mt-6 flex justify-center">
-                        <Button variant="secondary" onClick={() => setShowTable(!showTable)}>
-                            {showTable ? 'Hide Table' : 'Show Table'}
-                        </Button>
+                        ))}
                     </div>
 
-                    {showTable && (
-                        <div className="mt-4">
-                            <h3 className="text-lg font-bold mb-2">Damage Reduction Table</h3>
-                            <DamageReductionTable />
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">Effective HP Explanation</h2>
+                        <p className="mb-2">
+                            Effective HP represents how much raw damage your ship can take before
+                            being destroyed, taking damage reduction into account.
+                        </p>
+                        <p className="mb-2">The formula for calculating Effective HP is:</p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            Effective HP = HP / (1 - (Damage Reduction / 100))
+                        </p>
+                        <p>
+                            For example, a ship with 10,000 HP and 70% damage reduction has an
+                            effective HP of 33,333, meaning it can take more than three times as
+                            much damage as its raw HP value.
+                        </p>
+                    </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">Damage Reduction Curve</h2>
+                        <p className="mb-4">
+                            Damage reduction follows a curve where higher defense values have
+                            diminishing returns. The interactive chart below shows how damage
+                            reduction increases with defense values from 0 to 26,000, and marks the
+                            position of your ship configurations.
+                        </p>
+
+                        <DamageReductionChart
+                            height={400}
+                            maxDefense={26000}
+                            ships={configs.map((config) => ({
+                                id: config.id,
+                                name: config.name,
+                                defense: config.defense,
+                                damageReduction: config.damageReduction || 0,
+                                isHighlighted: bestShip ? config.id === bestShip.id : false,
+                            }))}
+                        />
+
+                        <div className="mt-6 flex justify-center">
+                            <Button variant="secondary" onClick={() => setShowTable(!showTable)}>
+                                {showTable ? 'Hide Table' : 'Show Table'}
+                            </Button>
                         </div>
-                    )}
+
+                        {showTable && (
+                            <div className="mt-4">
+                                <h3 className="text-lg font-bold mb-2">Damage Reduction Table</h3>
+                                <DamageReductionTable />
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
-        </PageLayout>
+            </PageLayout>
+        </>
     );
 };
 
