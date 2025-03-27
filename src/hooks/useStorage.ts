@@ -18,11 +18,18 @@ export function useStorage<T>(config: StorageConfig<T>) {
         if (localData) {
             try {
                 const parsedData = JSON.parse(localData);
-                if (Array.isArray(parsedData) && parsedData.length > 0) {
-                    return parsedData as T;
+                // Ensure the parsed data is valid
+                if (Array.isArray(defaultValue)) {
+                    // If default value is an array, ensure parsed data is also an array
+                    return Array.isArray(parsedData)
+                        ? parsedData.filter((item) => item !== null && item !== undefined)
+                        : defaultValue;
                 }
+                // For non-array data, just ensure it's not null/undefined
+                return parsedData !== null && parsedData !== undefined ? parsedData : defaultValue;
             } catch (error) {
                 console.error('Error parsing local data:', error);
+                return defaultValue;
             }
         }
         return defaultValue;

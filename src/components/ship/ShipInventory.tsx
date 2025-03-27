@@ -150,8 +150,9 @@ export const ShipInventory: React.FC<Props> = ({
     ];
 
     const sortedAndFilteredInventory = useMemo(() => {
-        const filtered = filteredInventory;
+        const filtered = filteredInventory.filter((ship) => ship !== undefined && ship !== null);
         return [...filtered].sort((a, b) => {
+            if (!a || !b) return 0;
             switch (state.sort.field) {
                 case 'type':
                     return state.sort.direction === 'asc'
@@ -172,8 +173,8 @@ export const ShipInventory: React.FC<Props> = ({
                 }
                 case 'name':
                     return state.sort.direction === 'asc'
-                        ? a.name.localeCompare(b.name)
-                        : b.name.localeCompare(a.name);
+                        ? (a.name || '').localeCompare(b.name || '')
+                        : (b.name || '').localeCompare(a.name || '');
                 default:
                     return state.sort.direction === 'asc'
                         ? a.id.localeCompare(b.id)

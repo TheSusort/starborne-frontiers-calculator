@@ -322,11 +322,12 @@ export const SHIPS: Record<string, ShipData> = {
         imageKey: 'Gelecek_12_Portrait.png',
         activeSkillText:
             'This Unit deals 150% damage and inflicts Corrosion 2 for 2 turns. If the target has more than 3 Debuffs, it inflicts Stasis for 2 turns.',
-        chargeSkillText: 'This Unit deals 250% damage and detonates Corrosion effects.',
+        chargeSkillText:
+            'This Unit deals 250% damage and detonates Corrosion effects at 180% power.',
         firstPassiveSkillText:
-            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs 3% of its Max HP.',
+            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs itself for 3% of its Max HP.',
         secondPassiveSkillText:
-            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs 3% of its Max HP and inflicts Corrosion 2 for 2 turns on that enemy.',
+            'When an ally inflicts a Damage Over Time (DoT) effect with a critical hit, this unit repairs itself for 3% of its Max HP and inflicts Corrosion 2 for 2 turns on that enemy.',
     },
     CRUCIALIS: {
         name: 'Crucialis',
@@ -1362,8 +1363,10 @@ export const SHIPS: Record<string, ShipData> = {
             'This Unit purges 1 buff from the enemy and deals 200% damage, including additional damage equal to 20% of its Max HP.',
         chargeSkillText:
             'This Unit deals 250% damage, with additional Damage equal to 20% of its Max HP and increases Damage by 100% to enemies with less than 30% HP.',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        firstPassiveSkillText:
+            'This unit adds 2 charges to its charged skill upon killing an enemy.',
+        secondPassiveSkillText:
+            'This unit adds 2 charges to its charged skill upon killing an enemy. At the start of each round, it gains Attack Up 3 for 1 turn.',
     },
     OLEANDER: {
         name: 'Oleander',
@@ -1384,8 +1387,10 @@ export const SHIPS: Record<string, ShipData> = {
             'This Unit grants Hacking Up 3 for 2 turns and repairs 10% of its Max HP, with an additional 7% repair for each debuffed enemy.',
         chargeSkillText:
             'This Unit grants Repair Over Time 2 for 1 turn, grants Out. DoT Damage Up 3 for 3 turns, and grants Hit Mitigation for 3 turns.',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        firstPassiveSkillText:
+            "When an ally inflicts a debuff, this unit adds 1 charge to it's charged skill.",
+        secondPassiveSkillText:
+            "When an ally inflicts a debuff, this unit adds 1 charge to it's charged skill and then, once per ally per round, grants Repair Over Time 2 to that ally for 2 turns.",
     },
     OPAL: {
         name: 'Opal',
@@ -1448,10 +1453,13 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 46,
         speed: 84,
         imageKey: 'Everliving_11_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText:
+            'This unit deals 200% damage. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.',
+        chargeSkillText: 'This unit steals 1 buff from the primary target, then deals 260% damage.',
+        firstPassiveSkillText:
+            'This unit gains Attack Up 2 for 1 turn after an ally is critically repaired.',
+        secondPassiveSkillText:
+            'This unit gains Attack Up 2 and Leech 2 for 1 turn after an ally is critically repaired.',
     },
     PANGUAN: {
         name: 'Panguan',
@@ -1516,7 +1524,8 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 88,
         imageKey: 'Everliving_5_Portrait.png',
         activeSkillText: 'This unit grants Attack Up 2 and Crit Power Up 2 for 2 turns.',
-        chargeSkillText: '',
+        chargeSkillText:
+            'This unit grants Attack Up 3 and Crit Power Up 3 for 1 turns and cleanses 2 debuffs.',
         firstPassiveSkillText:
             'Upon being killed by direct damage, this unit deals damage equal to 50% of its max HP.',
         secondPassiveSkillText:
@@ -1594,7 +1603,7 @@ export const SHIPS: Record<string, ShipData> = {
     QUIXILVER: {
         name: 'Quixilver',
         affinity: 'electric',
-        rarity: 'epic',
+        rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'DEFENDER',
         hp: 19634,
@@ -1606,10 +1615,14 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 24,
         speed: 69,
         imageKey: 'Atlas_17_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText:
+            'This unit deals 80% damage plus an additional damage equal to 10% of its current shield, and if it has any shield, gains Taunt for 1 turn.',
+        chargeSkillText:
+            'This unit deals 120% damage with additional damage equal to 12% of its current shield and grants Shield Converter.',
+        firstPassiveSkillText:
+            'This unit gains shield equal to 25% of the damage taken when taking HP damage and still having shield.',
+        secondPassiveSkillText:
+            'This unit gains shield equal to 50% of the damage taken when taking HP damage and still having shield.',
     },
     RAVAGER: {
         name: 'Ravager',
@@ -1904,10 +1917,14 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 42,
         speed: 88,
         imageKey: 'Tianchao_5_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText:
+            'This unit deals 140% damage, inflicts Inc. Repair Down 2 for 1 turn, and Bomb 1 for 2 turns.',
+        chargeSkillText:
+            'This unit deals 210% damage, inflicts Inc. Repair Down 3 for 2 turns, and inflicts Bomb 2 for 2 turns.',
+        firstPassiveSkillText:
+            'This unit gains Stealth for 2 turns when damaging a Debuffer or Supporter.',
+        secondPassiveSkillText:
+            'This unit gains Stealth for 2 turns when damaging a Debuffer or Supporter. Additionally, when damaging a Debuffed enemy, it gains Tianchao Precision 2 for 3 turns.',
     },
     SHASHOU: {
         name: 'Shashou',
@@ -2082,10 +2099,13 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 54,
         speed: 81,
         imageKey: 'Everliving_13_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText:
+            'This unit deals 170% damage and all allies repair 7% of the damage dealt and this repair cannot critically hit.',
+        chargeSkillText: 'This unit purges 2 buffs from the enemy and deals 210% damage',
+        firstPassiveSkillText:
+            "This unit deals increased direct damage by up to 40% based on the target's missing health percentage, with the maximum damage bonus achieved for targets at 10% HP.",
+        secondPassiveSkillText:
+            "This Unit gains One Extra Action after purging at least 4 buffs with a single skill. This unit deals increased direct damage by up to 40% based on the target's missing health percentage, with the maximum damage bonus achieved for targets at 10% HP.",
     },
     THRESH: {
         name: 'Thresh',
@@ -2102,10 +2122,13 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 50,
         speed: 78,
         imageKey: 'Binderburg_16_Portrait.png',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
+        activeSkillText:
+            "This unit gains Attack Up 3 for 1 turn and deals 240% damage. If the target is a Defender, this unit removes 1 charge for the enemy and adds 1 charge to this unit's charged skill.",
+        chargeSkillText:
+            'This unit steals 1 buff from the primary target and deals 300% damage. When targeting a Defender, this unit gains Crit Power Up 2 for 1 turn.',
+        firstPassiveSkillText: 'This unit deals 25% more direct damage when Taunted or Provoked.',
+        secondPassiveSkillText:
+            'This unit ignores 7.5% Defense for each Buff it has, up to 45%, and deals 25% more direct damage when Taunted or Provoked.',
     },
     TORCHER: {
         name: 'Torcher',
