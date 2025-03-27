@@ -79,8 +79,8 @@ const App: React.FC = () => {
                 <AuthProvider>
                     <Router>
                         <Seo
-                            title="Home"
-                            description="Starborne Frontiers Calculator - Your comprehensive tool for ship management, gear optimization, and battle simulations."
+                            title="Starborne Planner"
+                            description="Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations."
                             keywords="starborne, frontiers, calculator, ships, gear, simulation"
                         />
                         <main className="flex">

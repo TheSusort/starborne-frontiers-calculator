@@ -2,7 +2,7 @@ export const SEO_CONFIG = {
     home: {
         title: '',
         description:
-            'Starborne Frontiers Calculator - Your comprehensive tool for ship management, gear optimization, and battle simulations.',
+            'Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations.',
         keywords: 'starborne, frontiers, calculator, ships, gear, simulation',
     },
     ships: {
