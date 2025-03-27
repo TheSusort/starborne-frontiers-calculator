@@ -14,6 +14,7 @@ export const useGearLookup = (
     getGearPiece: (id: string) => GearPiece | undefined
 ): GearLookup => {
     return useMemo(() => {
+        if (!equipment) return {};
         const lookup: GearLookup = {};
         Object.entries(equipment).forEach(([_, gearId]) => {
             if (gearId) {
@@ -34,6 +35,7 @@ export const useGearSets = (
     gearLookup: GearLookup
 ): string[] => {
     return useMemo(() => {
+        if (!equipment) return [];
         const setCount = Object.values(equipment).reduce(
             (acc, gearId) => {
                 if (!gearId) return acc;

@@ -115,7 +115,7 @@ export const ShipInventory: React.FC<Props> = ({
             onChange: setSelectedFactions,
             options: uniqueFactions.map((faction) => ({
                 value: faction,
-                label: FACTIONS[faction].name,
+                label: FACTIONS[faction]?.name,
             })),
         },
         {
@@ -125,7 +125,7 @@ export const ShipInventory: React.FC<Props> = ({
             onChange: setSelectedShipTypes,
             options: uniqueShipTypes.map((shipType) => ({
                 value: shipType,
-                label: SHIP_TYPES[shipType].name,
+                label: SHIP_TYPES[shipType]?.name,
             })),
         },
         {
@@ -135,7 +135,7 @@ export const ShipInventory: React.FC<Props> = ({
             onChange: setSelectedRarities,
             options: uniqueRarities.map((rarity) => ({
                 value: rarity,
-                label: RARITIES[rarity].label,
+                label: RARITIES[rarity]?.label,
             })),
         },
     ];
@@ -156,12 +156,12 @@ export const ShipInventory: React.FC<Props> = ({
             switch (state.sort.field) {
                 case 'type':
                     return state.sort.direction === 'asc'
-                        ? SHIP_TYPES[a.type].name.localeCompare(SHIP_TYPES[b.type].name)
-                        : SHIP_TYPES[b.type].name.localeCompare(SHIP_TYPES[a.type].name);
+                        ? SHIP_TYPES[a.type]?.name.localeCompare(SHIP_TYPES[b.type]?.name)
+                        : SHIP_TYPES[b.type]?.name.localeCompare(SHIP_TYPES[a.type]?.name);
                 case 'faction':
                     return state.sort.direction === 'asc'
-                        ? FACTIONS[a.faction].name.localeCompare(FACTIONS[b.faction].name)
-                        : FACTIONS[b.faction].name.localeCompare(FACTIONS[a.faction].name);
+                        ? FACTIONS[a.faction]?.name.localeCompare(FACTIONS[b.faction]?.name)
+                        : FACTIONS[b.faction]?.name.localeCompare(FACTIONS[a.faction]?.name);
                 case 'rarity':
                     return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
@@ -212,7 +212,7 @@ export const ShipInventory: React.FC<Props> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {sortedAndFilteredInventory.map((ship) => (
                             <ShipCard
-                                key={ship.id}
+                                key={ship.id ?? new Date().toISOString()}
                                 ship={ship}
                                 allShips={ships}
                                 hoveredGear={hoveredGear}

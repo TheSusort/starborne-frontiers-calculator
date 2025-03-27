@@ -107,7 +107,7 @@ export const ShipCard: React.FC<Props> = ({
                             <GearSlot
                                 key={key}
                                 slotKey={key as GearSlotName}
-                                gear={gearLookup[ship.equipment[key as GearSlotName] || '']}
+                                gear={gearLookup[ship.equipment?.[key as GearSlotName] || '']}
                                 hoveredGear={hoveredGear}
                                 onSelect={setSelectedSlot}
                                 onRemove={(slot) => onRemoveGear(ship.id, slot)}
@@ -177,7 +177,7 @@ export const ShipCard: React.FC<Props> = ({
                                 </Tooltip>
                             </div>
                         )}
-                        {Object.values(ship.equipment) && (
+                        {Object.values(ship.equipment || {}).length > 0 && (
                             <Button
                                 aria-label="Unequip all gear"
                                 className="ml-auto"

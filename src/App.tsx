@@ -38,10 +38,6 @@ const siteId = 5241833;
 const hotjarVersion = 6;
 Hotjar.init(siteId, hotjarVersion);
 
-// Run migrations when app starts
-migrateTianshaoToTianchao();
-migrateShipAffinity();
-
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
     const [lastSeenVersion, setLastSeenVersion] = useState(CURRENT_VERSION);

@@ -46,7 +46,7 @@ export const calculateTotalStats = (
     Object.assign(breakdown.afterGear, breakdown.afterEngineering);
 
     // Process gear
-    Object.values(equipment).forEach((gearId) => {
+    Object.values(equipment || {}).forEach((gearId) => {
         if (!gearId) return;
         const gear = getGearPiece(gearId);
         if (!gear) return;
@@ -102,7 +102,7 @@ export const calculateTotalStats = (
     function countSetPieces(): Record<string, number> {
         const setCounts: Record<string, number> = {};
 
-        Object.values(equipment).forEach((gearId) => {
+        Object.values(equipment || {}).forEach((gearId) => {
             if (!gearId) return;
             const gear = getGearPiece(gearId);
             if (!gear?.setBonus || !GEAR_SETS[gear.setBonus].name) return;

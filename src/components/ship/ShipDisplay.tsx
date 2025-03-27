@@ -78,7 +78,7 @@ const Header = memo(
                 {Array.from({ length: 6 }, (_, index) => (
                     <span
                         key={index}
-                        className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : 'text-gray-300'}`}
                     >
                         ★
                     </span>
