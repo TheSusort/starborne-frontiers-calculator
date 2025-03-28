@@ -11,6 +11,67 @@ interface UseShipsProps {
     getGearPiece?: (id: string) => GearPiece | undefined;
 }
 
+// Define a type for unknown ship data
+type UnknownShipData = {
+    [key: string]: unknown;
+    id?: unknown;
+    name?: unknown;
+    type?: unknown;
+    faction?: unknown;
+    rarity?: unknown;
+    equipment?: unknown;
+    baseStats?: {
+        [key: string]: unknown;
+    };
+    refits?: unknown;
+    implants?: unknown;
+    equipmentLocked?: unknown;
+};
+
+// Validation function to check if a ship object is valid
+const isValidShip = (ship: unknown): ship is Ship => {
+    if (!ship || typeof ship !== 'object') return false;
+
+    const shipData = ship as UnknownShipData;
+
+    // Check required string properties
+    const requiredStringProps = ['id', 'name', 'type', 'faction', 'rarity'];
+    if (!requiredStringProps.every((prop) => typeof shipData[prop] === 'string')) return false;
+
+    // Check equipment object
+    if (!shipData.equipment || typeof shipData.equipment !== 'object') return false;
+
+    // Check baseStats object
+    const requiredBaseStats = [
+        'hp',
+        'attack',
+        'defence',
+        'speed',
+        'hacking',
+        'security',
+        'crit',
+        'critDamage',
+        'healModifier',
+    ];
+    if (
+        !shipData.baseStats ||
+        typeof shipData.baseStats !== 'object' ||
+        !requiredBaseStats.every((stat) => typeof shipData.baseStats?.[stat] === 'number')
+    ) {
+        return false;
+    }
+
+    // Check arrays
+    if (!Array.isArray(shipData.refits) || !Array.isArray(shipData.implants)) return false;
+
+    // Check equipmentLocked boolean
+    if (typeof shipData.equipmentLocked !== 'boolean') {
+        return false;
+    }
+
+    return true;
+};
+
 export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
     const {
         data: ships = [],
@@ -18,6 +79,19 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
         loading,
     } = useStorage<Ship[]>({ key: STORAGE_KEY, defaultValue: [] });
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
+
+    // Clean up invalid ships on load
+    useEffect(() => {
+        if (!loading) {
+            const validShips = ships.filter(isValidShip);
+            if (validShips.length !== ships.length) {
+                console.error(
+                    `Removed ${ships.length - validShips.length} invalid ships from storage`
+                );
+                setShips(validShips);
+            }
+        }
+    }, [loading, ships, setShips]);
 
     const handleEquipGear = useCallback(
         async (shipId: string, slot: GearSlotName, gearId: string) => {
@@ -107,6 +181,12 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
     const handleSaveShip = useCallback(
         async (ship: Ship) => {
+            // Validate the ship before saving
+            if (!isValidShip(ship)) {
+                console.error('Attempted to save invalid ship:', ship);
+                throw new Error('Invalid ship data');
+            }
+
             const newShips = ships.some((s) => s.id === ship.id)
                 ? ships.map((s) => (s.id === ship.id ? ship : s))
                 : [...ships, ship];
@@ -120,6 +200,12 @@ export const useShips = ({ getGearPiece }: UseShipsProps = {}) => {
 
     const updateShip = useCallback(
         async (updatedShip: Ship) => {
+            // Validate the ship before updating
+            if (!isValidShip(updatedShip)) {
+                console.error('Attempted to update with invalid ship data:', updatedShip);
+                throw new Error('Invalid ship data');
+            }
+
             const newShips = ships.map((ship) =>
                 ship.id === updatedShip.id
                     ? {
