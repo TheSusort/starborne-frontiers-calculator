@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.24.1';
+export const CURRENT_VERSION = '0.24.2';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.24.2',
+        date: '2025-03-28',
+        changes: ['Added buffs data', 'Added buff/debuff tooltip'],
+    },
     {
         version: '0.24.1',
         date: '2025-03-28',
