@@ -44,7 +44,8 @@
         "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
         "prepare": "husky install",
         "lint-staged": "lint-staged",
-        "update-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
+        "fetch-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
+        "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
         "migrate-ships": "tsx scripts/migrate-ships.ts"
     },
     "eslintConfig": {

@@ -1,17 +1,25 @@
 import React from 'react';
+import { findBuffsInText } from '../../utils/buffUtils';
+import { BuffTooltip } from './BuffTooltip';
 
-interface Props {
+interface SkillTooltipProps {
     skillText: string;
     skillType: string;
 }
 
-export const SkillTooltip: React.FC<Props> = ({ skillText, skillType }) => {
-    if (!skillText) return null;
+export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType }) => {
+    const buffs = findBuffsInText(skillText);
 
     return (
-        <div className="bg-dark-lighter border border-dark-border p-2 rounded-md shadow-lg max-w-md">
-            <div className="font-secondary text-sm text-primary mb-1">{skillType}</div>
-            <div className="text-sm text-gray-300">{skillText}</div>
-        </div>
+        <>
+            <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-gray-600">
+                <div className="font-semibold text-primary">{skillType}</div>
+                <div className="text-sm text-gray-300 mb-2">{skillText}</div>
+            </div>
+
+            {buffs.map((buffName) => (
+                <BuffTooltip key={buffName} buffName={buffName} />
+            ))}
+        </>
     );
 };
