@@ -89,14 +89,14 @@ export const ShipInventory: React.FC<Props> = ({
     const uniqueFactions = useMemo(() => {
         const factions = new Set(ships.map((ship) => ship.faction));
         return Array.from(factions).sort((a, b) =>
-            FACTIONS[a].name.localeCompare(FACTIONS[b].name)
+            FACTIONS[a]?.name.localeCompare(FACTIONS[b]?.name)
         );
     }, [ships]);
 
     const uniqueShipTypes = useMemo(() => {
         const shipTypes = new Set(ships.map((ship) => ship.type));
         return Array.from(shipTypes).sort((a, b) =>
-            SHIP_TYPES[a].name.localeCompare(SHIP_TYPES[b].name)
+            SHIP_TYPES[a]?.name.localeCompare(SHIP_TYPES[b]?.name)
         );
     }, [ships]);
 
