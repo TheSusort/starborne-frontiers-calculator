@@ -11,7 +11,7 @@ interface SeoProps {
 const Seo: React.FC<SeoProps> = ({ title, description, keywords, ogImage }) => {
     const siteTitle = 'Starborne Planner';
     const fullTitle = `${title} | ${siteTitle}`;
-    const defaultOgImage = '/favicon.ico';
+    const defaultOgImage = '/faviconV2.png';
 
     return (
         <Helmet>
