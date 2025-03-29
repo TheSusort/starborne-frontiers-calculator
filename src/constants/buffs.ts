@@ -393,12 +393,12 @@ export const BUFFS: Buff[] = [
             'Increases the incoming damage of the next direct hit by 100%, removed after taking direct damage or at the end of the round.',
     },
     {
-        name: 'Affinity Override - Offensive',
+        name: 'Offensive Affinity Override',
         description:
             'Guarantees affinity advantage when attacking or being attacked, but is removed after attacking.',
     },
     {
-        name: 'Affinity Override - Defensive',
+        name: 'Defensive Affinity Override',
         description:
             'Grants affinity advantage when attacking or being attacked, but is removed after being attacked',
     },
@@ -557,5 +557,9 @@ export const BUFFS: Buff[] = [
         name: 'Echoing Burst',
         description:
             'Accumulates direct damage dealt and deals 100% of the damage upon expiration.',
+    },
+    {
+        name: 'Titanite Plating',
+        description: '+5% Defense, Stackable up to 5 times. Remove 1 stack per hit.',
     },
 ];
