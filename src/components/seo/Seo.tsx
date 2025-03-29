@@ -26,7 +26,6 @@ const Seo: React.FC<SeoProps> = ({ title, description, keywords, ogImage }) => {
             <meta property="og:image" content={ogImage || defaultOgImage} />
 
             {/* Twitter */}
-            <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:title" content={fullTitle} />
             <meta name="twitter:description" content={description} />
             <meta name="twitter:image" content={ogImage || defaultOgImage} />
