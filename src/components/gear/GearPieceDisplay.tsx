@@ -47,7 +47,7 @@ export const GearPieceDisplay = memo(
 
         return (
             <div
-                className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col min-w-[230px] ${className}`}
+                className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className}`}
             >
                 {/* Header */}
                 <div
