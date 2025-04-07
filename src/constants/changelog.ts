@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.24.2';
+export const CURRENT_VERSION = '0.25.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '0.25.0',
+        date: '2025-04-07',
+        changes: ['Added shared encounters page'],
+    },
     {
         version: '0.24.2',
         date: '2025-03-28',

@@ -11,3 +11,5 @@ export * from './InfoIcon';
 export * from './LockIcon';
 export * from './MenuIcon';
 export * from './UnlockedLockIcon';
+export * from './SearchIcon';
+export * from './ShareIcon';

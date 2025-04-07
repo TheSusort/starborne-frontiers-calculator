@@ -257,6 +257,29 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText: 'This unit repairs 3.5% of its max HP every turn.',
         secondPassiveSkillText: 'This unit repairs 5% of its max HP every turn.',
     },
+    CHAKARA: {
+        name: 'Chakara',
+        affinity: 'thermal',
+        rarity: 'legendary',
+        faction: 'TERRAN_COMBINE',
+        role: 'ATTACKER',
+        hp: 11482,
+        attack: 4464,
+        defense: 2619,
+        hacking: 79,
+        security: 18,
+        critRate: 18,
+        critDamage: 62,
+        speed: 68,
+        imageKey: 'Terran_18_Portrait.png',
+        activeSkillText:
+            'This unit deals 180% damage with additional damage equal to 80% of its Defense. If all damaged enemies have more Speed than this unit, it adds 1 charge to its charged skill.',
+        chargeSkillText:
+            'This unit deals 220% damage with additional damage equal to 100% of its Defense, bypassing 20% of the enemy Defense, and purges 1 buff from the enemy.',
+        firstPassiveSkillText: '',
+        secondPassiveSkillText:
+            'This unit starts each round with Attack Up 2 and Defense Up 2 for 1 turn if it has the lowest Speed among all Allies. Then, deals 60% damage to the highest Speed enemy.',
+    },
     CHIMEI: {
         name: 'Chimei',
         affinity: 'antimatter',

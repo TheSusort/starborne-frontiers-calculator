@@ -73,4 +73,10 @@ export const SEO_CONFIG = {
         description: 'Analyze and break down ship damage calculations in Starborne Frontiers.',
         keywords: 'damage analysis, damage breakdown, damage calculations, ship damage analysis',
     },
+    sharedEncounters: {
+        title: 'Shared Encounters - Starborne Frontiers Calculator',
+        description:
+            "View and learn from other players' successful fleet formations for different encounters",
+        keywords: 'starborne, frontiers, calculator, shared encounters, fleet formations',
+    },
 } as const;

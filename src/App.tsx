@@ -4,15 +4,13 @@ import { HelmetProvider } from 'react-helmet-async';
 import { Sidebar } from './components/ui';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
-import { migrateTianshaoToTianchao } from './migrations/factionMigration';
-import { migrateShipAffinity } from './migrations/affinityMigration';
 import Hotjar from '@hotjar/browser';
 import { AuthProvider } from './contexts/AuthProvider';
 import { STORAGE_KEYS } from './constants/storage';
 import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import Seo from './components/seo/Seo';
-
+import SharedEncountersPage from './pages/SharedEncountersPage';
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
@@ -134,6 +132,10 @@ const App: React.FC = () => {
                                                 <Route
                                                     path="/damage-deconstruction"
                                                     element={<DamageDeconstructionPage />}
+                                                />
+                                                <Route
+                                                    path="/shared-encounters"
+                                                    element={<SharedEncountersPage />}
                                                 />
                                             </Routes>
                                         </Suspense>

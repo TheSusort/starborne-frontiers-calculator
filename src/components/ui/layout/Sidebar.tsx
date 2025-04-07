@@ -164,6 +164,7 @@ export const Sidebar: React.FC = () => {
             ],
         },
         { path: '/ships/index', label: 'Ship Database' },
+        { path: '/shared-encounters', label: 'Shared Encounters' },
         {
             path: '/calculators',
             label: 'Calculators',

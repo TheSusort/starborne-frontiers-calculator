@@ -17,10 +17,29 @@ export interface ShipPosition {
     position: Position;
 }
 
-export interface EncounterNote {
+export interface SharedShipPosition {
+    shipName: string;
+    position: Position;
+}
+
+export interface BaseEncounterNote {
     id: string;
     name: string;
-    formation: ShipPosition[];
     createdAt: number;
     description?: string;
+    isPublic?: boolean;
 }
+
+export interface LocalEncounterNote extends BaseEncounterNote {
+    formation: ShipPosition[];
+}
+
+export interface SharedEncounterNote extends BaseEncounterNote {
+    formation: SharedShipPosition[];
+    userId: string;
+    userName: string;
+    votes: number;
+    userVotes: Record<string, number>; // userId -> vote (-1, 0, or 1)
+}
+
+export type EncounterNote = LocalEncounterNote | SharedEncounterNote;

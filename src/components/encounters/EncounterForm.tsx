@@ -1,30 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Position, ShipPosition, EncounterNote } from '../../types/encounters';
+import { Position, ShipPosition, EncounterNote, SharedShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import { ShipSelector } from '../ship/ShipSelector';
 import FormationGrid from './FormationGrid';
-import { Button, Input, Textarea } from '../ui';
+import { Button, Input, Textarea, Checkbox } from '../ui';
 
 interface EncounterFormProps {
     onSubmit: (encounter: EncounterNote) => void;
     initialEncounter?: EncounterNote | null;
 }
 
+const convertToShipPosition = (position: ShipPosition | SharedShipPosition): ShipPosition => {
+    if ('shipId' in position) {
+        return position;
+    }
+    return {
+        position: position.position,
+        shipId: position.shipName, // This is a temporary conversion, you might want to handle this differently
+    };
+};
+
 const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounter }) => {
     const [name, setName] = useState('');
     const [formation, setFormation] = useState<ShipPosition[]>([]);
     const [selectedPosition, setSelectedPosition] = useState<Position>();
     const [description, setDescription] = useState('');
+    const [isPublic, setIsPublic] = useState(false);
 
     useEffect(() => {
         if (initialEncounter) {
             setName(initialEncounter.name);
-            setFormation(initialEncounter.formation);
+            setFormation(initialEncounter.formation.map(convertToShipPosition));
             setDescription(initialEncounter.description || '');
+            setIsPublic(initialEncounter.isPublic || false);
         } else {
             setName('');
             setFormation([]);
             setDescription('');
+            setIsPublic(false);
         }
     }, [initialEncounter]);
 
@@ -36,12 +49,14 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
             formation,
             createdAt: initialEncounter?.createdAt || Date.now(),
             description,
+            isPublic,
         };
         onSubmit(encounterData);
         setName('');
         setFormation([]);
         setDescription('');
         setSelectedPosition(undefined);
+        setIsPublic(false);
     };
 
     const handleShipSelect = (ship: Ship) => {
@@ -80,6 +95,11 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                     id="description"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
+                />
+                <Checkbox
+                    label="Make this encounter public"
+                    checked={isPublic}
+                    onChange={setIsPublic}
                 />
             </form>
 

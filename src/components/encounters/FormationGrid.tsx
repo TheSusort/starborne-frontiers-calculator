@@ -1,10 +1,10 @@
 import React from 'react';
-import { Position, ShipPosition } from '../../types/encounters';
+import { Position, ShipPosition, SharedShipPosition } from '../../types/encounters';
 import { useShips } from '../../hooks/useShips';
 import { HexButton } from '../ui/HexButton';
 
 interface FormationGridProps {
-    formation: ShipPosition[];
+    formation: ShipPosition[] | SharedShipPosition[];
     onPositionSelect?: (position: Position) => void;
     selectedPosition?: Position;
     onRemoveShip?: (position: Position) => void;
@@ -26,11 +26,14 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     const getShipForPosition = (pos: Position) => {
         const shipPosition = formation.find((ship) => ship.position === pos);
         if (!shipPosition) return null;
-        return ships.find((ship) => ship.id === shipPosition.shipId);
+        if ('shipId' in shipPosition) {
+            return ships.find((ship) => ship.id === shipPosition.shipId);
+        }
+        return { name: shipPosition.shipName };
     };
 
     return (
-        <div className="grid p-4 pb-6 ml-[9.5%]" role="grid">
+        <div className="grid p-4 py-6 ml-[9.5%] !mt-auto" role="grid">
             {rows.map((row, rowIndex) => (
                 <div
                     key={rowIndex}
@@ -58,16 +61,18 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                             <span className="text-white text-xs mt-1 px-1 truncate max-w-full">
                                                 {ship.name}
                                             </span>
-                                            <span className="flex items-center gap-1">
-                                                {Array.from({ length: 6 }, (_, index) => (
-                                                    <span
-                                                        key={index}
-                                                        className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
-                                                    >
-                                                        ★
-                                                    </span>
-                                                ))}
-                                            </span>
+                                            {'refits' in ship && ship.refits && (
+                                                <span className="flex items-center gap-1">
+                                                    {Array.from({ length: 6 }, (_, index) => (
+                                                        <span
+                                                            key={index}
+                                                            className={`text-xs tracking-tightest ${index < ship.refits.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                                                        >
+                                                            ★
+                                                        </span>
+                                                    ))}
+                                                </span>
+                                            )}
                                         </>
                                     )}
                                 </div>

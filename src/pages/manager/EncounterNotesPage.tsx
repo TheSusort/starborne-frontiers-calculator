@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { EncounterNote } from '../../types/encounters';
+import { EncounterNote, LocalEncounterNote, ShipPosition } from '../../types/encounters';
 import EncounterForm from '../../components/encounters/EncounterForm';
 import EncounterList from '../../components/encounters/EncounterList';
 import { PageLayout } from '../../components/ui/layout/PageLayout';
 import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
+import { useSharedEncounters } from '../../hooks/useSharedEncounters';
 import { useNotification } from '../../hooks/useNotification';
+import { useShips } from '../../hooks/useShips';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -14,12 +16,14 @@ import { SEO_CONFIG } from '../../constants/seo';
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =
         useEncounterNotes();
+    const { shareEncounter, unshareEncounter } = useSharedEncounters();
     const { addNotification } = useNotification();
+    const { ships } = useShips();
     const [editingEncounter, setEditingEncounter] = useState<EncounterNote | null>(null);
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
     const [isFormVisible, setIsFormVisible] = useState(false);
 
-    const handleSubmit = (encounter: EncounterNote) => {
+    const handleSubmit = async (encounter: EncounterNote) => {
         if (editingEncounter) {
             updateEncounter(encounter);
             setEditingEncounter(null);
@@ -40,15 +44,50 @@ const EncounterNotesPage: React.FC = () => {
         setDeletingEncounterId(encounterId);
     };
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (deletingEncounterId) {
             deleteEncounter(deletingEncounterId);
             if (editingEncounter?.id === deletingEncounterId) {
                 setEditingEncounter(null);
                 setIsFormVisible(false);
             }
+            addNotification('success', 'Encounter Deleted');
         }
-        addNotification('success', 'Encounter Deleted');
+    };
+
+    const handleShareToggle = async (encounter: EncounterNote) => {
+        try {
+            if (encounter.isPublic) {
+                await unshareEncounter(encounter.id);
+                updateEncounter({
+                    ...encounter,
+                    isPublic: false,
+                });
+            } else {
+                // Convert to LocalEncounterNote if it's a SharedEncounterNote
+                const localEncounter: LocalEncounterNote = {
+                    ...encounter,
+                    formation: encounter.formation.map((pos): ShipPosition => {
+                        if ('shipName' in pos) {
+                            const ship = ships.find((s) => s.name === pos.shipName);
+                            if (!ship) {
+                                throw new Error(`Ship with name ${pos.shipName} not found`);
+                            }
+                            return { shipId: ship.id, position: pos.position };
+                        }
+                        return pos;
+                    }),
+                };
+                await shareEncounter(localEncounter);
+                updateEncounter({
+                    ...encounter,
+                    isPublic: true,
+                });
+            }
+        } catch (error) {
+            console.error('Failed to toggle encounter sharing:', error);
+            addNotification('error', 'Failed to update encounter sharing status');
+        }
     };
 
     if (loading) {
@@ -88,6 +127,7 @@ const EncounterNotesPage: React.FC = () => {
                     encounters={encounters}
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
+                    onShareToggle={handleShareToggle}
                 />
 
                 <ConfirmModal
