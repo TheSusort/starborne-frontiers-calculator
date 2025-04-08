@@ -104,6 +104,7 @@ export const EncounterList = ({
                                             <Button
                                                 variant="secondary"
                                                 size="sm"
+                                                aria-label="Upvote Encounter"
                                                 onClick={() =>
                                                     handleVote(
                                                         encounter.id,
@@ -121,6 +122,7 @@ export const EncounterList = ({
                                             <Button
                                                 variant="secondary"
                                                 size="sm"
+                                                aria-label="Downvote Encounter"
                                                 onClick={() =>
                                                     handleVote(
                                                         encounter.id,
@@ -160,6 +162,11 @@ export const EncounterList = ({
                                             variant={encounter.isPublic ? 'danger' : 'secondary'}
                                             size="sm"
                                             onClick={() => onShareToggle(encounter)}
+                                            aria-label={
+                                                encounter.isPublic
+                                                    ? 'Unshare Encounter'
+                                                    : 'Share Encounter'
+                                            }
                                         >
                                             <ShareIcon />
                                         </Button>
@@ -169,6 +176,7 @@ export const EncounterList = ({
                                             variant="danger"
                                             size="sm"
                                             onClick={() => onDelete(encounter.id)}
+                                            aria-label="Delete Encounter"
                                         >
                                             <CloseIcon />
                                         </Button>
