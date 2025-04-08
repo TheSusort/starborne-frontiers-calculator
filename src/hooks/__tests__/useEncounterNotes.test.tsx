@@ -1,10 +1,20 @@
-import { renderHook, act } from '../../test-utils/test-utils';
+import { renderHook, act } from '@testing-library/react';
 import { useEncounterNotes } from '../useEncounterNotes';
+import { LocalEncounterNote, Position } from '../../types/encounters';
 import { vi } from 'vitest';
-import { EncounterNote, Position } from '../../types/encounters';
+
+const localStorageMock = {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    clear: vi.fn(),
+};
+
+Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
+});
 
 describe('useEncounterNotes Hook', () => {
-    const mockEncounters: EncounterNote[] = [
+    const mockEncounters: LocalEncounterNote[] = [
         {
             id: '1',
             name: 'First Encounter',
@@ -18,30 +28,14 @@ describe('useEncounterNotes Hook', () => {
             id: '2',
             name: 'Second Encounter',
             formation: [
-                { shipId: 'ship3', position: 'B1' as Position },
-                { shipId: 'ship4', position: 'B4' as Position },
+                { shipId: 'ship3', position: 'T3' as Position },
+                { shipId: 'ship4', position: 'M4' as Position },
             ],
             createdAt: 1234567891,
         },
     ];
 
-    const localStorageMock = (() => {
-        let store: { [key: string]: string } = {};
-        return {
-            getItem: vi.fn((key: string) => store[key] || null),
-            setItem: vi.fn((key: string, value: string) => {
-                store[key] = value.toString();
-            }),
-            clear: vi.fn(() => {
-                store = {};
-            }),
-        };
-    })();
-
     beforeEach(() => {
-        Object.defineProperty(window, 'localStorage', {
-            value: localStorageMock,
-        });
         localStorageMock.clear();
         localStorageMock.getItem.mockReturnValue(null);
         vi.useFakeTimers();

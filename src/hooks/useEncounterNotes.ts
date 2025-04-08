@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { EncounterNote } from '../types/encounters';
+import { EncounterNote, LocalEncounterNote } from '../types/encounters';
 import { useStorage } from './useStorage';
 import { STORAGE_KEYS } from '../constants/storage';
 
@@ -13,8 +13,8 @@ export const useEncounterNotes = () => {
     } = useStorage<EncounterNote[]>({ key: STORAGE_KEY, defaultValue: [] });
 
     const addEncounter = useCallback(
-        (encounter: Omit<EncounterNote, 'id' | 'createdAt'>) => {
-            const newEncounter: EncounterNote = {
+        (encounter: Omit<LocalEncounterNote, 'id' | 'createdAt'>) => {
+            const newEncounter: LocalEncounterNote = {
                 ...encounter,
                 id: Date.now().toString(),
                 createdAt: Date.now(),

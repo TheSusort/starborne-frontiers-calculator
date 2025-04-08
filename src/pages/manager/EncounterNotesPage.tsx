@@ -29,7 +29,21 @@ const EncounterNotesPage: React.FC = () => {
             setEditingEncounter(null);
             addNotification('success', 'Encounter Updated');
         } else {
-            addEncounter(encounter);
+            // Convert to LocalEncounterNote if it's a SharedEncounterNote
+            const localEncounter: LocalEncounterNote = {
+                ...encounter,
+                formation: encounter.formation.map((pos): ShipPosition => {
+                    if ('shipName' in pos) {
+                        const ship = ships.find((s) => s.name === pos.shipName);
+                        if (!ship) {
+                            throw new Error(`Ship with name ${pos.shipName} not found`);
+                        }
+                        return { shipId: ship.id, position: pos.position };
+                    }
+                    return pos;
+                }),
+            };
+            addEncounter(localEncounter);
             addNotification('success', 'Encounter Added');
         }
         setIsFormVisible(false);
@@ -38,6 +52,7 @@ const EncounterNotesPage: React.FC = () => {
     const handleEdit = (encounter: EncounterNote) => {
         setEditingEncounter(encounter);
         setIsFormVisible(true);
+        window.scrollTo(0, 0);
     };
 
     const handleDeleteClick = (encounterId: string) => {

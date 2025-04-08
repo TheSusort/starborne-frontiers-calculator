@@ -96,11 +96,6 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                 />
-                <Checkbox
-                    label="Make this encounter public"
-                    checked={isPublic}
-                    onChange={setIsPublic}
-                />
             </form>
 
             <div className="bg-dark-light space-y-4 max-w-[700px] mx-auto py-6">
