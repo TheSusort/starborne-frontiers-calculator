@@ -41,31 +41,24 @@ export const useSharedEncounters = () => {
                     const data = doc.data();
                     // Validate the data structure
                     if (!data.votes || typeof data.votes !== 'number') {
-                        console.error('Invalid votes field in document:', doc.id, data);
                         data.votes = 0;
                     }
                     if (!data.userVotes || typeof data.userVotes !== 'object') {
-                        console.error('Invalid userVotes field in document:', doc.id, data);
                         data.userVotes = {};
                     }
                     if (!data.createdAt || typeof data.createdAt !== 'number') {
-                        console.error('Invalid createdAt field in document:', doc.id, data);
                         data.createdAt = Date.now();
                     }
                     if (!data.formation || !Array.isArray(data.formation)) {
-                        console.error('Invalid formation field in document:', doc.id, data);
                         data.formation = [];
                     }
                     if (!data.userId || typeof data.userId !== 'string') {
-                        console.error('Invalid userId field in document:', doc.id, data);
                         data.userId = 'unknown';
                     }
                     if (!data.userName || typeof data.userName !== 'string') {
-                        console.error('Invalid userName field in document:', doc.id, data);
                         data.userName = 'Anonymous';
                     }
                     if (!data.name || typeof data.name !== 'string') {
-                        console.error('Invalid name field in document:', doc.id, data);
                         data.name = 'Unnamed Encounter';
                     }
 
