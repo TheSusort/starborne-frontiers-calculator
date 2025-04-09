@@ -43,7 +43,9 @@ export const ImplantIndexPage: React.FC = () => {
             onChange: setSelectedTypes,
             options: [
                 { value: 'major', label: 'Major' },
-                { value: 'minor', label: 'Minor' },
+                { value: 'alpha(minor)', label: 'Alpha (Minor)' },
+                { value: 'gamma(minor)', label: 'Gamma (Minor)' },
+                { value: 'sigma(minor)', label: 'Sigma (Minor)' },
                 { value: 'ultimate', label: 'Ultimate' },
             ],
         },
