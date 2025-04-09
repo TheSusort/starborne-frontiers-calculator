@@ -340,7 +340,134 @@ export const IMPLANTS: Record<string, ImplantData> = {
             },
         ],
     },
-    // Add more implants here
-    // Add more implants here
-    // Add more implants here
+    font_of_power: {
+        name: 'Font of Power',
+        type: 'major',
+        imageKey: 'fontofpower-Photoroom',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'hp', value: 1886, type: 'flat' },
+                    { name: 'crit', value: 20, type: 'percentage' },
+                ],
+                description:
+                    'When applying repair to another ally, there is a 16% chance to grant Power Infused Nanobots for 1 turn.',
+            },
+        ],
+    },
+    fortifying_shroud: {
+        name: 'Fortifying Shroud',
+        type: 'major',
+        imageKey: 'fortifyingshroud-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'defence', value: 240, type: 'flat' },
+                    { name: 'hp', value: 9, type: 'percentage' },
+                ],
+                description:
+                    'Every turn, there is a 21% chance to grant all adjacent allies Defence Up 1 for 1 turn.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 468, type: 'flat' },
+                    { name: 'hp', value: 17, type: 'percentage' },
+                ],
+                description:
+                    'Every turn, there is a 32% chance to grant all adjacent allies Defence Up 1 for 1 turn.',
+            },
+        ],
+    },
+    last_stand: {
+        name: 'Last Stand',
+        type: 'major',
+        imageKey: 'laststand-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'defence', value: 230, type: 'flat' },
+                    { name: 'attack', value: 148, type: 'flat' },
+                ],
+                description:
+                    'When this unit becomes the last one standing, there is a 21% chance to gain Block Damage and Block Debuff for 1 turn.',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 355, type: 'flat' },
+                    { name: 'attack', value: 244, type: 'flat' },
+                ],
+                description:
+                    'When this unit is at 25% or less HP, there is a 26% chance to grant Buff Protection to all allies for 1 turn.',
+            },
+        ],
+    },
+    last_wish: {
+        name: 'Last Wish',
+        type: 'major',
+        imageKey: 'lastwish-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 15, type: 'percentage' },
+                    { name: 'attack', value: 264, type: 'flat' },
+                ],
+                description: "Upon death, repairs 25% of all allies' max HP.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 17, type: 'percentage' },
+                    { name: 'attack', value: 391, type: 'flat' },
+                ],
+                description: "Upon death, repairs 32% of all allies' max HP.",
+            },
+        ],
+    },
+    bloodthirst: {
+        name: 'Bloodthirst',
+        type: 'major',
+        imageKey: 'bloodthirst-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'critDamage', value: 11, type: 'percentage' },
+                    { name: 'attack', value: 262, type: 'flat' },
+                ],
+                description:
+                    'On a critical hit, there is a 17% chance for this unit to repair itself for 17% of the damage dealt.',
+            },
+        ],
+    },
+    adaptive_plating: {
+        name: 'Adaptive Plating',
+        type: 'major',
+        imageKey: 'adaptiveplating-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'attack', value: 252, type: 'flat' },
+                    { name: 'hacking', value: 15, type: 'flat' },
+                ],
+                description:
+                    'When directly damaged, there is a 16% chance to gain a Shield equal to 34% of the damage taken, limited to once per round.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'attack', value: 361, type: 'flat' },
+                    { name: 'hacking', value: 22, type: 'flat' },
+                ],
+                description:
+                    'When directly damaged, there is a 19% chance to gain a Shield equal to 42% of the damage taken, limited to once per round.',
+            },
+        ],
+    },
 };
