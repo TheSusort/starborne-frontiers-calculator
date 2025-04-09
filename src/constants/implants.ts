@@ -651,10 +651,10 @@ export const IMPLANTS: Record<string, ImplantData> = {
             },
         ],
     },
-    arcance_siege: {
-        name: 'Arcance Siege',
+    arcane_siege: {
+        name: 'Arcane Siege',
         type: 'ultimate',
-        imageKey: 'arcancesiege-Photoroom',
+        imageKey: 'arcanesiege-Photoroom',
         variants: [
             {
                 rarity: 'uncommon',

@@ -10,7 +10,6 @@ import { Image } from '../components/ui/Image';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { ImplantData, ImplantVariant } from '../constants/implants';
-import { Stat } from '../types/stats';
 import { StatDisplay } from '../components/stats/StatDisplay';
 import { RARITIES } from '../constants/rarities';
 export const ImplantIndexPage: React.FC = () => {
@@ -97,7 +96,7 @@ export const ImplantIndexPage: React.FC = () => {
             <Seo {...SEO_CONFIG.implantDatabase} />
             <PageLayout
                 title="Implant Database"
-                description="Browse all available implants and their effects."
+                description="Browse all available implants and their effects. Stat values shown are examples, actual values varies as they are randomised to an extent."
             >
                 <div className="space-y-6">
                     <div className="flex flex-col">
