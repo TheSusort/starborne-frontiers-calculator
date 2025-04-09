@@ -31,7 +31,7 @@ export const StatDisplay: React.FC<Props> = ({ stats, className = '', title, com
                                         : STATS[stat.name as StatName].label}
                                 </span>
                                 <span>
-                                    {stat.value}
+                                    {stat.min && stat.max ? `${stat.min}-${stat.max}` : stat.value}
                                     {stat.type === 'percentage' ? '%' : ''}
                                 </span>
                             </>

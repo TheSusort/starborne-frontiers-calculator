@@ -23,12 +23,16 @@ export interface PercentageStat {
     name: PercentageOnlyStats | FlexibleStats;
     value: number;
     type: 'percentage';
+    min?: number;
+    max?: number;
 }
 
 export interface FlatStat {
     name: FlexibleStats;
     value: number;
     type: 'flat';
+    min?: number;
+    max?: number;
 }
 
 // Combined Stat type

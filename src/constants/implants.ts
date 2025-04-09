@@ -4,7 +4,7 @@ import { Stat } from '../types/stats';
 export interface ImplantData {
     id?: string;
     name: string;
-    type: 'major' | 'minor' | 'ultimate';
+    type: 'major' | 'alpha(minor)' | 'gamma(minor)' | 'sigma(minor)' | 'ultimate';
     variants: ImplantVariant[];
     imageKey?: string;
 }
@@ -12,17 +12,2054 @@ export interface ImplantData {
 export interface ImplantVariant {
     rarity: RarityName;
     stats?: Stat[];
-    description: string;
+    description?: string;
 }
 
-export const IMPLANTS: Record<string, ImplantData> = {
-    // Major Implants
-    menace: {
-        id: 'menace',
+export const IMPLANTS: ImplantData[] = [
+    {
+        name: 'Abundant Renewal',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Grants a sheild equal to 30% of the overrepaired amount on the target when overrepairing an ally',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Grants a sheild equal to 20% of the overrepaired amount on the target when overrepairing an ally',
+            },
+        ],
+        imageKey: 'abundantrenewal-Photoroom',
+    },
+    {
+        name: 'Arcane Siege',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Increases outgoing Direct Damage by 6% while shielded',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Increases outgoing direct damage by 15% while shielded.',
+            },
+        ],
+        imageKey: 'arcanesiege-Photoroom',
+    },
+    {
+        name: 'Chrono Reaver',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Every third turn, adds 1 charge to the Unit’s Charged skill.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Every other turn, adds 1 charge to the Unit’s Charged skill.',
+            },
+        ],
+        imageKey: 'chronoreaver-Photoroom',
+    },
+    {
+        name: 'Code Guard',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'This unit increases Security by 30% of its Hacking at the start of Combat.',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'This unit increases Security by 25% of its own Hacking at the start of combat.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
+            },
+        ],
+        imageKey: 'codeguard-Photoroom',
+    },
+    {
+        name: 'Hyperion Gaze',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Decreases Damage by 21% when critically hit by an enemy that has stealth. Does not stack with similar effects',
+            },
+        ],
+        imageKey: 'hyperiongaze-Photoroom',
+    },
+    {
+        name: 'Intrusion',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Increases damage dealt by 2% for each debuff on the target when directly damaging them.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Increases damage dealt by 3% for each debuff on the target when directly damaging them',
+            },
+        ],
+        imageKey: 'intrusion-Photoroom',
+    },
+    {
+        name: 'Lifeline',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 6000 plus 100% of this unit's attack stat. This can occur once per battle",
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 8000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 12000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+            },
+        ],
+        imageKey: 'lifeline-Photoroom',
+    },
+    {
+        name: 'Cipher Link',
+        type: 'ultimate',
+        imageKey: 'cipherlink-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'This unit increases Hacking by 25% of its own Security at the start of combat.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
+            },
+        ],
+    },
+    {
+        name: 'Nebula Nullifier',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Decrease damage by 21% when directly damaged while under Stasis or Disable.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Decrease Direct Damage by 28% when the unit is in Stasis or Disable',
+            },
+        ],
+        imageKey: 'nebulanullifier-Photoroom',
+    },
+    {
+        name: 'Nourishment',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Increases repair by 15% when targeting an ally with lower HP',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Increases repair by 10% when targeting an ally with lower HP',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Icreases repair by 30% when targeting an ally with lower HP',
+            },
+        ],
+        imageKey: 'nourishment-Photoroom',
+    },
+    {
+        name: 'Synaptic Resonance',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Gains Speed Up III for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 6%',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when and enemy gets directly repaired. Increases the critDamage of the next crit by 4%',
+            },
+        ],
+        imageKey: 'synapticresonance-Photoroom',
+    },
+    {
+        name: 'Voidfire Catalyst',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Deals 4% more detonation damage and bombs additionally deal 8% more splash damage.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Inflicts bombs that deal 24% more splash damage',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'Deals 8% more detonation damage and bombs additionally deal 16% more splash damage.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Inflicts bombs that deal 40% more splash damage.',
+            },
+        ],
+        imageKey: 'voidfirecatalyst-Photoroom',
+    },
+    {
+        name: 'Voidshade',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Decreases direct damage by 8% while self has Stealth.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Decreases Damage Received by 12% When Directly Damaged While Stealth is Active',
+            },
+        ],
+        imageKey: 'voidshade-Photoroom',
+    },
+    {
+        name: 'Vortex Veil',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Reduces damage taken from inferno and corrosion by 12%',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 18%.',
+            },
+        ],
+        imageKey: 'vortexveil-Photoroom',
+    },
+    {
+        name: 'Warpstrike',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    "Increases damage by 3% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn",
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    "Increases damage by 4% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    "Increases damage by 5% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
+            },
+        ],
+        imageKey: 'warpstrike-Photoroom',
+    },
+    {
+        name: 'Citadel',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 190,
+                        type: 'flat',
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 1010,
+                        type: 'flat',
+                        min: 1010,
+                        max: 1198,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 1612,
+                        type: 'flat',
+                        min: 1612,
+                        max: 1672,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 704,
+                        type: 'flat',
+                        min: 704,
+                        max: 770,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 409,
+                        type: 'flat',
+                        min: 409,
+                        max: 416,
+                    },
+                ],
+            },
+        ],
+        imageKey: 'citadel-Photoroom',
+    },
+    {
+        name: 'Haste',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 2,
+                        type: 'flat',
+                        min: 2,
+                        max: 2,
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 9,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 4,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 12,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'haste-Photoroom',
+    },
+    {
+        name: 'Haste',
+        type: 'gamma(minor)',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 10,
+                        type: 'flat',
+                        min: 10,
+                        max: 12,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 6,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'haste-Photoroom',
+    },
+    {
+        name: 'Onslaught',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 11,
+                        type: 'flat',
+                        min: 11,
+                        max: 11,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 16,
+                        type: 'flat',
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 8,
+                    },
+                ],
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 2,
+                        type: 'percentage',
+                        min: 2,
+                        max: 3,
+                    },
+                ],
+            },
+        ],
+        imageKey: 'onslaught-Photoroom',
+    },
+    {
+        name: 'Onslaught',
+        type: 'alpha(minor)',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 12,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 4,
+                        type: 'percentage',
+                        min: 4,
+                        max: 7,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 13,
+                        type: 'percentage',
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 11,
+                    },
+                ],
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'onslaught-Photoroom',
+    },
+    {
+        name: 'Precision',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 2,
+                        type: 'percentage',
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 9,
+                        type: 'percentage',
+                        min: 9,
+                        max: 12,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 8,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 4,
+                        type: 'percentage',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 14,
+                        type: 'percentage',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'precision-Photoroom',
+    },
+    {
+        name: 'Precision',
+        type: 'gamma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 2,
+                        type: 'percentage',
+                        min: 2,
+                        max: 3,
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 10,
+                        type: 'percentage',
+                        min: 10,
+                        max: 11,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 14,
+                        type: 'percentage',
+                        min: 14,
+                        max: 16,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 8,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 5,
+                    },
+                ],
+            },
+        ],
+        imageKey: 'precision-Photoroom',
+    },
+    {
+        name: 'Sentry',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 11,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'sentry-Photoroom',
+    },
+    {
+        name: 'Sentry',
+        type: 'gamma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 2,
+                        type: 'flat',
+                        min: 2,
+                        max: 3,
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 9,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 4,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 11,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'sentry-Photoroom',
+    },
+    {
+        name: 'Strike',
+        type: 'sigma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 30,
+                        type: 'flat',
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 182,
+                        type: 'flat',
+                        min: 182,
+                        max: 220,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 289,
+                        type: 'flat',
+                        min: 289,
+                        max: 313,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 115,
+                        type: 'flat',
+                        min: 115,
+                        max: 130,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 71,
+                        type: 'flat',
+                        min: 71,
+                        max: 78,
+                    },
+                ],
+            },
+        ],
+        imageKey: 'strike-Photoroom',
+    },
+    {
+        name: 'Adaptive Plating',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'attack', value: 252, type: 'flat' },
+                    { name: 'hacking', value: 15, type: 'flat' },
+                ],
+                description:
+                    'When directly damaged, there is a 16% chance to gain a Shield equal to 34% of the damage taken, limited to once per round.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 22,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'attack',
+                        value: 359,
+                        type: 'flat',
+                        min: 359,
+                        max: 361,
+                    },
+                ],
+                description:
+                    "When directly damaged, there's a 19% chance to gain a shield equal to 42% of the damage taken, limited to once per round.",
+            },
+        ],
+        imageKey: 'adaptiveplating-Photoroom',
+    },
+    {
+        name: 'Alacrity',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 11,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'crit',
+                        value: 15,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'At the end of the round, if not hit, there is a 16% chance to gain Speed Up III for 2 turns',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 9,
+                    },
+                    {
+                        name: 'crit',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 8,
+                    },
+                ],
+                description:
+                    'At the end of the round, if not hit, there is a 14% chance to gain Speed Up III for 2 turns',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 18,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'critDamage',
+                        value: 16,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'At the end of the round, if not hit, there is a 20% chance to gain Speed Up III for 2 turns',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 5,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'critDamage',
+                        value: 6,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'At the end of the round, if not hit, there is a 12% chance to gain Speed Up III for 2 turns',
+            },
+        ],
+        imageKey: 'alacrity-Photoroom',
+    },
+    {
+        name: 'Ambush',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 10,
+                        type: 'percentage',
+                        min: 10,
+                        max: 15,
+                    },
+                    {
+                        name: 'defence',
+                        value: 341,
+                        type: 'flat',
+                        min: 341,
+                        max: 359,
+                    },
+                ],
+                description:
+                    'At the start of the round, if in stealth, there is a 12% chance to gain Crit Power Up 3 for 1 turn.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 9,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'defence',
+                        value: 223,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'At the start of the round, if in stealth, there is a 9% chance to gain Crit Power Up 3 for 1 turn.',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'defence',
+                        value: 132,
+                        type: 'flat',
+                        min: 132,
+                        max: 137,
+                    },
+                ],
+                description:
+                    'At the start of the round, if in stealth, there is a 7% chance to gain Crit Power Up 3 for 1 turn.',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 4,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'defence',
+                        value: 59,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'At the start of the round, if in stealth, there is a 5% chance to gain Crit Power Up 3 for 1 turn',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 20,
+                        type: 'percentage',
+                        min: 19,
+                        max: 20,
+                    },
+                    {
+                        name: 'defence',
+                        value: 495,
+                        type: 'flat',
+                        min: 495,
+                        max: 545,
+                    },
+                ],
+                description:
+                    'At the start of a round, if this unit has Stealth, there is a 16% chance to gain Crit Power Up 3 for 1 turn.',
+            },
+        ],
+        imageKey: 'ambush-Photoroom',
+    },
+    {
+        name: 'Battlecry',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 206,
+                        type: 'flat',
+                        min: 206,
+                        max: 245,
+                    },
+                    {
+                        name: 'defence',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 9,
+                    },
+                ],
+                description: 'Upon death, grans all allies Inc. Damage Down II for 2 turns',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'defence',
+                        value: 56,
+                        type: 'flat',
+                    },
+                ],
+                description: 'Upon death, grans all allies Inc. Damage Down II for 1 turns',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 14, type: 'percentage' },
+                    { name: 'defence', value: 396, type: 'flat' },
+                ],
+                description: 'Upon death, grants all allies Inc. Damage Down 2 for 2 turns.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 19, type: 'percentage' },
+                    { name: 'defence', value: 552, type: 'flat' },
+                ],
+                description: 'Upon death, grants all allies Inc. Damage Down 2 for 3 turns.',
+            },
+        ],
+        imageKey: 'battlecry-Photoroom',
+    },
+    {
+        name: 'Bloodthirst',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'attack',
+                        value: 92,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'On a critical hit, there is a 12% chance for this unit to repair itself for 12% of the damage dealt',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 11,
+                        type: 'percentage',
+                        min: 11,
+                        max: 15,
+                    },
+                    {
+                        name: 'attack',
+                        value: 230,
+                        type: 'flat',
+                        min: 230,
+                        max: 262,
+                    },
+                ],
+                description:
+                    'On a critical hit, there is a 17% chance for this unit to repair itself for 17% of the damage dealt',
+            },
+        ],
+        imageKey: 'bloodthirst-Photoroom',
+    },
+    {
+        name: 'Bulwark',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'security', value: 11, type: 'flat' },
+                    { name: 'hp', value: 1301, type: 'flat' },
+                ],
+                description:
+                    'There is a 12% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn, once per round.',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 211,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'security',
+                        value: 2,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'There is a 5% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn. Once per round.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 844,
+                        type: 'flat',
+                        min: 844,
+                        max: 930,
+                    },
+                    {
+                        name: 'security',
+                        value: 7,
+                        type: 'flat',
+                        min: 7,
+                        max: 9,
+                    },
+                ],
+                description:
+                    'There is a 9% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn. Once per round.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 1886,
+                        type: 'flat',
+                        min: 1886,
+                        max: 2093,
+                    },
+                    {
+                        name: 'security',
+                        value: 21,
+                        type: 'flat',
+                        min: 20,
+                        max: 23,
+                    },
+                ],
+                description:
+                    'There is a 16% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn. Once per round.',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 5,
+                        type: 'flat',
+                        min: 5,
+                        max: 5,
+                    },
+                    {
+                        name: 'hp',
+                        value: 474,
+                        type: 'flat',
+                        min: 474,
+                        max: 504,
+                    },
+                ],
+                description:
+                    'There is a 7% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn. Once per round.',
+            },
+        ],
+        imageKey: 'bulwark-Photoroom',
+    },
+    {
+        name: 'Doomsayer',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'critDamage', value: 18, type: 'percentage' },
+                    { name: 'hacking', value: 22, type: 'flat' },
+                ],
+                description:
+                    'At the end of the round, if this unit was the first to activate, there is a 16% change to apply Concentrate Fire to the enemy with highest attack for 1 turn.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 8,
+                    },
+                    {
+                        name: 'hacking',
+                        value: 10,
+                        type: 'flat',
+                        min: 10,
+                        max: 10,
+                    },
+                ],
+                description:
+                    'At the end of the round, if this unit was the first to activate, there is a 9% chance to apply Concentrate Fire to the enemy with the highest attack for 1 turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 5,
+                        type: 'flat',
+                        min: 5,
+                        max: 5,
+                    },
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                ],
+                description:
+                    'At the end of the round, if this unit was the first to activate, there is a 7% chance to apply Concentrate Fire to the enemy with the highest attack for 1 turn',
+            },
+        ],
+        imageKey: 'doomsayer-Photoroom',
+    },
+    {
+        name: 'Exuberance',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    { name: 'defence', value: 6, type: 'percentage' },
+                    { name: 'speed', value: 4, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 17% chance to increase that repair by 12%.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 8,
+                    },
+                    {
+                        name: 'speed',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
+                description: 'When repaired, there is a 20% chance to increase that repair by 13%',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 14, type: 'percentage' },
+                    { name: 'speed', value: 9, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 24% chance to increase that repair by 14%.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 18,
+                        type: 'percentage',
+                        min: 17,
+                        max: 20,
+                    },
+                    {
+                        name: 'speed',
+                        value: 12,
+                        type: 'flat',
+                        min: 12,
+                        max: 16,
+                    },
+                ],
+                description: 'When repaired, there is a 30% chance to increase that repair by 15%',
+            },
+        ],
+        imageKey: 'exuberance-Photoroom',
+    },
+    {
+        name: 'Firewall',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 244,
+                        type: 'flat',
+                        min: 244,
+                        max: 264,
+                    },
+                    {
+                        name: 'security',
+                        value: 12,
+                        type: 'flat',
+                        min: 12,
+                        max: 14,
+                    },
+                ],
+                description: 'When debuffed, there is a 12% chance to gain Block Debuff for 1 turn',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 372,
+                        type: 'flat',
+                        min: 372,
+                        max: 395,
+                    },
+                    {
+                        name: 'security',
+                        value: 21,
+                        type: 'flat',
+                        min: 21,
+                        max: 24,
+                    },
+                ],
+                description: 'When debuffed, there is a 15% chance to gain Block Debuff for 1 turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 5,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'attack',
+                        value: 86,
+                        type: 'flat',
+                    },
+                ],
+                description: 'When debuffed, there is an 8% chance to gain Block Debuff for 1 turn',
+            },
+        ],
+        imageKey: 'firewall-Photoroom',
+    },
+    {
+        name: 'Font of Power',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 9,
+                        type: 'percentage',
+                        min: 9,
+                        max: 9,
+                    },
+                    {
+                        name: 'hp',
+                        value: 894,
+                        type: 'flat',
+                        min: 894,
+                        max: 928,
+                    },
+                ],
+                description:
+                    "When applying repair to another ally, there's a 9% chance to grand Power Infused Nanobots for 1 turn",
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'hp', value: 1886, type: 'flat' },
+                    { name: 'crit', value: 20, type: 'percentage' },
+                ],
+                description:
+                    'When applying repair to another ally, there is a 16% chance to grant Power Infused Nanobots for 1 turn.',
+            },
+        ],
+        imageKey: 'fontofpower-Photoroom',
+    },
+    {
+        name: 'Fortifying Shroud',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 574,
+                        type: 'flat',
+                        min: 468,
+                        max: 574,
+                    },
+                    {
+                        name: 'hp',
+                        value: 20,
+                        type: 'percentage',
+                        min: 17,
+                        max: 22,
+                    },
+                ],
+                description:
+                    'Every turn, there is a 32% chance to grant all adjacent allies defenceense Up I for 1 turn',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 356,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'hp',
+                        value: 12,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'Every turn, there is a 26% chance to grant all adjacent allies defenceense Up I for 1 turn',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 9,
+                    },
+                    {
+                        name: 'defence',
+                        value: 210,
+                        type: 'flat',
+                        min: 210,
+                        max: 250,
+                    },
+                ],
+                description:
+                    'Every turn, there is a 21% chance to grant all adjacent allies defenceense Up I for 1 turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 6,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'defence',
+                        value: 126,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'Every turn, there is a 18% chance to grant all adjacent allies defenceense Up I for 1 turn',
+            },
+        ],
+        imageKey: 'fortifyingshroud-Photoroom',
+    },
+    {
+        name: 'Giant Slayer',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'speed',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+                description:
+                    "When directly damaging an enemy with a higher attack, there's a 12% chance to increase that damage by 50%",
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 19,
+                        type: 'percentage',
+                        min: 18,
+                        max: 19,
+                    },
+                    {
+                        name: 'speed',
+                        value: 11,
+                        type: 'flat',
+                        min: 11,
+                        max: 14,
+                    },
+                ],
+                description:
+                    "When directly damaging an enemy with a higher attack, there's a 20% chance to increase that damage by 50%",
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 8,
+                    },
+                    {
+                        name: 'speed',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
+                description:
+                    "When directly damaging an enemy with a higher attack, there's a 14% chance to increase that damage by 50%",
+            },
+        ],
+        imageKey: 'giantslayer-Photoroom',
+    },
+    {
+        name: 'Insidiousness',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'hacking',
+                        value: 5,
+                        type: 'flat',
+                        min: 5,
+                        max: 6,
+                    },
+                ],
+                description: 'When debuffing an enemy, there is a 12% chance to deal 70% damage.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 8,
+                    },
+                    {
+                        name: 'hacking',
+                        value: 7,
+                        type: 'flat',
+                        min: 7,
+                        max: 9,
+                    },
+                ],
+                description: 'When debuffing an enemy, there is a 14% chance to deal 80% damage',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 19,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hacking',
+                        value: 18,
+                        type: 'flat',
+                        min: 18,
+                        max: 23,
+                    },
+                ],
+                description: 'When debuffing an enemy, there is a 21% chance to deal 100% damage.',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hacking',
+                        value: 3,
+                        type: 'flat',
+                    },
+                ],
+                description: 'When debuffing an enemy, there is a 10% chance to deal 60% damage',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 12,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'crit',
+                        value: 15,
+                        type: 'percentage',
+                    },
+                ],
+                description: 'When debuffing an enemy, there is a 17% chance to deal 90% damage.',
+            },
+        ],
+        imageKey: 'insidiousness-Photoroom',
+    },
+    {
+        name: 'Ironclad',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 4,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'security',
+                        value: 4,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'When directly damaged for the second and subsequent times in a round, there is a 10% chance to block 30% of the damage',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 15,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'security',
+                        value: 14,
+                        type: 'flat',
+                        min: 14,
+                        max: 16,
+                    },
+                ],
+                description:
+                    'When directly damaged for the second and subsequent times in a round, there is a 16% chance to block 45% of the damage',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 19,
+                        type: 'flat',
+                        min: 19,
+                        max: 24,
+                    },
+                    {
+                        name: 'security',
+                        value: 22,
+                        type: 'flat',
+                        min: 21,
+                        max: 23,
+                    },
+                ],
+                description:
+                    'When directly damaged for the second and subsequent times in a round, there is a 20% chance to block 50% of the damage',
+            },
+        ],
+        imageKey: 'ironclad-Photoroom',
+    },
+    {
+        name: 'Last Stand',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 348,
+                        type: 'flat',
+                        min: 348,
+                        max: 367,
+                    },
+                    {
+                        name: 'defence',
+                        value: 482,
+                        type: 'flat',
+                        min: 482,
+                        max: 501,
+                    },
+                ],
+                description:
+                    'When this unit becomes the last one standing, there is a 32% chance to gain Block Damage and Block Debuff for 1 turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 99,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'defence',
+                        value: 122,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'When this unit becomes the last one standing, there is a 18% chance to gain Block Damage and Block Debuff for 1 turn',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'defence', value: 230, type: 'flat' },
+                    { name: 'attack', value: 148, type: 'flat' },
+                ],
+                description:
+                    'When this unit becomes the last one standing, there is a 21% chance to gain Block Damage and Block Debuff for 1 turn.',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 355, type: 'flat' },
+                    { name: 'attack', value: 244, type: 'flat' },
+                ],
+                description:
+                    'When this unit is at 25% or less HP, there is a 26% chance to grant Buff Protection to all allies for 1 turn.',
+            },
+        ],
+        imageKey: 'laststand-Photoroom',
+    },
+    {
+        name: 'Last stand',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 530,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'attack',
+                        value: 373,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'When this unit becomes the last one standing, there is a 32% chance to gain Block Damage and Block Debuff for 1 turn',
+            },
+        ],
+        imageKey: 'laststand-Photoroom',
+    },
+    {
+        name: 'Last Wish',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 155,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'defence',
+                        value: 8,
+                        type: 'percentage',
+                    },
+                ],
+                description: "Upon death, repairs 19% of all allies' max HP.",
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 5,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'attack',
+                        value: 100,
+                        type: 'flat',
+                    },
+                ],
+                description: "Upon death, repairs 14% of all allies' max HP",
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 15, type: 'percentage' },
+                    { name: 'attack', value: 264, type: 'flat' },
+                ],
+                description: "Upon death, repairs 25% of all allies' max HP.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 17, type: 'percentage' },
+                    { name: 'attack', value: 391, type: 'flat' },
+                ],
+                description: "Upon death, repairs 32% of all allies' max HP.",
+            },
+        ],
+        imageKey: 'lastwish-Photoroom',
+    },
+    {
+        name: 'Lockdown',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 204,
+                        type: 'flat',
+                        min: 204,
+                        max: 234,
+                    },
+                    {
+                        name: 'security',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 10,
+                    },
+                ],
+                description:
+                    'When resisting a debuff, there is a 9% chance to grant Buff Protection to all allies for 1 turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 5,
+                        type: 'flat',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'defence',
+                        value: 130,
+                        type: 'flat',
+                        min: 130,
+                        max: 135,
+                    },
+                ],
+                description:
+                    'When resisting a debuff, there is a 7% chance to grant Buff Protection to all allies for 1 turn',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 574, type: 'flat' },
+                    { name: 'security', value: 23, type: 'flat' },
+                ],
+                description:
+                    'When resisting a debuff, there is a 16% chance to grant Buff Protection to all allies for 1 turn.',
+            },
+        ],
+        imageKey: 'lockdown-Photoroom',
+    },
+    {
         name: 'Menace',
         type: 'major',
-        imageKey: 'menace-Photoroom',
         variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 3,
+                        type: 'percentage',
+                        min: 3,
+                        max: 4,
+                    },
+                    {
+                        name: 'attack',
+                        value: 4,
+                        type: 'percentage',
+                        min: 3,
+                        max: 4,
+                    },
+                ],
+                description:
+                    'When critically damaging an enemy, there is an 8% chance to increase that damage by 20%',
+            },
             {
                 rarity: 'rare',
                 stats: [
@@ -44,452 +2081,370 @@ export const IMPLANTS: Record<string, ImplantData> = {
             {
                 rarity: 'legendary',
                 stats: [
-                    { name: 'attack', value: 17, type: 'percentage' },
-                    { name: 'crit', value: 19, type: 'percentage' },
+                    {
+                        name: 'crit',
+                        value: 16,
+                        type: 'percentage',
+                        min: 16,
+                        max: 19,
+                    },
+                    {
+                        name: 'attack',
+                        value: 19,
+                        type: 'percentage',
+                        min: 17,
+                        max: 19,
+                    },
                 ],
                 description:
-                    'When critically damaging an enemy, there is a 12% chance to increase that damage by 45%.',
+                    'When critically damaging an enemy, there is an 12% chance to increase that damage by 45%',
             },
-        ],
-    },
-    // Add more implants here
-    spearhead: {
-        name: 'Spearhead',
-        type: 'major',
-        imageKey: 'spearhead-Photoroom',
-        variants: [
             {
-                rarity: 'rare',
+                rarity: 'uncommon',
                 stats: [
-                    { name: 'hp', value: 7, type: 'percentage' },
-                    { name: 'hacking', value: 8, type: 'flat' },
+                    {
+                        name: 'attack',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'crit',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
                 ],
                 description:
-                    'After using the charged skill, there is a 21% chance to grant all allies Attack Up 1 for 1 turn.',
+                    'When critically damaging an enemy, there is a 9% chance to increase that damage by 25%.',
             },
             {
                 rarity: 'epic',
                 stats: [
-                    { name: 'hp', value: 12, type: 'percentage' },
-                    { name: 'hacking', value: 13, type: 'flat' },
+                    {
+                        name: 'attack',
+                        value: 15,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'crit',
+                        value: 12,
+                        type: 'percentage',
+                    },
                 ],
                 description:
-                    'After using the charged skill, there is a 26% chance to grant all allies Attack Up 1 for 1 turn.',
+                    'When critically damaging an enemy, there is an 11% chance to increase that damage by 35%',
             },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'hp', value: 17, type: 'percentage' },
-                    { name: 'hacking', value: 21, type: 'flat' },
-                ],
-                description:
-                    'After using the charged skill, there is a 32% chance to grant all allies Attack Up 1 for 1 turn.',
-            },
-        ],
-    },
-    giant_slayer: {
-        name: 'Giant Slayer',
-        type: 'major',
-        imageKey: 'giantslayer-Photoroom',
-        variants: [
             {
                 rarity: 'rare',
                 stats: [
-                    { name: 'critDamage', value: 8, type: 'percentage' },
-                    { name: 'speed', value: 7, type: 'flat' },
+                    {
+                        name: 'attack',
+                        value: 7,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'crit',
+                        value: 7,
+                        type: 'percentage',
+                    },
                 ],
                 description:
-                    "When directly damaging an enemy, with a higher attack, there's a 14% chance to increase that damage by 50%.",
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'critDamage', value: 18, type: 'percentage' },
-                    { name: 'speed', value: 14, type: 'flat' },
-                ],
-                description:
-                    "When directly damaging an enemy, with a higher attack, there's a 20% chance to increase that damage by 50%.",
+                    'When critically damaging an enemy, there is a 10% chance to icnreawse that damage by 30%',
             },
         ],
+        imageKey: 'menace-Photoroom',
     },
-    insidiousness: {
-        name: 'Insidiousness',
-        type: 'major',
-        imageKey: 'insidiousness-Photoroom',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    { name: 'crit', value: 7, type: 'percentage' },
-                    { name: 'hacking', value: 9, type: 'flat' },
-                ],
-                description: 'When debuffing an enemy, there is a 14% chance to deal 80% damage.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'crit', value: 19, type: 'percentage' },
-                    { name: 'hacking', value: 23, type: 'flat' },
-                ],
-                description: 'When debuffing an enemy, there is a 21% chance to deal 100% damage.',
-            },
-        ],
-    },
-    ambush: {
-        name: 'Ambush',
-        type: 'major',
-        imageKey: 'ambush-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'defence', value: 341, type: 'flat' },
-                    { name: 'critDamage', value: 14, type: 'percentage' },
-                ],
-                description:
-                    'At the start of a round, if this unit has Stealth, there is a 12% chance to gain Crit Power Up 3 for 1 turn.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'defence', value: 564, type: 'flat' },
-                    { name: 'critDamage', value: 19, type: 'percentage' },
-                ],
-                description:
-                    'At the start of a round, if this unit has Stealth, there is a 16% chance to gain Crit Power Up 3 for 1 turn.',
-            },
-        ],
-    },
-    bulwark: {
-        name: 'Bulwark',
-        type: 'major',
-        imageKey: 'bulwark-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'security', value: 11, type: 'flat' },
-                    { name: 'hp', value: 1301, type: 'flat' },
-                ],
-                description:
-                    'There is a 12% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn, once per round.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'security', value: 20, type: 'flat' },
-                    { name: 'hp', value: 2074, type: 'flat' },
-                ],
-                description:
-                    'There is a 16% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn, once per round.',
-            },
-        ],
-    },
-    reactive_ward: {
+    {
         name: 'Reactive Ward',
         type: 'major',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'hp',
+                        value: 471,
+                        type: 'flat',
+                        min: 471,
+                        max: 508,
+                    },
+                ],
+                description:
+                    'When directly damaged, there is a 7% chance to cleanse 1 debuff, but if the hit was a critical, 2 debuffs are cleansed instead.',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 12,
+                        type: 'percentage',
+                        min: 12,
+                        max: 14,
+                    },
+                    {
+                        name: 'hp',
+                        value: 1205,
+                        type: 'flat',
+                        min: 1205,
+                        max: 1411,
+                    },
+                ],
+                description:
+                    'When directly damaged, there  is a 12% chance to cleanse 1 debuff, but if the hit was a critical, 2 debuff are cleansed instead. ',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'attack',
+                        value: 17,
+                        type: 'percentage',
+                        min: 17,
+                        max: 20,
+                    },
+                    {
+                        name: 'hp',
+                        value: 2102,
+                        type: 'flat',
+                        min: 2088,
+                        max: 2102,
+                    },
+                ],
+                description:
+                    'When directly damaged, there  is a 16% chance to cleanse 1 debuff, but if the hit was a critical, 2 debuff are cleansed instead . ',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 252,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'attack',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'When directly damaged, there is a 5% chance to cleanse 1 debuff, but if the hit was a critical, 2 debuffs are cleansed instead',
+            },
+        ],
         imageKey: 'reactiveward-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'attack', value: 12, type: 'percentage' },
-                    { name: 'hp', value: 1207, type: 'flat' },
-                ],
-                description:
-                    'When directly damaged, there is a 12% chance to cleanse 1 debuff, but if the hit was critical, 2 debuffs are cleased instead.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'attack', value: 20, type: 'percentage' },
-                    { name: 'hp', value: 2088, type: 'flat' },
-                ],
-                description:
-                    'When directly damaged, there is a 16% chance to cleanse 1 debuff, but if the hit was critical, 2 debuffs are cleased instead.',
-            },
-        ],
     },
-    doomsayer: {
-        name: 'Doomsayer',
-        type: 'major',
-        imageKey: 'doomsayer-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'critDamage', value: 18, type: 'percentage' },
-                    { name: 'hacking', value: 22, type: 'flat' },
-                ],
-                description:
-                    'At the end of the round, if this unit was the first to activate, there is a 16% change to apply Concentrate Fire to the enemy with highest attack for 1 turn.',
-            },
-        ],
-    },
-    firewall: {
-        name: 'Firewall',
-        type: 'major',
-        imageKey: 'firewall-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'security', value: 22, type: 'flat' },
-                    { name: 'attack', value: 376, type: 'flat' },
-                ],
-                description:
-                    'When an enemy inflicts a debuff on this unit, there is a 15% chance to gain Block Debuff for 1 turn.',
-            },
-        ],
-    },
-    lockdown: {
-        name: 'Lockdown',
-        type: 'major',
-        imageKey: 'lockdown-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'defence', value: 574, type: 'flat' },
-                    { name: 'security', value: 23, type: 'flat' },
-                ],
-                description:
-                    'When resisting a debuff, there is a 16% chance to grant Buff Protection to all allies for 1 turn.',
-            },
-        ],
-    },
-    second_wind: {
-        name: 'Second Wind',
-        type: 'major',
-        imageKey: 'secondwind-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'defence', value: 17, type: 'percentage' },
-                    { name: 'crit', value: 19, type: 'percentage' },
-                ],
-                description:
-                    "Upon recieving critical direct damage, there is a 16% change to repair 10% of this unit's max HP.",
-            },
-        ],
-    },
-    ironclad: {
-        name: 'Ironclad',
-        type: 'major',
-        imageKey: 'ironclad-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'hacking', value: 15, type: 'flat' },
-                    { name: 'security', value: 16, type: 'flat' },
-                ],
-                description:
-                    'When this unit is directly damaged for the second and subsequent times, there is a 16% chance to block 45% of the damage.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'hacking', value: 21, type: 'flat' },
-                    { name: 'security', value: 21, type: 'flat' },
-                ],
-                description:
-                    'When this unit is directly damaged for the second and subsequent times, there is a 20% chance to block 50% of the damage.',
-            },
-        ],
-    },
-    tenacity: {
-        name: 'Tenacity',
-        type: 'major',
-        imageKey: 'tenacity-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'security', value: 21, type: 'flat' },
-                    { name: 'defence', value: 20, type: 'percentage' },
-                ],
-                description:
-                    'Upon directly recieving damage exceeding 25% of max HP, there is a 16% chance to grant Buff Protection to all allies for 2 turns.',
-            },
-        ],
-    },
-    vivacious_repair: {
-        name: 'Vivacious Repair',
-        type: 'major',
-        imageKey: 'vivaciousrepair-Photoroom',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    { name: 'hp', value: 8, type: 'percentage' },
-                    { name: 'hp', value: 916, type: 'flat' },
-                ],
-                description:
-                    'When repairing an ally with less than 25% HP, there is a 21% chance to double the amount of repair.',
-            },
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'hp', value: 12, type: 'percentage' },
-                    { name: 'hp', value: 1342, type: 'flat' },
-                ],
-                description:
-                    'When repairing an ally with less than 25% HP, there is a 26% chance to double the amount of repair.',
-            },
-        ],
-    },
-    font_of_power: {
-        name: 'Font of Power',
-        type: 'major',
-        imageKey: 'fontofpower-Photoroom',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'hp', value: 1886, type: 'flat' },
-                    { name: 'crit', value: 20, type: 'percentage' },
-                ],
-                description:
-                    'When applying repair to another ally, there is a 16% chance to grant Power Infused Nanobots for 1 turn.',
-            },
-        ],
-    },
-    fortifying_shroud: {
-        name: 'Fortifying Shroud',
-        type: 'major',
-        imageKey: 'fortifyingshroud-Photoroom',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    { name: 'defence', value: 240, type: 'flat' },
-                    { name: 'hp', value: 9, type: 'percentage' },
-                ],
-                description:
-                    'Every turn, there is a 21% chance to grant all adjacent allies Defence Up 1 for 1 turn.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'defence', value: 468, type: 'flat' },
-                    { name: 'hp', value: 17, type: 'percentage' },
-                ],
-                description:
-                    'Every turn, there is a 32% chance to grant all adjacent allies Defence Up 1 for 1 turn.',
-            },
-        ],
-    },
-    last_stand: {
-        name: 'Last Stand',
-        type: 'major',
-        imageKey: 'laststand-Photoroom',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    { name: 'defence', value: 230, type: 'flat' },
-                    { name: 'attack', value: 148, type: 'flat' },
-                ],
-                description:
-                    'When this unit becomes the last one standing, there is a 21% chance to gain Block Damage and Block Debuff for 1 turn.',
-            },
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'defence', value: 355, type: 'flat' },
-                    { name: 'attack', value: 244, type: 'flat' },
-                ],
-                description:
-                    'When this unit is at 25% or less HP, there is a 26% chance to grant Buff Protection to all allies for 1 turn.',
-            },
-        ],
-    },
-    last_wish: {
-        name: 'Last Wish',
-        type: 'major',
-        imageKey: 'lastwish-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'defence', value: 15, type: 'percentage' },
-                    { name: 'attack', value: 264, type: 'flat' },
-                ],
-                description: "Upon death, repairs 25% of all allies' max HP.",
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'defence', value: 17, type: 'percentage' },
-                    { name: 'attack', value: 391, type: 'flat' },
-                ],
-                description: "Upon death, repairs 32% of all allies' max HP.",
-            },
-        ],
-    },
-    bloodthirst: {
-        name: 'Bloodthirst',
-        type: 'major',
-        imageKey: 'bloodthirst-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'critDamage', value: 11, type: 'percentage' },
-                    { name: 'attack', value: 262, type: 'flat' },
-                ],
-                description:
-                    'On a critical hit, there is a 17% chance for this unit to repair itself for 17% of the damage dealt.',
-            },
-        ],
-    },
-    adaptive_plating: {
-        name: 'Adaptive Plating',
-        type: 'major',
-        imageKey: 'adaptiveplating-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'attack', value: 252, type: 'flat' },
-                    { name: 'hacking', value: 15, type: 'flat' },
-                ],
-                description:
-                    'When directly damaged, there is a 16% chance to gain a Shield equal to 34% of the damage taken, limited to once per round.',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    { name: 'attack', value: 361, type: 'flat' },
-                    { name: 'hacking', value: 22, type: 'flat' },
-                ],
-                description:
-                    'When directly damaged, there is a 19% chance to gain a Shield equal to 42% of the damage taken, limited to once per round.',
-            },
-        ],
-    },
-    resonating_fury: {
+    {
         name: 'Resonating Fury',
         type: 'major',
-        imageKey: 'resonatingfury-Photoroom',
         variants: [
             {
                 rarity: 'rare',
                 stats: [
-                    { name: 'attack', value: 9, type: 'percentage' },
-                    { name: 'critDamage', value: 8, type: 'percentage' },
+                    {
+                        name: 'attack',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 9,
+                    },
+                    {
+                        name: 'critDamage',
+                        value: 7,
+                        type: 'percentage',
+                        min: 7,
+                        max: 8,
+                    },
                 ],
                 description:
-                    'When applying a shield, there is a 9% chance to grant Crit Power Up 3 for 1 turn.',
+                    'When applying a shield, there is a 9% chance to grant Crit Power Up 3 for 1 turn',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 20,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'attack',
+                        value: 19,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'When applying a shield, there is a 16% chance to grant Crit Power Up 3 for 1 turn',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 4,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'attack',
+                        value: 4,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'When applying a shield, there is a 5% chance to grant Crit Power Up 3 for 1 turn',
             },
         ],
+        imageKey: 'resonatingfury-Photoroom',
     },
-    smokescreen: {
+    {
+        name: 'Second Wind',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 11,
+                        type: 'percentage',
+                        min: 11,
+                        max: 13,
+                    },
+                    {
+                        name: 'defence',
+                        value: 11,
+                        type: 'percentage',
+                        min: 11,
+                        max: 14,
+                    },
+                ],
+                description:
+                    'Upon receiving critical direct damage, there is a 12% chance to repair 10% of this Unit’s max HP.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 7,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'defence',
+                        value: 7,
+                        type: 'percentage',
+                    },
+                ],
+                description:
+                    'Upon receiving critical direct damage, there is a 9% chance to repair 10% of this Unit’s max HP.',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'defence',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                ],
+                description:
+                    "Upon receiveing critical direct damage, there is a 7% chance to repair 10% of this unit's max HP",
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 19,
+                        type: 'percentage',
+                        min: 17,
+                        max: 20,
+                    },
+                    {
+                        name: 'defence',
+                        value: 20,
+                        type: 'percentage',
+                        min: 16,
+                        max: 20,
+                    },
+                ],
+                description:
+                    "Upon recieving critical direct damage, there is a 16% chance to repair 10% of this Unit's Max HP",
+            },
+        ],
+        imageKey: 'secondwind-Photoroom',
+    },
+    {
+        name: 'Shadowguard',
+        type: 'major',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 12,
+                        type: 'percentage',
+                        min: 11,
+                        max: 14,
+                    },
+                    {
+                        name: 'speed',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 10,
+                    },
+                ],
+                description:
+                    'When directly damaged while in stealth, there is a 12% chance to block the damage, limited to once per round',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 7,
+                    },
+                    {
+                        name: 'speed',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+                description:
+                    'When directly damaged while in stealth, there is a 7% chance to block the damage, limited to once per round',
+            },
+        ],
+        imageKey: 'shadowguard-Photoroom',
+    },
+    {
         name: 'Smokescreen',
         type: 'major',
-        imageKey: 'smokescreen-Photoroom',
         variants: [
             {
                 rarity: 'rare',
@@ -512,357 +2467,654 @@ export const IMPLANTS: Record<string, ImplantData> = {
             {
                 rarity: 'legendary',
                 stats: [
-                    { name: 'speed', value: 11, type: 'flat' },
-                    { name: 'attack', value: 17, type: 'percentage' },
+                    {
+                        name: 'attack',
+                        value: 16,
+                        type: 'percentage',
+                        min: 16,
+                        max: 17,
+                    },
+                    {
+                        name: 'speed',
+                        value: 13,
+                        type: 'flat',
+                        min: 11,
+                        max: 13,
+                    },
                 ],
                 description:
-                    'When directly damaged, there is a 16% chance to gain Stealth for 1 turn.',
+                    'When directly damaged, there is a 16% change to gain Stealth for 1 turn. ',
             },
         ],
+        imageKey: 'smokescreen-Photoroom',
     },
-    shadowguard: {
-        name: 'Shadowguard',
+    {
+        name: 'Spearhead',
         type: 'major',
-        imageKey: 'shadowguard-Photoroom',
         variants: [
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 23,
+                        type: 'flat',
+                        min: 21,
+                        max: 24,
+                    },
+                    {
+                        name: 'hp',
+                        value: 18,
+                        type: 'percentage',
+                        min: 17,
+                        max: 18,
+                    },
+                ],
+                description:
+                    'After using the charged skill, there is a 32% chance to grant all allies Attack Up 1 for 1 turn.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 9,
+                        type: 'flat',
+                        min: 8,
+                        max: 10,
+                    },
+                    {
+                        name: 'hp',
+                        value: 9,
+                        type: 'percentage',
+                        min: 7,
+                        max: 9,
+                    },
+                ],
+                description:
+                    'After using the charged skill, there is a 21% chance to grant all allies Attack Up I for 1 Turn',
+            },
             {
                 rarity: 'epic',
                 stats: [
-                    { name: 'speed', value: 9, type: 'flat' },
-                    { name: 'hp', value: 11, type: 'percentage' },
+                    {
+                        name: 'hp',
+                        value: 12,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hacking',
+                        value: 13,
+                        type: 'flat',
+                    },
                 ],
                 description:
-                    'When directly damaged while in stealth, there is a 12% chance to block the damage, limited to once per round.',
+                    'After using the charged skill, there is a 26% chance to grant all allies Attack Up I for 1 turn.',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hacking',
+                        value: 3,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'After using the charged skill, there is a 15% chance to grant all allies Attack Up I for 1 Turn',
             },
         ],
+        imageKey: 'spearhead-Photoroom',
     },
-    battlecry: {
-        name: 'Battlecry',
+    {
+        name: 'Tenacity',
         type: 'major',
-        imageKey: 'battlecry-Photoroom',
         variants: [
             {
-                rarity: 'epic',
+                rarity: 'rare',
                 stats: [
-                    { name: 'defence', value: 14, type: 'percentage' },
-                    { name: 'defence', value: 396, type: 'flat' },
+                    {
+                        name: 'defence',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 9,
+                    },
+                    {
+                        name: 'security',
+                        value: 7,
+                        type: 'flat',
+                        min: 7,
+                        max: 9,
+                    },
                 ],
-                description: 'Upon death, grants all allies Inc. Damage Down 2 for 2 turns.',
+                description:
+                    "Upon directly receiving damage exceeding 25% of max HP, there's a 10% chance to grant Buff Protection to all allies for 2 turns",
             },
             {
                 rarity: 'legendary',
                 stats: [
-                    { name: 'defence', value: 19, type: 'percentage' },
-                    { name: 'defence', value: 552, type: 'flat' },
+                    { name: 'security', value: 21, type: 'flat' },
+                    { name: 'defence', value: 20, type: 'percentage' },
                 ],
-                description: 'Upon death, grants all allies Inc. Damage Down 2 for 3 turns.',
+                description:
+                    'Upon directly recieving damage exceeding 25% of max HP, there is a 16% chance to grant Buff Protection to all allies for 2 turns.',
             },
         ],
+        imageKey: 'tenacity-Photoroom',
     },
-    exuberance: {
-        name: 'Exuberance',
+    {
+        name: 'Vivacious Repair',
         type: 'major',
-        imageKey: 'exuberance-Photoroom',
         variants: [
             {
-                rarity: 'uncommon',
+                rarity: 'legendary',
                 stats: [
-                    { name: 'defence', value: 6, type: 'percentage' },
-                    { name: 'speed', value: 4, type: 'flat' },
+                    {
+                        name: 'hp',
+                        value: 1795,
+                        type: 'flat',
+                        min: 1795,
+                        max: 2126,
+                    },
+                    {
+                        name: 'hp',
+                        value: 17,
+                        type: 'percentage',
+                        min: 17,
+                        max: 20,
+                    },
                 ],
-                description: 'When repaired, there is a 17% chance to increase that repair by 12%.',
-            },
-            {
-                rarity: 'rare',
-                stats: [
-                    { name: 'defence', value: 9, type: 'percentage' },
-                    { name: 'speed', value: 6, type: 'flat' },
-                ],
-                description: 'When repaired, there is a 20% chance to increase that repair by 13%.',
+                description:
+                    'When repairing an ally with less than 25% HP, there is a 32% chance to double the amount of repair',
             },
             {
                 rarity: 'epic',
                 stats: [
-                    { name: 'defence', value: 14, type: 'percentage' },
-                    { name: 'speed', value: 9, type: 'flat' },
+                    {
+                        name: 'hp',
+                        value: 12,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hp',
+                        value: 1286,
+                        type: 'flat',
+                        min: 1286,
+                        max: 1342,
+                    },
                 ],
-                description: 'When repaired, there is a 24% chance to increase that repair by 14%.',
+                description:
+                    'When repairing an ally with less that 25% HP, there is a 26% chance to double the amount of repair',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 8,
+                        type: 'percentage',
+                        min: 8,
+                        max: 8,
+                    },
+                    {
+                        name: 'hp',
+                        value: 870,
+                        type: 'flat',
+                        min: 870,
+                        max: 916,
+                    },
+                ],
+                description:
+                    'When repairing an ally with less than 25% HP, there is a 21% chance to double the amount of repair.',
+            },
+        ],
+        imageKey: 'vivaciousrepair-Photoroom',
+    },
+    {
+        name: 'Barrier',
+        type: 'gamma(minor)',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 4,
+                        type: 'percentage',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 9,
+                        type: 'percentage',
+                        min: 9,
+                        max: 12,
+                    },
+                ],
             },
             {
                 rarity: 'legendary',
                 stats: [
-                    { name: 'defence', value: 17, type: 'percentage' },
-                    { name: 'speed', value: 12, type: 'flat' },
+                    {
+                        name: 'defence',
+                        value: 14,
+                        type: 'percentage',
+                    },
                 ],
-                description: 'When repaired, there is a 30% chance to increase that repair by 15%.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
             },
         ],
+        imageKey: 'barrier-Photoroom',
     },
-    alacrity: {
-        name: 'Alacrity',
-        type: 'major',
-        imageKey: 'alacrity-Photoroom',
+    {
+        name: 'Barrier ',
+        type: 'gamma(minor)',
         variants: [
             {
                 rarity: 'rare',
                 stats: [
-                    { name: 'crit', value: 8, type: 'percentage' },
-                    { name: 'critDamage', value: 8, type: 'percentage' },
+                    {
+                        name: 'defence',
+                        value: 8,
+                        type: 'percentage',
+                    },
                 ],
-                description:
-                    'At the end of the round, if not hit, there is a 14% chance to gain Speed Up 3 for 2 rounds.',
             },
         ],
+        imageKey: 'barrier-Photoroom',
     },
-    // Ultimate Implants
-    intrusion: {
-        name: 'Intrusion',
-        type: 'ultimate',
-        imageKey: 'intrusion-Photoroom',
+    {
+        name: 'Haste ',
+        type: 'gamma(minor)',
         variants: [
             {
-                rarity: 'uncommon',
-                stats: [],
-                description:
-                    'Increases damage dealt by 2% for each debuff on the target when directly damaging them.',
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'speed',
+                        value: 6,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'haste-Photoroom',
+    },
+    {
+        name: 'Override',
+        type: 'gamma(minor)',
+        variants: [
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 3,
+                        type: 'flat',
+                        min: 3,
+                        max: 3,
+                    },
+                ],
             },
             {
                 rarity: 'rare',
-                stats: [],
-                description:
-                    'Increases damage dealt by 3% for each debuff on the target when directly damaging them.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
             },
-        ],
-    },
-    nourishment: {
-        name: 'Nourishment',
-        type: 'ultimate',
-        imageKey: 'nourishment-Photoroom',
-        variants: [
             {
                 rarity: 'uncommon',
-                stats: [],
-                description: 'Increase repair by 10% when repairing an ally with lower HP.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 8,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'override-Photoroom',
+    },
+    {
+        name: 'Override',
+        type: 'alpha(minor)',
+        variants: [
             {
                 rarity: 'rare',
-                stats: [],
-                description: 'Increase repair by 15% when repairing an ally with lower HP.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 6,
+                        type: 'flat',
+                        min: 6,
+                        max: 7,
+                    },
+                ],
             },
-        ],
-    },
-    arcane_siege: {
-        name: 'Arcane Siege',
-        type: 'ultimate',
-        imageKey: 'arcanesiege-Photoroom',
-        variants: [
             {
                 rarity: 'uncommon',
-                stats: [],
-                description: 'Increases outgoing direct damage by 6% while shielded.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 4,
+                        type: 'flat',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
             },
             {
-                rarity: 'epic',
-                stats: [],
-                description: 'Increases outgoing direct damage by 15% while shielded.',
-            },
-        ],
-    },
-    warpstrike: {
-        name: 'Warpstrike',
-        type: 'ultimate',
-        imageKey: 'warpstrike-Photoroom',
-        variants: [
-            {
-                rarity: 'epic',
-                stats: [],
-                description:
-                    "Increases damage by 4% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 3,
+                        type: 'flat',
+                    },
+                ],
             },
             {
                 rarity: 'legendary',
-                stats: [],
-                description:
-                    "Increases damage by 5% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
-            },
-        ],
-    },
-    voidshade: {
-        name: 'Voidshade',
-        type: 'ultimate',
-        imageKey: 'voidshade-Photoroom',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [],
-                description: 'Decreases direct damage by 8% while self has Stealth.',
-            },
-            {
-                rarity: 'rare',
-                stats: [],
-                description: 'Decreases direct damage by 12% while self has Stealth.',
-            },
-        ],
-    },
-    nebula_nullifier: {
-        name: 'Nebula Nullifier',
-        type: 'ultimate',
-        imageKey: 'nebulanullifier-Photoroom',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [],
-                description:
-                    'Decrease damage by 21% when directly damaged while under Stasis or Disable.',
-            },
-        ],
-    },
-    voidfire_catalyst: {
-        name: 'Voidfire Catalyst',
-        type: 'ultimate',
-        imageKey: 'voidfirecatalyst-Photoroom',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [],
-                description:
-                    'Deals 4% more detonation damage and bombs additionally deal 8% more splash damage.',
-            },
-            {
-                rarity: 'rare',
-                stats: [],
-                description:
-                    'Deals 6% more detonation damage and bombs additionally deal 12% more splash damage.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 11,
+                        type: 'flat',
+                        min: 11,
+                        max: 12,
+                    },
+                ],
             },
             {
                 rarity: 'epic',
-                stats: [],
-                description:
-                    'Deals 8% more detonation damage and bombs additionally deal 16% more splash damage.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 9,
+                    },
+                ],
             },
         ],
+        imageKey: 'override-Photoroom',
     },
-    vortex_veil: {
-        name: 'Vortex Veil',
-        type: 'ultimate',
-        imageKey: 'vortexveil-Photoroom',
+    {
+        name: 'Override ',
+        type: 'gamma(minor)',
         variants: [
             {
                 rarity: 'uncommon',
-                stats: [],
-                description: 'Reduces damage taken from Inferno or Corrosion by 12%.',
-            },
-            {
-                rarity: 'rare',
-                stats: [],
-                description: 'Reduces damage taken from Inferno or Corrosion by 18%.',
-            },
-        ],
-    },
-    synaptic_response: {
-        name: 'Synaptic Response',
-        type: 'ultimate',
-        imageKey: 'synapticresponse-Photoroom',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [],
-                description:
-                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the Crit Power for the next crit by 4%.',
-            },
-            {
-                rarity: 'rare',
-                stats: [],
-                description:
-                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the Crit Power for the next crit by 6%.',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 5,
+                        type: 'flat',
+                    },
+                ],
             },
         ],
+        imageKey: 'override-Photoroom',
     },
-    lifeline: {
-        name: 'Lifeline',
-        type: 'ultimate',
-        imageKey: 'lifeline-Photoroom',
+    {
+        name: 'Precision ',
+        type: 'gamma(minor)',
         variants: [
             {
                 rarity: 'rare',
-                stats: [],
-                description:
-                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 8000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 8,
+                        type: 'percentage',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'precision-Photoroom',
+    },
+    {
+        name: 'Bastion',
+        type: 'alpha(minor)',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 9,
+                        type: 'percentage',
+                        min: 9,
+                        max: 12,
+                    },
+                ],
             },
             {
                 rarity: 'legendary',
-                stats: [],
-                description:
-                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 12000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 13,
+                        type: 'percentage',
+                        min: 13,
+                        max: 15,
+                    },
+                ],
             },
-        ],
-    },
-    cipher_link: {
-        name: 'Cipher Link',
-        type: 'ultimate',
-        imageKey: 'cipherlink-Photoroom',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [],
-                description:
-                    'This unit increases Hacking by 25% of its own Security at the start of combat.',
-            },
-            {
-                rarity: 'epic',
-                stats: [],
-                description:
-                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
-            },
-        ],
-    },
-    code_guard: {
-        name: 'Code Guard',
-        type: 'ultimate',
-        imageKey: 'codeguard-Photoroom',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [],
-                description:
-                    'This unit increases Security by 25% of its own Hacking at the start of combat.',
-            },
-            {
-                rarity: 'epic',
-                stats: [],
-                description:
-                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
-            },
-        ],
-    },
-    hyperion_gaze: {
-        name: 'Hyperion Gaze',
-        type: 'ultimate',
-        imageKey: 'hyperiongaze-Photoroom',
-        variants: [
             {
                 rarity: 'rare',
-                stats: [],
-                description:
-                    'Decreases damage by 21% when critically hit by an enemy that has Stealth. Does not stack with similar effects.',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 8,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 4,
+                        type: 'percentage',
+                        min: 4,
+                        max: 5,
+                    },
+                ],
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 3,
+                        type: 'percentage',
+                    },
+                ],
             },
         ],
+        imageKey: 'bastion-Photoroom',
     },
-    chrono_reaver: {
-        name: 'Chrono Reaver',
-        type: 'ultimate',
-        imageKey: 'chronoreaver-Photoroom',
+    {
+        name: 'Devastation',
+        type: 'alpha(minor)',
         variants: [
             {
                 rarity: 'epic',
-                stats: [],
-                description: "Adds 1 charge to this unit's charged skill every third round.",
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 9,
+                        type: 'percentage',
+                        min: 9,
+                        max: 11,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 6,
+                        type: 'percentage',
+                        min: 6,
+                        max: 8,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                    },
+                ],
             },
             {
                 rarity: 'legendary',
-                stats: [],
-                description: "Adds 1 charge to this unit's charged skill every other round.",
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 13,
+                        type: 'percentage',
+                        min: 13,
+                        max: 16,
+                    },
+                ],
             },
         ],
+        imageKey: 'devastation-Photoroom',
     },
-};
+    {
+        name: 'Devastation ',
+        type: 'alpha(minor)',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'devastation-Photoroom',
+    },
+    {
+        name: 'Guardian',
+        type: 'alpha(minor)',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 284,
+                        type: 'flat',
+                        min: 284,
+                        max: 317,
+                    },
+                ],
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 402,
+                        type: 'flat',
+                        min: 402,
+                        max: 454,
+                    },
+                ],
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 170,
+                        type: 'flat',
+                        min: 170,
+                        max: 206,
+                    },
+                ],
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 103,
+                        type: 'flat',
+                        min: 103,
+                        max: 119,
+                    },
+                ],
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'defence',
+                        value: 49,
+                        type: 'flat',
+                    },
+                ],
+            },
+        ],
+        imageKey: 'guardian-Photoroom',
+    },
+];
+
+export default IMPLANTS;
