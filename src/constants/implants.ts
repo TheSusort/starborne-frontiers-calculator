@@ -16,7 +16,7 @@ export interface ImplantVariant {
 }
 
 export const IMPLANTS: Record<string, ImplantData> = {
-    // Example implant - add more as needed
+    // Major Implants
     menace: {
         id: 'menace',
         name: 'Menace',
@@ -467,6 +467,401 @@ export const IMPLANTS: Record<string, ImplantData> = {
                 ],
                 description:
                     'When directly damaged, there is a 19% chance to gain a Shield equal to 42% of the damage taken, limited to once per round.',
+            },
+        ],
+    },
+    resonating_fury: {
+        name: 'Resonating Fury',
+        type: 'major',
+        imageKey: 'resonatingfury-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'attack', value: 9, type: 'percentage' },
+                    { name: 'critDamage', value: 8, type: 'percentage' },
+                ],
+                description:
+                    'When applying a shield, there is a 9% chance to grant Crit Power Up 3 for 1 turn.',
+            },
+        ],
+    },
+    smokescreen: {
+        name: 'Smokescreen',
+        type: 'major',
+        imageKey: 'smokescreen-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'speed', value: 6, type: 'flat' },
+                    { name: 'attack', value: 9, type: 'percentage' },
+                ],
+                description:
+                    'When directly damaged, there is a 9% chance to gain Stealth for 1 turn.',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'speed', value: 9, type: 'flat' },
+                    { name: 'attack', value: 14, type: 'percentage' },
+                ],
+                description:
+                    'When directly damaged, there is a 12% chance to gain Stealth for 1 turn.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'speed', value: 11, type: 'flat' },
+                    { name: 'attack', value: 17, type: 'percentage' },
+                ],
+                description:
+                    'When directly damaged, there is a 16% chance to gain Stealth for 1 turn.',
+            },
+        ],
+    },
+    shadowguard: {
+        name: 'Shadowguard',
+        type: 'major',
+        imageKey: 'shadowguard-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'speed', value: 9, type: 'flat' },
+                    { name: 'hp', value: 11, type: 'percentage' },
+                ],
+                description:
+                    'When directly damaged while in stealth, there is a 12% chance to block the damage, limited to once per round.',
+            },
+        ],
+    },
+    battlecry: {
+        name: 'Battlecry',
+        type: 'major',
+        imageKey: 'battlecry-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 14, type: 'percentage' },
+                    { name: 'defence', value: 396, type: 'flat' },
+                ],
+                description: 'Upon death, grants all allies Inc. Damage Down 2 for 2 turns.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 19, type: 'percentage' },
+                    { name: 'defence', value: 552, type: 'flat' },
+                ],
+                description: 'Upon death, grants all allies Inc. Damage Down 2 for 3 turns.',
+            },
+        ],
+    },
+    exuberance: {
+        name: 'Exuberance',
+        type: 'major',
+        imageKey: 'exuberance-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    { name: 'defence', value: 6, type: 'percentage' },
+                    { name: 'speed', value: 4, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 17% chance to increase that repair by 12%.',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'defence', value: 9, type: 'percentage' },
+                    { name: 'speed', value: 6, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 20% chance to increase that repair by 13%.',
+            },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 14, type: 'percentage' },
+                    { name: 'speed', value: 9, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 24% chance to increase that repair by 14%.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'defence', value: 17, type: 'percentage' },
+                    { name: 'speed', value: 12, type: 'flat' },
+                ],
+                description: 'When repaired, there is a 30% chance to increase that repair by 15%.',
+            },
+        ],
+    },
+    alacrity: {
+        name: 'Alacrity',
+        type: 'major',
+        imageKey: 'alacrity-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [
+                    { name: 'crit', value: 8, type: 'percentage' },
+                    { name: 'critDamage', value: 8, type: 'percentage' },
+                ],
+                description:
+                    'At the end of the round, if not hit, there is a 14% chance to gain Speed Up 3 for 2 rounds.',
+            },
+        ],
+    },
+    // Ultimate Implants
+    intrusion: {
+        name: 'Intrusion',
+        type: 'ultimate',
+        imageKey: 'intrusion-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Increases damage dealt by 2% for each debuff on the target when directly damaging them.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Increases damage dealt by 3% for each debuff on the target when directly damaging them.',
+            },
+        ],
+    },
+    nourishment: {
+        name: 'Nourishment',
+        type: 'ultimate',
+        imageKey: 'nourishment-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Increase repair by 10% when repairing an ally with lower HP.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Increase repair by 15% when repairing an ally with lower HP.',
+            },
+        ],
+    },
+    arcance_siege: {
+        name: 'Arcance Siege',
+        type: 'ultimate',
+        imageKey: 'arcancesiege-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Increases outgoing direct damage by 6% while shielded.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Increases outgoing direct damage by 15% while shielded.',
+            },
+        ],
+    },
+    warpstrike: {
+        name: 'Warpstrike',
+        type: 'ultimate',
+        imageKey: 'warpstrike-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    "Increases damage by 4% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    "Increases damage by 5% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn.",
+            },
+        ],
+    },
+    voidshade: {
+        name: 'Voidshade',
+        type: 'ultimate',
+        imageKey: 'voidshade-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Decreases direct damage by 8% while self has Stealth.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Decreases direct damage by 12% while self has Stealth.',
+            },
+        ],
+    },
+    nebula_nullifier: {
+        name: 'Nebula Nullifier',
+        type: 'ultimate',
+        imageKey: 'nebulanullifier-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Decrease damage by 21% when directly damaged while under Stasis or Disable.',
+            },
+        ],
+    },
+    voidfire_catalyst: {
+        name: 'Voidfire Catalyst',
+        type: 'ultimate',
+        imageKey: 'voidfirecatalyst-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Deals 4% more detonation damage and bombs additionally deal 8% more splash damage.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Deals 6% more detonation damage and bombs additionally deal 12% more splash damage.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'Deals 8% more detonation damage and bombs additionally deal 16% more splash damage.',
+            },
+        ],
+    },
+    vortex_veil: {
+        name: 'Vortex Veil',
+        type: 'ultimate',
+        imageKey: 'vortexveil-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 12%.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 18%.',
+            },
+        ],
+    },
+    synaptic_response: {
+        name: 'Synaptic Response',
+        type: 'ultimate',
+        imageKey: 'synapticresponse-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the Crit Power for the next crit by 4%.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the Crit Power for the next crit by 6%.',
+            },
+        ],
+    },
+    lifeline: {
+        name: 'Lifeline',
+        type: 'ultimate',
+        imageKey: 'lifeline-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 8000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 12000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+            },
+        ],
+    },
+    cipher_link: {
+        name: 'Cipher Link',
+        type: 'ultimate',
+        imageKey: 'cipherlink-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'This unit increases Hacking by 25% of its own Security at the start of combat.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
+            },
+        ],
+    },
+    code_guard: {
+        name: 'Code Guard',
+        type: 'ultimate',
+        imageKey: 'codeguard-Photoroom',
+        variants: [
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'This unit increases Security by 25% of its own Hacking at the start of combat.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
+            },
+        ],
+    },
+    hyperion_gaze: {
+        name: 'Hyperion Gaze',
+        type: 'ultimate',
+        imageKey: 'hyperiongaze-Photoroom',
+        variants: [
+            {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'Decreases damage by 21% when critically hit by an enemy that has Stealth. Does not stack with similar effects.',
+            },
+        ],
+    },
+    chrono_reaver: {
+        name: 'Chrono Reaver',
+        type: 'ultimate',
+        imageKey: 'chronoreaver-Photoroom',
+        variants: [
+            {
+                rarity: 'epic',
+                stats: [],
+                description: "Adds 1 charge to this unit's charged skill every third round.",
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: "Adds 1 charge to this unit's charged skill every other round.",
             },
         ],
     },
