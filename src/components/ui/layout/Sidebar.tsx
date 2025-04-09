@@ -163,8 +163,6 @@ export const Sidebar: React.FC = () => {
                 { path: '/encounters', label: 'Encounters' },
             ],
         },
-        { path: '/ships/index', label: 'Ship Database' },
-        { path: '/shared-encounters', label: 'Shared Encounters' },
         {
             path: '/calculators',
             label: 'Calculators',
@@ -175,6 +173,9 @@ export const Sidebar: React.FC = () => {
                 { path: '/damage-deconstruction', label: 'Hit Deconstruction' },
             ],
         },
+        { path: '/ships/index', label: 'Ship Database' },
+        { path: '/implants', label: 'Implants' },
+        { path: '/shared-encounters', label: 'Shared Encounters' },
     ];
 
     const SidebarContent = memo(() => (

@@ -24,6 +24,7 @@ const EncounterNotesPage = lazy(() => import('./pages/manager/EncounterNotesPage
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
+const ImplantIndexPage = lazy(() => import('./pages/ImplantIndexPage'));
 
 // Calculator pages
 const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
@@ -136,6 +137,10 @@ const App: React.FC = () => {
                                                 <Route
                                                     path="/shared-encounters"
                                                     element={<SharedEncountersPage />}
+                                                />
+                                                <Route
+                                                    path="/implants"
+                                                    element={<ImplantIndexPage />}
                                                 />
                                             </Routes>
                                         </Suspense>
