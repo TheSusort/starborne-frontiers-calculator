@@ -11,7 +11,7 @@ import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { ImplantData, ImplantVariant } from '../constants/implants';
 import { StatDisplay } from '../components/stats/StatDisplay';
-import { RARITIES } from '../constants/rarities';
+import { RARITIES, RARITY_ORDER } from '../constants/rarities';
 export const ImplantIndexPage: React.FC = () => {
     const { implants, loading, error } = useImplantsData();
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -59,8 +59,10 @@ export const ImplantIndexPage: React.FC = () => {
             const matchesSearch =
                 searchQuery === '' ||
                 implant.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                implant.variants.some((variant: ImplantVariant) =>
-                    variant.description.toLowerCase().includes(searchQuery.toLowerCase())
+                implant.variants.some(
+                    (variant: ImplantVariant) =>
+                        variant.description?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                        false
                 );
             return matchesType && matchesSearch;
         });
@@ -154,8 +156,13 @@ export const ImplantIndexPage: React.FC = () => {
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                            {implant.variants.map(
-                                                (variant: ImplantVariant, index: number) => (
+                                            {implant.variants
+                                                .sort(
+                                                    (a, b) =>
+                                                        RARITY_ORDER.indexOf(a.rarity) -
+                                                        RARITY_ORDER.indexOf(b.rarity)
+                                                )
+                                                .map((variant: ImplantVariant, index: number) => (
                                                     <div
                                                         key={index}
                                                         className={`bg-dark p-4 border ${RARITIES[variant.rarity].borderColor}`}
@@ -172,8 +179,7 @@ export const ImplantIndexPage: React.FC = () => {
                                                             {variant.description}
                                                         </p>
                                                     </div>
-                                                )
-                                            )}
+                                                ))}
                                         </div>
                                     </div>
                                 </div>

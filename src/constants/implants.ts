@@ -27,7 +27,7 @@ export const IMPLANTS: ImplantData[] = [
                     'Grants a sheild equal to 30% of the overrepaired amount on the target when overrepairing an ally',
             },
             {
-                rarity: 'legendary',
+                rarity: 'epic',
                 stats: [],
                 description:
                     'Grants a sheild equal to 20% of the overrepaired amount on the target when overrepairing an ally',
