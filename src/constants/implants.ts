@@ -218,7 +218,7 @@ export const IMPLANTS: ImplantData[] = [
                 rarity: 'rare',
                 stats: [],
                 description:
-                    'Gains Speed Up III for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 6%',
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 6%',
             },
             {
                 rarity: 'uncommon',
@@ -936,7 +936,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'At the end of the round, if not hit, there is a 16% chance to gain Speed Up III for 2 turns',
+                    'At the end of the round, if not hit, there is a 16% chance to gain Speed Up 3 for 2 turns',
             },
             {
                 rarity: 'rare',
@@ -957,7 +957,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'At the end of the round, if not hit, there is a 14% chance to gain Speed Up III for 2 turns',
+                    'At the end of the round, if not hit, there is a 14% chance to gain Speed Up 3 for 2 turns',
             },
             {
                 rarity: 'legendary',
@@ -974,7 +974,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'At the end of the round, if not hit, there is a 20% chance to gain Speed Up III for 2 turns',
+                    'At the end of the round, if not hit, there is a 20% chance to gain Speed Up 3 for 2 turns',
             },
             {
                 rarity: 'uncommon',
@@ -991,7 +991,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'At the end of the round, if not hit, there is a 12% chance to gain Speed Up III for 2 turns',
+                    'At the end of the round, if not hit, there is a 12% chance to gain Speed Up 3 for 2 turns',
             },
         ],
         imageKey: 'alacrity-Photoroom',
@@ -1015,7 +1015,7 @@ export const IMPLANTS: ImplantData[] = [
                         value: 341,
                         type: 'flat',
                         min: 341,
-                        max: 359,
+                        max: 371,
                     },
                 ],
                 description:
@@ -1212,7 +1212,7 @@ export const IMPLANTS: ImplantData[] = [
                 rarity: 'epic',
                 stats: [
                     { name: 'security', value: 11, type: 'flat' },
-                    { name: 'hp', value: 1301, type: 'flat' },
+                    { name: 'hp', value: 1301, type: 'flat', min: 1207, max: 1301 },
                 ],
                 description:
                     'There is a 12% chance, when an adjacent ally is directly damaged, to apply Provoke to that enemy for 1 turn, once per round.',
@@ -1432,7 +1432,7 @@ export const IMPLANTS: ImplantData[] = [
                         name: 'attack',
                         value: 244,
                         type: 'flat',
-                        min: 244,
+                        min: 226,
                         max: 264,
                     },
                     {
@@ -1440,7 +1440,7 @@ export const IMPLANTS: ImplantData[] = [
                         value: 12,
                         type: 'flat',
                         min: 12,
-                        max: 14,
+                        max: 16,
                     },
                 ],
                 description: 'When debuffed, there is a 12% chance to gain Block Debuff for 1 turn',
@@ -1480,6 +1480,22 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description: 'When debuffed, there is an 8% chance to gain Block Debuff for 1 turn',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 9,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'attack',
+                        value: 147,
+                        type: 'flat',
+                    },
+                ],
+                description: 'When debuffed, there is a 10% chance to gain Block Debuff for 1 turn',
             },
         ],
         imageKey: 'firewall-Photoroom',
@@ -1544,7 +1560,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 32% chance to grant all adjacent allies defenceense Up I for 1 turn',
+                    'Every turn, there is a 32% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
             },
             {
                 rarity: 'epic',
@@ -1561,7 +1577,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 26% chance to grant all adjacent allies defenceense Up I for 1 turn',
+                    'Every turn, there is a 26% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
             },
             {
                 rarity: 'rare',
@@ -1582,7 +1598,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 21% chance to grant all adjacent allies defenceense Up I for 1 turn',
+                    'Every turn, there is a 21% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
             },
             {
                 rarity: 'uncommon',
@@ -1599,7 +1615,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 18% chance to grant all adjacent allies defenceense Up I for 1 turn',
+                    'Every turn, there is a 18% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
             },
         ],
         imageKey: 'fortifyingshroud-Photoroom',
@@ -1759,11 +1775,15 @@ export const IMPLANTS: ImplantData[] = [
                         name: 'hacking',
                         value: 12,
                         type: 'flat',
+                        min: 12,
+                        max: 15,
                     },
                     {
                         name: 'crit',
                         value: 15,
                         type: 'percentage',
+                        min: 14,
+                        max: 15,
                     },
                 ],
                 description: 'When debuffing an enemy, there is a 17% chance to deal 90% damage.',
@@ -1791,6 +1811,23 @@ export const IMPLANTS: ImplantData[] = [
                 ],
                 description:
                     'When directly damaged for the second and subsequent times in a round, there is a 10% chance to block 30% of the damage',
+            },
+            {
+                rarity: 'rare',
+                stats: [
+                    {
+                        name: 'hacking',
+                        value: 9,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'security',
+                        value: 9,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'When directly damaged for the second and subsequent times in a round, there is a 14% chance to block 40% of the damage',
             },
             {
                 rarity: 'epic',
@@ -1989,7 +2026,7 @@ export const IMPLANTS: ImplantData[] = [
                         value: 204,
                         type: 'flat',
                         min: 204,
-                        max: 234,
+                        max: 249,
                     },
                     {
                         name: 'security',
@@ -2031,6 +2068,23 @@ export const IMPLANTS: ImplantData[] = [
                 ],
                 description:
                     'When resisting a debuff, there is a 16% chance to grant Buff Protection to all allies for 1 turn.',
+            },
+            {
+                rarity: 'common',
+                stats: [
+                    {
+                        name: 'security',
+                        value: 2,
+                        type: 'flat',
+                    },
+                    {
+                        name: 'defence',
+                        value: 68,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'When resisting a debuff, there is a 5% chance to grant Buff Protection to all allies for 1 turn',
             },
         ],
         imageKey: 'lockdown-Photoroom',
@@ -2532,7 +2586,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'After using the charged skill, there is a 21% chance to grant all allies Attack Up I for 1 Turn',
+                    'After using the charged skill, there is a 21% chance to grant all allies Attack Up 1 for 1 Turn',
             },
             {
                 rarity: 'epic',
@@ -2549,7 +2603,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'After using the charged skill, there is a 26% chance to grant all allies Attack Up I for 1 turn.',
+                    'After using the charged skill, there is a 26% chance to grant all allies Attack Up 1 for 1 turn.',
             },
             {
                 rarity: 'common',
@@ -2566,7 +2620,24 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'After using the charged skill, there is a 15% chance to grant all allies Attack Up I for 1 Turn',
+                    'After using the charged skill, there is a 15% chance to grant all allies Attack Up 1 for 1 Turn',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'hp',
+                        value: 6,
+                        type: 'percentage',
+                    },
+                    {
+                        name: 'hacking',
+                        value: 5,
+                        type: 'flat',
+                    },
+                ],
+                description:
+                    'After using the charged skill, there is a 18% chance to grant all allies Attack Up 1 for 1 Turn',
             },
         ],
         imageKey: 'spearhead-Photoroom',
