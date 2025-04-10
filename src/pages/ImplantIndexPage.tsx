@@ -144,6 +144,7 @@ export const ImplantIndexPage: React.FC = () => {
                                                     <Image
                                                         src={implant.imageKey}
                                                         alt={implant.name}
+                                                        className="w-12 h-12"
                                                     />
                                                 </div>
                                             )}

@@ -227,7 +227,7 @@ export const IMPLANTS: ImplantData[] = [
                     'Gains Speed Up 3 for 1 turn when and enemy gets directly repaired. Increases the critDamage of the next crit by 4%',
             },
         ],
-        imageKey: 'synapticresonance-Photoroom',
+        imageKey: 'synapticresponse-Photoroom',
     },
     {
         name: 'Voidfire Catalyst',
@@ -446,7 +446,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'haste-Photoroom',
+        imageKey: 'hastesigma-Photoroom',
     },
     {
         name: 'Haste',
@@ -487,7 +487,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'haste-Photoroom',
+        imageKey: 'hastegamma-Photoroom',
     },
     {
         name: 'Onslaught',
@@ -540,7 +540,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'onslaught-Photoroom',
+        imageKey: 'onslaughtsigma-Photoroom',
     },
     {
         name: 'Onslaught',
@@ -603,7 +603,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'onslaught-Photoroom',
+        imageKey: 'onslaughtalpha-Photoroom',
     },
     {
         name: 'Precision',
@@ -666,7 +666,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'precision-Photoroom',
+        imageKey: 'precisionsigma-Photoroom',
     },
     {
         name: 'Precision',
@@ -733,7 +733,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'precision-Photoroom',
+        imageKey: 'precisiongamma-Photoroom',
     },
     {
         name: 'Sentry',
@@ -2851,7 +2851,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'override-Photoroom',
+        imageKey: 'overridegamma-Photoroom',
     },
     {
         name: 'Override',
@@ -2916,24 +2916,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'override-Photoroom',
-    },
-    {
-        name: 'Override ',
-        type: 'gamma(minor)',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [
-                    {
-                        name: 'hacking',
-                        value: 5,
-                        type: 'flat',
-                    },
-                ],
-            },
-        ],
-        imageKey: 'override-Photoroom',
+        imageKey: 'overridealpha-Photoroom',
     },
     {
         name: 'Bastion',
@@ -3051,7 +3034,7 @@ export const IMPLANTS: ImplantData[] = [
                 ],
             },
         ],
-        imageKey: 'devastation-Photoroom',
+        imageKey: 'devastationalpha-Photoroom',
     },
     {
         name: 'Guardian',
