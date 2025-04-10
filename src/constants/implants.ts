@@ -2115,24 +2115,6 @@ export const IMPLANTS: ImplantData[] = [
                     'When critically damaging an enemy, there is an 8% chance to increase that damage by 20%',
             },
             {
-                rarity: 'rare',
-                stats: [
-                    { name: 'attack', value: 8, type: 'percentage' },
-                    { name: 'crit', value: 8, type: 'percentage' },
-                ],
-                description:
-                    'When critically damaging an enemy, there is a 10% chance to increase that damage by 30%.',
-            },
-            {
-                rarity: 'epic',
-                stats: [
-                    { name: 'attack', value: 14, type: 'percentage' },
-                    { name: 'crit', value: 12, type: 'percentage' },
-                ],
-                description:
-                    'When critically damaging an enemy, there is an 11% chance to increase that damage by 35%.',
-            },
-            {
                 rarity: 'legendary',
                 stats: [
                     {
@@ -2181,6 +2163,8 @@ export const IMPLANTS: ImplantData[] = [
                         name: 'attack',
                         value: 15,
                         type: 'percentage',
+                        min: 14,
+                        max: 15,
                     },
                     {
                         name: 'crit',
@@ -2198,11 +2182,15 @@ export const IMPLANTS: ImplantData[] = [
                         name: 'attack',
                         value: 7,
                         type: 'percentage',
+                        min: 7,
+                        max: 8,
                     },
                     {
                         name: 'crit',
                         value: 7,
                         type: 'percentage',
+                        min: 7,
+                        max: 8,
                     },
                 ],
                 description:
