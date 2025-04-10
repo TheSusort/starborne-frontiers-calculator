@@ -130,7 +130,7 @@ export const ImplantIndexPage: React.FC = () => {
                         />
                     </div>
 
-                    <div className="grid grid-cols-1 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredAndSortedImplants.length > 0 ? (
                             filteredAndSortedImplants.map((implant: ImplantData, index: number) => (
                                 <div
@@ -157,7 +157,7 @@ export const ImplantIndexPage: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 gap-4">
                                             {implant.variants
                                                 .sort(
                                                     (a, b) =>

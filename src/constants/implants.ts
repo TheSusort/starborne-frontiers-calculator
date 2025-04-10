@@ -2793,46 +2793,12 @@ export const IMPLANTS: ImplantData[] = [
                         value: 6,
                         type: 'percentage',
                         min: 6,
-                        max: 7,
+                        max: 8,
                     },
                 ],
             },
         ],
         imageKey: 'barrier-Photoroom',
-    },
-    {
-        name: 'Barrier ',
-        type: 'gamma(minor)',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    {
-                        name: 'defence',
-                        value: 8,
-                        type: 'percentage',
-                    },
-                ],
-            },
-        ],
-        imageKey: 'barrier-Photoroom',
-    },
-    {
-        name: 'Haste ',
-        type: 'gamma(minor)',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    {
-                        name: 'speed',
-                        value: 6,
-                        type: 'flat',
-                    },
-                ],
-            },
-        ],
-        imageKey: 'haste-Photoroom',
     },
     {
         name: 'Override',
@@ -2970,23 +2936,6 @@ export const IMPLANTS: ImplantData[] = [
         imageKey: 'override-Photoroom',
     },
     {
-        name: 'Precision ',
-        type: 'gamma(minor)',
-        variants: [
-            {
-                rarity: 'rare',
-                stats: [
-                    {
-                        name: 'crit',
-                        value: 8,
-                        type: 'percentage',
-                    },
-                ],
-            },
-        ],
-        imageKey: 'precision-Photoroom',
-    },
-    {
         name: 'Bastion',
         type: 'alpha(minor)',
         variants: [
@@ -3098,23 +3047,6 @@ export const IMPLANTS: ImplantData[] = [
                         type: 'percentage',
                         min: 13,
                         max: 16,
-                    },
-                ],
-            },
-        ],
-        imageKey: 'devastation-Photoroom',
-    },
-    {
-        name: 'Devastation ',
-        type: 'alpha(minor)',
-        variants: [
-            {
-                rarity: 'uncommon',
-                stats: [
-                    {
-                        name: 'critDamage',
-                        value: 5,
-                        type: 'percentage',
                     },
                 ],
             },
