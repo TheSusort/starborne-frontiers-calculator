@@ -562,4 +562,9 @@ export const BUFFS: Buff[] = [
         name: 'Titanite Plating',
         description: '+5% Defense, Stackable up to 5 times. Remove 1 stack per hit.',
     },
+    {
+        name: 'Overclock 3',
+        description:
+            '+30% Attack, +60% Crit Power. <br> On removal or expiration, apply Speed Down 1 and Attack Down 1 to self for 2 turns.',
+    },
 ];

@@ -271,7 +271,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 62,
         speed: 68,
-        imageKey: 'Terran_18_Portrait.png',
+        imageKey: 'chakara.png',
         activeSkillText:
             'This unit deals 180% damage with additional damage equal to 80% of its Defense. If all damaged enemies have more Speed than this unit, it adds 1 charge to its charged skill.',
         chargeSkillText:
@@ -699,6 +699,27 @@ export const SHIPS: Record<string, ShipData> = {
             'When an ally critically hits an enemy, this unit gains 1 charge to its charged skill.',
         secondPassiveSkillText:
             "This unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when this unit critically repairs an ally, it cleanses 1 debuff from itself.",
+    },
+    HOWLER: {
+        name: 'Howler',
+        affinity: 'thermal',
+        rarity: 'legendary',
+        faction: 'MARAUDERS',
+        role: 'SUPPORTER',
+        hp: 0,
+        attack: 0,
+        defense: 0,
+        hacking: 0,
+        security: 0,
+        critRate: 0,
+        critDamage: 0,
+        speed: 0,
+        imageKey: 'howler.png',
+        activeSkillText: 'This Unit grants Attack Up 3 for 2 turns and repairs 90% of its attack.',
+        chargeSkillText: 'This Unit grants Overclock 3 for 2 turns and repairs 140% of its attack.',
+        firstPassiveSkillText: 'This Unit cleanses 1 debuff when an ally crits an enemy.',
+        secondPassiveSkillText:
+            'This Unit cleanses 1 debuff and grants 1 stack of Blast when an ally crits an enemy.',
     },
     HUANYING: {
         name: 'Huanying',
@@ -1154,7 +1175,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 16,
         speed: 72,
-        imageKey: 'Atlas_14_Portrait.png',
+        imageKey: 'malvex.png',
         activeSkillText:
             'This Unit deals 140% damage with additional damage equal to 7% of its current shield, bypassing enemy shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
         chargeSkillText:
