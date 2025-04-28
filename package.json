@@ -9,6 +9,7 @@
         "@firebase/auth": "^1.8.2",
         "@firebase/firestore": "^4.7.6",
         "@hotjar/browser": "^1.0.9",
+        "@supabase/supabase-js": "^2.49.4",
         "@testing-library/jest-dom": "^5.17.0",
         "@testing-library/react": "^13.4.0",
         "@testing-library/user-event": "^13.5.0",
@@ -47,7 +48,8 @@
         "fetch-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
         "migrate-ships": "tsx scripts/migrate-ships.ts",
-        "migrate-implants": "tsx scripts/migrate-implants.ts"
+        "migrate-implants": "tsx scripts/migrate-implants.ts",
+        "migrate-to-supabase": "tsx scripts/migrate-to-supabase.ts"
     },
     "eslintConfig": {
         "extends": [
