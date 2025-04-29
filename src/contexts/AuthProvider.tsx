@@ -1,19 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import {
-    User,
-    signInWithPopup,
-    GoogleAuthProvider,
-    signOut as firebaseSignOut,
-    onAuthStateChanged,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-} from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { AuthService, AuthUser } from '../services/auth/types';
+import { FirebaseAuthService } from '../services/auth/firebaseAuth';
+import { SupabaseAuthService } from '../services/auth/supabaseAuth';
 import { useNotification } from '../hooks/useNotification';
-import { STORAGE_KEYS } from '../constants/storage';
 
 interface AuthContextType {
-    user: User | null;
+    user: AuthUser | null;
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -23,58 +15,74 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Choose which auth service to use
+const authService: AuthService =
+    import.meta.env.VITE_USE_SUPABASE === 'true'
+        ? new SupabaseAuthService()
+        : new FirebaseAuthService();
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [loading, setLoading] = useState(true);
     const { addNotification } = useNotification();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
+        // Get initial user
+        authService.getCurrentUser().then((user) => {
             setUser(user);
             setLoading(false);
         });
 
-        return unsubscribe;
+        // Listen for auth changes
+        const unsubscribe = authService.onAuthStateChanged((user) => {
+            setUser(user);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const signInWithGoogle = async () => {
-        const provider = new GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
+            await authService.signInWithGoogle();
+            addNotification('success', 'Logged in with Google successfully');
         } catch (error) {
-            console.error('Error signing in with Google:', error);
+            console.error('Google sign in error:', error);
+            addNotification('error', 'Google sign in failed');
             throw error;
         }
     };
 
     const signInWithEmail = async (email: string, password: string) => {
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            await authService.signInWithEmail(email, password);
+            addNotification('success', 'Logged in successfully');
         } catch (error) {
-            console.error('Error signing in with email:', error);
+            console.error('Sign in error:', error);
+            addNotification('error', 'Sign in failed');
             throw error;
         }
     };
 
     const signUpWithEmail = async (email: string, password: string) => {
         try {
-            await createUserWithEmailAndPassword(auth, email, password);
+            await authService.signUpWithEmail(email, password);
+            addNotification('success', 'Account created successfully');
         } catch (error) {
-            console.error('Error signing up with email:', error);
+            console.error('Sign up error:', error);
+            addNotification('error', 'Sign up failed');
             throw error;
         }
     };
 
     const signOut = async () => {
         try {
-            await firebaseSignOut(auth);
-            // Clear all local storage data
-            Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key));
-
+            await authService.signOut();
             addNotification('success', 'Logged out successfully');
         } catch (error) {
-            console.error('Logout failed:', error);
-            addNotification('error', 'Failed to log out');
+            console.error('Sign out error:', error);
+            addNotification('error', 'Sign out failed');
+            throw error;
         }
     };
 
