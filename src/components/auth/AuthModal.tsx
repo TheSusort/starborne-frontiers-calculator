@@ -16,6 +16,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     const [error, setError] = useState<string | null>(null);
     const [showEmailForm, setShowEmailForm] = useState(false);
     const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
+    const { addNotification } = useNotification();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,21 +25,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         try {
             if (isSignUp) {
                 await signUpWithEmail(email, password);
+                addNotification('success', 'You can now sign in');
             } else {
                 await signInWithEmail(email, password);
+                addNotification('success', 'You are now signed in');
             }
             onClose();
         } catch (error) {
             setError(error instanceof Error ? error.message : 'An error occurred');
+            addNotification('error', 'An error occurred');
         }
     };
 
     const handleGoogleSignIn = async () => {
         try {
             await signInWithGoogle();
+            addNotification('success', 'You are now signed in');
             onClose();
         } catch (error) {
             setError(error instanceof Error ? error.message : 'An error occurred');
+            addNotification('error', 'An error occurred');
         }
     };
 
