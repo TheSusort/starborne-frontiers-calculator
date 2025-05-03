@@ -36,13 +36,13 @@ export function useStorage<T>(config: StorageConfig<T>) {
     });
     const [loading, setLoading] = useState(true);
     const { addNotification } = useNotification();
-    const prevUserRef = useRef(user?.uid);
+    const prevUserRef = useRef(user?.id);
 
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            if (user?.uid) {
-                const firebaseData = await firebaseStorage.getUserData(user.uid);
+            if (user?.id) {
+                const firebaseData = await firebaseStorage.getUserData(user.id);
                 if (firebaseData?.[key as keyof UserData]) {
                     const userData = firebaseData[key as keyof UserData] as T;
                     setData(userData);
@@ -55,11 +55,11 @@ export function useStorage<T>(config: StorageConfig<T>) {
         } finally {
             setLoading(false);
         }
-    }, [key, user?.uid, addNotification]);
+    }, [key, user?.id, addNotification]);
 
     // Load data on mount and when auth state changes
     useEffect(() => {
-        const userChanged = prevUserRef.current !== user?.uid;
+        const userChanged = prevUserRef.current !== user?.id;
         if (userChanged) {
             if (!user) {
                 // Handle logout
@@ -69,7 +69,7 @@ export function useStorage<T>(config: StorageConfig<T>) {
                 // Handle login
                 loadData();
             }
-            prevUserRef.current = user?.uid;
+            prevUserRef.current = user?.id;
         }
     }, [user, loadData, key, defaultValue]);
 
@@ -83,8 +83,8 @@ export function useStorage<T>(config: StorageConfig<T>) {
             localStorage.setItem(key, JSON.stringify(newData));
             setData(newData);
 
-            if (user?.uid) {
-                await firebaseStorage.saveUserData(user.uid, {
+            if (user?.id) {
+                await firebaseStorage.saveUserData(user.id, {
                     [key]: newData,
                 });
             }

@@ -520,18 +520,16 @@ async function migrateAllUsers() {
         // 1. Build the UID map
         const uidMap = await getUidMap();
 
-        // 2. Choose the Firebase UID you want to migrate
-        const firebaseUid = '9P9g2CnrsIT7ZB1qQpVJlWEWmwA3';
-        const supabaseUserId = uidMap[firebaseUid];
+        // 2. Pass the Supabase UUID to your migration function
+        await prepareMigration();
 
-        if (!supabaseUserId) {
-            throw new Error(`No Supabase user found for Firebase UID: ${firebaseUid}`);
+        // 3. loop through all users and migrate them
+        for (const [firebaseUid, supabaseUserId] of Object.entries(uidMap)) {
+            console.log(`Migrating user ${firebaseUid} to Supabase user ${supabaseUserId}`);
+            await migrateUserData(firebaseUid, supabaseUserId, stats);
+            await replaceFirebaseIds(supabaseUserId, stats);
         }
 
-        // 3. Pass the Supabase UUID to your migration function
-        await prepareMigration();
-        await migrateUserData(firebaseUid, supabaseUserId, stats);
-        await replaceFirebaseIds(supabaseUserId, stats);
         await updateForeignKeys(stats);
         await cleanupMigration(stats);
 
