@@ -25,14 +25,14 @@ vi.mock('../../../hooks/useGear', () => ({
     useGearSets: () => ['CRITICAL', 'FORTITUDE'],
 }));
 
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         handleEquipGear: vi.fn(),
         getShipById: vi.fn(),
     }),
 }));
 
-vi.mock('../../../hooks/useInventory', () => ({
+vi.mock('../../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         saveInventory: vi.fn(),
     }),

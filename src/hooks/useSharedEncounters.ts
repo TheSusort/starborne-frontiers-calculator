@@ -15,7 +15,7 @@ import { db } from '../config/firebase';
 import { LocalEncounterNote, SharedEncounterNote } from '../types/encounters';
 import { useAuth } from '../contexts/AuthProvider';
 import { useNotification } from './useNotification';
-import { useShips } from './useShips';
+import { useShips } from '../contexts/ShipsContext';
 
 export const useSharedEncounters = () => {
     const [sharedEncounters, setSharedEncounters] = useState<SharedEncounterNote[]>([]);

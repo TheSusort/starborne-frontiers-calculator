@@ -2375,7 +2375,7 @@ export const SHIPS: Record<string, ShipData> = {
         imageKey: 'XAOC_16_Portrait.png',
         activeSkillText: 'This Unit grants Crit Rate Up 3 for 2 turns and Attack Up 2 for 2 turns.',
         chargeSkillText:
-            'This Unit grants Crit Power 3 for 3 turns and Out. Damage Up 3 for 3 turns.',
+            'This Unit grants Crit Power Up 3 for 3 turns and Out. Damage Up 2 for 3 turns.',
         firstPassiveSkillText:
             'At the start of its turn, this unit repairs 30% of its max HP to the ally with the most missing Health.',
         secondPassiveSkillText:

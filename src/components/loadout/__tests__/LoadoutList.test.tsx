@@ -8,7 +8,7 @@ import { vi } from 'vitest';
 // Mock useShips hook
 const mockHandleEquipGear = vi.fn();
 
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         handleEquipGear: mockHandleEquipGear,
         ships: [mockShip],

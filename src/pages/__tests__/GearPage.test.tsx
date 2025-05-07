@@ -62,7 +62,7 @@ const mockShips: Ship[] = [
 const mockSaveInventory = vi.fn();
 const mockAddNotification = vi.fn();
 
-vi.mock('../../hooks/useInventory', () => ({
+vi.mock('../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         inventory: mockGear,
         loading: false,
@@ -77,7 +77,7 @@ vi.mock('../../hooks/useNotification', () => ({
     }),
 }));
 
-vi.mock('../../hooks/useShips', () => ({
+vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
     }),

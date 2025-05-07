@@ -10,7 +10,7 @@ create table users (
 create table ships (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references users(id) on delete cascade,
-  firebase_id text not null,
+  firebase_id text,
   name text not null,
   rarity text not null,
   faction text not null,
@@ -38,6 +38,41 @@ create table ship_base_stats (
   primary key (ship_id)
 );
 
+-- Ship refits
+create table ship_refits (
+  id uuid default uuid_generate_v4() primary key,
+  ship_id uuid references ships(id) on delete cascade,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Ship refit stats
+create table ship_refit_stats (
+  id uuid default uuid_generate_v4() primary key,
+  refit_id uuid references ship_refits(id) on delete cascade,
+  name text not null,
+  value numeric not null,
+  type text not null
+);
+
+-- Ship implants
+create table ship_implants (
+  id uuid default uuid_generate_v4() primary key,
+  ship_id uuid references ships(id) on delete cascade,
+  description text,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- Ship implant stats
+create table ship_implant_stats (
+  id uuid default uuid_generate_v4() primary key,
+  implant_id uuid references ship_implants(id) on delete cascade,
+  name text not null,
+  value numeric not null,
+  type text not null
+);
+
 -- Inventory items
 create table inventory_items (
   id uuid default uuid_generate_v4() primary key,
@@ -56,18 +91,18 @@ create table inventory_items (
 create table ship_equipment (
   ship_id uuid references ships(id) on delete cascade,
   slot text not null,
-  gear_id text references inventory_items(firebase_id),
+  gear_id text references inventory_items(id),
   primary key (ship_id, slot)
 );
 
 -- Gear stats
 create table gear_stats (
+  id uuid default uuid_generate_v4() primary key,
   gear_id uuid references inventory_items(id) on delete cascade,
   name text not null,
   value numeric not null,
   type text not null,
-  is_main boolean not null,
-  primary key (gear_id, name, type)
+  is_main boolean not null
 );
 
 -- Encounter notes
@@ -84,7 +119,7 @@ create table encounter_notes (
 -- Encounter formations
 create table encounter_formations (
   note_id uuid references encounter_notes(id) on delete cascade,
-  ship_id uuid references ships(firebase_id) on delete cascade,
+  ship_id uuid references ships(id) on delete cascade,
   position text not null,
   primary key (note_id, position)
 );
@@ -94,7 +129,7 @@ create table loadouts (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references users(id) on delete cascade,
   name text not null,
-  ship_id uuid references ships(firebase_id) on delete cascade,
+  ship_id uuid references ships(id) on delete cascade,
   created_at timestamp with time zone default timezone('utc'::text, now()),
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
@@ -103,7 +138,7 @@ create table loadouts (
 create table loadout_equipment (
   loadout_id uuid references loadouts(id) on delete cascade,
   slot text not null,
-  gear_id uuid references inventory_items(firebase_id),
+  gear_id uuid references inventory_items(id),
   primary key (loadout_id, slot)
 );
 
@@ -120,7 +155,7 @@ create table team_loadouts (
 create table team_loadout_ships (
   team_loadout_id uuid references team_loadouts(id) on delete cascade,
   position integer not null,
-  ship_id uuid references ships(firebase_id) on delete cascade,
+  ship_id uuid references ships(id) on delete cascade,
   primary key (team_loadout_id, position)
 );
 
@@ -129,7 +164,7 @@ create table team_loadout_equipment (
   team_loadout_id uuid references team_loadouts(id) on delete cascade,
   position integer not null,
   slot text not null,
-  gear_id uuid references inventory_items(firebase_id),
+  gear_id uuid references inventory_items(id),
   primary key (team_loadout_id, position, slot)
 );
 

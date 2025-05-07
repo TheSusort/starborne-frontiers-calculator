@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { Button, PageLayout } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';

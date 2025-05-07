@@ -55,7 +55,7 @@ const mockShips: Ship[] = [
 let currentMockShips: Ship[] = mockShips;
 
 // Mock useShips hook
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: currentMockShips,
         loading: false,

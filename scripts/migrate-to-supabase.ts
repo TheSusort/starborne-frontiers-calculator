@@ -32,6 +32,7 @@ async function getUidMap() {
 }
 
 async function prepareMigration() {
+    console.log('Preparing migration...');
     const { error: createError } = await supabase.rpc('create_id_mappings_table');
     if (createError) {
         console.error('Error creating ID mappings table:', createError);
@@ -81,6 +82,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         }
 
         // Migrate inventory items
+        console.log('Migrating inventory items...');
         if (Array.isArray(userData['gear-inventory'])) {
             for (const item of userData['gear-inventory']) {
                 try {
@@ -135,6 +137,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         }
 
         // Migrate ships
+        console.log('Migrating ships...');
         if (Array.isArray(userData.ships)) {
             for (const ship of userData.ships) {
                 try {
@@ -188,6 +191,87 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
                         }
                     }
 
+                    // Migrate ship refits
+                    if (Array.isArray(ship.refits)) {
+                        for (const refit of ship.refits) {
+                            try {
+                                const { data: newRefit, error: refitError } = await supabase
+                                    .from('ship_refits')
+                                    .insert({
+                                        ship_id: newShip.id,
+                                    })
+                                    .select()
+                                    .single();
+
+                                if (refitError) throw refitError;
+
+                                // Migrate refit stats
+                                if (Array.isArray(refit.stats)) {
+                                    const refitStats = refit.stats.map((stat) => ({
+                                        refit_id: newRefit.id,
+                                        name: stat.name,
+                                        value: stat.value,
+                                        type: stat.type,
+                                    }));
+
+                                    const { error: statsError } = await supabase
+                                        .from('ship_refit_stats')
+                                        .insert(refitStats);
+
+                                    if (statsError) throw statsError;
+                                }
+                            } catch (error) {
+                                console.error('Error migrating ship refit:', {
+                                    error,
+                                    shipId: newShip.id,
+                                    refit,
+                                });
+                                stats.errors++;
+                            }
+                        }
+                    }
+
+                    // Migrate ship implants
+                    if (Array.isArray(ship.implants)) {
+                        for (const implant of ship.implants) {
+                            try {
+                                const { data: newImplant, error: implantError } = await supabase
+                                    .from('ship_implants')
+                                    .insert({
+                                        ship_id: newShip.id,
+                                        description: implant.description,
+                                    })
+                                    .select()
+                                    .single();
+
+                                if (implantError) throw implantError;
+
+                                // Migrate implant stats
+                                if (Array.isArray(implant.stats)) {
+                                    const implantStats = implant.stats.map((stat) => ({
+                                        implant_id: newImplant.id,
+                                        name: stat.name,
+                                        value: stat.value,
+                                        type: stat.type,
+                                    }));
+
+                                    const { error: statsError } = await supabase
+                                        .from('ship_implant_stats')
+                                        .insert(implantStats);
+
+                                    if (statsError) throw statsError;
+                                }
+                            } catch (error) {
+                                console.error('Error migrating ship implant:', {
+                                    error,
+                                    shipId: newShip.id,
+                                    implant,
+                                });
+                                stats.errors++;
+                            }
+                        }
+                    }
+
                     // Migrate ship equipment
                     if (ship.equipment) {
                         for (const [slot, gearId] of Object.entries(ship.equipment)) {
@@ -222,6 +306,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
             }
         }
         // Migrate encounter notes
+        console.log('Migrating encounter notes...');
         if (Array.isArray(userData.encounterNotes)) {
             for (const note of userData.encounterNotes) {
                 try {
@@ -262,6 +347,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         }
 
         // Migrate loadouts
+        console.log('Migrating loadouts...');
         if (Array.isArray(userData.shipLoadouts)) {
             for (const loadout of userData.shipLoadouts) {
                 try {
@@ -301,7 +387,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         }
 
         // Migrate team loadouts
-
+        console.log('Migrating team loadouts...');
         if (Array.isArray(userData.teamLoadouts)) {
             for (const teamLoadout of userData.teamLoadouts) {
                 try {
@@ -356,6 +442,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         }
 
         // Migrate engineering stats
+        console.log('Migrating engineering stats...');
         if (userData.engineeringStats?.stats) {
             for (const stat of userData.engineeringStats.stats) {
                 try {
@@ -524,11 +611,13 @@ async function migrateAllUsers() {
         await prepareMigration();
 
         // 3. loop through all users and migrate them
-        for (const [firebaseUid, supabaseUserId] of Object.entries(uidMap)) {
-            console.log(`Migrating user ${firebaseUid} to Supabase user ${supabaseUserId}`);
-            await migrateUserData(firebaseUid, supabaseUserId, stats);
-            await replaceFirebaseIds(supabaseUserId, stats);
-        }
+        //for (const [firebaseUid, supabaseUserId] of Object.entries(uidMap)) {
+        const firebaseUid = '9P9g2CnrsIT7ZB1qQpVJlWEWmwA3';
+        const supabaseUserId = uidMap[firebaseUid];
+        console.log(`Migrating user ${firebaseUid} to Supabase user ${supabaseUserId}`);
+        await migrateUserData(firebaseUid, supabaseUserId, stats);
+        await replaceFirebaseIds(supabaseUserId, stats);
+        //}
 
         await updateForeignKeys(stats);
         await cleanupMigration(stats);

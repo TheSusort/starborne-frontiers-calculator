@@ -3,7 +3,7 @@ import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
 
 interface Props {
@@ -26,8 +26,8 @@ export const GearPieceDisplay = memo(
         onEquip,
         className = '',
     }: Props) => {
-        const { getShipById } = useShips();
-        const ship = gear.shipId ? getShipById(gear.shipId) : undefined;
+        const { getShipName } = useShips();
+        const shipName = gear.shipId ? getShipName(gear.shipId) : undefined;
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus].iconUrl, [gear.setBonus]);
@@ -122,11 +122,8 @@ export const GearPieceDisplay = memo(
                                 <StatDisplay stats={gear.subStats} />
                             </div>
                         )}
-                        {ship && (
-                            <span className="text-xxs text-gray-500">
-                                {' '}
-                                Equipped by: {ship.name}
-                            </span>
+                        {shipName && (
+                            <span className="text-xxs text-gray-500"> Equipped by: {shipName}</span>
                         )}
                     </div>
                 )}

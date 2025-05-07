@@ -5,7 +5,7 @@ language plpgsql
 security definer
 as $$
 begin
-    create table id_mappings (
+    create table if not exists id_mappings (
         old_id text not null,
         new_id uuid not null,
         table_name text not null,

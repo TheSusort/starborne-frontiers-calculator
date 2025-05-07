@@ -25,6 +25,7 @@ export interface PercentageStat {
     type: 'percentage';
     min?: number;
     max?: number;
+    id?: string;
 }
 
 export interface FlatStat {
@@ -33,6 +34,7 @@ export interface FlatStat {
     type: 'flat';
     min?: number;
     max?: number;
+    id?: string;
 }
 
 // Combined Stat type

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Position, ShipPosition, SharedShipPosition } from '../../types/encounters';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { HexButton } from '../ui/HexButton';
 
 interface FormationGridProps {

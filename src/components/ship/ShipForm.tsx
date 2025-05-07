@@ -70,8 +70,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ship: Ship = {
-            id: editingShip?.id || Date.now().toString(),
+        const ship: Omit<Ship, 'id'> = {
             name,
             faction,
             type,
@@ -85,7 +84,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         };
 
         try {
-            await onSubmit(ship);
+            await onSubmit(ship as Ship);
             setName('');
             setBaseStats(initialBaseStats);
             setFaction('');

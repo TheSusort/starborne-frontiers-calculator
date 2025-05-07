@@ -5,7 +5,7 @@ import { GearPiece } from '../../../types/gear';
 import { vi } from 'vitest';
 
 // Mock useInventory hook
-vi.mock('../../../hooks/useInventory', () => ({
+vi.mock('../../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         getGearPiece: vi.fn(),
     }),

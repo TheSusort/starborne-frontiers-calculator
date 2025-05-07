@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { ShipCard } from './ShipCard';
 import {
     FACTIONS,

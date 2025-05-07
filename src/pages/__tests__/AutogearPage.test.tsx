@@ -43,7 +43,7 @@ const mockGear: GearPiece[] = [
     },
 ];
 
-vi.mock('../../hooks/useShips', () => ({
+vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
         getShipById: (id: string) => mockShips.find((ship) => ship.id === id),
@@ -51,7 +51,7 @@ vi.mock('../../hooks/useShips', () => ({
     }),
 }));
 
-vi.mock('../../hooks/useInventory', () => ({
+vi.mock('../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         inventory: mockGear,
         getGearPiece: (id: string) => mockGear.find((gear) => gear.id === id),

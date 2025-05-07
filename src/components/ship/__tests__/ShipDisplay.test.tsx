@@ -7,7 +7,7 @@ import { FACTIONS } from '../../../constants/factions';
 import { Stat } from '../../../types/stats';
 
 // Mock hooks
-vi.mock('../../../hooks/useInventory', () => ({
+vi.mock('../../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         getGearPiece: vi.fn(),
     }),

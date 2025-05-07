@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
-import { firebaseStorage, UserData } from '../services/firebaseStorage';
+//import { firebaseStorage, UserData } from '../services/firebaseStorage';
 import { useNotification } from './useNotification';
 import { StorageKey } from '../constants/storage';
 
@@ -39,7 +39,9 @@ export function useStorage<T>(config: StorageConfig<T>) {
     const prevUserRef = useRef(user?.id);
 
     const loadData = useCallback(async () => {
+        /*
         setLoading(true);
+
         try {
             if (user?.id) {
                 const firebaseData = await firebaseStorage.getUserData(user.id);
@@ -53,9 +55,11 @@ export function useStorage<T>(config: StorageConfig<T>) {
             console.error('Error loading data:', error);
             addNotification('error', 'Failed to load data');
         } finally {
-            setLoading(false);
+
         }
-    }, [key, user?.id, addNotification]);
+        */
+        setLoading(false);
+    }, []);
 
     // Load data on mount and when auth state changes
     useEffect(() => {
@@ -82,12 +86,13 @@ export function useStorage<T>(config: StorageConfig<T>) {
         try {
             localStorage.setItem(key, JSON.stringify(newData));
             setData(newData);
-
+            /*
             if (user?.id) {
                 await firebaseStorage.saveUserData(user.id, {
                     [key]: newData,
                 });
             }
+            */
         } catch (error) {
             console.error('Error saving data:', error);
             addNotification('error', 'Failed to save to cloud storage');

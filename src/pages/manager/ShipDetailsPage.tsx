@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import { ShipCard } from '../../components/ship/ShipCard';
 import { StatDisplay } from '../../components/stats/StatDisplay';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { analyzeStatDistribution } from '../../utils/ship/statDistribution';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { PageLayout } from '../../components/ui/layout/PageLayout';
 import { GearPiece } from '../../types/gear';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
@@ -20,7 +20,6 @@ import { useGearLookup } from '../../hooks/useGear';
 import { StatDistributionChart } from '../../components/stats/StatDistributionChart';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
-import { SEO_CONFIG } from '../../constants/seo';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);

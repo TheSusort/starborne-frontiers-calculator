@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loadout } from '../../types/loadout';
 import { LoadoutCard } from './LoadoutCard';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { GearPiece } from '../../types/gear';
 import { GearSlotName } from '../../constants';
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { useShipsData } from '../hooks/useShipsData';
-import { useShips } from '../hooks/useShips';
+import { useShipsData } from '../contexts/ShipsContextData';
+import { useShips } from '../contexts/ShipsContext';
 import { PageLayout } from '../components/ui';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { Image } from '../components/ui/Image';

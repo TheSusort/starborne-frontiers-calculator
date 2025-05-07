@@ -4,9 +4,9 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { Button, CloseIcon } from '../ui';
 import { LoadoutCard } from './LoadoutCard';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { GearSlotName } from '../../constants';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 
 interface TeamLoadoutCardProps {
