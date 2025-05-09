@@ -8,7 +8,6 @@ import { Modal, Button, CloseIcon, CheckIcon } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { useShips } from '../../contexts/ShipsContext';
-import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 
 interface LoadoutCardProps {

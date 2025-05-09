@@ -6,7 +6,6 @@ import { Button, CloseIcon } from '../ui';
 import { LoadoutCard } from './LoadoutCard';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearSlotName } from '../../constants';
-import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 
 interface TeamLoadoutCardProps {
