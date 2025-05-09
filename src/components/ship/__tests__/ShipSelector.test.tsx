@@ -62,7 +62,7 @@ vi.mock('../../../contexts/ShipsContext', () => ({
         error: null,
         editingShip: undefined,
         setEditingShip: vi.fn(),
-        handleEquipGear: vi.fn(),
+        equipGear: vi.fn(),
         handleRemoveGear: vi.fn(),
         handleRemoveShip: vi.fn(),
         handleSaveShip: vi.fn(),

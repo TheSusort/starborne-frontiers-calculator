@@ -149,7 +149,7 @@ vi.mock('../../contexts/InventoryProvider', () => ({
 vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
-        handleEquipGear: vi.fn(),
+        equipGear: vi.fn(),
     }),
 }));
 

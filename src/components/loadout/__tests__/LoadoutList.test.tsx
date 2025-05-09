@@ -10,7 +10,7 @@ const mockHandleEquipGear = vi.fn();
 
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
-        handleEquipGear: mockHandleEquipGear,
+        equipGear: mockHandleEquipGear,
         ships: [mockShip],
         loading: false,
         error: null,

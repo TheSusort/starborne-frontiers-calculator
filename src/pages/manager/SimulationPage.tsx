@@ -38,7 +38,7 @@ export const SimulationPage: React.FC = () => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
-    const { handleEquipMultipleGear, updateShip } = useShips({ getGearPiece });
+    const { equipMultipleGear, updateShip } = useShips();
     const [temporaryImplants, setTemporaryImplants] = useState<Implant[]>([]);
 
     useEffect(() => {
@@ -101,7 +101,7 @@ export const SimulationPage: React.FC = () => {
             gearId: gearId || '',
         }));
 
-        handleEquipMultipleGear(selectedShip.id, gearAssignments);
+        equipMultipleGear(selectedShip.id, gearAssignments);
         addNotification('success', 'Gear changes saved successfully');
     };
 
@@ -120,7 +120,7 @@ export const SimulationPage: React.FC = () => {
             implants: temporaryImplants,
         };
 
-        updateShip(updatedShip);
+        updateShip(selectedShip.id, updatedShip);
         addNotification('success', 'Implant changes saved successfully');
     };
 

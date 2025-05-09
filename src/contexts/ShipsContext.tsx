@@ -10,7 +10,6 @@ import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
-import { BaseStats } from '../types/stats';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -22,16 +21,13 @@ interface ShipsContextType {
     getShipById: (id: string) => Ship | undefined;
     addShip: (newShip: Omit<Ship, 'id'>) => Promise<Ship>;
     updateShip: (id: string, updates: Partial<Ship>) => Promise<void>;
-    updateShipData: (id: string, updates: Partial<Ship>) => Promise<void>;
     deleteShip: (id: string) => Promise<void>;
     equipGear: (shipId: string, slot: GearSlotName, gearId: string) => Promise<void>;
     equipMultipleGear: (
         shipId: string,
         gearAssignments: { slot: GearSlotName; gearId: string }[]
     ) => Promise<void>;
-    addEquipment: (shipId: string, slot: GearSlotName, gearId: string) => Promise<void>;
     removeGear: (shipId: string, slot: GearSlotName) => Promise<void>;
-    removeEquipment: (shipId: string, slot: GearSlotName) => Promise<void>;
     lockEquipment: (shipId: string, locked: boolean) => Promise<void>;
     toggleEquipmentLock: (shipId: string) => Promise<void>;
     validateGearAssignments: () => void;
@@ -864,13 +860,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 getShipById,
                 addShip,
                 updateShip,
-                updateShipData: updateShip,
                 deleteShip,
                 equipGear,
-                addEquipment: equipGear,
                 equipMultipleGear,
                 removeGear,
-                removeEquipment: removeGear,
                 lockEquipment,
                 toggleEquipmentLock,
                 validateGearAssignments,

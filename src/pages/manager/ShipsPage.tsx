@@ -23,10 +23,10 @@ export const ShipsPage: React.FC = () => {
         editingShip,
         setEditingShip,
         addShip,
-        updateShipData,
+        updateShip,
         deleteShip,
-        addEquipment,
-        removeEquipment,
+        equipGear,
+        removeGear,
         toggleEquipmentLock,
         unequipAllEquipment,
     } = useShips();
@@ -55,7 +55,7 @@ export const ShipsPage: React.FC = () => {
     const handleSaveShip = async (ship: Ship) => {
         try {
             if (ship.id) {
-                await updateShipData(ship.id, ship);
+                await updateShip(ship.id, ship);
             } else {
                 await addShip(ship);
             }
@@ -123,8 +123,8 @@ export const ShipsPage: React.FC = () => {
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     onLockEquipment={handleLockEquipment}
-                    onEquipGear={addEquipment}
-                    onRemoveGear={removeEquipment}
+                    onEquipGear={equipGear}
+                    onRemoveGear={removeGear}
                     onUnequipAll={handleUnequipAll}
                     availableGear={inventory}
                 />

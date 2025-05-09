@@ -20,7 +20,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
     getGearPiece,
     availableGear,
 }) => {
-    const { handleEquipGear, ships } = useShips();
+    const { equipGear, ships } = useShips();
 
     if (loadouts.length === 0) {
         return (
@@ -47,7 +47,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
                             getGearPiece={getGearPiece}
                             onEquip={() => {
                                 Object.entries(loadout.equipment).forEach(([slot, gearId]) => {
-                                    handleEquipGear(loadout.shipId, slot as GearSlotName, gearId);
+                                    equipGear(loadout.shipId, slot as GearSlotName, gearId);
                                 });
                             }}
                             onUpdate={(equipment) => onUpdate(loadout.id, equipment)}

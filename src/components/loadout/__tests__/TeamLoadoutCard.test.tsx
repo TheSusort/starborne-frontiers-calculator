@@ -12,7 +12,7 @@ const mockAddNotification = vi.fn();
 
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
-        handleEquipGear: mockHandleEquipGear,
+        equipGear: mockHandleEquipGear,
     }),
 }));
 

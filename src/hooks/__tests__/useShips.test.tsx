@@ -228,7 +228,7 @@ describe('useShips Hook', () => {
             const { result } = renderHook(() => useShips());
 
             act(() => {
-                result.current.handleEquipGear('ship1', 'generator', 'gear4');
+                result.current.equipGear('ship1', 'generator', 'gear4');
             });
 
             expect(result.current.ships[0].equipment.generator).toBe('gear4');
@@ -250,7 +250,7 @@ describe('useShips Hook', () => {
             const { result } = renderHook(() => useShips());
 
             act(() => {
-                result.current.handleEquipGear('ship2', 'weapon', 'gear1');
+                result.current.equipGear('ship2', 'weapon', 'gear1');
             });
 
             expect(result.current.ships[0].equipment.weapon).toBeUndefined();

@@ -27,7 +27,7 @@ vi.mock('../../../hooks/useGear', () => ({
 
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
-        handleEquipGear: vi.fn(),
+        equipGear: vi.fn(),
         getShipById: vi.fn(),
     }),
 }));

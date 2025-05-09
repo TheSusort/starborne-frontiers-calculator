@@ -26,21 +26,12 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     onUpdate,
     onDelete,
 }) => {
-    const { handleEquipGear } = useShips();
-    const { saveInventory } = useInventory();
+    const { equipGear } = useShips();
     const { addNotification } = useNotification();
 
     const handleEquipTeam = () => {
-        const inventoryUpdates = new Map<string, string>();
-        const processedGear = new Set<string>();
-
         teamLoadout.shipLoadouts.forEach((shipLoadout) => {
             Object.entries(shipLoadout.equipment).forEach(([slot, gearId]) => {
-                if (processedGear.has(gearId)) {
-                    addNotification('warning', `Skipped duplicate gear assignment for ${slot}`);
-                    return;
-                }
-
                 const gear = getGearPiece(gearId);
                 if (!gear) {
                     addNotification('error', `Gear piece ${gearId} not found in inventory`);
@@ -54,22 +45,10 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                     }
                 }
 
-                inventoryUpdates.set(gearId, shipLoadout.shipId);
-                processedGear.add(gearId);
-
-                handleEquipGear(shipLoadout.shipId, slot as GearSlotName, gearId);
+                equipGear(shipLoadout.shipId, slot as GearSlotName, gearId);
             });
         });
 
-        const newInventory = availableGear.map((gear) => {
-            const newShipId = inventoryUpdates.get(gear.id);
-            if (newShipId !== undefined) {
-                return { ...gear, shipId: newShipId };
-            }
-            return gear;
-        });
-
-        saveInventory(newInventory);
         addNotification('success', 'Team loadout equipped successfully');
     };
 

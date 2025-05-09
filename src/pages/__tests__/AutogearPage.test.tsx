@@ -47,7 +47,7 @@ vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
         getShipById: (id: string) => mockShips.find((ship) => ship.id === id),
-        handleEquipGear: vi.fn(),
+        equipGear: vi.fn(),
     }),
 }));
 
