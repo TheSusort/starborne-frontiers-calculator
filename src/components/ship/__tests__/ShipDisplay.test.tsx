@@ -59,6 +59,7 @@ const mockShip: Ship = {
                 { name: 'hacking', value: 0, type: 'flat' },
                 { name: 'security', value: 0, type: 'flat' },
             ],
+            id: '',
         },
         {
             stats: [
@@ -69,6 +70,7 @@ const mockShip: Ship = {
                 { name: 'hacking', value: 0, type: 'flat' },
                 { name: 'security', value: 0, type: 'flat' },
             ],
+            id: '',
         },
     ],
     implants: [
@@ -81,6 +83,7 @@ const mockShip: Ship = {
                 { name: 'hacking', value: 0, type: 'flat' },
                 { name: 'security', value: 0, type: 'flat' },
             ],
+            id: '',
         },
     ],
     baseStats: {

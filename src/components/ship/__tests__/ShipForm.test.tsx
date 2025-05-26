@@ -30,11 +30,13 @@ const mockShip: Ship = {
     refits: [
         {
             stats: [{ name: 'hp', value: 1000, type: 'flat' }],
+            id: '',
         },
     ],
     implants: [
         {
             stats: [{ name: 'attack', value: 100, type: 'flat' }],
+            id: '',
         },
     ],
     baseStats: {

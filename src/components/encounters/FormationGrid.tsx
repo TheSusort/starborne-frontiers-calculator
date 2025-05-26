@@ -29,7 +29,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
         if ('shipId' in shipPosition) {
             return ships.find((ship) => ship.id === shipPosition.shipId);
         }
-        return { name: shipPosition.shipName };
+        return { name: (shipPosition as SharedShipPosition).shipName };
     };
 
     return (

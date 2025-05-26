@@ -14,8 +14,8 @@ const convertToShipPosition = (position: ShipPosition | SharedShipPosition): Shi
         return position;
     }
     return {
-        position: position.position,
-        shipId: position.shipName, // This is a temporary conversion, you might want to handle this differently
+        position: (position as SharedShipPosition).position,
+        shipId: (position as SharedShipPosition).shipName,
     };
 };
 

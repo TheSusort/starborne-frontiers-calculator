@@ -145,13 +145,17 @@ export const useEncounterNotes = () => {
                                 ship_id: pos.shipId,
                             };
                         } else {
-                            const ship = ships.find((s) => s.name === pos.shipName);
+                            const ship = ships.find(
+                                (s) => s.name === (pos as SharedShipPosition).shipName
+                            );
                             if (!ship) {
-                                throw new Error(`Ship with name ${pos.shipName} not found`);
+                                throw new Error(
+                                    `Ship with name ${(pos as SharedShipPosition).shipName} not found`
+                                );
                             }
                             return {
                                 note_id: noteData.id,
-                                position: pos.position,
+                                position: (pos as SharedShipPosition).position,
                                 ship_id: ship.id,
                             };
                         }
