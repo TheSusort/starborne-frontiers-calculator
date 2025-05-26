@@ -77,7 +77,7 @@ create table ship_implant_stats (
 create table inventory_items (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references users(id) on delete cascade,
-  firebase_id text unique not null,
+  firebase_id text,
   slot text not null,
   level integer not null,
   stars integer not null,
@@ -162,10 +162,10 @@ create table team_loadout_ships (
 -- Team loadout equipment
 create table team_loadout_equipment (
   team_loadout_id uuid references team_loadouts(id) on delete cascade,
-  position integer not null,
+  ship_id uuid references ships(id) on delete cascade,
   slot text not null,
   gear_id uuid references inventory_items(id),
-  primary key (team_loadout_id, position, slot)
+  primary key (team_loadout_id, ship_id, slot)
 );
 
 -- Engineering stats

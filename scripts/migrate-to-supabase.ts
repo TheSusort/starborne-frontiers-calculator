@@ -60,7 +60,6 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         // Fetch user data from Firebase
         const userDoc = await adminDb.collection('users').doc(firebaseUid).get();
         const userData = userDoc.data();
-
         if (!userData) return;
 
         // Create user record first

@@ -26,8 +26,8 @@ export const GearPieceDisplay = memo(
         onEquip,
         className = '',
     }: Props) => {
-        const { getShipName } = useShips();
-        const shipName = gear.shipId ? getShipName(gear.shipId) : undefined;
+        const { getShipName, getShipNameFromGearId } = useShips();
+        const shipName = gear.shipId ? getShipName(gear.shipId) : getShipNameFromGearId(gear.id);
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus].iconUrl, [gear.setBonus]);
@@ -131,11 +131,46 @@ export const GearPieceDisplay = memo(
         );
     },
     (prevProps, nextProps) => {
-        return (
-            prevProps.gear.id === nextProps.gear.id &&
-            prevProps.mode === nextProps.mode &&
-            prevProps.showDetails === nextProps.showDetails
-        );
+        // Compare IDs and display settings
+        if (
+            prevProps.gear.id !== nextProps.gear.id ||
+            prevProps.mode !== nextProps.mode ||
+            prevProps.showDetails !== nextProps.showDetails
+        ) {
+            return false;
+        }
+
+        // Compare gear properties
+        const prevGear = prevProps.gear;
+        const nextGear = nextProps.gear;
+
+        if (
+            prevGear.slot !== nextGear.slot ||
+            prevGear.level !== nextGear.level ||
+            prevGear.stars !== nextGear.stars ||
+            prevGear.rarity !== nextGear.rarity ||
+            prevGear.setBonus !== nextGear.setBonus ||
+            prevGear.shipId !== nextGear.shipId
+        ) {
+            return false;
+        }
+
+        // Compare main stat
+        if (
+            prevGear.mainStat.name !== nextGear.mainStat.name ||
+            prevGear.mainStat.value !== nextGear.mainStat.value ||
+            prevGear.mainStat.type !== nextGear.mainStat.type
+        ) {
+            return false;
+        }
+
+        // Compare sub stats
+        if (prevGear.subStats.length !== nextGear.subStats.length) {
+            return false;
+        }
+
+        // If we've passed all the checks, the components are equal
+        return true;
     }
 );
 

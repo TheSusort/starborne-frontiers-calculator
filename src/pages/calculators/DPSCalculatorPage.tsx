@@ -311,7 +311,7 @@ const DPSCalculatorPage: React.FC = () => {
                         </p>
 
                         {viewMode === 'table' ? (
-                            <DPSCalculatorTable attack={bestConfig ? bestConfig.attack : 5000} />
+                            <DPSCalculatorTable />
                         ) : (
                             <DPSChart
                                 ships={configs.map((config) => ({

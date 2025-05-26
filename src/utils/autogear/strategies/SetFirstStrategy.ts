@@ -48,8 +48,7 @@ export class SetFirstStrategy extends BaseStrategy {
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType,
-            setPriorities
+            getEngineeringStatsForShipType
         );
 
         // Sort set groups by priority
@@ -122,8 +121,7 @@ export class SetFirstStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        setPriorities?: SetPriority[]
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
     ): SetGroup[] {
         const setGroups: Record<string, GearPiece[]> = {};
 

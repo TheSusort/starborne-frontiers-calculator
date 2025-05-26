@@ -10,6 +10,8 @@ import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
+import { useStorage } from '../hooks/useStorage';
+import { StorageKey } from '../constants/storage';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -32,6 +34,7 @@ interface ShipsContextType {
     toggleEquipmentLock: (shipId: string) => Promise<void>;
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
+    getShipNameFromGearId: (gearId: string) => string | undefined;
 }
 
 interface RawShipStat {
@@ -227,7 +230,6 @@ const transformShipData = (data: RawShipData): Ship | null => {
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [ships, setShips] = useState<Ship[]>([]);
     const { loadInventory } = useInventory();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -235,15 +237,22 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { addNotification } = useNotification();
     const { user } = useAuth();
 
+    // Use useStorage for ships
+    const { data: ships, setData: setShips } = useStorage<Ship[]>({
+        key: StorageKey.SHIPS,
+        defaultValue: [],
+    });
+
     const loadShips = useCallback(async () => {
-        if (!user?.id) return;
+        // Prevent multiple concurrent loads
 
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('ships')
-                .select(
-                    `
+            if (user?.id) {
+                const { data, error } = await supabase
+                    .from('ships')
+                    .select(
+                        `
                     *,
                     ship_base_stats (*),
                     ship_equipment (*),
@@ -256,16 +265,21 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         ship_implant_stats (*)
                     )
                 `
-                )
-                .eq('user_id', user.id);
+                    )
+                    .eq('user_id', user.id);
 
-            if (error) throw error;
+                if (error) throw error;
 
-            const transformedShips = data
-                .map(transformShipData)
-                .filter((ship): ship is Ship => ship !== null);
+                const transformedShips = data
+                    .map(transformShipData)
+                    .filter((ship): ship is Ship => ship !== null)
+                    .map((ship) => ({
+                        ...ship,
+                        equipment: ship.equipment || {},
+                    }));
 
-            setShips(transformedShips);
+                setShips(transformedShips);
+            }
         } catch (error) {
             console.error('Error loading ships:', error);
             addNotification('error', 'Failed to load ships');
@@ -273,11 +287,36 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification]);
+    }, [user?.id, addNotification, setShips]);
 
+    // Initial load and reload on auth changes
     useEffect(() => {
         loadShips();
-    }, [loadShips]);
+    }, [user?.id, loadShips]);
+
+    // Ensure equipment is properly initialized for all ships
+    useEffect(() => {
+        if (ships.length > 0) {
+            const updatedShips = ships.map((ship) => ({
+                ...ship,
+                equipment: ship.equipment || {},
+            }));
+            if (JSON.stringify(updatedShips) !== JSON.stringify(ships)) {
+                setShips(updatedShips);
+            }
+        }
+    }, [ships, setShips]);
+
+    useEffect(() => {
+        const handleSignOut = () => {
+            setShips([]);
+        };
+
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setShips]);
 
     const getShipName = useCallback(
         (id: string) => ships.find((ship) => ship.id === id)?.name,
@@ -288,10 +327,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const addShip = useCallback(
         async (newShip: Omit<Ship, 'id'>) => {
-            if (!user?.id) {
-                throw new Error('User not authenticated');
-            }
-
             const tempId = uuidv4();
 
             const optimisticShip: Ship = {
@@ -299,6 +334,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 id: tempId,
             };
             setShips((prev) => [...prev, optimisticShip]);
+            if (!user?.id) return getShipById(tempId) as Ship;
 
             try {
                 // Create ship record
@@ -424,19 +460,19 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, getShipById, addNotification]
+        [user?.id, loadShips, getShipById, addNotification, setShips]
     );
 
     const updateShip = useCallback(
         async (id: string, updates: Partial<Ship>) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) =>
+                prev.map((ship) => (ship.id === id ? { ...ship, ...updates } : ship))
+            );
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) =>
-                    prev.map((ship) => (ship.id === id ? { ...ship, ...updates } : ship))
-                );
-
                 // Update ship record
                 const { error: shipError } = await supabase
                     .from('ships')
@@ -475,17 +511,11 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     if (statsError) throw statsError;
                 }
 
-                // TODO: Update refits
                 if (updates.refits) {
                     for (const refit of updates.refits) {
                         let refitId;
                         if (refit.id) {
                             refitId = refit.id;
-                            const { error: refitError } = await supabase
-                                .from('ship_refits')
-                                .update({ stats: refit.stats })
-                                .eq('id', refit.id);
-                            if (refitError) throw refitError;
                         } else {
                             const { data: refitData, error: refitError } = await supabase
                                 .from('ship_refits')
@@ -521,17 +551,12 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         }
                     }
                 }
-                // TODO: Update implants
+
                 if (updates.implants) {
                     for (const implant of updates.implants) {
                         let implantId;
                         if (implant.id) {
                             implantId = implant.id;
-                            const { error: implantError } = await supabase
-                                .from('ship_implants')
-                                .update({ stats: implant.stats })
-                                .eq('id', implant.id);
-                            if (implantError) throw implantError;
                         } else {
                             const { data: implantData, error: implantError } = await supabase
                                 .from('ship_implants')
@@ -577,17 +602,17 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const deleteShip = useCallback(
         async (id: string) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) => prev.filter((ship) => ship.id !== id));
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) => prev.filter((ship) => ship.id !== id));
-
                 // Delete ship record (this will cascade delete related records)
                 const { error } = await supabase
                     .from('ships')
@@ -604,28 +629,47 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const equipGear = useCallback(
         async (shipId: string, slot: GearSlotName, gearId: string) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prevShips) => {
+                return prevShips.map((ship) => {
+                    if (ship.id === shipId) {
+                        return {
+                            ...ship,
+                            equipment: {
+                                ...ship.equipment,
+                                [slot]: gearId,
+                            },
+                        };
+                    }
+                    // For all other ships, remove this gear if it's equipped
+                    const equipment = { ...ship.equipment };
+                    Object.entries(equipment).forEach(([key, value]) => {
+                        if (value === gearId) {
+                            equipment[key as GearSlotName] = undefined;
+                        }
+                    });
+                    return {
+                        ...ship,
+                        equipment,
+                    };
+                });
+            });
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) =>
-                    prev.map((ship) =>
-                        ship.id === shipId
-                            ? {
-                                  ...ship,
-                                  equipment: {
-                                      ...ship.equipment,
-                                      [slot]: gearId,
-                                  },
-                              }
-                            : ship
-                    )
-                );
+                // Delete existing equipment
+                const { error: deleteError } = await supabase
+                    .from('ship_equipment')
+                    .delete()
+                    .eq('gear_id', gearId);
+
+                if (deleteError) throw deleteError;
 
                 // Update equipment in database
                 const { error } = await supabase
@@ -651,12 +695,27 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory]
+        [user?.id, loadShips, addNotification, loadInventory, setShips]
     );
 
     const equipMultipleGear = useCallback(
         async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) =>
+                prev.map((ship) =>
+                    ship.id === shipId
+                        ? {
+                              ...ship,
+                              equipment: gearAssignments.reduce(
+                                  (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                                  {}
+                              ),
+                          }
+                        : ship
+                )
+            );
+
+            if (!user?.id) return;
 
             try {
                 // Update equipment in database
@@ -682,29 +741,29 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory]
+        [user?.id, loadShips, addNotification, loadInventory, setShips]
     );
 
     const removeGear = useCallback(
         async (shipId: string, slot: GearSlotName) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) =>
+                prev.map((ship) =>
+                    ship.id === shipId
+                        ? {
+                              ...ship,
+                              equipment: {
+                                  ...ship.equipment,
+                                  [slot]: undefined,
+                              },
+                          }
+                        : ship
+                )
+            );
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) =>
-                    prev.map((ship) =>
-                        ship.id === shipId
-                            ? {
-                                  ...ship,
-                                  equipment: {
-                                      ...ship.equipment,
-                                      [slot]: undefined,
-                                  },
-                              }
-                            : ship
-                    )
-                );
-
                 // Remove equipment from database
                 const { error } = await supabase
                     .from('ship_equipment')
@@ -725,26 +784,26 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory]
+        [user?.id, loadShips, addNotification, loadInventory, setShips]
     );
 
     const lockEquipment = useCallback(
         async (shipId: string, locked: boolean) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) =>
+                prev.map((ship) =>
+                    ship.id === shipId
+                        ? {
+                              ...ship,
+                              equipmentLocked: locked,
+                          }
+                        : ship
+                )
+            );
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) =>
-                    prev.map((ship) =>
-                        ship.id === shipId
-                            ? {
-                                  ...ship,
-                                  equipmentLocked: locked,
-                              }
-                            : ship
-                    )
-                );
-
                 // Update lock state
                 const { error } = await supabase
                     .from('ships')
@@ -764,7 +823,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const validateGearAssignments = useCallback(() => {
@@ -798,25 +857,25 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
             return updatedShips;
         });
-    }, []);
+    }, [setShips]);
 
     const unequipAllEquipment = useCallback(
         async (shipId: string) => {
-            if (!user?.id) throw new Error('User not authenticated');
+            // Optimistic update
+            setShips((prev) =>
+                prev.map((ship) =>
+                    ship.id === shipId
+                        ? {
+                              ...ship,
+                              equipment: {},
+                          }
+                        : ship
+                )
+            );
+
+            if (!user?.id) return;
 
             try {
-                // Optimistic update
-                setShips((prev) =>
-                    prev.map((ship) =>
-                        ship.id === shipId
-                            ? {
-                                  ...ship,
-                                  equipment: {},
-                              }
-                            : ship
-                    )
-                );
-
                 // Remove all equipment from database
                 const { error } = await supabase
                     .from('ship_equipment')
@@ -836,7 +895,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory]
+        [user?.id, loadShips, addNotification, loadInventory, setShips]
     );
 
     const toggleEquipmentLock = useCallback(
@@ -846,6 +905,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             await lockEquipment(shipId, !ship.equipmentLocked);
         },
         [ships, lockEquipment]
+    );
+
+    const getShipNameFromGearId = useCallback(
+        (gearId: string) => {
+            const ship = ships.find((s) => Object.values(s.equipment).includes(gearId));
+            return ship?.name;
+        },
+        [ships]
     );
 
     return (
@@ -868,6 +935,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 toggleEquipmentLock,
                 validateGearAssignments,
                 unequipAllEquipment,
+                getShipNameFromGearId,
             }}
         >
             {children}

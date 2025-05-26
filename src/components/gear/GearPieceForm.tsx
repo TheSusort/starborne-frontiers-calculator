@@ -113,7 +113,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         [mainStat.type, mainStat.name] // Reduced dependencies
     );
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         // Validate and adjust substat types
@@ -136,8 +136,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             return subStat;
         });
 
-        const piece: GearPiece = {
-            id: editingPiece?.id || Date.now().toString(),
+        const piece = {
+            id: editingPiece?.id,
             slot,
             mainStat,
             subStats: validatedSubStats as Stat[], // Use validated substats
@@ -147,7 +147,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             level,
             shipId: editingPiece?.shipId || '',
         };
-        onSubmit(piece);
+        await onSubmit(piece as GearPiece);
         setSubStats([]);
         setStars(1);
         setLevel(0);

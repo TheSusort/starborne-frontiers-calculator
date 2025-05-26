@@ -158,14 +158,6 @@ const HomePage: React.FC = () => {
                         useful if you want to migrate your data to a new device, or if you want to
                         backup your data.
                         <br />
-                        <br /> If you just want to test the app, you can use this{' '}
-                        <Link
-                            to="https://pastebin.com/m0TMcQZA"
-                            className="text-primary hover:text-primary-hover"
-                        >
-                            Pastebin link
-                        </Link>{' '}
-                        to get the data, and save it as a json file to restore.
                     </p>
                     <BackupRestoreData />
                 </section>

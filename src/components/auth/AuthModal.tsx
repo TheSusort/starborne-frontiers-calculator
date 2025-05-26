@@ -68,9 +68,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 </span>
                 {!showEmailForm ? (
                     <div className="flex flex-col gap-3">
-                        <button
+                        <Button
                             onClick={handleGoogleSignIn}
-                            className="px-4 py-2 bg-white hover:bg-gray-100 text-dark transition-colors rounded flex items-center justify-center gap-2"
+                            variant="secondary"
+                            fullWidth
+                            className="flex items-center gap-2 justify-center"
                         >
                             <img
                                 src="https://www.google.com/favicon.ico"
@@ -78,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 className="w-4 h-4"
                             />
                             Continue with Google
-                        </button>
+                        </Button>
                         <div className="relative">
                             <div className="absolute inset-0 flex items-center">
                                 <div className="w-full border-t border-dark-border"></div>
@@ -87,64 +89,56 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 <span className="px-2 bg-dark-lighter text-gray-400">Or</span>
                             </div>
                         </div>
-                        <button
+                        <Button
                             onClick={() => setShowEmailForm(true)}
-                            className="px-4 py-2 bg-primary hover:bg-primary-hover text-dark transition-colors rounded"
+                            variant="secondary"
+                            fullWidth
                         >
                             Continue with Email
-                        </button>
+                        </Button>
                     </div>
                 ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium">
-                                Email
-                            </label>
-                            <input
+                            <Input
+                                label="Email"
                                 type="email"
                                 id="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="mt-1 block w-full rounded border-dark-border bg-dark p-2"
                                 required
                             />
                         </div>
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium">
-                                Password
-                            </label>
-                            <input
+                            <Input
+                                label="Password"
                                 type="password"
                                 id="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="mt-1 block w-full rounded border-dark-border bg-dark p-2"
                                 required
                             />
                         </div>
                         <div className="flex flex-col gap-2">
-                            <button
-                                type="submit"
-                                className="w-full px-4 py-2 bg-primary hover:bg-primary-hover text-dark transition-colors rounded"
-                            >
+                            <Button variant="primary" fullWidth type="submit">
                                 {isSignUp ? 'Sign Up' : 'Sign In'}
-                            </button>
-                            <button
-                                type="button"
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                fullWidth
                                 onClick={() => setIsSignUp(!isSignUp)}
-                                className="text-sm text-gray-400 hover:text-white"
                             >
                                 {isSignUp
                                     ? 'Already have an account? Sign in'
                                     : "Don't have an account? Sign up"}
-                            </button>
-                            <button
-                                type="button"
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                fullWidth
                                 onClick={() => setShowEmailForm(false)}
-                                className="text-sm text-gray-400 hover:text-white"
                             >
-                                ← Back to sign in options
-                            </button>
+                                Back to sign in options
+                            </Button>
                         </div>
                     </form>
                 )}

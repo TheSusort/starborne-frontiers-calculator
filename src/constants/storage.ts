@@ -1,11 +1,11 @@
-export const STORAGE_KEYS = {
+export const StorageKey = {
     SHIPS: 'ships',
-    GEAR_INVENTORY: 'inventory_items',
-    ENCOUNTER_NOTES: 'encounter_notes',
+    INVENTORY: 'inventory_items',
+    ENCOUNTERS: 'encounter_notes',
     ENGINEERING_STATS: 'engineering_stats',
-    SHIP_LOADOUTS: 'loadouts',
+    LOADOUTS: 'loadouts',
     TEAM_LOADOUTS: 'team_loadouts',
     CHANGELOG_STATE: 'changelog_state',
 } as const;
 
-export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
+export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];

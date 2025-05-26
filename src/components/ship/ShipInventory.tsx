@@ -212,7 +212,7 @@ export const ShipInventory: React.FC<Props> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {sortedAndFilteredInventory.map((ship) => (
                             <ShipCard
-                                key={ship.id ?? new Date().toISOString()}
+                                key={ship.id}
                                 ship={ship}
                                 allShips={ships}
                                 hoveredGear={hoveredGear}

@@ -7,6 +7,8 @@ import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
+import { useStorage } from '../hooks/useStorage';
+import { StorageKey } from '../constants/storage';
 
 interface InventoryContextType {
     inventory: GearPiece[];
@@ -78,8 +80,8 @@ const isValidGearPiece = (gear: unknown): gear is GearPiece => {
 // Helper function to transform Supabase data into GearPiece format
 const transformGearData = (data: RawGearData): GearPiece | null => {
     try {
-        const mainStat = data.gear_stats.find((stat) => stat.is_main);
-        const subStats = data.gear_stats.filter((stat) => !stat.is_main);
+        const mainStat = data.gear_stats?.find((stat) => stat.is_main);
+        const subStats = data.gear_stats?.filter((stat) => !stat.is_main) || [];
 
         const createStat = (stat: RawGearStat): Stat => {
             if (stat.type === 'percentage') {
@@ -111,7 +113,7 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
                       value: 0,
                       type: 'flat',
                   },
-            subStats: subStats.map(createStat),
+            subStats: subStats.length > 0 ? subStats.map(createStat) : [],
             shipId: data.ship_equipment?.[0]?.ship_id,
         };
 
@@ -123,46 +125,68 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
 };
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [inventory, setInventory] = useState<GearPiece[]>([]);
-    const [loading, setLoading] = useState(true);
     const { addNotification } = useNotification();
     const { user } = useAuth();
+    const [loading, setLoading] = useState(true);
+    // Use useStorage for inventory
+    const { data: inventory, setData: setInventory } = useStorage<GearPiece[]>({
+        key: StorageKey.INVENTORY,
+        defaultValue: [],
+    });
 
-    // Load all inventory data with a single query
     const loadInventory = useCallback(async () => {
-        if (!user?.id) return;
-
         try {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('inventory_items')
-                .select(
+            if (user?.id) {
+                const { data, error } = await supabase
+                    .from('inventory_items')
+                    .select(
+                        `
+                        *,
+                        gear_stats (*),
+                        ship_equipment (*)
                     `
-                    *,
-                    gear_stats (*),
-                    ship_equipment (*)
-                `
-                )
-                .eq('user_id', user.id);
+                    )
+                    .eq('user_id', user.id);
 
-            if (error) throw error;
-            const transformedGear = data
-                .map(transformGearData)
-                .filter((gear): gear is GearPiece => gear !== null);
+                if (error) throw error;
+                const transformedGear = data
+                    .map(transformGearData)
+                    .filter((gear): gear is GearPiece => gear !== null)
+                    .map((gear) => ({
+                        ...gear,
+                        subStats: gear.subStats || [],
+                    }));
 
-            setInventory(transformedGear);
+                setInventory(transformedGear);
+            }
+            // Don't clear inventory when user is not authenticated
         } catch (error) {
             console.error('Error loading inventory:', error);
             addNotification('error', 'Failed to load inventory');
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification]);
+    }, [user?.id, addNotification, setInventory]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
         loadInventory();
-    }, [loadInventory]);
+    }, [user?.id, loadInventory]);
+
+    // Ensure gear pieces are properly initialized for all users
+    useEffect(() => {
+        if (inventory.length > 0) {
+            const updatedInventory = inventory.map((gear) => ({
+                ...gear,
+                subStats: gear.subStats || [],
+            }));
+
+            if (JSON.stringify(updatedInventory) !== JSON.stringify(inventory)) {
+                setInventory(updatedInventory);
+            }
+        }
+    }, [inventory, setInventory]);
 
     const getGearPiece = useCallback(
         (id: string) => inventory.find((gear) => gear.id === id),
@@ -171,16 +195,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const addGear = useCallback(
         async (newGear: Omit<GearPiece, 'id'>) => {
-            if (!user?.id) throw new Error('User not authenticated');
-
-            const tempId = `temp-${Date.now()}`;
+            const tempId = `gear-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
             try {
-                // Optimistic update
+                // Ensure all properties are properly initialized
                 const optimisticGear: GearPiece = {
                     ...newGear,
                     id: tempId,
+                    subStats: newGear.subStats || [],
                 };
+
+                // Optimistic update
                 setInventory((prev) => [...prev, optimisticGear]);
+
+                if (!user?.id) return optimisticGear;
 
                 // Create gear record
                 const { data: gearData, error: gearError } = await supabase
@@ -207,7 +234,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         type: newGear.mainStat.type,
                         is_main: true,
                     },
-                    ...newGear.subStats.map((stat) => ({
+                    ...(newGear.subStats || []).map((stat) => ({
                         gear_id: gearData.id,
                         name: stat.name,
                         value: stat.value,
@@ -231,28 +258,40 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification]
+        [user?.id, loadInventory, addNotification, setInventory]
     );
 
     const updateGearPiece = useCallback(
         async (id: string, updates: Partial<GearPiece>) => {
-            if (!user?.id) throw new Error('User not authenticated');
-
             try {
+                // Get the current piece to update
+                const currentPiece = inventory.find((gear) => gear.id === id);
+                if (!currentPiece) {
+                    throw new Error('Gear piece not found');
+                }
+
+                // Create updated piece with merged changes
+                const updatedPiece = {
+                    ...currentPiece,
+                    ...updates,
+                    // Ensure subStats are initialized
+                    subStats: updates.subStats || currentPiece.subStats || [],
+                };
+
                 // Optimistic update
-                setInventory((prev) =>
-                    prev.map((gear) => (gear.id === id ? { ...gear, ...updates } : gear))
-                );
+                setInventory((prev) => prev.map((gear) => (gear.id === id ? updatedPiece : gear)));
+
+                if (!user?.id) return;
 
                 // Update gear record
                 const { error: gearError } = await supabase
                     .from('inventory_items')
                     .update({
-                        slot: updates.slot,
-                        level: updates.level,
-                        stars: updates.stars,
-                        rarity: updates.rarity,
-                        set_bonus: updates.setBonus,
+                        slot: updatedPiece.slot,
+                        level: updatedPiece.level,
+                        stars: updatedPiece.stars,
+                        rarity: updatedPiece.rarity,
+                        set_bonus: updatedPiece.setBonus,
                     })
                     .eq('id', id)
                     .eq('user_id', user.id);
@@ -271,16 +310,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                     // Insert new stats
                     const stats = [
-                        updates.mainStat
-                            ? {
-                                  gear_id: id,
-                                  name: updates.mainStat.name,
-                                  value: updates.mainStat.value,
-                                  type: updates.mainStat.type,
-                                  is_main: true,
-                              }
-                            : null,
-                        ...(updates.subStats?.map((stat) => ({
+                        {
+                            gear_id: id,
+                            name: updatedPiece.mainStat.name,
+                            value: updatedPiece.mainStat.value,
+                            type: updatedPiece.mainStat.type,
+                            is_main: true,
+                        },
+                        ...(updatedPiece.subStats?.map((stat) => ({
                             gear_id: id,
                             name: stat.name,
                             value: stat.value,
@@ -298,8 +335,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     }
                 }
 
-                // Update state with real data
-                await loadInventory();
+                // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
+                if (user?.id) {
+                    await loadInventory();
+                }
             } catch (error) {
                 // Revert optimistic update on error
                 await loadInventory();
@@ -308,16 +347,16 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification]
+        [user?.id, loadInventory, addNotification, inventory, setInventory]
     );
 
     const deleteGearPiece = useCallback(
         async (id: string) => {
-            if (!user?.id) throw new Error('User not authenticated');
-
             try {
                 // Optimistic update
                 setInventory((prev) => prev.filter((gear) => gear.id !== id));
+
+                if (!user?.id) return;
 
                 // Delete gear record (this will cascade delete related records)
                 const { error } = await supabase
@@ -327,6 +366,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .eq('user_id', user.id);
 
                 if (error) throw error;
+
+                // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
+                if (user?.id) {
+                    await loadInventory();
+                }
             } catch (error) {
                 // Revert optimistic update on error
                 await loadInventory();
@@ -335,8 +379,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification]
+        [user?.id, loadInventory, addNotification, setInventory]
     );
+
+    useEffect(() => {
+        const handleSignOut = () => {
+            setInventory([]);
+        };
+
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setInventory]);
 
     return (
         <InventoryContext.Provider

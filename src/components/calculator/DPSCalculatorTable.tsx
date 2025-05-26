@@ -3,7 +3,6 @@ import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
 
 interface DPSCalculatorTableProps {
-    attack: number;
     critDamageValues?: number[];
 }
 
@@ -15,7 +14,6 @@ const ErrorFallback = () => (
 );
 
 export const DPSCalculatorTable: React.FC<DPSCalculatorTableProps> = ({
-    attack,
     critDamageValues = [100, 125, 150, 175, 200, 225, 250],
 }) => {
     // Use fixed attack values

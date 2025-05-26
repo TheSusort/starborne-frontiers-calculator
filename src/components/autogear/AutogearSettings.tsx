@@ -31,8 +31,7 @@ interface AutogearSettingsProps {
 
 const SetPriorityForm: React.FC<{
     onAdd: (priority: SetPriority) => void;
-    existingPriorities: SetPriority[];
-}> = ({ onAdd, existingPriorities }) => {
+}> = ({ onAdd }) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
 
@@ -157,10 +156,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     />
 
                     <div className="bg-dark p-4 space-y-2">
-                        <SetPriorityForm
-                            onAdd={onAddSetPriority}
-                            existingPriorities={setPriorities}
-                        />
+                        <SetPriorityForm onAdd={onAddSetPriority} />
                     </div>
                 </>
             )}

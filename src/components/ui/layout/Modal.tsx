@@ -46,22 +46,23 @@ export const Modal: React.FC<Props> = ({
             document.body.style.top = `-${scrollY}px`;
             document.body.style.width = '100%';
             document.body.style.overflow = 'hidden';
-        } else {
-            // Restore scroll position
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
-        }
 
-        return () => {
-            // Cleanup
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
-        };
-    }, [isOpen]);
+            // Add escape key handler
+            const handleEscape = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') onClose();
+            };
+            document.addEventListener('keydown', handleEscape);
+
+            return () => {
+                // Cleanup
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+                document.body.style.overflow = '';
+                document.removeEventListener('keydown', handleEscape);
+            };
+        }
+    }, [isOpen, onClose]);
 
     if (!isOpen || !portalRoot.current) return null;
 

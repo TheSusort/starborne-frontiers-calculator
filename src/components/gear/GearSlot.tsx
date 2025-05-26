@@ -47,7 +47,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                                 aria-label="Remove gear piece"
                                 variant="danger"
                                 size="sm"
-                                onClick={() => onRemove && onRemove(slotKey)}
+                                onClick={() => onRemove(slotKey)}
                                 className="!absolute -top-2 -right-2 rounded-full hidden group-hover:block"
                             >
                                 <CloseIcon />

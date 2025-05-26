@@ -1,12 +1,10 @@
 import React from 'react';
-import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GearSlotName, GEAR_SLOT_ORDER } from '../../constants';
 import { GearSlot } from '../gear/GearSlot';
 import { Button } from '../ui';
 
 interface GearTestingProps {
-    ship: Ship;
     temporaryGear: Partial<Record<GearSlotName, string>>;
     getGearPiece: (id: string) => GearPiece | undefined;
     hoveredGear: GearPiece | null;
@@ -19,7 +17,6 @@ interface GearTestingProps {
 }
 
 export const GearTesting: React.FC<GearTestingProps> = ({
-    ship,
     temporaryGear,
     getGearPiece,
     hoveredGear,

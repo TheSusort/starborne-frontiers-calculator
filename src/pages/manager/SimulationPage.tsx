@@ -192,7 +192,6 @@ export const SimulationPage: React.FC = () => {
                             <h3 className="text-xl font-bold">Quick Swap</h3>
                             <div className="bg-dark p-4 space-y-4">
                                 <GearTesting
-                                    ship={selectedShip}
                                     temporaryGear={temporaryGear}
                                     getGearPiece={getGearPiece}
                                     hoveredGear={hoveredGear}
@@ -213,7 +212,6 @@ export const SimulationPage: React.FC = () => {
                                 <hr className="border-gray-700" />
 
                                 <ImplantTesting
-                                    ship={selectedShip}
                                     temporaryImplants={temporaryImplants}
                                     onImplantsChange={setTemporaryImplants}
                                     onSaveChanges={handleSaveImplantChanges}
