@@ -34,29 +34,13 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: (id) => {
-                    if (
-                        id.includes('node_modules/react') ||
-                        id.includes('node_modules/react-dom') ||
-                        id.includes('node_modules/react-router-dom')
-                    ) {
-                        return 'vendor';
-                    }
-
-                    if (id.includes('/src/components/ui')) {
-                        return 'ui';
-                    }
-
-                    if (id.includes('/src/constants/ships')) {
-                        return 'ships-data';
-                    }
-
-                    if (id.includes('/src/constants/mainStatValues')) {
-                        return 'stat-values';
-                    }
+                manualChunks: {
+                    'react-vendor': ['react', 'react-dom'],
+                    'router-vendor': ['react-router-dom'],
                 },
             },
         },
         chunkSizeWarningLimit: 1000,
+        sourcemap: true,
     },
 });

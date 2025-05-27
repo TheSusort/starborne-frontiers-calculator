@@ -74,6 +74,7 @@ const App: React.FC = () => {
     return (
         <HelmetProvider>
             <NotificationProvider>
+                0
                 <AuthProvider>
                     <InventoryProvider>
                         <ShipsProvider>
