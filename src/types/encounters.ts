@@ -18,6 +18,7 @@ export interface ShipPosition {
 }
 
 export interface SharedShipPosition {
+    shipId: string;
     shipName: string;
     position: Position;
 }

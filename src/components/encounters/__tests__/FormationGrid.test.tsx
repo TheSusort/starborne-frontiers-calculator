@@ -52,7 +52,7 @@ const mockShips: Ship[] = [
 ];
 
 // Mock useShips hook
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
     }),

@@ -133,8 +133,11 @@ export const GearInventory: React.FC<Props> = ({
     ];
 
     const sortedAndFilteredInventory = useMemo(() => {
-        const filtered = filteredInventory;
-        return [...filtered].sort((a, b) => {
+        const filtered = filteredInventory.map((item, index) => ({
+            ...item,
+            originalIndex: index,
+        }));
+        const sorted = [...filtered].sort((a, b) => {
             switch (state.sort.field) {
                 case 'setBonus':
                     return state.sort.direction === 'asc'
@@ -150,10 +153,13 @@ export const GearInventory: React.FC<Props> = ({
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
                 default:
                     return state.sort.direction === 'asc'
-                        ? b.id.localeCompare(a.id)
-                        : a.id.localeCompare(b.id);
+                        ? a.originalIndex - b.originalIndex
+                        : b.originalIndex - a.originalIndex;
             }
         });
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        return sorted.map(({ originalIndex, ...rest }) => rest);
     }, [filteredInventory, state.sort]);
 
     return (

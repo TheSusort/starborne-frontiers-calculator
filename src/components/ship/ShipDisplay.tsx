@@ -3,7 +3,7 @@ import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
 import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon, Tooltip } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { StatList } from '../stats/StatList';
 import { StatBreakdown } from '../stats/StatBreakdown';

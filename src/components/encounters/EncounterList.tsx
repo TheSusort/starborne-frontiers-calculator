@@ -65,7 +65,7 @@ export const EncounterList = ({
 
     const getUserVote = (encounter: SharedEncounterNote) => {
         if (!user) return 0;
-        const vote = encounter.userVotes?.[user.uid] || 0;
+        const vote = encounter.userVotes?.[user.id] || 0;
         return vote;
     };
 

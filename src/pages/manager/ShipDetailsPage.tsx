@@ -3,10 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import { ShipCard } from '../../components/ship/ShipCard';
 import { StatDisplay } from '../../components/stats/StatDisplay';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { analyzeStatDistribution } from '../../utils/ship/statDistribution';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { PageLayout } from '../../components/ui/layout/PageLayout';
 import { GearPiece } from '../../types/gear';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
@@ -20,7 +20,6 @@ import { useGearLookup } from '../../hooks/useGear';
 import { StatDistributionChart } from '../../components/stats/StatDistributionChart';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
-import { SEO_CONFIG } from '../../constants/seo';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -29,14 +28,8 @@ export const ShipDetailsPage: React.FC = () => {
     const { shipId } = useParams<{ shipId: string }>();
     const navigate = useNavigate();
     const { inventory: availableGear, getGearPiece } = useInventory();
-    const {
-        ships,
-        updateShip,
-        handleRemoveShip: removeShip,
-        handleLockEquipment: toggleEquipmentLock,
-        handleUnequipAllGear,
-        loading,
-    } = useShips({ getGearPiece });
+    const { ships, updateShip, deleteShip, toggleEquipmentLock, unequipAllEquipment, loading } =
+        useShips();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
     const ship = ships.find((s) => s.id === shipId);
@@ -105,7 +98,7 @@ export const ShipDetailsPage: React.FC = () => {
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm
                         onSubmit={async (updatedShip) => {
-                            await updateShip(updatedShip);
+                            await updateShip(updatedShip.id, updatedShip);
                             setIsFormVisible(false);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                             setEditingShip(undefined);
@@ -124,24 +117,24 @@ export const ShipDetailsPage: React.FC = () => {
                             availableGear={availableGear}
                             getGearPiece={getGearPiece}
                             onRemove={(id) => {
-                                removeShip(id);
+                                deleteShip(id);
                                 navigate('/ships');
                             }}
                             onLockEquipment={async (ship) => {
-                                await toggleEquipmentLock(ship);
+                                await toggleEquipmentLock(ship.id);
                             }}
                             onEquipGear={(_, slot, gearId) => {
                                 const updatedShip = { ...ship };
                                 updatedShip.equipment[slot] = gearId;
-                                updateShip(updatedShip);
+                                updateShip(updatedShip.id, updatedShip);
                             }}
                             onRemoveGear={(_, slot) => {
                                 const updatedShip = { ...ship };
                                 delete updatedShip.equipment[slot];
-                                updateShip(updatedShip);
+                                updateShip(updatedShip.id, updatedShip);
                             }}
                             onUnequipAll={() => {
-                                handleUnequipAllGear(ship.id);
+                                unequipAllEquipment(ship.id);
                             }}
                             onHoverGear={setHoveredGear}
                             onEdit={() => {

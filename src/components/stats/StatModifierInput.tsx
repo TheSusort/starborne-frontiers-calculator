@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Select, Input, Button, CloseIcon } from '../ui';
 import { Stat, StatName, StatType } from '../../types/stats';
 import { STATS } from '../../constants';
-import { ChevronDownIcon, ChevronUpIcon, EditIcon } from '../ui/icons';
+import { EditIcon } from '../ui/icons';
 
 interface Props {
     stats: Stat[];

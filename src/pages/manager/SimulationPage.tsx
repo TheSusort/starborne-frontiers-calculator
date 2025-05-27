@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { Button, PageLayout } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
@@ -38,7 +38,7 @@ export const SimulationPage: React.FC = () => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
-    const { handleEquipMultipleGear, updateShip } = useShips({ getGearPiece });
+    const { equipMultipleGear, updateShip } = useShips();
     const [temporaryImplants, setTemporaryImplants] = useState<Implant[]>([]);
 
     useEffect(() => {
@@ -101,7 +101,7 @@ export const SimulationPage: React.FC = () => {
             gearId: gearId || '',
         }));
 
-        handleEquipMultipleGear(selectedShip.id, gearAssignments);
+        equipMultipleGear(selectedShip.id, gearAssignments);
         addNotification('success', 'Gear changes saved successfully');
     };
 
@@ -120,7 +120,7 @@ export const SimulationPage: React.FC = () => {
             implants: temporaryImplants,
         };
 
-        updateShip(updatedShip);
+        updateShip(selectedShip.id, updatedShip);
         addNotification('success', 'Implant changes saved successfully');
     };
 
@@ -192,7 +192,6 @@ export const SimulationPage: React.FC = () => {
                             <h3 className="text-xl font-bold">Quick Swap</h3>
                             <div className="bg-dark p-4 space-y-4">
                                 <GearTesting
-                                    ship={selectedShip}
                                     temporaryGear={temporaryGear}
                                     getGearPiece={getGearPiece}
                                     hoveredGear={hoveredGear}
@@ -213,7 +212,6 @@ export const SimulationPage: React.FC = () => {
                                 <hr className="border-gray-700" />
 
                                 <ImplantTesting
-                                    ship={selectedShip}
                                     temporaryImplants={temporaryImplants}
                                     onImplantsChange={setTemporaryImplants}
                                     onSaveChanges={handleSaveImplantChanges}

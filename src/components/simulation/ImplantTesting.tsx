@@ -1,11 +1,10 @@
 import React from 'react';
-import { Ship, Implant } from '../../types/ship';
+import { Implant } from '../../types/ship';
 import { Button } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { CloseIcon } from '../ui';
-
+import { v4 as uuidv4 } from 'uuid';
 interface ImplantTestingProps {
-    ship: Ship;
     temporaryImplants: Implant[];
     onImplantsChange: (implants: Implant[]) => void;
     onSaveChanges: () => void;
@@ -14,7 +13,6 @@ interface ImplantTestingProps {
 }
 
 export const ImplantTesting: React.FC<ImplantTestingProps> = ({
-    ship,
     temporaryImplants,
     onImplantsChange,
     onSaveChanges,
@@ -60,7 +58,9 @@ export const ImplantTesting: React.FC<ImplantTestingProps> = ({
                         aria-label="Add implant"
                         type="button"
                         variant="primary"
-                        onClick={() => onImplantsChange([...temporaryImplants, { stats: [] }])}
+                        onClick={() =>
+                            onImplantsChange([...temporaryImplants, { stats: [], id: uuidv4() }])
+                        }
                     >
                         Add Implant
                     </Button>

@@ -70,7 +70,7 @@ const mockHandleRemoveGear = vi.fn();
 const mockHandleLockEquipment = vi.fn();
 const mockAddNotification = vi.fn();
 
-vi.mock('../../hooks/useInventory', () => ({
+vi.mock('../../contexts/InventoryProvider', () => ({
     useInventory: () => ({
         inventory: mockGear,
         saveInventory: mockSaveInventory,
@@ -78,14 +78,14 @@ vi.mock('../../hooks/useInventory', () => ({
     }),
 }));
 
-vi.mock('../../hooks/useShips', () => ({
+vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: mockShips,
         loading: false,
         error: null,
         editingShip: null,
         handleRemoveShip: mockHandleRemoveShip,
-        handleEquipGear: mockHandleEquipGear,
+        equipGear: mockHandleEquipGear,
         handleRemoveGear: mockHandleRemoveGear,
         handleSaveShip: mockHandleSaveShip,
         setEditingShip: vi.fn(),

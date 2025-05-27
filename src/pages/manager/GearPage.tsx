@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
 import { GearInventory } from '../../components/gear/GearInventory';
 import { GearUpgradeAnalysis } from '../../components/gear/GearUpgradeAnalysis';
 import { GearPiece } from '../../types/gear';
-import { useInventory } from '../../hooks/useInventory';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
-import { useShips } from '../../hooks/useShips';
 import { SHIP_TYPES } from '../../constants';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
@@ -14,11 +13,10 @@ import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
 export const GearPage: React.FC = () => {
-    const { inventory, loading, error, saveInventory } = useInventory();
+    const { inventory, loading, addGear, updateGearPiece, deleteGearPiece } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
-    const { ships } = useShips();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
@@ -29,30 +27,6 @@ export const GearPage: React.FC = () => {
         { id: 'analysis', label: 'Upgrade Analysis' },
     ];
 
-    useEffect(() => {
-        // Validate that all equipped gear matches ship assignments
-        const validateGearAssignments = async () => {
-            const newInventory = inventory.map((gear) => {
-                if (gear.shipId) {
-                    // Check if the gear is actually equipped on the ship it claims to be equipped on
-                    const ship = ships.find((s) => s.id === gear.shipId);
-                    if (!ship || !Object.values(ship.equipment).includes(gear.id)) {
-                        // If not, clear the shipId
-                        return { ...gear, shipId: '' };
-                    }
-                }
-                return gear;
-            });
-
-            // Only save if there were changes
-            if (JSON.stringify(newInventory) !== JSON.stringify(inventory)) {
-                await saveInventory(newInventory);
-            }
-        };
-
-        validateGearAssignments();
-    }, [inventory, ships, saveInventory]);
-
     const handleRemovePiece = async (id: string) => {
         const piece = inventory.find((p) => p.id === id);
         setPendingDeletePieceEquipped(!!piece?.shipId);
@@ -60,12 +34,15 @@ export const GearPage: React.FC = () => {
         setShowDeleteConfirm(true);
     };
 
-    const deleteGearPiece = async (id: string) => {
-        const newInventory = inventory.filter((piece) => piece.id !== id);
-        await saveInventory(newInventory);
-        addNotification('success', 'Gear piece removed successfully');
-        setPendingDeleteId(null);
-        setShowDeleteConfirm(false);
+    const handleDeleteGearPiece = async (id: string) => {
+        try {
+            await deleteGearPiece(id);
+            addNotification('success', 'Gear piece removed successfully');
+            setPendingDeleteId(null);
+            setShowDeleteConfirm(false);
+        } catch (error) {
+            addNotification('error', 'Failed to remove gear piece');
+        }
     };
 
     const handleEditPiece = (piece: GearPiece) => {
@@ -75,20 +52,21 @@ export const GearPage: React.FC = () => {
     };
 
     const handleSavePiece = async (piece: GearPiece) => {
-        let newInventory;
-        if (editingPiece) {
-            // Update existing piece
-            newInventory = inventory.map((p) => (p.id === piece.id ? piece : p));
-        } else {
-            // Add new piece
-            newInventory = [...inventory, piece];
+        try {
+            if (editingPiece) {
+                // Update existing piece
+                await updateGearPiece(piece.id, piece);
+            } else {
+                // Add new piece
+                await addGear(piece);
+            }
+            setEditingPiece(undefined);
+            setIsFormVisible(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            addNotification('success', 'Gear piece saved successfully');
+        } catch (error) {
+            addNotification('error', 'Failed to save gear piece');
         }
-
-        await saveInventory(newInventory);
-        setEditingPiece(undefined);
-        setIsFormVisible(false);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        addNotification('success', 'Gear piece saved successfully');
     };
 
     if (loading) {
@@ -112,12 +90,6 @@ export const GearPage: React.FC = () => {
                     variant: isFormVisible ? 'secondary' : 'primary',
                 }}
             >
-                {error && (
-                    <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700">
-                        {error}
-                    </div>
-                )}
-
                 <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
                     <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
                 </CollapsibleForm>
@@ -144,7 +116,7 @@ export const GearPage: React.FC = () => {
                         setShowDeleteConfirm(false);
                         setPendingDeleteId(null);
                     }}
-                    onConfirm={() => pendingDeleteId && deleteGearPiece(pendingDeleteId)}
+                    onConfirm={() => pendingDeleteId && handleDeleteGearPiece(pendingDeleteId)}
                     title="Delete Gear Piece"
                     message={
                         pendingDeletePieceEquipped

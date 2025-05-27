@@ -1,6 +1,6 @@
 import React from 'react';
 import { Position, ShipPosition, SharedShipPosition } from '../../types/encounters';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { HexButton } from '../ui/HexButton';
 
 interface FormationGridProps {
@@ -29,7 +29,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
         if ('shipId' in shipPosition) {
             return ships.find((ship) => ship.id === shipPosition.shipId);
         }
-        return { name: shipPosition.shipName };
+        return { name: (shipPosition as SharedShipPosition).shipName };
     };
 
     return (

@@ -37,10 +37,12 @@ export interface ShipType {
 }
 
 export interface Refit {
+    id: string;
     stats: Stat[];
 }
 
 export interface Implant {
+    id: string;
     stats: Stat[];
     description?: string;
 }

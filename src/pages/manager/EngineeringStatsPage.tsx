@@ -10,7 +10,8 @@ import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
 export const EngineeringStatsPage: React.FC = () => {
-    const { engineeringStats, saveEngineeringStats, loading } = useEngineeringStats();
+    const { engineeringStats, saveEngineeringStats, deleteEngineeringStats, loading } =
+        useEngineeringStats();
     const [editingStats, setEditingStats] = useState<EngineeringStat | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
@@ -30,15 +31,15 @@ export const EngineeringStatsPage: React.FC = () => {
         setEditingStats(undefined);
     };
 
-    const handleDelete = (shipType: string) => {
-        const newEngStats: EngineeringStats = {
-            stats: engineeringStats.stats.filter((s) => s.shipType !== shipType),
-        };
-        saveEngineeringStats(newEngStats);
-        if (editingStats?.shipType === shipType) {
-            setEditingStats(undefined);
+    const handleDelete = async (shipType: string) => {
+        try {
+            await deleteEngineeringStats(shipType);
+            if (editingStats?.shipType === shipType) {
+                setEditingStats(undefined);
+            }
+        } catch (error) {
+            // Error is already handled in the hook
         }
-        addNotification('success', 'Engineering stats deleted successfully');
     };
 
     if (loading) {

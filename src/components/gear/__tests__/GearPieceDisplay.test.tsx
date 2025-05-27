@@ -5,7 +5,7 @@ import { GEAR_SETS, RARITIES } from '../../../constants';
 import { vi } from 'vitest';
 
 // Mock useShips hook
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         getShipById: (id: string) => (id === 'ship1' ? { name: 'Test Ship' } : undefined),
     }),

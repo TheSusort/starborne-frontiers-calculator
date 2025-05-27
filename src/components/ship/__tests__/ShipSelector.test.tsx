@@ -55,14 +55,14 @@ const mockShips: Ship[] = [
 let currentMockShips: Ship[] = mockShips;
 
 // Mock useShips hook
-vi.mock('../../../hooks/useShips', () => ({
+vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: currentMockShips,
         loading: false,
         error: null,
         editingShip: undefined,
         setEditingShip: vi.fn(),
-        handleEquipGear: vi.fn(),
+        equipGear: vi.fn(),
         handleRemoveGear: vi.fn(),
         handleRemoveShip: vi.fn(),
         handleSaveShip: vi.fn(),

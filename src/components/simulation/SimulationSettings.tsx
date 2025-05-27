@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
-import { Button, Select } from '../ui';
+import { Select } from '../ui';
 import { Ship } from '../../types/ship';
 import { SHIP_TYPES, ShipTypeName } from '../../constants';
 

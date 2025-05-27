@@ -28,7 +28,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
 
         return (
             initialStats?.shipType === key || // Include current ship type if editing
-            !engineeringStats.stats.some((stat) => stat.shipType === key)
+            !engineeringStats.stats?.some((stat) => stat.shipType === key)
         );
     });
 

@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, CloseIcon } from '../';
 
 interface Props {
@@ -16,6 +17,25 @@ export const Modal: React.FC<Props> = ({
     children,
     fullHeight = false,
 }) => {
+    const portalRoot = useRef<HTMLElement | null>(null);
+
+    useEffect(() => {
+        // Create portal root if it doesn't exist
+        if (!portalRoot.current) {
+            portalRoot.current = document.createElement('div');
+            portalRoot.current.setAttribute('id', 'modal-root');
+            document.body.appendChild(portalRoot.current);
+        }
+
+        return () => {
+            // Cleanup portal root when component unmounts
+            if (portalRoot.current) {
+                document.body.removeChild(portalRoot.current);
+                portalRoot.current = null;
+            }
+        };
+    }, []);
+
     useEffect(() => {
         if (isOpen) {
             // Save current scroll position
@@ -26,26 +46,27 @@ export const Modal: React.FC<Props> = ({
             document.body.style.top = `-${scrollY}px`;
             document.body.style.width = '100%';
             document.body.style.overflow = 'hidden';
-        } else {
-            // Restore scroll position
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
+
+            // Add escape key handler
+            const handleEscape = (e: KeyboardEvent) => {
+                if (e.key === 'Escape') onClose();
+            };
+            document.addEventListener('keydown', handleEscape);
+
+            return () => {
+                // Cleanup
+                document.body.style.position = '';
+                document.body.style.top = '';
+                document.body.style.width = '';
+                document.body.style.overflow = '';
+                document.removeEventListener('keydown', handleEscape);
+            };
         }
+    }, [isOpen, onClose]);
 
-        return () => {
-            // Cleanup
-            document.body.style.position = '';
-            document.body.style.top = '';
-            document.body.style.width = '';
-            document.body.style.overflow = '';
-        };
-    }, [isOpen]);
+    if (!isOpen || !portalRoot.current) return null;
 
-    if (!isOpen) return null;
-
-    return (
+    return createPortal(
         <>
             <div
                 className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
@@ -74,6 +95,7 @@ export const Modal: React.FC<Props> = ({
                     </div>
                 </div>
             </div>
-        </>
+        </>,
+        portalRoot.current
     );
 };

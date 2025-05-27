@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from './ShipDisplay';
 

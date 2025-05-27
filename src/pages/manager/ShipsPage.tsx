@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { ShipForm } from '../../components/ship/ShipForm';
 import { ShipInventory } from '../../components/ship/ShipInventory';
-import { useInventory } from '../../hooks/useInventory';
-import { useShips } from '../../hooks/useShips';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useShips } from '../../contexts/ShipsContext';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { useNotification } from '../../hooks/useNotification';
 import { Ship } from '../../types/ship';
@@ -15,28 +15,21 @@ export const ShipsPage: React.FC = () => {
     const [isFormVisible, setIsFormVisible] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteShip, setPendingDeleteShip] = useState<Ship | null>(null);
-
-    const getGearPiece = useCallback(
-        (id: string) => {
-            return inventory.find((gear) => gear.id === id);
-        },
-        [inventory]
-    );
+    const { addNotification } = useNotification();
 
     const {
         ships,
         loading,
         editingShip,
-        handleRemoveShip,
-        handleEquipGear,
-        handleRemoveGear,
-        handleSaveShip,
         setEditingShip,
-        handleLockEquipment,
-        handleUnequipAllGear,
-    } = useShips({ getGearPiece });
-
-    const { addNotification } = useNotification();
+        addShip,
+        updateShip,
+        deleteShip,
+        equipGear,
+        removeGear,
+        toggleEquipmentLock,
+        unequipAllEquipment,
+    } = useShips();
 
     const handleShipDelete = async (id: string) => {
         setPendingDeleteShip(ships.find((s) => s.id === id) || null);
@@ -46,18 +39,54 @@ export const ShipsPage: React.FC = () => {
     const confirmShipDelete = async () => {
         if (!pendingDeleteShip) return;
 
-        // Unequip all gear before deleting
-        const gearPromises = Object.entries(pendingDeleteShip.equipment).map(([slot, gearId]) => {
-            if (gearId) {
-                return handleRemoveGear(pendingDeleteShip.id, slot);
-            }
-            return Promise.resolve();
-        });
+        try {
+            // Unequip all gear before deleting
+            await unequipAllEquipment(pendingDeleteShip.id);
+            await deleteShip(pendingDeleteShip.id);
+            addNotification('success', 'Ship removed successfully');
+            setPendingDeleteShip(null);
+            setShowDeleteConfirm(false);
+        } catch (error) {
+            console.error('Error deleting ship:', error);
+            addNotification('error', 'Failed to remove ship');
+        }
+    };
 
-        await Promise.all(gearPromises);
-        await handleRemoveShip(pendingDeleteShip.id);
-        addNotification('success', 'Ship removed successfully');
-        setPendingDeleteShip(null);
+    const handleSaveShip = async (ship: Ship) => {
+        try {
+            if (ship.id) {
+                await updateShip(ship.id, ship);
+            } else {
+                await addShip(ship);
+            }
+            setIsFormVisible(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setEditingShip(undefined);
+            addNotification('success', 'Ship saved successfully');
+        } catch (error) {
+            console.error('Error saving ship:', error);
+            addNotification('error', 'Failed to save ship');
+        }
+    };
+
+    const handleLockEquipment = async (ship: Ship) => {
+        try {
+            await toggleEquipmentLock(ship.id);
+            addNotification('success', `Equipment lock state updated`);
+        } catch (error) {
+            console.error('Error toggling equipment lock:', error);
+            addNotification('error', 'Failed to toggle equipment lock');
+        }
+    };
+
+    const handleUnequipAll = async (shipId: string) => {
+        try {
+            await unequipAllEquipment(shipId);
+            addNotification('success', 'All gear unequipped successfully');
+        } catch (error) {
+            console.error('Error unequipping all gear:', error);
+            addNotification('error', 'Failed to unequip all gear');
+        }
     };
 
     if (loading) {
@@ -82,16 +111,7 @@ export const ShipsPage: React.FC = () => {
                 }}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
-                    <ShipForm
-                        onSubmit={async (ship) => {
-                            await handleSaveShip(ship);
-                            setIsFormVisible(false);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            setEditingShip(undefined);
-                            addNotification('success', 'Ship saved successfully');
-                        }}
-                        editingShip={editingShip}
-                    />
+                    <ShipForm onSubmit={handleSaveShip} editingShip={editingShip} />
                 </CollapsibleForm>
 
                 <ShipInventory
@@ -102,16 +122,10 @@ export const ShipsPage: React.FC = () => {
                         setIsFormVisible(true);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    onLockEquipment={async (ship) => {
-                        const updatedLockState = await handleLockEquipment(ship);
-                        addNotification(
-                            'success',
-                            `Equipment lock state on ${ship.name} set to ${updatedLockState}`
-                        );
-                    }}
-                    onEquipGear={handleEquipGear}
-                    onRemoveGear={handleRemoveGear}
-                    onUnequipAll={handleUnequipAllGear}
+                    onLockEquipment={handleLockEquipment}
+                    onEquipGear={equipGear}
+                    onRemoveGear={removeGear}
+                    onUnequipAll={handleUnequipAll}
                     availableGear={inventory}
                 />
 

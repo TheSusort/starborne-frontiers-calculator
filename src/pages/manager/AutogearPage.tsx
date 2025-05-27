@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useShips } from '../../hooks/useShips';
-import { useInventory } from '../../hooks/useInventory';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
 import { GearSuggestion, StatPriority, SetPriority } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
@@ -34,8 +34,8 @@ export const AutogearPage: React.FC = () => {
     };
 
     // All hooks
-    const { getGearPiece, inventory, saveInventory } = useInventory();
-    const { getShipById, ships, handleEquipMultipleGear } = useShips();
+    const { getGearPiece, inventory } = useInventory();
+    const { getShipById, ships, equipMultipleGear } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -260,27 +260,9 @@ export const AutogearPage: React.FC = () => {
             slot: suggestion.slotName as GearSlotName,
             gearId: suggestion.gearId,
         }));
-
         // Update ships equipment
-        handleEquipMultipleGear(selectedShip.id, gearAssignments);
+        equipMultipleGear(selectedShip.id, gearAssignments);
 
-        // Update inventory state
-        const newInventory = inventory.map((gear) => {
-            const assignment = gearAssignments.find((a) => a.gearId === gear.id);
-            if (assignment) {
-                return { ...gear, shipId: selectedShip.id };
-            }
-            // If this gear was on the selected ship but not in new assignments, clear its shipId
-            if (gear.shipId === selectedShip.id) {
-                const stillEquipped = gearAssignments.some((a) => a.gearId === gear.id);
-                if (!stillEquipped) {
-                    return { ...gear, shipId: '' };
-                }
-            }
-            return gear;
-        });
-
-        saveInventory(newInventory);
         addNotification('success', 'Suggested gear equipped successfully');
         setSuggestions([]);
         setOptimizationProgress(null);

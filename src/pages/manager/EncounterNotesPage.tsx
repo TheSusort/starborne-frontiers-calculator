@@ -8,7 +8,7 @@ import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useSharedEncounters } from '../../hooks/useSharedEncounters';
 import { useNotification } from '../../hooks/useNotification';
-import { useShips } from '../../hooks/useShips';
+import { useShips } from '../../contexts/ShipsContext';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';

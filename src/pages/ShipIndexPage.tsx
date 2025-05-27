@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { useShipsData } from '../hooks/useShipsData';
-import { useShips } from '../hooks/useShips';
+import { useShips } from '../contexts/ShipsContext';
 import { PageLayout } from '../components/ui';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
 import { Image } from '../components/ui/Image';
@@ -20,7 +20,7 @@ import { SEO_CONFIG } from '../constants/seo';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
-    const { handleSaveShip } = useShips();
+    const { addShip } = useShips();
     const { addNotification } = useNotification();
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -158,7 +158,7 @@ export const ShipIndexPage: React.FC = () => {
                     equipment: {},
                     equipmentLocked: false,
                 };
-                await handleSaveShip(newShip);
+                await addShip(newShip);
                 setAddedShips((prev) => new Set(prev).add(templateShip.name));
                 addNotification('success', `Added ${templateShip.name} to your fleet`);
             } catch (error) {
@@ -166,7 +166,7 @@ export const ShipIndexPage: React.FC = () => {
                 console.error('Failed to add ship:', error);
             }
         },
-        [handleSaveShip, addNotification]
+        [addShip, addNotification]
     );
 
     if (loading) {

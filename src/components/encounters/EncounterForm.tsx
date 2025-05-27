@@ -3,8 +3,7 @@ import { Position, ShipPosition, EncounterNote, SharedShipPosition } from '../..
 import { Ship } from '../../types/ship';
 import { ShipSelector } from '../ship/ShipSelector';
 import FormationGrid from './FormationGrid';
-import { Button, Input, Textarea, Checkbox } from '../ui';
-
+import { Button, Input, Textarea } from '../ui';
 interface EncounterFormProps {
     onSubmit: (encounter: EncounterNote) => void;
     initialEncounter?: EncounterNote | null;
@@ -15,8 +14,8 @@ const convertToShipPosition = (position: ShipPosition | SharedShipPosition): Shi
         return position;
     }
     return {
-        position: position.position,
-        shipId: position.shipName, // This is a temporary conversion, you might want to handle this differently
+        position: (position as SharedShipPosition).position,
+        shipId: (position as SharedShipPosition).shipName,
     };
 };
 
@@ -41,17 +40,17 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
         }
     }, [initialEncounter]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const encounterData: EncounterNote = {
-            id: initialEncounter?.id || Date.now().toString(),
+        const encounterData = {
+            id: initialEncounter?.id,
             name,
             formation,
             createdAt: initialEncounter?.createdAt || Date.now(),
             description,
             isPublic,
         };
-        onSubmit(encounterData);
+        await onSubmit(encounterData as EncounterNote);
         setName('');
         setFormation([]);
         setDescription('');

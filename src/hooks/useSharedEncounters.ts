@@ -15,7 +15,7 @@ import { db } from '../config/firebase';
 import { LocalEncounterNote, SharedEncounterNote } from '../types/encounters';
 import { useAuth } from '../contexts/AuthProvider';
 import { useNotification } from './useNotification';
-import { useShips } from './useShips';
+import { useShips } from '../contexts/ShipsContext';
 
 export const useSharedEncounters = () => {
     const [sharedEncounters, setSharedEncounters] = useState<SharedEncounterNote[]>([]);
@@ -101,6 +101,7 @@ export const useSharedEncounters = () => {
                     throw new Error(`Ship with ID ${shipId} not found`);
                 }
                 return {
+                    shipId,
                     shipName: ship.name,
                     position,
                 };
@@ -109,7 +110,7 @@ export const useSharedEncounters = () => {
             const sharedEncounter: Omit<SharedEncounterNote, 'id'> = {
                 ...encounter,
                 formation: sharedFormation,
-                userId: user.uid,
+                userId: user.id,
                 userName: user.displayName || 'Anonymous',
                 createdAt: Date.now(),
                 votes: 0,
@@ -142,7 +143,7 @@ export const useSharedEncounters = () => {
             const sharedEncountersRef = collection(db, 'sharedEncounters');
             const q = query(
                 sharedEncountersRef,
-                where('userId', '==', user.uid),
+                where('userId', '==', user.id),
                 where('id', '==', encounterId)
             );
             const querySnapshot = await getDocs(q);
@@ -178,7 +179,7 @@ export const useSharedEncounters = () => {
                 throw new Error('Encounter not found');
             }
 
-            const currentVote = encounter.userVotes[user.uid] || 0;
+            const currentVote = encounter.userVotes[user.id] || 0;
             const voteChange = vote - currentVote;
 
             if (voteChange === 0) {
@@ -187,7 +188,7 @@ export const useSharedEncounters = () => {
 
             await updateDoc(encounterRef, {
                 votes: increment(voteChange),
-                [`userVotes.${user.uid}`]: vote,
+                [`userVotes.${user.id}`]: vote,
             });
 
             setSharedEncounters((prev) =>
@@ -199,7 +200,7 @@ export const useSharedEncounters = () => {
                                   votes: e.votes + voteChange,
                                   userVotes: {
                                       ...e.userVotes,
-                                      [user.uid]: vote,
+                                      [user.id]: vote,
                                   },
                               }
                             : e

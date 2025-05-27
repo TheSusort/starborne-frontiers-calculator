@@ -9,12 +9,14 @@
         "@firebase/auth": "^1.8.2",
         "@firebase/firestore": "^4.7.6",
         "@hotjar/browser": "^1.0.9",
+        "@supabase/supabase-js": "^2.49.4",
         "@testing-library/jest-dom": "^5.17.0",
         "@testing-library/react": "^13.4.0",
         "@testing-library/user-event": "^13.5.0",
         "@types/jest": "^27.5.2",
         "@types/react": "^18.3.12",
         "@types/react-dom": "^18.3.1",
+        "@types/uuid": "^10.0.0",
         "@vitejs/plugin-react-swc": "^3.7.2",
         "dom-to-image": "^2.6.0",
         "dotenv": "^16.0.3",
@@ -26,6 +28,7 @@
         "react-helmet-async": "^2.0.5",
         "react-router-dom": "^7.0.1",
         "recharts": "^2.15.1",
+        "uuid": "^11.1.0",
         "vite": "^6.3.2",
         "vite-plugin-svgr": "^4.3.0",
         "vite-tsconfig-paths": "^5.1.4",
@@ -47,7 +50,8 @@
         "fetch-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
         "migrate-ships": "tsx scripts/migrate-ships.ts",
-        "migrate-implants": "tsx scripts/migrate-implants.ts"
+        "migrate-implants": "tsx scripts/migrate-implants.ts",
+        "migrate-to-supabase": "tsx scripts/migrate-to-supabase.ts"
     },
     "eslintConfig": {
         "extends": [
@@ -74,7 +78,6 @@
         "@types/dom-to-image": "^2.6.7",
         "@types/jsdom": "^21.1.7",
         "@types/node": "^22.10.5",
-        "@types/react-plotly.js": "^2.6.3",
         "@typescript-eslint/eslint-plugin": "^7.18.0",
         "@typescript-eslint/parser": "^7.18.0",
         "@vitest/coverage-v8": "^3.1.2",

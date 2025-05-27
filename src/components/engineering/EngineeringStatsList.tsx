@@ -15,7 +15,7 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
     onEdit,
     onDelete,
 }) => {
-    if (stats.length === 0) {
+    if (!stats || stats.length === 0) {
         return (
             <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
                 No engineering stats found.

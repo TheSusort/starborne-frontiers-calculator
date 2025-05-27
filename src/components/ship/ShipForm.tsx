@@ -70,8 +70,8 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const ship: Ship = {
-            id: editingShip?.id || Date.now().toString(),
+        const ship = {
+            id: editingShip?.id,
             name,
             faction,
             type,
@@ -85,7 +85,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         };
 
         try {
-            await onSubmit(ship);
+            await onSubmit(ship as Ship);
             setName('');
             setBaseStats(initialBaseStats);
             setFaction('');
@@ -314,7 +314,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         aria-label="Add refit"
                         type="button"
                         variant="primary"
-                        onClick={() => setRefits([...refits, { stats: [] }])}
+                        onClick={() => setRefits([...refits, { id: '', stats: [] }])}
                     >
                         Add Refit
                     </Button>
@@ -357,7 +357,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                         aria-label="Add implant"
                         type="button"
                         variant="primary"
-                        onClick={() => setImplants([...implants, { stats: [] }])}
+                        onClick={() => setImplants([...implants, { id: '', stats: [] }])}
                     >
                         Add Implant
                     </Button>

@@ -33,7 +33,7 @@ const mockShip: Ship = {
 };
 
 // Mock hooks
-vi.mock('../../hooks/useShips', () => ({
+vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: [mockShip],
         loading: false,
