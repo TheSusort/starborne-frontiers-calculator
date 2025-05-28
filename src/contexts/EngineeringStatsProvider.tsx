@@ -1,4 +1,11 @@
-import React, { ReactNode, useCallback, useState, useEffect, createContext } from 'react';
+import React, {
+    ReactNode,
+    useCallback,
+    useState,
+    useEffect,
+    createContext,
+    useContext,
+} from 'react';
 import { EngineeringStats, EngineeringStat, StatName, StatType, Stat } from '../types/stats';
 import { STATS } from '../constants/stats';
 import { ShipTypeName } from '../constants/shipTypes';
@@ -18,6 +25,9 @@ export interface EngineeringStatsContextType {
         shipType: ShipTypeName
     ) => EngineeringStats['stats'][0] | undefined;
     loading: boolean;
+    setData: (
+        data: EngineeringStats | ((prev: EngineeringStats) => EngineeringStats)
+    ) => Promise<void>;
 }
 
 export const EngineeringStatsContext = createContext<EngineeringStatsContextType | undefined>(
@@ -208,6 +218,7 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
         getAllAllowedStats,
         getEngineeringStatsForShipType,
         loading,
+        setData: setEngineeringStats,
     };
 
     return (
@@ -215,4 +226,12 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
             {children}
         </EngineeringStatsContext.Provider>
     );
+};
+
+export const useEngineeringStats = () => {
+    const context = useContext(EngineeringStatsContext);
+    if (context === undefined) {
+        throw new Error('useEngineeringStats must be used within an EngineeringStatsProvider');
+    }
+    return context;
 };

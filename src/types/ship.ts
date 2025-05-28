@@ -23,6 +23,9 @@ export interface Ship {
     chargeSkillText?: string;
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
+    level?: number;
+    rank?: number;
+    copies?: number;
 }
 
 export interface Faction {
@@ -45,6 +48,7 @@ export interface Implant {
     id: string;
     stats: Stat[];
     description?: string;
+    shipId?: string;
 }
 
 export interface ShipData {

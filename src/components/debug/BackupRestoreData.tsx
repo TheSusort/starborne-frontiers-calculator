@@ -119,7 +119,7 @@ interface TeamLoadoutData {
 
 export const BackupRestoreData: React.FC = () => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
+    const { user, signOut } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -373,21 +373,9 @@ export const BackupRestoreData: React.FC = () => {
             // Clear local storage
             BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
 
-            // Delete user data from Supabase
-            const tables = [
-                'ships',
-                'inventory_items',
-                'encounter_notes',
-                'loadouts',
-                'team_loadouts',
-                'engineering_stats',
-            ];
-            for (const table of tables) {
-                await supabase.from(table).delete().eq('user_id', user.id);
-            }
-
             // Delete user account
-            await supabase.auth.admin.deleteUser(user.id);
+            await supabase.rpc('delete_user');
+            await signOut();
 
             addNotification('success', 'Account deleted successfully');
         } catch (error) {

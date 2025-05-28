@@ -1,7 +1,16 @@
 import React, { memo, useMemo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon, Tooltip } from '../ui';
+import {
+    Button,
+    CloseIcon,
+    EditIcon,
+    LockIcon,
+    UnlockedLockIcon,
+    InfoIcon,
+    Tooltip,
+    CopyIcon,
+} from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -78,7 +87,7 @@ const Header = memo(
                 {Array.from({ length: 6 }, (_, index) => (
                     <span
                         key={index}
-                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : 'text-gray-300'}`}
+                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-gray-300' : 'text-gray-500'}`}
                     >
                         ★
                     </span>
@@ -307,6 +316,12 @@ export const ShipDisplay: React.FC<Props> = memo(
                         </div>
                     </div>
                 </div>
+                {ship.copies && ship.copies > 1 && (
+                    <div className="flex items-center gap-1 justify-end px-4 pb-2">
+                        <span className="text-gray-300 text-sm">x{ship.copies}</span>
+                        <CopyIcon />
+                    </div>
+                )}
             </div>
         );
     }

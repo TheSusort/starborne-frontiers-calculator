@@ -7,7 +7,7 @@ import { EditIcon } from '../ui/icons';
 interface Props {
     stats: Stat[];
     onChange: (stats: Stat[]) => void;
-    maxStats: number;
+    maxStats?: number;
     allowedStats?: Record<StatName, { allowedTypes: StatType[] | undefined }>;
     excludedStats?: Array<{ name: StatName; type: StatType }>;
     alwaysColumn?: boolean;
@@ -87,7 +87,7 @@ export const StatModifierInput: React.FC<Props> = ({
     };
 
     const addStat = () => {
-        if (stats.length < maxStats) {
+        if (!maxStats || stats.length < maxStats) {
             const firstStat = Object.keys(allowedStats || STATS)[0] as StatName;
             const firstType = (allowedStats?.[firstStat]?.allowedTypes || ['flat'])[0];
 
@@ -204,7 +204,7 @@ export const StatModifierInput: React.FC<Props> = ({
                     </Button>
                 </div>
             ))}
-            {stats.length < maxStats && (
+            {(!maxStats || stats.length < maxStats) && (
                 <Button variant="secondary" onClick={addStat} type="button" aria-label="Add stat">
                     Add Stat
                 </Button>

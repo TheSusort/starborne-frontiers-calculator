@@ -18,6 +18,7 @@ interface InventoryContextType {
     updateGearPiece: (id: string, updates: Partial<GearPiece>) => Promise<void>;
     deleteGearPiece: (id: string) => Promise<void>;
     loadInventory: () => Promise<void>;
+    setData: (data: GearPiece[] | ((prev: GearPiece[]) => GearPiece[])) => Promise<void>;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
@@ -403,6 +404,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 addGear,
                 updateGearPiece,
                 deleteGearPiece,
+                setData: setInventory,
             }}
         >
             {children}

@@ -35,6 +35,7 @@ interface ShipsContextType {
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
     getShipNameFromGearId: (gearId: string) => string | undefined;
+    setData: (data: Ship[] | ((prev: Ship[]) => Ship[])) => Promise<void>;
 }
 
 interface RawShipStat {
@@ -80,6 +81,7 @@ interface RawShipData {
     faction: FactionName;
     type: ShipTypeName;
     affinity: AffinityName;
+    copies: number;
     ship_base_stats: RawShipBaseStats;
     ship_equipment: RawShipEquipment[];
     equipment_locked: boolean;
@@ -190,6 +192,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
             faction: data.faction,
             type: data.type,
             affinity: data.affinity,
+            copies: data.copies || 1,
             baseStats: {
                 hp: data.ship_base_stats.hp,
                 attack: data.ship_base_stats.attack,
@@ -210,7 +213,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 },
                 {} as Record<GearSlotName, string>
             ),
-            equipmentLocked: data.equipment_locked,
+            equipmentLocked: data.equipment_locked || false,
             refits: data.ship_refits.map((refit) => ({
                 id: refit.id,
                 stats: refit.ship_refit_stats.map(createStat),
@@ -346,6 +349,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     rarity: newShip.rarity,
                     affinity: newShip.affinity,
                     equipment_locked: newShip.equipmentLocked,
+                    copies: newShip.copies || 1,
                 };
 
                 const { data: insertedShip, error: shipError } = await supabase
@@ -936,6 +940,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 validateGearAssignments,
                 unequipAllEquipment,
                 getShipNameFromGearId,
+                setData: setShips,
             }}
         >
             {children}

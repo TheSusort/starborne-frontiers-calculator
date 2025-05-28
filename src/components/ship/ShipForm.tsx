@@ -303,22 +303,19 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                                 newRefits[index] = { ...refit, stats: newStats };
                                 setRefits(newRefits);
                             }}
-                            maxStats={2}
                             defaultExpanded={editingShip ? false : true}
                             excludedStats={[{ name: 'healModifier', type: 'percentage' }]}
                         />
                     </div>
                 ))}
-                {refits?.length < 6 && (
-                    <Button
-                        aria-label="Add refit"
-                        type="button"
-                        variant="primary"
-                        onClick={() => setRefits([...refits, { id: '', stats: [] }])}
-                    >
-                        Add Refit
-                    </Button>
-                )}
+                <Button
+                    aria-label="Add refit"
+                    type="button"
+                    variant="primary"
+                    onClick={() => setRefits([...refits, { id: '', stats: [] }])}
+                >
+                    Add Refit
+                </Button>
             </div>
 
             {/* Implants Section */}

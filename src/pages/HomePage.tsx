@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { APP_NAME } from '../constants';
 import { BackupRestoreData } from '../components/debug/BackupRestoreData';
+import { ImportButton } from '../components/debug/ImportButton';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 
@@ -159,7 +160,13 @@ const HomePage: React.FC = () => {
                         backup your data.
                         <br />
                     </p>
-                    <BackupRestoreData />
+                    <div className="space-y-4">
+                        <BackupRestoreData />
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm">Or import data from the game:</span>
+                            <ImportButton />
+                        </div>
+                    </div>
                 </section>
             </div>
         </>
