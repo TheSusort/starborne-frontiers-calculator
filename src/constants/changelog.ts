@@ -6,7 +6,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.0.0',
         date: '2025-05-29',
-        changes: ['Supabase backend', 'Import game data'],
+        changes: ['Supabase backend', 'Import GAME DATA!'],
     },
     {
         version: '0.26.0',

@@ -255,7 +255,7 @@ export const Sidebar: React.FC = () => {
 
     const SidebarContent = memo(() => (
         <div className="space-y-2 flex flex-col h-full">
-            <span className="text-xs text-gray-400 hidden lg:block">{CURRENT_VERSION}</span>
+            <span className="text-xs text-gray-400 hidden lg:block">v{CURRENT_VERSION}</span>
             <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
                 <img src={logo} alt="logo" className="w-8 h-8" />
                 {APP_NAME}
@@ -301,7 +301,7 @@ export const Sidebar: React.FC = () => {
                         <img src={logo} alt="logo" className="w-8 h-8" />
                         {APP_NAME}
                     </h1>
-                    <span className="text-xs text-gray-400">{CURRENT_VERSION}</span>
+                    <span className="text-xs text-gray-400">v{CURRENT_VERSION}</span>
                 </div>
             </div>
 
