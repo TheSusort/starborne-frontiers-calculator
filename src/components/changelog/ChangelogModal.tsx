@@ -34,25 +34,61 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                 {entries.map((entry) => (
                     <div key={entry.version}>
                         {compareVersions(entry.version, lastSeenVersion) && (
-                            <div className={`mb-6 `}>
-                                <h3 className="font-bold mb-2">
-                                    Version {entry.version} - {entry.date}
-                                    {compareVersions(entry.version, lastSeenVersion) && (
-                                        <span className="ml-2 text-xs bg-blue-500  px-2 py-1">
-                                            New
-                                        </span>
-                                    )}
-                                </h3>
-                                <ul className="list-disc list-inside space-y-1">
-                                    {entry.changes.map((change, index) => (
-                                        <li key={index}>{change}</li>
-                                    ))}
-                                </ul>
+                            <div className={`${entry.version === '1.0.0' ? 'animate-bounce' : ''}`}>
+                                <div
+                                    className={`mb-6 ${
+                                        entry.version === '1.0.0'
+                                            ? 'mt-8 p-4 text-dark rounded-lg bg-gradient-to-r from-red-500 via-yellow-500 to-purple-500 bg-[length:200%_100%] animate-gradient'
+                                            : ''
+                                    }`}
+                                    style={
+                                        entry.version === '1.0.0'
+                                            ? {
+                                                  animation: 'gradient 3s ease infinite',
+                                              }
+                                            : undefined
+                                    }
+                                >
+                                    <h3 className="font-bold mb-2">
+                                        Version {entry.version} - {entry.date}
+                                        {compareVersions(entry.version, lastSeenVersion) && (
+                                            <span
+                                                className={`ml-2 text-xs px-2 py-1 ${
+                                                    entry.version === '1.0.0'
+                                                        ? 'animate-ping bg-dark text-white'
+                                                        : 'bg-blue-500'
+                                                }`}
+                                            >
+                                                New
+                                            </span>
+                                        )}
+                                    </h3>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        {entry.changes.map((change, index) => (
+                                            <li key={index}>{change}</li>
+                                        ))}
+                                    </ul>
+                                </div>
                             </div>
                         )}
                     </div>
                 ))}
             </div>
+            <style>
+                {`
+                    @keyframes gradient {
+                        0% {
+                            background-position: 0% 50%;
+                        }
+                        50% {
+                            background-position: 100% 50%;
+                        }
+                        100% {
+                            background-position: 0% 50%;
+                        }
+                    }
+                `}
+            </style>
         </Modal>
     );
 };

@@ -173,6 +173,11 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         ],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034713745227796.webp',
     },
+    PIERCER: {
+        name: 'Piercer',
+        stats: [],
+        description: 'Ignore 7% Defense',
+    },
 } satisfies Record<string, GearSetBonus>;
 
 export type GearSetName = keyof typeof GEAR_SETS;

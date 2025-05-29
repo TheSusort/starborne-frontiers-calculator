@@ -40,8 +40,13 @@ export function useStorage<T>(config: StorageConfig<T>) {
     useEffect(() => {
         if (data) {
             try {
-                localStorage.setItem(key, JSON.stringify(data));
-                setLocalData(data);
+                // Only update localStorage if the data is different
+                const currentData = localStorage.getItem(key);
+                const newData = JSON.stringify(data);
+                if (currentData !== newData) {
+                    localStorage.setItem(key, newData);
+                    setLocalData(data);
+                }
             } catch (error) {
                 console.error('Error syncing data to localStorage:', error);
                 addNotification('error', 'Failed to sync data to local storage');

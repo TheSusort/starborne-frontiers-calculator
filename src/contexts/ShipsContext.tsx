@@ -35,6 +35,7 @@ interface ShipsContextType {
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
     getShipNameFromGearId: (gearId: string) => string | undefined;
+    setData: (data: Ship[] | ((prev: Ship[]) => Ship[])) => Promise<void>;
 }
 
 interface RawShipStat {
@@ -71,6 +72,7 @@ interface RawShipBaseStats {
     heal_modifier: number;
     hp_regen: number;
     shield: number;
+    defense_penetration: number;
 }
 
 interface RawShipData {
@@ -80,6 +82,9 @@ interface RawShipData {
     faction: FactionName;
     type: ShipTypeName;
     affinity: AffinityName;
+    copies: number;
+    rank: number;
+    level: number;
     ship_base_stats: RawShipBaseStats;
     ship_equipment: RawShipEquipment[];
     equipment_locked: boolean;
@@ -190,6 +195,9 @@ const transformShipData = (data: RawShipData): Ship | null => {
             faction: data.faction,
             type: data.type,
             affinity: data.affinity,
+            copies: data.copies || 1,
+            rank: data.rank,
+            level: data.level,
             baseStats: {
                 hp: data.ship_base_stats.hp,
                 attack: data.ship_base_stats.attack,
@@ -202,6 +210,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 healModifier: data.ship_base_stats.heal_modifier,
                 hpRegen: data.ship_base_stats.hp_regen,
                 shield: data.ship_base_stats.shield,
+                defensePenetration: data.ship_base_stats.defense_penetration,
             },
             equipment: data.ship_equipment.reduce(
                 (acc: Record<GearSlotName, string>, eq) => {
@@ -210,7 +219,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 },
                 {} as Record<GearSlotName, string>
             ),
-            equipmentLocked: data.equipment_locked,
+            equipmentLocked: data.equipment_locked || false,
             refits: data.ship_refits.map((refit) => ({
                 id: refit.id,
                 stats: refit.ship_refit_stats.map(createStat),
@@ -236,6 +245,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
     const { addNotification } = useNotification();
     const { user } = useAuth();
+    const [isMigrating, setIsMigrating] = useState(false);
 
     // Use useStorage for ships
     const { data: ships, setData: setShips } = useStorage<Ship[]>({
@@ -244,7 +254,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     const loadShips = useCallback(async () => {
-        // Prevent multiple concurrent loads
+        // Skip loading if we're in the middle of migration
+        if (isMigrating) return;
 
         try {
             setLoading(true);
@@ -287,12 +298,45 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setShips]);
+    }, [user?.id, addNotification, setShips, isMigrating]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
         loadShips();
     }, [user?.id, loadShips]);
+
+    useEffect(() => {
+        const handleSignOut = () => {
+            // Only clear data if we're not in the middle of migration
+            if (!isMigrating) {
+                setShips([]);
+            }
+        };
+
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setShips, isMigrating]);
+
+    // Listen for migration start/end events
+    useEffect(() => {
+        const handleMigrationStart = () => {
+            setIsMigrating(true);
+        };
+
+        const handleMigrationEnd = () => {
+            setIsMigrating(false);
+        };
+
+        window.addEventListener('app:migration:start', handleMigrationStart);
+        window.addEventListener('app:migration:end', handleMigrationEnd);
+
+        return () => {
+            window.removeEventListener('app:migration:start', handleMigrationStart);
+            window.removeEventListener('app:migration:end', handleMigrationEnd);
+        };
+    }, []);
 
     // Ensure equipment is properly initialized for all ships
     useEffect(() => {
@@ -306,17 +350,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
         }
     }, [ships, setShips]);
-
-    useEffect(() => {
-        const handleSignOut = () => {
-            setShips([]);
-        };
-
-        window.addEventListener('app:signout', handleSignOut);
-        return () => {
-            window.removeEventListener('app:signout', handleSignOut);
-        };
-    }, [setShips]);
 
     const getShipName = useCallback(
         (id: string) => ships.find((ship) => ship.id === id)?.name,
@@ -346,6 +379,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     rarity: newShip.rarity,
                     affinity: newShip.affinity,
                     equipment_locked: newShip.equipmentLocked,
+                    copies: newShip.copies || 1,
                 };
 
                 const { data: insertedShip, error: shipError } = await supabase
@@ -936,6 +970,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 validateGearAssignments,
                 unequipAllEquipment,
                 getShipNameFromGearId,
+                setData: setShips,
             }}
         >
             {children}

@@ -33,6 +33,7 @@ describe('StatModifierInput', () => {
             security: { allowedTypes: ['flat'] as StatType[] },
             shield: { allowedTypes: ['percentage'] as StatType[] },
             hpRegen: { allowedTypes: ['percentage'] as StatType[] },
+            defensePenetration: { allowedTypes: ['percentage'] as StatType[] },
         },
     };
 

@@ -1,4 +1,4 @@
-import React, { ReactNode, useCallback, useState, useEffect, createContext } from 'react';
+import React, { useCallback, useState, useEffect, createContext, useContext } from 'react';
 import { EngineeringStats, EngineeringStat, StatName, StatType, Stat } from '../types/stats';
 import { STATS } from '../constants/stats';
 import { ShipTypeName } from '../constants/shipTypes';
@@ -18,6 +18,9 @@ export interface EngineeringStatsContextType {
         shipType: ShipTypeName
     ) => EngineeringStats['stats'][0] | undefined;
     loading: boolean;
+    setData: (
+        data: EngineeringStats | ((prev: EngineeringStats) => EngineeringStats)
+    ) => Promise<void>;
 }
 
 export const EngineeringStatsContext = createContext<EngineeringStatsContextType | undefined>(
@@ -56,21 +59,22 @@ const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats
     };
 };
 
-interface EngineeringStatsProviderProps {
-    children: ReactNode;
-}
-
-export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> = ({ children }) => {
+export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [isMigrating, setIsMigrating] = useState(false);
 
+    // Use useStorage for engineering stats
     const { data: engineeringStats, setData: setEngineeringStats } = useStorage<EngineeringStats>({
         key: StorageKey.ENGINEERING_STATS,
         defaultValue: { stats: [] },
     });
 
     const loadEngineeringStats = useCallback(async () => {
+        // Skip loading if we're in the middle of migration
+        if (isMigrating) return;
+
         try {
             setLoading(true);
             if (user?.id) {
@@ -79,8 +83,13 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
                     .select('*')
                     .eq('user_id', user.id);
 
-                if (error) throw error;
-                setEngineeringStats(transformEngineeringStats(data));
+                if (error) {
+                    throw error;
+                }
+
+                if (data) {
+                    setEngineeringStats(transformEngineeringStats(data));
+                }
             }
         } catch (error) {
             console.error('Error loading engineering stats:', error);
@@ -88,22 +97,47 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
         } finally {
             setLoading(false);
         }
-    }, [user?.id, setLoading, setEngineeringStats, addNotification]);
+    }, [user?.id, addNotification, setEngineeringStats, isMigrating]);
 
+    // Initial load and reload on auth changes
     useEffect(() => {
         loadEngineeringStats();
     }, [user?.id, loadEngineeringStats]);
 
     useEffect(() => {
         const handleSignOut = () => {
-            setEngineeringStats({ stats: [] });
+            // Only clear data if we're not in the middle of migration
+            if (!isMigrating) {
+                setEngineeringStats({
+                    stats: [],
+                });
+            }
         };
 
         window.addEventListener('app:signout', handleSignOut);
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setEngineeringStats]);
+    }, [setEngineeringStats, isMigrating]);
+
+    // Listen for migration start/end events
+    useEffect(() => {
+        const handleMigrationStart = () => {
+            setIsMigrating(true);
+        };
+
+        const handleMigrationEnd = () => {
+            setIsMigrating(false);
+        };
+
+        window.addEventListener('app:migration:start', handleMigrationStart);
+        window.addEventListener('app:migration:end', handleMigrationEnd);
+
+        return () => {
+            window.removeEventListener('app:migration:start', handleMigrationStart);
+            window.removeEventListener('app:migration:end', handleMigrationEnd);
+        };
+    }, []);
 
     const saveEngineeringStats = useCallback(
         async (statsToSave: EngineeringStats) => {
@@ -208,6 +242,7 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
         getAllAllowedStats,
         getEngineeringStatsForShipType,
         loading,
+        setData: setEngineeringStats,
     };
 
     return (
@@ -215,4 +250,12 @@ export const EngineeringStatsProvider: React.FC<EngineeringStatsProviderProps> =
             {children}
         </EngineeringStatsContext.Provider>
     );
+};
+
+export const useEngineeringStats = () => {
+    const context = useContext(EngineeringStatsContext);
+    if (context === undefined) {
+        throw new Error('useEngineeringStats must be used within an EngineeringStatsProvider');
+    }
+    return context;
 };

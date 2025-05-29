@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { APP_NAME } from '../constants';
-import { BackupRestoreData } from '../components/debug/BackupRestoreData';
+import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { ImportButton } from '../components/import/ImportButton';
 
 const HomePage: React.FC = () => {
     return (
@@ -23,22 +24,24 @@ const HomePage: React.FC = () => {
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <div className="bg-dark p-4 ">
                             <h3 className="text-xl font-semibold text-gray-100 mb-2">
-                                1. Add Ships
+                                1. Import Game Data
                             </h3>
-                            <p>
-                                Start by visiting the{' '}
-                                <Link to="/ships" className="text-primary hover:text-primary-hover">
-                                    Ships
-                                </Link>{' '}
-                                page to create and manage your fleet.
+                            <p className="mb-4">
+                                Start by importing your game data. This will create your ships, gear
+                                and engineering stats. You can find the import button in the
+                                sidebar.
                             </p>
                         </div>
                         <div className="bg-dark p-4 ">
                             <h3 className="text-xl font-semibold text-gray-100 mb-2">
-                                2. Add Gear
+                                2. Gaze at the glory of your fleet
                             </h3>
                             <p>
-                                Configure your equipment in the{' '}
+                                Check out your fleet in the{' '}
+                                <Link to="/ships" className="text-primary hover:text-primary-hover">
+                                    Ships
+                                </Link>{' '}
+                                section, and your inventory in the{' '}
                                 <Link to="/gear" className="text-primary hover:text-primary-hover">
                                     Gear
                                 </Link>{' '}
@@ -159,7 +162,9 @@ const HomePage: React.FC = () => {
                         backup your data.
                         <br />
                     </p>
-                    <BackupRestoreData />
+                    <div className="space-y-4">
+                        <BackupRestoreData />
+                    </div>
                 </section>
             </div>
         </>
