@@ -87,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             unsubscribe();
         };
-    }, [user?.id, addNotification, currentUser]);
+    }, [user?.id, addNotification]);
 
     const signInWithGoogle = async () => {
         try {
