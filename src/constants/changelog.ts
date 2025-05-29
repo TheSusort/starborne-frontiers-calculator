@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '0.26.0';
+export const CURRENT_VERSION = '1.0.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.0.0',
+        date: '2025-05-29',
+        changes: ['Supabase backend', 'Import game data'],
+    },
     {
         version: '0.26.0',
         date: '2025-04-09',
