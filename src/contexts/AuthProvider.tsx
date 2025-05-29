@@ -3,8 +3,6 @@ import { AuthService, AuthUser } from '../services/auth/types';
 import { FirebaseAuthService } from '../services/auth/firebaseAuth';
 import { SupabaseAuthService } from '../services/auth/supabaseAuth';
 import { useNotification } from '../hooks/useNotification';
-import { StorageKey } from '../constants/storage';
-import { useStorage } from '../hooks/useStorage';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -31,32 +29,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [migrationCompleted, setMigrationCompleted] = useState(false);
     const isMigratingRef = useRef(false);
     const previousUserIdRef = useRef<string | null>(null);
-
-    // Initialize storage hooks
-    const { setData: setLoadouts } = useStorage({
-        key: StorageKey.LOADOUTS,
-        defaultValue: [],
-    });
-    const { setData: setTeamLoadouts } = useStorage({
-        key: StorageKey.TEAM_LOADOUTS,
-        defaultValue: [],
-    });
-    const { setData: setShips } = useStorage({
-        key: StorageKey.SHIPS,
-        defaultValue: [],
-    });
-    const { setData: setInventory } = useStorage({
-        key: StorageKey.INVENTORY,
-        defaultValue: [],
-    });
-    const { setData: setEncounters } = useStorage({
-        key: StorageKey.ENCOUNTERS,
-        defaultValue: [],
-    });
-    const { setData: setEngineeringStats } = useStorage({
-        key: StorageKey.ENGINEERING_STATS,
-        defaultValue: {},
-    });
 
     useEffect(() => {
         // Get initial user
@@ -180,6 +152,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             // If the user wasn't signed in before but is now, it's a new sign-up
             const newUser = await authService.getCurrentUser();
+
             if (!wasSignedIn && newUser && newUser.id !== previousUserIdRef.current) {
                 // Reset migration state for new sign-in
                 setMigrationCompleted(false);

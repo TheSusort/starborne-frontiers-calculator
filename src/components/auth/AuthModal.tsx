@@ -73,6 +73,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             variant="secondary"
                             fullWidth
                             className="flex items-center gap-2 justify-center"
+                            type="button"
                         >
                             <img
                                 src="https://www.google.com/favicon.ico"
@@ -93,6 +94,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             onClick={() => setShowEmailForm(true)}
                             variant="secondary"
                             fullWidth
+                            type="button"
                         >
                             Continue with Email
                         </Button>
@@ -127,6 +129,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 variant="secondary"
                                 fullWidth
                                 onClick={() => setIsSignUp(!isSignUp)}
+                                type="button"
                             >
                                 {isSignUp
                                     ? 'Already have an account? Sign in'
@@ -136,6 +139,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 variant="secondary"
                                 fullWidth
                                 onClick={() => setShowEmailForm(false)}
+                                type="button"
                             >
                                 Back to sign in options
                             </Button>

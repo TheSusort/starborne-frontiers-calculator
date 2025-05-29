@@ -27,6 +27,8 @@ export const StatList: React.FC<StatListProps> = ({
         'speed',
         'healModifier',
         'shield',
+        'defensePenetration',
+        'hpRegen',
     ] satisfies (keyof BaseStats)[];
 
     return (
@@ -35,7 +37,7 @@ export const StatList: React.FC<StatListProps> = ({
             {orderedStatNames.map((statName) => {
                 const value = stats[statName];
 
-                if ((statName === 'healModifier' || statName === 'shield') && (value ?? 0) <= 0) {
+                if ((value ?? 0) <= 0) {
                     return null;
                 }
 

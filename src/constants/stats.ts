@@ -78,7 +78,7 @@ export const STATS: Record<
         maxValue: { percentage: 0, flat: 0 },
     },
     shield: {
-        label: 'Shield',
+        label: 'Shield Regen',
         shortLabel: 'SH',
         allowedTypes: ['percentage'],
         engineeringAllowedTypes: [],
@@ -87,6 +87,13 @@ export const STATS: Record<
     hpRegen: {
         label: 'HP Regen',
         shortLabel: 'HPR',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
+    },
+    defensePenetration: {
+        label: 'Defense Penetration',
+        shortLabel: 'DP',
         allowedTypes: ['percentage'],
         engineeringAllowedTypes: [],
         maxValue: { percentage: 0, flat: 0 },

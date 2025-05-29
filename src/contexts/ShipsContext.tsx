@@ -72,6 +72,7 @@ interface RawShipBaseStats {
     heal_modifier: number;
     hp_regen: number;
     shield: number;
+    defense_penetration: number;
 }
 
 interface RawShipData {
@@ -82,6 +83,8 @@ interface RawShipData {
     type: ShipTypeName;
     affinity: AffinityName;
     copies: number;
+    rank: number;
+    level: number;
     ship_base_stats: RawShipBaseStats;
     ship_equipment: RawShipEquipment[];
     equipment_locked: boolean;
@@ -193,6 +196,8 @@ const transformShipData = (data: RawShipData): Ship | null => {
             type: data.type,
             affinity: data.affinity,
             copies: data.copies || 1,
+            rank: data.rank,
+            level: data.level,
             baseStats: {
                 hp: data.ship_base_stats.hp,
                 attack: data.ship_base_stats.attack,
@@ -205,6 +210,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 healModifier: data.ship_base_stats.heal_modifier,
                 hpRegen: data.ship_base_stats.hp_regen,
                 shield: data.ship_base_stats.shield,
+                defensePenetration: data.ship_base_stats.defense_penetration,
             },
             equipment: data.ship_equipment.reduce(
                 (acc: Record<GearSlotName, string>, eq) => {

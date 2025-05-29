@@ -349,6 +349,9 @@ export const syncMigratedDataToSupabase = async (
                     type: ship.type,
                     affinity: ship.affinity,
                     equipment_locked: ship.equipmentLocked,
+                    copies: ship.copies,
+                    rank: ship.rank,
+                    level: ship.level,
                 }));
 
                 // Batch insert ships
@@ -370,6 +373,7 @@ export const syncMigratedDataToSupabase = async (
                     heal_modifier: ship.baseStats.healModifier,
                     hp_regen: ship.baseStats.hpRegen || 0,
                     shield: ship.baseStats.shield || 0,
+                    defense_penetration: ship.baseStats.defensePenetration || 0,
                 }));
 
                 // Batch insert base stats

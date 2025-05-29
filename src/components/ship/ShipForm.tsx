@@ -31,6 +31,9 @@ const initialBaseStats: BaseStats = {
     critDamage: 0,
     speed: 0,
     healModifier: 0,
+    defensePenetration: 0,
+    hpRegen: 0,
+    shield: 0,
 };
 
 const AFFINITIES: { value: AffinityName; label: string }[] = [
@@ -258,26 +261,21 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <div className="space-y-4">
                 <h3 className="text-lg font-medium ">Base Stats</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Object.entries(baseStats).map(
-                        ([stat, value]) =>
-                            stat !== 'healModifier' &&
-                            stat !== 'hpRegen' &&
-                            stat !== 'shield' && (
-                                <Input
-                                    key={stat}
-                                    type="number"
-                                    label={STATS[stat as StatName].label}
-                                    value={value}
-                                    onChange={(e) =>
-                                        setBaseStats((prev) => ({
-                                            ...prev,
-                                            [stat]: Number(e.target.value),
-                                        }))
-                                    }
-                                    min="0"
-                                />
-                            )
-                    )}
+                    {Object.entries(baseStats).map(([stat, value]) => (
+                        <Input
+                            key={stat}
+                            type="number"
+                            label={STATS[stat as StatName].label}
+                            value={value}
+                            onChange={(e) =>
+                                setBaseStats((prev) => ({
+                                    ...prev,
+                                    [stat]: Number(e.target.value),
+                                }))
+                            }
+                            min="0"
+                        />
+                    ))}
                 </div>
             </div>
 

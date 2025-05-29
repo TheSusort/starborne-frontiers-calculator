@@ -131,8 +131,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
         unit.Attributes.Refit.forEach((refitStat, index) => {
             // Use modulo to cycle through refits if there are more stats than refits
             const refitIndex = index % refits.length;
-
-            if (refits[refitIndex]) {
+            if (refits[refitIndex] && getStatName(refitStat.Attribute)) {
                 refits[refitIndex].stats.push(
                     createStat(
                         getStatName(refitStat.Attribute) as StatName,
@@ -144,7 +143,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
                         getStatType(refitStat.Type, refitStat.Attribute)
                     )
                 );
-            } else {
+            } else if (getStatName(refitStat.Attribute)) {
                 baseStats[getStatName(refitStat.Attribute) as StatName] += getPercentageStatValue(
                     refitStat.Value,
                     refitStat.Type,
@@ -289,7 +288,7 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
 /** HELPER FUNCTIONS */
 
 const getPercentageStatValue = (value: number, modifierType: string, attribute: string): number => {
-    if (attribute === 'CritChance' || attribute === 'CritBoost') {
+    if (PERCENTAGE_ONLY_STATS.includes(getStatName(attribute) as PercentageOnlyStats)) {
         return Math.round(value * 100);
     }
 
@@ -300,7 +299,7 @@ const getPercentageStatValue = (value: number, modifierType: string, attribute: 
 };
 
 const getStatType = (modifierType: string, attribute: string): StatType => {
-    if (attribute === 'CritChance' || attribute === 'CritBoost') {
+    if (PERCENTAGE_ONLY_STATS.includes(getStatName(attribute) as PercentageOnlyStats)) {
         return 'percentage';
     }
 
