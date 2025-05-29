@@ -245,6 +245,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
     const { addNotification } = useNotification();
     const { user } = useAuth();
+    const [isMigrating, setIsMigrating] = useState(false);
 
     // Use useStorage for ships
     const { data: ships, setData: setShips } = useStorage<Ship[]>({
@@ -253,7 +254,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     const loadShips = useCallback(async () => {
-        // Prevent multiple concurrent loads
+        // Skip loading if we're in the middle of migration
+        if (isMigrating) return;
 
         try {
             setLoading(true);
@@ -296,12 +298,45 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setShips]);
+    }, [user?.id, addNotification, setShips, isMigrating]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
         loadShips();
     }, [user?.id, loadShips]);
+
+    useEffect(() => {
+        const handleSignOut = () => {
+            // Only clear data if we're not in the middle of migration
+            if (!isMigrating) {
+                setShips([]);
+            }
+        };
+
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setShips, isMigrating]);
+
+    // Listen for migration start/end events
+    useEffect(() => {
+        const handleMigrationStart = () => {
+            setIsMigrating(true);
+        };
+
+        const handleMigrationEnd = () => {
+            setIsMigrating(false);
+        };
+
+        window.addEventListener('app:migration:start', handleMigrationStart);
+        window.addEventListener('app:migration:end', handleMigrationEnd);
+
+        return () => {
+            window.removeEventListener('app:migration:start', handleMigrationStart);
+            window.removeEventListener('app:migration:end', handleMigrationEnd);
+        };
+    }, []);
 
     // Ensure equipment is properly initialized for all ships
     useEffect(() => {
@@ -315,17 +350,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
         }
     }, [ships, setShips]);
-
-    useEffect(() => {
-        const handleSignOut = () => {
-            setShips([]);
-        };
-
-        window.addEventListener('app:signout', handleSignOut);
-        return () => {
-            window.removeEventListener('app:signout', handleSignOut);
-        };
-    }, [setShips]);
 
     const getShipName = useCallback(
         (id: string) => ships.find((ship) => ship.id === id)?.name,

@@ -129,6 +129,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [isMigrating, setIsMigrating] = useState(false);
+
     // Use useStorage for inventory
     const { data: inventory, setData: setInventory } = useStorage<GearPiece[]>({
         key: StorageKey.INVENTORY,
@@ -136,6 +138,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     const loadInventory = useCallback(async () => {
+        // Skip loading if we're in the middle of migration
+        if (isMigrating) return;
+
         try {
             setLoading(true);
             if (user?.id) {
@@ -168,26 +173,45 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setInventory]);
+    }, [user?.id, addNotification, setInventory, isMigrating]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
         loadInventory();
     }, [user?.id, loadInventory]);
 
-    // Ensure gear pieces are properly initialized for all users
     useEffect(() => {
-        if (inventory.length > 0) {
-            const updatedInventory = inventory.map((gear) => ({
-                ...gear,
-                subStats: gear.subStats || [],
-            }));
-
-            if (JSON.stringify(updatedInventory) !== JSON.stringify(inventory)) {
-                setInventory(updatedInventory);
+        const handleSignOut = () => {
+            // Only clear data if we're not in the middle of migration
+            if (!isMigrating) {
+                setInventory([]);
             }
-        }
-    }, [inventory, setInventory]);
+        };
+
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setInventory, isMigrating]);
+
+    // Listen for migration start/end events
+    useEffect(() => {
+        const handleMigrationStart = () => {
+            setIsMigrating(true);
+        };
+
+        const handleMigrationEnd = () => {
+            setIsMigrating(false);
+        };
+
+        window.addEventListener('app:migration:start', handleMigrationStart);
+        window.addEventListener('app:migration:end', handleMigrationEnd);
+
+        return () => {
+            window.removeEventListener('app:migration:start', handleMigrationStart);
+            window.removeEventListener('app:migration:end', handleMigrationEnd);
+        };
+    }, []);
 
     const getGearPiece = useCallback(
         (id: string) => inventory.find((gear) => gear.id === id),
@@ -382,17 +406,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         },
         [user?.id, loadInventory, addNotification, setInventory]
     );
-
-    useEffect(() => {
-        const handleSignOut = () => {
-            setInventory([]);
-        };
-
-        window.addEventListener('app:signout', handleSignOut);
-        return () => {
-            window.removeEventListener('app:signout', handleSignOut);
-        };
-    }, [setInventory]);
 
     return (
         <InventoryContext.Provider
