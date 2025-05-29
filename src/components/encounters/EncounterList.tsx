@@ -78,7 +78,7 @@ export const EncounterList = ({
     }
 
     return (
-        <div className="flex flex-col">
+        <div className="flex flex-col overflow-hidden">
             <span className="text-sm text-gray-400 -mt-4">
                 {encounters.length} {encounters.length === 1 ? 'encounter' : 'encounters'}
             </span>

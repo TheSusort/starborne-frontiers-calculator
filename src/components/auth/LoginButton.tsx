@@ -17,7 +17,13 @@ export const LoginButton: React.FC = () => {
                         className="w-8 h-8 rounded-full"
                     />
                 )}
-                <Button onClick={() => signOut()} fullWidth variant="secondary" type="button">
+                <Button
+                    onClick={() => signOut()}
+                    fullWidth
+                    variant="secondary"
+                    type="button"
+                    className="text-right"
+                >
                     Sign Out
                 </Button>
             </div>
@@ -29,8 +35,9 @@ export const LoginButton: React.FC = () => {
             <Button
                 onClick={() => setShowAuthModal(true)}
                 fullWidth
-                variant="primary"
+                variant="secondary"
                 type="button"
+                className="text-right"
             >
                 Sign In
             </Button>

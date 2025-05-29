@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -6,12 +6,16 @@ import { useEngineeringStats } from '../../contexts/EngineeringStatsProvider';
 import { importPlayerData } from '../../utils/importPlayerData';
 import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
+import { syncMigratedDataToSupabase } from '../../utils/migrateLegacyData';
+import { useAuth } from '../../contexts/AuthProvider';
 
-export const ImportButton: React.FC = () => {
+export const ImportButton: React.FC<{ className?: string }> = ({ className = '' }) => {
     const { setData: setShips } = useShips();
     const { setData: setInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
+    const { user } = useAuth();
+    const [loading, setLoading] = useState(false);
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,6 +23,7 @@ export const ImportButton: React.FC = () => {
             if (!file) return;
 
             try {
+                setLoading(true);
                 const text = await file.text();
                 const data = JSON.parse(text) as ExportedPlayData;
 
@@ -29,6 +34,18 @@ export const ImportButton: React.FC = () => {
                     await setShips(result.data.ships);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
+
+                    // sync to supabase if user is logged in
+                    if (user) {
+                        await syncMigratedDataToSupabase(user.id, {
+                            ships: result.data.ships,
+                            inventory: result.data.inventory,
+                            encounters: [],
+                            loadouts: [],
+                            teamLoadouts: [],
+                            engineeringStats: result.data.engineeringStats,
+                        });
+                    }
 
                     addNotification('success', 'Data imported successfully');
                 } else {
@@ -41,6 +58,8 @@ export const ImportButton: React.FC = () => {
                     'Failed to import data: ' +
                         (error instanceof Error ? error.message : 'Unknown error')
                 );
+            } finally {
+                setLoading(false);
             }
 
             // Reset the file input
@@ -50,7 +69,7 @@ export const ImportButton: React.FC = () => {
     );
 
     return (
-        <div className="d-flex align-items-center">
+        <div className={`d-flex align-items-center`}>
             <input
                 type="file"
                 accept=".json"
@@ -61,8 +80,13 @@ export const ImportButton: React.FC = () => {
             <Button
                 variant="primary"
                 onClick={() => document.getElementById('import-file-input')?.click()}
+                className={className}
             >
-                Import Data
+                {loading ? (
+                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-dark absolute top-2 left-1/2"></div>
+                ) : (
+                    'Import Game Data'
+                )}
             </Button>
         </div>
     );

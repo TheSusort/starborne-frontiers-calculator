@@ -284,6 +284,14 @@ export const syncMigratedDataToSupabase = async (
                     set_bonus: item.setBonus,
                 }));
 
+                // delete all inventory items for the user
+                const { error: deleteError } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .eq('user_id', userId);
+
+                if (deleteError) throw deleteError;
+
                 // Batch insert inventory items
                 const { error: inventoryError } = await supabase
                     .from('inventory_items')
@@ -353,6 +361,14 @@ export const syncMigratedDataToSupabase = async (
                     rank: ship.rank,
                     level: ship.level,
                 }));
+
+                // delete all ships for the user
+                const { error: deleteError } = await supabase
+                    .from('ships')
+                    .delete()
+                    .eq('user_id', userId);
+
+                if (deleteError) throw deleteError;
 
                 // Batch insert ships
                 const { error: shipsError } = await supabase.from('ships').insert(shipRecords);
@@ -764,6 +780,14 @@ export const syncMigratedDataToSupabase = async (
                     .filter(
                         (record) => record.ship_type && record.stat_name && !isNaN(record.value)
                     );
+
+                // delete all engineering stats for the user
+                const { error: deleteError } = await supabase
+                    .from('engineering_stats')
+                    .delete()
+                    .eq('user_id', userId);
+
+                if (deleteError) throw deleteError;
 
                 if (statsRecords.length > 0) {
                     // Insert in smaller batches to prevent errors
