@@ -6,7 +6,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.0.1',
         date: '2025-05-30',
-        changes: ['Added gear batchloading'],
+        changes: ['Added gear batchloading', 'Added Piercer gear bonus'],
     },
     {
         version: '1.0.0',
