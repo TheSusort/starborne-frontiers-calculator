@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.0.3';
+export const CURRENT_VERSION = '1.1.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.1.0',
+        date: '2025-05-31',
+        changes: [
+            'Adjusted autogear algorithm to be scalable to inventory size',
+            'Simplified autogear filtering',
+            'Removed numerous loads from db, relying on optimistic updates instead. Page refresh fetches all data again.',
+        ],
+    },
     {
         version: '1.0.3',
         date: '2025-05-30',

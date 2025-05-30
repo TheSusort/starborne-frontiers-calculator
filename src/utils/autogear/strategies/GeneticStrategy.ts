@@ -33,7 +33,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private readonly MUTATION_RATE = 0.1; // 10% chance to mutate each gear piece
 
     private getPopulationSize(inventorySize: number): number {
-        return Math.min(1000, Math.max(250, Math.floor(inventorySize * 0.5)));
+        return Math.min(1200, Math.max(250, Math.floor(inventorySize * 0.5)));
     }
 
     private getGenerations(populationSize: number): number {
