@@ -1,6 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, CloseIcon } from '../';
+
+// Create a single portal root for all modals
+const getOrCreatePortalRoot = () => {
+    let portalRoot = document.getElementById('modal-root');
+    if (!portalRoot) {
+        portalRoot = document.createElement('div');
+        portalRoot.setAttribute('id', 'modal-root');
+        document.body.appendChild(portalRoot);
+    }
+    return portalRoot;
+};
 
 interface Props {
     isOpen: boolean;
@@ -17,25 +28,6 @@ export const Modal: React.FC<Props> = ({
     children,
     fullHeight = false,
 }) => {
-    const portalRoot = useRef<HTMLElement | null>(null);
-
-    useEffect(() => {
-        // Create portal root if it doesn't exist
-        if (!portalRoot.current) {
-            portalRoot.current = document.createElement('div');
-            portalRoot.current.setAttribute('id', 'modal-root');
-            document.body.appendChild(portalRoot.current);
-        }
-
-        return () => {
-            // Cleanup portal root when component unmounts
-            if (portalRoot.current) {
-                document.body.removeChild(portalRoot.current);
-                portalRoot.current = null;
-            }
-        };
-    }, []);
-
     useEffect(() => {
         if (isOpen) {
             // Save current scroll position
@@ -64,7 +56,9 @@ export const Modal: React.FC<Props> = ({
         }
     }, [isOpen, onClose]);
 
-    if (!isOpen || !portalRoot.current) return null;
+    if (!isOpen) return null;
+
+    const portalRoot = getOrCreatePortalRoot();
 
     return createPortal(
         <>
@@ -96,6 +90,6 @@ export const Modal: React.FC<Props> = ({
                 </div>
             </div>
         </>,
-        portalRoot.current
+        portalRoot
     );
 };
