@@ -9,7 +9,7 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
 import { StorageKey } from './constants/storage';
-import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
+import { CHANGELOG, CURRENT_VERSION, AUTHOR, AUTHOR_EMAIL } from './constants';
 import { ChangelogState } from './types/changelog';
 import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
 import Seo from './components/seo/Seo';
@@ -169,7 +169,24 @@ const App: React.FC = () => {
 
                                                 <JokeCorner />
                                                 <footer className="text-center text-xs mt-auto pt-5">
-                                                    Made with ❤️ by {AUTHOR}
+                                                    Made with ❤️ by {AUTHOR} (
+                                                    <a
+                                                        href={`mailto:${AUTHOR_EMAIL}`}
+                                                        className="hover:underline"
+                                                    >
+                                                        {AUTHOR_EMAIL}
+                                                    </a>
+                                                    )
+                                                    <br />
+                                                    <br />
+                                                    <a
+                                                        href="https://www.buymeacoffee.com/starborneplanner"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="hover:underline"
+                                                    >
+                                                        Buy me a coffee to keep me going! ☕
+                                                    </a>
                                                 </footer>
                                             </div>
                                         </div>
