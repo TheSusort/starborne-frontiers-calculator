@@ -4,7 +4,7 @@ type IconProps = ComponentPropsWithoutRef<'svg'> & {
     className?: string;
 };
 
-export const SearchIcon: React.FC<IconProps> = ({ className = 'w-6 h-6', ...props }) => {
+export const SearchIcon: React.FC<IconProps> = ({ className = 'w-4 h-4', ...props }) => {
     return (
         <svg
             xmlns="http://www.w3.org/2000/svg"

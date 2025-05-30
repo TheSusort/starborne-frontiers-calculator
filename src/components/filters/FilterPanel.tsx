@@ -1,6 +1,7 @@
-import React from 'react';
-import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button } from '../ui';
+import React, { useState } from 'react';
+import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button, Input } from '../ui';
 import { SortConfig, SortOption, SortPanel } from './SortPanel';
+import { SearchIcon } from '../ui/icons/SearchIcon';
 
 export interface FilterOption {
     label: string;
@@ -24,6 +25,9 @@ interface Props {
     sortOptions?: SortOption[];
     sort?: SortConfig;
     setSort?: (sort: SortConfig) => void;
+    searchValue?: string;
+    onSearchChange?: (value: string) => void;
+    searchPlaceholder?: string;
 }
 
 export const FilterPanel: React.FC<Props> = ({
@@ -35,7 +39,19 @@ export const FilterPanel: React.FC<Props> = ({
     sortOptions,
     sort,
     setSort,
+    searchValue,
+    onSearchChange,
+    searchPlaceholder = 'Search...',
 }) => {
+    const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+    const handleSearchToggle = () => {
+        setIsSearchExpanded(!isSearchExpanded);
+        if (isSearchExpanded && onSearchChange) {
+            onSearchChange('');
+        }
+    };
+
     return (
         <>
             <div className="flex justify-between items-center flex-wrap -mt-8">
@@ -73,19 +89,52 @@ export const FilterPanel: React.FC<Props> = ({
                         )}
                     </div>
                 )}
-                <Button
-                    variant="secondary"
-                    className="ml-auto"
-                    onClick={onToggle}
-                    aria-label="Filters and sorting"
-                    title="Filters and sorting"
-                >
-                    <FilterIcon />
-                </Button>
+                <div className="flex gap-2 ml-auto">
+                    {onSearchChange && (
+                        <div className="relative">
+                            <div
+                                className={`flex items-center transition-all duration-300 ease-in-out ${isSearchExpanded ? 'w-64' : 'w-0'}`}
+                            >
+                                <Input
+                                    type="text"
+                                    value={searchValue}
+                                    onChange={(e) => onSearchChange(e.target.value)}
+                                    placeholder={searchPlaceholder}
+                                    className={`w-full !pr-12 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-100' : 'opacity-0'}`}
+                                    autoFocus
+                                />
+                                <Button
+                                    variant="secondary"
+                                    onClick={handleSearchToggle}
+                                    className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-100' : 'opacity-0'}`}
+                                >
+                                    <CloseIcon />
+                                </Button>
+                            </div>
+                            <Button
+                                variant="secondary"
+                                onClick={handleSearchToggle}
+                                aria-label="Search"
+                                title="Search"
+                                className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-0' : 'opacity-100'}`}
+                            >
+                                <SearchIcon />
+                            </Button>
+                        </div>
+                    )}
+                    <Button
+                        variant="secondary"
+                        onClick={onToggle}
+                        aria-label="Filters and sorting"
+                        title="Filters and sorting"
+                    >
+                        <FilterIcon />
+                    </Button>
+                </div>
             </div>
 
             <Offcanvas isOpen={isOpen} onClose={onToggle} title="Filters">
-                <div className="space-y-4">
+                <div className="space-y-4 pb-6">
                     {sortOptions && sort && setSort && (
                         <SortPanel options={sortOptions} currentSort={sort} onSort={setSort} />
                     )}

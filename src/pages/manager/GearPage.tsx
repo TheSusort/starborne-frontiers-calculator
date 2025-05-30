@@ -96,13 +96,12 @@ export const GearPage: React.FC = () => {
 
                 <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
                 {activeTab === 'inventory' ? (
-                    <>
-                        <GearInventory
-                            inventory={inventory}
-                            onRemove={handleRemovePiece}
-                            onEdit={handleEditPiece}
-                        />
-                    </>
+                    <GearInventory
+                        inventory={inventory}
+                        onRemove={handleRemovePiece}
+                        onEdit={handleEditPiece}
+                        maxItems={inventory.length}
+                    />
                 ) : (
                     <GearUpgradeAnalysis
                         inventory={inventory}
