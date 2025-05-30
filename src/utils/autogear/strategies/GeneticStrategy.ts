@@ -30,10 +30,19 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     name = 'Genetic Algorithm';
     description = 'Evolution-inspired approach for finding optimal gear combinations';
 
-    private readonly POPULATION_SIZE = 1000; // Number of solutions in each generation
-    private readonly GENERATIONS = 30; // How many iterations to evolve
     private readonly MUTATION_RATE = 0.1; // 10% chance to mutate each gear piece
-    private readonly ELITE_SIZE = 5; // Number of best solutions to keep unchanged
+
+    private getPopulationSize(inventorySize: number): number {
+        return Math.min(1000, Math.max(250, Math.floor(inventorySize * 0.5)));
+    }
+
+    private getGenerations(populationSize: number): number {
+        return Math.min(50, Math.max(20, Math.floor(40000 / populationSize)));
+    }
+
+    private getEliteSize(populationSize: number): number {
+        return Math.max(3, Math.min(10, Math.floor(populationSize * 0.01)));
+    }
 
     async findOptimalGear(
         ship: Ship,
@@ -45,8 +54,14 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
         // Initialize progress tracking (population size * generations)
-        const totalOperations = this.POPULATION_SIZE * this.GENERATIONS;
+        const totalOperations =
+            this.getPopulationSize(availableInventory.length) *
+            this.getGenerations(this.getPopulationSize(availableInventory.length));
         this.initializeProgress(totalOperations);
+
+        const populationSize = this.getPopulationSize(availableInventory.length);
+        const generations = this.getGenerations(populationSize);
+        const eliteSize = this.getEliteSize(populationSize);
 
         let population = this.initializePopulation(availableInventory, getGearPiece, setPriorities);
         population = this.evaluatePopulation(
@@ -59,11 +74,11 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities
         );
 
-        for (let generation = 0; generation < this.GENERATIONS; generation++) {
+        for (let generation = 0; generation < generations; generation++) {
             const newPopulation: Individual[] = [];
-            newPopulation.push(...population.slice(0, this.ELITE_SIZE));
+            newPopulation.push(...population.slice(0, eliteSize));
 
-            while (newPopulation.length < this.POPULATION_SIZE) {
+            while (newPopulation.length < populationSize) {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
@@ -106,7 +121,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     ): Individual[] {
         const population: Individual[] = [];
 
-        for (let i = 0; i < this.POPULATION_SIZE; i++) {
+        for (let i = 0; i < this.getPopulationSize(inventory.length); i++) {
             const equipment: Partial<Record<GearSlotName, string>> = {};
 
             Object.keys(GEAR_SLOTS).forEach((slotKey) => {
