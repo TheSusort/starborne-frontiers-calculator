@@ -13,6 +13,7 @@ import { StorageKey } from '../constants/storage';
 interface InventoryContextType {
     inventory: GearPiece[];
     loading: boolean;
+    loadingProgress: number;
     getGearPiece: (id: string) => GearPiece | undefined;
     addGear: (newGear: Omit<GearPiece, 'id'>) => Promise<GearPiece>;
     updateGearPiece: (id: string, updates: Partial<GearPiece>) => Promise<void>;
@@ -20,6 +21,10 @@ interface InventoryContextType {
     loadInventory: () => Promise<void>;
     setData: (data: GearPiece[] | ((prev: GearPiece[]) => GearPiece[])) => Promise<void>;
 }
+
+const BATCH_SIZE = 1000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
@@ -129,6 +134,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
+    const [loadingProgress, setLoadingProgress] = useState(0);
     const [isMigrating, setIsMigrating] = useState(false);
 
     // Use useStorage for inventory
@@ -137,25 +143,35 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         defaultValue: [],
     });
 
-    const loadInventory = useCallback(async () => {
-        // Skip loading if we're in the middle of migration
-        if (isMigrating) return;
+    const loadBatch = useCallback(
+        async (
+            lastId: string | null,
+            retryCount = 0
+        ): Promise<{ items: GearPiece[]; lastId: string | null }> => {
+            if (!user?.id) return { items: [], lastId: null };
 
-        try {
-            setLoading(true);
-            if (user?.id) {
-                const { data, error } = await supabase
+            try {
+                let query = supabase
                     .from('inventory_items')
                     .select(
                         `
-                        *,
-                        gear_stats (*),
-                        ship_equipment (*)
-                    `
+                    *,
+                    gear_stats (*)
+                `
                     )
-                    .eq('user_id', user.id);
+                    .eq('user_id', user.id)
+                    .order('id')
+                    .limit(BATCH_SIZE);
+
+                // Only add gt condition if we have a lastId
+                if (lastId) {
+                    query = query.gt('id', lastId);
+                }
+
+                const { data, error } = await query;
 
                 if (error) throw error;
+
                 const transformedGear = data
                     .map(transformGearData)
                     .filter((gear): gear is GearPiece => gear !== null)
@@ -164,16 +180,71 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         subStats: gear.subStats || [],
                     }));
 
-                setInventory(transformedGear);
+                return {
+                    items: transformedGear,
+                    lastId: data[data.length - 1]?.id || null,
+                };
+            } catch (error) {
+                if (retryCount < MAX_RETRIES) {
+                    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+                    return loadBatch(lastId, retryCount + 1);
+                }
+                throw error;
             }
-            // Don't clear inventory when user is not authenticated
+        },
+        [user?.id]
+    );
+
+    const loadInventory = useCallback(async () => {
+        // Skip loading if we're in the middle of migration
+        if (isMigrating) return;
+
+        try {
+            if (!user?.id) return;
+
+            setLoading(true);
+            setLoadingProgress(0);
+            let allItems: GearPiece[] = [];
+            let lastId: string | null = null;
+            let totalLoaded = 0;
+
+            // First, get the total count
+            const { count, error: countError } = await supabase
+                .from('inventory_items')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user?.id);
+
+            if (countError) throw countError;
+            const totalItems = count || 0;
+
+            // Load all batches
+            while (true) {
+                const { items, lastId: newLastId } = await loadBatch(lastId);
+
+                if (items.length === 0) break;
+
+                allItems = [...allItems, ...items];
+                lastId = newLastId;
+                totalLoaded += items.length;
+
+                // Update progress
+                setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
+
+                // Update inventory as we go
+                setInventory(allItems);
+
+                if (items.length < BATCH_SIZE) break;
+            }
+
+            setLoadingProgress(100);
         } catch (error) {
             console.error('Error loading inventory:', error);
             addNotification('error', 'Failed to load inventory');
+            // Keep existing inventory on error
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setInventory, isMigrating]);
+    }, [user?.id, addNotification, setInventory, isMigrating, loadBatch]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -412,11 +483,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             value={{
                 inventory,
                 loading,
-                loadInventory,
+                loadingProgress,
                 getGearPiece,
                 addGear,
                 updateGearPiece,
                 deleteGearPiece,
+                loadInventory,
                 setData: setInventory,
             }}
         >
