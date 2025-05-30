@@ -34,22 +34,12 @@ export class BeamSearchStrategy extends BaseStrategy {
     async findOptimalGear(
         ship: Ship,
         priorities: StatPriority[],
-        inventory: GearPiece[],
+        availableInventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        getShipFromGearId: (gearId: string) => Ship | undefined,
         shipRole?: ShipTypeName,
-        ignoreEquipped?: boolean,
         setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
-        // Filter inventory based on ignoreEquipped setting
-        const availableInventory = this.filterInventory(
-            inventory,
-            ship.id,
-            getShipFromGearId,
-            ignoreEquipped
-        );
-
         // Calculate total operations:
         // For each slot:
         //   - We have BEAM_WIDTH configurations

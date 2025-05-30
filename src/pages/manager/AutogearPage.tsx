@@ -107,14 +107,21 @@ export const AutogearPage: React.FC = () => {
         const strategy = getAutogearStrategy(selectedAlgorithm);
         strategy.setProgressCallback(setOptimizationProgress);
 
-        // Filter out gear that's equipped on locked ships, except for gear on the selected ship
+        // Filter inventory based on both locked ships and ignoreEquipped setting
         const availableInventory = inventory.filter((gear) => {
             // If gear is equipped on a ship (either through shipId or getShipFromGearId)
             const equippedShip = gear.shipId
                 ? ships.find((ship) => ship.id === gear.shipId)
                 : getShipFromGearId(gear.id);
 
-            // Include if:
+            // If ignoreEquipped is true, only include:
+            // 1. Not equipped on any ship, OR
+            // 2. Equipped on selected ship
+            if (ignoreEquipped) {
+                return !equippedShip || equippedShip.id === selectedShip.id;
+            }
+
+            // Otherwise, include:
             // 1. Not equipped on any ship, OR
             // 2. Equipped on selected ship, OR
             // 3. Equipped on an unlocked ship
@@ -124,6 +131,7 @@ export const AutogearPage: React.FC = () => {
                 !equippedShip.equipmentLocked
             );
         });
+
         // eslint-disable-next-line no-console
         console.log(`Available inventory size: ${availableInventory.length}`);
 
@@ -134,9 +142,7 @@ export const AutogearPage: React.FC = () => {
                 availableInventory,
                 getGearPiece,
                 getEngineeringStatsForShipType,
-                getShipFromGearId,
                 selectedShipRole || undefined,
-                ignoreEquipped,
                 setPriorities
             )
         );
