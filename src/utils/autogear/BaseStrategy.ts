@@ -21,14 +21,25 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected filterInventory(
         inventory: GearPiece[],
         selectedShipId: string,
+        getShipFromGearId: (gearId: string) => Ship | undefined,
         ignoreEquipped: boolean = false
     ): GearPiece[] {
         if (!ignoreEquipped) {
             return inventory;
         }
 
-        // Filter out items that have shipId set (meaning they're equipped)
-        return inventory.filter((item) => !item.shipId || item.shipId === selectedShipId);
+        // When ignoreEquipped is true, exclude all gear equipped to any ship except selectedShip
+        return inventory.filter((item) => {
+            // Check if item is equipped on any ship
+            const equippedShip = item.shipId
+                ? { id: item.shipId } // If shipId is set, we know it's equipped to that ship
+                : getShipFromGearId(item.id);
+
+            // Include if:
+            // 1. Not equipped on any ship, OR
+            // 2. Equipped on selected ship
+            return !equippedShip || equippedShip.id === selectedShipId;
+        });
     }
 
     abstract findOptimalGear(
@@ -37,6 +48,7 @@ export abstract class BaseStrategy implements AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        getShipFromGearId: (gearId: string) => Ship | undefined,
         shipRole?: ShipTypeName,
         ignoreEquipped?: boolean
     ): Promise<GearSuggestion[]> | GearSuggestion[];

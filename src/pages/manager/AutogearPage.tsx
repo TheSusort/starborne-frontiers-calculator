@@ -35,7 +35,7 @@ export const AutogearPage: React.FC = () => {
 
     // All hooks
     const { getGearPiece, inventory } = useInventory();
-    const { getShipById, ships, equipMultipleGear } = useShips();
+    const { getShipById, ships, equipMultipleGear, getShipFromGearId } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -100,27 +100,32 @@ export const AutogearPage: React.FC = () => {
         setOptimizationProgress(null);
         setSuggestions([]);
 
+        const startTime = performance.now();
+        // eslint-disable-next-line no-console
+        console.log('Starting optimization...');
+
         const strategy = getAutogearStrategy(selectedAlgorithm);
         strategy.setProgressCallback(setOptimizationProgress);
 
         // Filter out gear that's equipped on locked ships, except for gear on the selected ship
         const availableInventory = inventory.filter((gear) => {
-            // If the gear is equipped on a ship
-            if (gear.shipId) {
-                const equippedShip = ships.find((ship) => ship.id === gear.shipId);
+            // If gear is equipped on a ship (either through shipId or getShipFromGearId)
+            const equippedShip = gear.shipId
+                ? ships.find((ship) => ship.id === gear.shipId)
+                : getShipFromGearId(gear.id);
 
-                // Include if:
-                // 1. It's equipped on the selected ship, OR
-                // 2. It's equipped on an unlocked ship
-                return (
-                    gear.shipId === selectedShip.id ||
-                    (equippedShip && !equippedShip.equipmentLocked)
-                );
-            }
-
-            // Include all unequipped gear
-            return true;
+            // Include if:
+            // 1. Not equipped on any ship, OR
+            // 2. Equipped on selected ship, OR
+            // 3. Equipped on an unlocked ship
+            return (
+                !equippedShip ||
+                equippedShip.id === selectedShip.id ||
+                !equippedShip.equipmentLocked
+            );
         });
+        // eslint-disable-next-line no-console
+        console.log(`Available inventory size: ${availableInventory.length}`);
 
         const newSuggestions = await Promise.resolve(
             strategy.findOptimalGear(
@@ -129,11 +134,17 @@ export const AutogearPage: React.FC = () => {
                 availableInventory,
                 getGearPiece,
                 getEngineeringStatsForShipType,
+                getShipFromGearId,
                 selectedShipRole || undefined,
                 ignoreEquipped,
                 setPriorities
             )
         );
+
+        const endTime = performance.now();
+        const duration = (endTime - startTime) / 1000; // Convert to seconds
+        // eslint-disable-next-line no-console
+        console.log(`Optimization completed in ${duration.toFixed(2)} seconds`);
 
         // Create new equipment objects
         const currentEquipment = selectedShip.equipment;

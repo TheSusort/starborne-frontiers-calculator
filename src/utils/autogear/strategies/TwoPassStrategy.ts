@@ -29,12 +29,18 @@ export class TwoPassStrategy extends BaseStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        getShipFromGearId: (gearId: string) => Ship | undefined,
         shipRole?: ShipTypeName,
         ignoreEquipped?: boolean,
         setPriorities?: SetPriority[]
     ): Promise<GearSuggestion[]> {
         // Filter inventory based on ignoreEquipped setting
-        const availableInventory = this.filterInventory(inventory, ship.id, ignoreEquipped);
+        const availableInventory = this.filterInventory(
+            inventory,
+            ship.id,
+            getShipFromGearId,
+            ignoreEquipped
+        );
 
         // Initialize progress tracking (slots * gear + potential set combinations)
         const totalOperations =

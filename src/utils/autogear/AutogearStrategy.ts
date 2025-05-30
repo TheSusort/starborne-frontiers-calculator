@@ -13,6 +13,7 @@ export interface AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        getShipFromGearId: (gearId: string) => Ship | undefined,
         shipRole?: ShipTypeName,
         ignoreEquipped?: boolean,
         setPriorities?: SetPriority[]

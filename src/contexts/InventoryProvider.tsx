@@ -156,7 +156,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .select(
                         `
                     *,
-                    gear_stats (*)
+                    gear_stats (*),
+                    ship_equipment (ship_id)
                 `
                     )
                     .eq('user_id', user.id)
@@ -218,6 +219,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const totalItems = count || 0;
 
             // Load all batches
+            // eslint-disable-next-line no-constant-condition
             while (true) {
                 const { items, lastId: newLastId } = await loadBatch(lastId);
 

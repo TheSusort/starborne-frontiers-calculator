@@ -26,8 +26,8 @@ export const GearPieceDisplay = memo(
         onEquip,
         className = '',
     }: Props) => {
-        const { getShipName, getShipNameFromGearId } = useShips();
-        const shipName = gear.shipId ? getShipName(gear.shipId) : getShipNameFromGearId(gear.id);
+        const { getShipName, getShipFromGearId } = useShips();
+        const shipName = gear.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus].iconUrl, [gear.setBonus]);

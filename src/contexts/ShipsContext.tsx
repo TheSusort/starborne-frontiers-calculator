@@ -34,7 +34,7 @@ interface ShipsContextType {
     toggleEquipmentLock: (shipId: string) => Promise<void>;
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
-    getShipNameFromGearId: (gearId: string) => string | undefined;
+    getShipFromGearId: (gearId: string) => Ship | undefined;
     setData: (data: Ship[] | ((prev: Ship[]) => Ship[])) => Promise<void>;
 }
 
@@ -941,10 +941,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         [ships, lockEquipment]
     );
 
-    const getShipNameFromGearId = useCallback(
+    const getShipFromGearId = useCallback(
         (gearId: string) => {
             const ship = ships.find((s) => Object.values(s.equipment).includes(gearId));
-            return ship?.name;
+            return ship;
         },
         [ships]
     );
@@ -969,7 +969,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 toggleEquipmentLock,
                 validateGearAssignments,
                 unequipAllEquipment,
-                getShipNameFromGearId,
+                getShipFromGearId,
                 setData: setShips,
             }}
         >
