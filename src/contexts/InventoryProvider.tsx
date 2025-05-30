@@ -346,7 +346,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 if (statsError) throw statsError;
 
                 // Update state with real data
-                await loadInventory();
+                //await loadInventory();
                 return transformGearData(gearData as RawGearData) as GearPiece;
             } catch (error) {
                 // Revert optimistic update on error
@@ -435,7 +435,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
                 if (user?.id) {
-                    await loadInventory();
+                    //await loadInventory();
                 }
             } catch (error) {
                 // Revert optimistic update on error
@@ -467,7 +467,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
                 if (user?.id) {
-                    await loadInventory();
+                    //await loadInventory();
                 }
             } catch (error) {
                 // Revert optimistic update on error

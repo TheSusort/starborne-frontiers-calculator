@@ -484,7 +484,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
 
                 // Update state with real data
-                await loadShips();
+                //await loadShips();
                 return getShipById(insertedShip.id) as Ship;
             } catch (error) {
                 // Revert optimistic update on error
@@ -627,7 +627,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     }
                 }
                 // Update state with real data
-                await loadShips();
+                //await loadShips();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -657,7 +657,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
             } catch (error) {
                 // Revert optimistic update on error
-                await loadShips();
+                //await loadShips();
                 console.error('Error deleting ship:', error);
                 addNotification('error', 'Failed to delete ship');
                 throw error;
@@ -719,8 +719,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
 
                 // Update state with real data
-                await loadShips();
-                await loadInventory();
+                //await loadShips();
+                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -767,8 +767,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
 
                 // Update state with real data
-                await loadShips();
-                await loadInventory();
+                //await loadShips();
+                //await loadInventory();
             } catch (error) {
                 console.error('Error equipping multiple gear:', error);
                 addNotification('error', 'Failed to equip multiple gear');
@@ -808,8 +808,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
 
                 // Update state with real data
-                await loadShips();
-                await loadInventory();
+                //await loadShips();
+                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -848,7 +848,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
 
                 // Update state with real data
-                await loadShips();
+                //await loadShips();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -919,8 +919,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
 
                 // Update state with real data
-                await loadShips();
-                await loadInventory();
+                //await loadShips();
+                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
