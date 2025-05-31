@@ -16,10 +16,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         <div className="space-y-8">
             <h2 className="text-xl font-semibold mb-4">Gear Upgrade Analysis (EXPERIMENTAL)</h2>
             <span className="text-sm text-gray-400">
-                This analysis tries to find the 3 best gear upgrades for each ship role, by
+                This analysis tries to find the 6 best gear upgrades for each ship role, by
                 simulating upgrading each piece to 16, 10 different times, and averaging the
-                results. The results are percentages of improvement to the role score over the
-                current level of the piece.
+                results. The improvement percentages are the average improvement to the role score
+                over the current level of the piece. Sorted by the total improvement to the role
+                score.
             </span>
 
             {shipRoles.map((role) => {
@@ -40,7 +41,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                                         <div
                                             className={`flex justify-between ${winnerColors[index]}`}
                                         >
-                                            <span>Average improvement:</span>
+                                            <span>Avg. gear improvement:</span>
                                             <span>
                                                 {Math.round(
                                                     (result.improvement / result.currentScore) * 100

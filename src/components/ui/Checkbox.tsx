@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CheckIcon } from './icons/CheckIcon';
+import { Tooltip } from './layout/Tooltip';
+import { InfoIcon } from './icons/InfoIcon';
 
 interface CheckboxProps {
     label: string;
@@ -8,6 +10,7 @@ interface CheckboxProps {
     className?: string;
     disabled?: boolean;
     id?: string;
+    helpLabel?: string;
 }
 
 export const Checkbox: React.FC<CheckboxProps> = ({
@@ -17,8 +20,19 @@ export const Checkbox: React.FC<CheckboxProps> = ({
     className = '',
     disabled = false,
     id: providedId,
+    helpLabel,
 }) => {
     const id = providedId || `checkbox-${label.toLowerCase().replace(/\s+/g, '-')}`;
+    const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+
+    const tooltip = (
+        <Tooltip
+            isVisible={showHelpTooltip}
+            className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+        >
+            <p>{helpLabel}</p>
+        </Tooltip>
+    );
 
     return (
         <div className={`flex items-center space-x-2 ${className}`}>
@@ -33,7 +47,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
             <label
                 htmlFor={id}
                 className={`
-                    flex items-center space-x-2
+                    flex items-center space-x-2 flex-grow
                     ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                 `}
             >
@@ -58,7 +72,19 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                         {checked && <CheckIcon />}
                     </div>
                 </div>
-                <span className=" select-none">{label}</span>
+                <span className=" select-none flex items-center justify-between gap-2 w-full">
+                    {label}
+                    {helpLabel && (
+                        <>
+                            <InfoIcon
+                                className="text-sm text-gray-400 h-8 w-8 p-2"
+                                onMouseEnter={() => setShowHelpTooltip(true)}
+                                onMouseLeave={() => setShowHelpTooltip(false)}
+                            />
+                            {tooltip}
+                        </>
+                    )}
+                </span>
             </label>
         </div>
     );

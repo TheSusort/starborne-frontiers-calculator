@@ -66,6 +66,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                         value: stat,
                         label: STATS[stat].label,
                     }))}
+                    helpLabel="Set a stat priority to be met by the gear you equip. A min or max value is required."
                 />
                 {!hideWeight && (
                     <div className="w-32">
@@ -76,6 +77,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                             onChange={(e) => setWeight(Number(e.target.value))}
                             placeholder="Enter weight"
                             className="mt-4"
+                            helpLabel="Set a weight for the stat priority. The higher the weight, the more important the stat is."
                         />
                     </div>
                 )}
@@ -89,6 +91,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                         value={minLimit}
                         onChange={(e) => setMinLimit(e.target.value)}
                         placeholder="min value"
+                        helpLabel="Set a minimum value for the stat priority. The gear should have a value greater than or equal to this."
                     />
                 )}
                 {!hideMaxLimit && (
@@ -98,6 +101,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                         value={maxLimit}
                         onChange={(e) => setMaxLimit(e.target.value)}
                         placeholder="max value"
+                        helpLabel="Set a maximum value for the stat priority. The gear should have a value less than or equal to this."
                     />
                 )}
             </div>

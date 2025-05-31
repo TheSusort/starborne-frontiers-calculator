@@ -3,7 +3,6 @@ import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GearSlotName, RARITIES, STATS } from '../../constants';
 import { Button, Tooltip, CloseIcon } from '../ui';
 import { GearPieceDisplay } from './GearPieceDisplay';
-
 interface GearSlotProps {
     slotKey: GearSlotName;
     gear?: GearPiece;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button, Input } from '../ui';
 import { SortConfig, SortOption, SortPanel } from './SortPanel';
 import { SearchIcon } from '../ui/icons/SearchIcon';
@@ -44,9 +44,21 @@ export const FilterPanel: React.FC<Props> = ({
     searchPlaceholder = 'Search...',
 }) => {
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isSearchExpanded && searchInputRef.current) {
+            // Small delay to ensure the input is visible
+            setTimeout(() => {
+                searchInputRef.current?.focus();
+            }, 50);
+        }
+    }, [isSearchExpanded]);
 
     const handleSearchToggle = () => {
         setIsSearchExpanded(!isSearchExpanded);
+
+        // Clear search value when search is closed
         if (isSearchExpanded && onSearchChange) {
             onSearchChange('');
         }
@@ -96,12 +108,12 @@ export const FilterPanel: React.FC<Props> = ({
                                 className={`flex items-center transition-all duration-300 ease-in-out ${isSearchExpanded ? 'w-64' : 'w-0'}`}
                             >
                                 <Input
+                                    ref={searchInputRef}
                                     type="text"
                                     value={searchValue}
                                     onChange={(e) => onSearchChange(e.target.value)}
                                     placeholder={searchPlaceholder}
                                     className={`w-full !pr-12 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-100' : 'opacity-0'}`}
-                                    autoFocus
                                 />
                                 <Button
                                     variant="secondary"

@@ -48,6 +48,8 @@ describe('AutogearSettings Component', () => {
         setPriorities: [],
         onAddSetPriority: vi.fn(),
         onRemoveSetPriority: vi.fn(),
+        ignoreUnleveled: false,
+        onIgnoreUnleveledChange: vi.fn(),
     };
 
     beforeEach(() => {

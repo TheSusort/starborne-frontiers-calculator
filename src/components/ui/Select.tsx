@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronUpIcon } from './icons/ChevronUpIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { InfoIcon } from './icons/InfoIcon';
+import { Tooltip } from './layout/Tooltip';
 
 interface Props {
     label?: string;
@@ -14,6 +16,7 @@ interface Props {
     disabled?: boolean;
     id?: string;
     'data-testid'?: string;
+    helpLabel?: string;
 }
 
 export const Select: React.FC<Props> = ({
@@ -28,10 +31,21 @@ export const Select: React.FC<Props> = ({
     disabled = false,
     id,
     'data-testid': testId,
+    helpLabel,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const selectId = id || `select-${Math.random().toString(36).substring(2, 15)}`;
+    const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+
+    const tooltip = (
+        <Tooltip
+            isVisible={showHelpTooltip}
+            className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+        >
+            <p>{helpLabel}</p>
+        </Tooltip>
+    );
 
     const selectedOption =
         value === '' && noDefaultSelection
@@ -87,8 +101,22 @@ export const Select: React.FC<Props> = ({
     return (
         <div className="space-y-1 grow" ref={containerRef}>
             {label && (
-                <label htmlFor={selectId} aria-label={label} className="block text-sm font-medium ">
+                <label
+                    htmlFor={selectId}
+                    aria-label={label}
+                    className="flex text-sm font-medium items-center gap-2 justify-between"
+                >
                     {label}
+                    {helpLabel && (
+                        <>
+                            <InfoIcon
+                                className="text-sm text-gray-400 h-8 w-8 p-2"
+                                onMouseEnter={() => setShowHelpTooltip(true)}
+                                onMouseLeave={() => setShowHelpTooltip(false)}
+                            />
+                            {tooltip}
+                        </>
+                    )}
                 </label>
             )}
             <div className="relative">

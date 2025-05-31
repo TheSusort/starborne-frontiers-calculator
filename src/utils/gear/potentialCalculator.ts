@@ -7,6 +7,7 @@ import { ShipTypeName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
 import { calculateTotalStats } from '../ship/statsCalculator';
+import { GEAR_SETS } from '../../constants/gearSets';
 
 const UPGRADE_LEVELS = {
     rare: {
@@ -162,13 +163,28 @@ function calculateGearStats(piece: GearPiece): BaseStats {
         undefined
     );
 
+    // Add set bonus stats if the piece has a set
+    if (piece.setBonus && GEAR_SETS[piece.setBonus]) {
+        const setBonus = GEAR_SETS[piece.setBonus];
+        if (setBonus.stats) {
+            setBonus.stats.forEach((stat) => {
+                const currentValue = breakdown.final[stat.name] || 0;
+                if (stat.type === 'percentage') {
+                    breakdown.final[stat.name] = currentValue * (1 + stat.value / 100);
+                } else {
+                    breakdown.final[stat.name] = currentValue + stat.value;
+                }
+            });
+        }
+    }
+
     return breakdown.final;
 }
 
 export function analyzePotentialUpgrades(
     inventory: GearPiece[],
     shipRole: ShipTypeName,
-    count: number = 3
+    count: number = 6
 ): PotentialResult[] {
     const eligiblePieces = inventory.filter(
         (piece) => piece.level < 16 && ['rare', 'epic', 'legendary'].includes(piece.rarity)

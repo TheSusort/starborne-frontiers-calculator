@@ -1,8 +1,20 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.1.0';
+export const CURRENT_VERSION = '1.2.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.1.1',
+        date: '2025-05-31',
+        changes: [
+            'Added set bonus stats to gear piece display',
+            'Added set bonus stats to gear upgrade analysis',
+            'Added autofocus to searchbars in gear and ship filters.',
+            'Added better sorting to ship selector, and autofocus on searchbar',
+            'Revamped gear upgrade analysis, shows better recommendations, and shows more pieces.',
+            'Added ignore unleveled gear option to autogear',
+        ],
+    },
     {
         version: '1.1.0',
         date: '2025-05-31',

@@ -55,7 +55,11 @@ export const GearPieceDisplay = memo(
                 >
                     <div>
                         <div className="capitalize flex items-center gap-2">
-                            <img src={slotInfo} alt={gear.setBonus} className="w-6 h-auto" />
+                            <img
+                                src={slotInfo}
+                                alt={GEAR_SETS[gear.setBonus].name}
+                                className="w-6 h-auto"
+                            />
                             <span className="font-secondary">{GEAR_SLOTS[gear.slot].label}</span>
                         </div>
                         <div className="flex items-center">
@@ -120,6 +124,14 @@ export const GearPieceDisplay = memo(
                             <div>
                                 <div className="text-sm text-gray-400 mb-2">Sub Stats</div>
                                 <StatDisplay stats={gear.subStats} />
+                            </div>
+                        )}
+                        {gear.setBonus && (
+                            <div>
+                                <div className="text-sm text-gray-400 mb-2">
+                                    Set Bonus: {GEAR_SETS[gear.setBonus].name}
+                                </div>
+                                <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
                             </div>
                         )}
                         {shipName && (

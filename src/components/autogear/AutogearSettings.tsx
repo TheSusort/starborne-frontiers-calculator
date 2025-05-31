@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
-import { Button, Select, Checkbox, CloseIcon, Input, Tooltip, InfoIcon } from '../ui';
+import {
+    Button,
+    Select,
+    Checkbox,
+    CloseIcon,
+    Input,
+    Tooltip,
+    InfoIcon,
+    CollapsibleForm,
+    ChevronDownIcon,
+} from '../ui';
 import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority } from '../../types/autogear';
@@ -15,6 +25,7 @@ interface AutogearSettingsProps {
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
     ignoreEquipped: boolean;
+    ignoreUnleveled: boolean;
     showSecondaryRequirements: boolean;
     setPriorities: SetPriority[];
     onShipSelect: (ship: Ship) => void;
@@ -24,6 +35,7 @@ interface AutogearSettingsProps {
     onRemovePriority: (index: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
+    onIgnoreUnleveledChange: (value: boolean) => void;
     onToggleSecondaryRequirements: (value: boolean) => void;
     onAddSetPriority: (priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
@@ -57,6 +69,7 @@ const SetPriorityForm: React.FC<{
                     value={selectedSet}
                     onChange={(value) => setSelectedSet(value)}
                     noDefaultSelection
+                    helpLabel="Select a gear set to be met by the gear you equip."
                 />
                 <Input
                     label="No. of pieces"
@@ -65,6 +78,7 @@ const SetPriorityForm: React.FC<{
                     max="6"
                     value={count}
                     onChange={(e) => setCount(parseInt(e.target.value))}
+                    helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
                 />
                 <Button type="submit" disabled={!selectedSet} variant="secondary">
                     Add
@@ -80,6 +94,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedAlgorithm,
     priorities,
     ignoreEquipped,
+    ignoreUnleveled,
     showSecondaryRequirements,
     setPriorities,
     onShipSelect,
@@ -89,6 +104,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemovePriority,
     onFindOptimalGear,
     onIgnoreEquippedChange,
+    onIgnoreUnleveledChange,
     onToggleSecondaryRequirements,
     onAddSetPriority,
     onRemoveSetPriority,
@@ -117,21 +133,30 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShipRole && (
-                <div className="p-4 bg-dark flex items-center gap-2">
-                    <Checkbox
-                        label="Add secondary requirements"
-                        checked={showSecondaryRequirements}
-                        onChange={onToggleSecondaryRequirements}
-                    />
+                <div className="p-4 bg-dark">
+                    <Button
+                        variant="link"
+                        onClick={() => onToggleSecondaryRequirements(!showSecondaryRequirements)}
+                        className="w-full flex justify-between items-center"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-gray-400 h-8 w-8 p-2 transition-transform duration-300 ${
+                                    showSecondaryRequirements ? 'rotate-180' : ''
+                                }`}
+                            />
+                            {showSecondaryRequirements ? 'Hide' : 'Show'} Secondary Priorities
+                        </span>
 
-                    <InfoIcon
-                        className="text-sm text-gray-400 mt-1"
-                        onMouseEnter={() => setShowSecondaryRequirementsTooltip(true)}
-                        onMouseLeave={() => setShowSecondaryRequirementsTooltip(false)}
-                    />
+                        <InfoIcon
+                            className="text-sm text-gray-400 h-8 w-8 p-2"
+                            onMouseEnter={() => setShowSecondaryRequirementsTooltip(true)}
+                            onMouseLeave={() => setShowSecondaryRequirementsTooltip(false)}
+                        />
+                    </Button>
                     <Tooltip
                         isVisible={showSecondaryRequirementsTooltip}
-                        className="bg-dark border border-dark-lighter p-2 w-[80%]"
+                        className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
                     >
                         <p>
                             Add additional minimum/maximum stat requirements, or wanted set pieces
@@ -145,10 +170,15 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             )}
 
-            {(selectedShipRole === null ||
-                selectedShipRole === '' ||
-                showSecondaryRequirements) && (
-                <>
+            <CollapsibleForm
+                isVisible={
+                    selectedShipRole === null ||
+                    selectedShipRole === '' ||
+                    showSecondaryRequirements
+                }
+                className="!mt-0"
+            >
+                <div className="space-y-4">
                     <StatPriorityForm
                         onAdd={onAddPriority}
                         existingPriorities={priorities}
@@ -158,8 +188,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="bg-dark p-4 space-y-2">
                         <SetPriorityForm onAdd={onAddSetPriority} />
                     </div>
-                </>
-            )}
+                </div>
+            </CollapsibleForm>
 
             {priorities.length > 0 && (
                 <div className="bg-dark p-4 space-y-2 ">
@@ -213,8 +243,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             )}
 
             <div className="space-y-2 p-4 bg-dark">
-                <span className=" text-sm">Algorithm</span>
                 <Select
+                    label="Algorithm"
                     data-testid="algorithm-select"
                     options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
                         value: key,
@@ -222,22 +252,32 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     }))}
                     value={selectedAlgorithm}
                     onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
+                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
                 />
                 <p className="text-sm text-gray-400">
                     {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
                 </p>
             </div>
 
-            <div className="p-4 bg-dark">
+            <div className="p-4 bg-dark space-y-4">
                 <Checkbox
                     label="Ignore currently equipped gear"
                     checked={ignoreEquipped}
                     onChange={(value) => onIgnoreEquippedChange(value)}
+                    helpLabel="When checked, the algorithm will ignore gear that is currently equipped on other
+                    ships.
+                    Unchecked, the algorithm will include gear that is currently equipped on other
+                    ships, except those you have locked."
+                    className="w-full"
                 />
-                <p className="text-sm text-gray-400 mt-1">
-                    When checked, the algorithm will ignore gear that is currently equipped on other
-                    ships
-                </p>
+                <Checkbox
+                    label="Ignore unleveled gear"
+                    checked={ignoreUnleveled}
+                    onChange={(value) => onIgnoreUnleveledChange(value)}
+                    helpLabel="When checked, the algorithm will ignore gear that has not been leveled up (level 0).
+                    Unchecked, the algorithm will consider all gear regardless of level."
+                    className="w-full"
+                />
             </div>
 
             <Button

@@ -3,6 +3,7 @@ import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from './ShipDisplay';
+import { RARITY_ORDER } from '../../constants';
 
 interface ShipSelectorProps {
     selected: Ship | null;
@@ -44,12 +45,19 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                     placeholder="Search ships"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    autoFocus
                 />
-                <div className="grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {ships.length === 0 && <p>No ships available</p>}
                     {ships
                         .filter((ship) => ship.name.toLowerCase().includes(search.toLowerCase()))
                         .sort((a, b) => {
+                            // First sort by rarity
+                            const rarityComparison =
+                                RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+                            if (rarityComparison !== 0) return rarityComparison;
+
+                            // If rarities are equal, sort by equipment length
                             const aLength = Object.keys(a.equipment ?? {}).length;
                             const bLength = Object.keys(b.equipment ?? {}).length;
                             return sortDirection === 'asc' ? aLength - bLength : bLength - aLength;

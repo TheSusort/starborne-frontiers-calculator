@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AffinityName, Ship } from '../../types/ship';
+import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { ShipCard } from './ShipCard';

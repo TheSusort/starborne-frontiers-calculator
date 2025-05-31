@@ -8,6 +8,7 @@ const getOrCreatePortalRoot = () => {
     if (!portalRoot) {
         portalRoot = document.createElement('div');
         portalRoot.setAttribute('id', 'modal-root');
+        portalRoot.className = 'z-[60] relative';
         document.body.appendChild(portalRoot);
     }
     return portalRoot;

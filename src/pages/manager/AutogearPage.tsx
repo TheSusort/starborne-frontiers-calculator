@@ -21,6 +21,14 @@ import { useSearchParams } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { BaseStats } from '../../types/stats';
+
+interface UnmetPriority {
+    stat: string;
+    current: number;
+    target: number;
+    type: 'min' | 'max';
+}
 
 export const AutogearPage: React.FC = () => {
     // Helper functions (before hooks)
@@ -61,6 +69,7 @@ export const AutogearPage: React.FC = () => {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
+    const [ignoreUnleveled, setIgnoreUnleveled] = useState(true);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -108,29 +117,31 @@ export const AutogearPage: React.FC = () => {
         strategy.setProgressCallback(setOptimizationProgress);
 
         // Filter inventory based on both locked ships and ignoreEquipped setting
-        const availableInventory = inventory.filter((gear) => {
-            // If gear is equipped on a ship (either through shipId or getShipFromGearId)
-            const equippedShip = gear.shipId
-                ? ships.find((ship) => ship.id === gear.shipId)
-                : getShipFromGearId(gear.id);
+        const availableInventory = inventory
+            .filter((gear) => {
+                // If gear is equipped on a ship (either through shipId or getShipFromGearId)
+                const equippedShip = gear.shipId
+                    ? ships.find((ship) => ship.id === gear.shipId)
+                    : getShipFromGearId(gear.id);
 
-            // If ignoreEquipped is true, only include:
-            // 1. Not equipped on any ship, OR
-            // 2. Equipped on selected ship
-            if (ignoreEquipped) {
-                return !equippedShip || equippedShip.id === selectedShip.id;
-            }
+                // If ignoreEquipped is true, only include:
+                // 1. Not equipped on any ship, OR
+                // 2. Equipped on selected ship
+                if (ignoreEquipped) {
+                    return !equippedShip || equippedShip.id === selectedShip.id;
+                }
 
-            // Otherwise, include:
-            // 1. Not equipped on any ship, OR
-            // 2. Equipped on selected ship, OR
-            // 3. Equipped on an unlocked ship
-            return (
-                !equippedShip ||
-                equippedShip.id === selectedShip.id ||
-                !equippedShip.equipmentLocked
-            );
-        });
+                // Otherwise, include:
+                // 1. Not equipped on any ship, OR
+                // 2. Equipped on selected ship, OR
+                // 3. Equipped on an unlocked ship
+                return (
+                    !equippedShip ||
+                    equippedShip.id === selectedShip.id ||
+                    !equippedShip.equipmentLocked
+                );
+            })
+            .filter((gear) => !ignoreUnleveled || gear.level > 0);
 
         // eslint-disable-next-line no-console
         console.log(`Available inventory size: ${availableInventory.length}`);
@@ -305,6 +316,34 @@ export const AutogearPage: React.FC = () => {
         setSuggestedSimulation(null);
     };
 
+    const getUnmetPriorities = (stats: BaseStats): UnmetPriority[] => {
+        const unmet: UnmetPriority[] = [];
+
+        statPriorities.forEach((priority) => {
+            const currentValue = stats[priority.stat] || 0;
+
+            if (priority.minLimit && currentValue < priority.minLimit) {
+                unmet.push({
+                    stat: priority.stat,
+                    current: currentValue,
+                    target: priority.minLimit,
+                    type: 'min',
+                });
+            }
+
+            if (priority.maxLimit && currentValue > priority.maxLimit) {
+                unmet.push({
+                    stat: priority.stat,
+                    current: currentValue,
+                    target: priority.maxLimit,
+                    type: 'max',
+                });
+            }
+        });
+
+        return unmet;
+    };
+
     const currentStats = getCurrentStats();
     const suggestedStats = calculateSuggestedStats(suggestions);
 
@@ -319,7 +358,9 @@ export const AutogearPage: React.FC = () => {
                         selectedAlgorithm={selectedAlgorithm}
                         priorities={statPriorities}
                         ignoreEquipped={ignoreEquipped}
+                        ignoreUnleveled={ignoreUnleveled}
                         onIgnoreEquippedChange={setIgnoreEquipped}
+                        onIgnoreUnleveledChange={setIgnoreUnleveled}
                         onShipSelect={(ship) => setSelectedShipId(ship.id)}
                         onRoleSelect={handleRoleChange}
                         onAlgorithmSelect={setSelectedAlgorithm}
@@ -354,6 +395,36 @@ export const AutogearPage: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {suggestedStats && suggestions.length > 0 && (
+                    <>
+                        {getUnmetPriorities(suggestedStats.final).length > 0 && (
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h3 className="text-lg font-semibold text-yellow-200 mb-2">
+                                    Unmet Stat Priorities
+                                </h3>
+                                <p className="text-yellow-100 mb-2">
+                                    The suggested gear doesn&apos;t meet all stat priorities, but
+                                    was chosen because hitting the priority had a higher negative
+                                    impact on the score. Try adjusting the minimum or maximum values
+                                    for the stat priorities.
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1">
+                                    {getUnmetPriorities(suggestedStats.final).map(
+                                        (priority, index) => (
+                                            <li key={index} className="text-yellow-100">
+                                                {priority.stat}: {priority.current.toFixed(1)}{' '}
+                                                {priority.type === 'min' ? '<' : '>'}{' '}
+                                                {priority.target.toFixed(1)}
+                                            </li>
+                                        )
+                                    )}
+                                </ul>
+                            </div>
+                        )}
+                    </>
+                )}
+
                 {currentSimulation && suggestedSimulation && suggestions.length > 0 && (
                     <SimulationResults
                         currentSimulation={currentSimulation}
