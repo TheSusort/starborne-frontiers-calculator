@@ -89,6 +89,9 @@ export function calculatePriorityScore(
             case 'Debuffer':
                 baseScore = calculateDebufferScore(stats);
                 break;
+            case 'Debuffer(Defensive)':
+                baseScore = calculateDefensiveDebufferScore(stats);
+                break;
             case 'Supporter':
                 baseScore = calculateHealerScore(stats);
                 break;
@@ -154,7 +157,17 @@ function calculateDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
     const dps = calculateDPS(stats);
 
-    return dps * hacking;
+    // Give more weight to hacking by:
+    // 1. Using a higher multiplier for hacking (20 instead of 10)
+    // 2. Adding a base score for hacking to ensure it's always considered
+    // 3. Using a square root for DPS to reduce its impact relative to hacking
+    return Math.sqrt(dps) * hacking * 20 + hacking * 100;
+}
+
+function calculateDefensiveDebufferScore(stats: BaseStats): number {
+    const hacking = stats.hacking || 0;
+    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    return Math.sqrt(effectiveHP) * hacking * 20 + hacking * 100;
 }
 
 function calculateHealerScore(stats: BaseStats): number {

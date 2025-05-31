@@ -42,6 +42,8 @@ describe('GearSuggestions Component', () => {
         hoveredGear: null,
         onHover: vi.fn(),
         onEquip: vi.fn(),
+        onLockEquipment: vi.fn(),
+        ship: undefined,
     };
 
     beforeEach(() => {

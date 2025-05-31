@@ -43,7 +43,7 @@ export const AutogearPage: React.FC = () => {
 
     // All hooks
     const { getGearPiece, inventory } = useInventory();
-    const { getShipById, ships, equipMultipleGear, getShipFromGearId } = useShips();
+    const { getShipById, ships, equipMultipleGear, getShipFromGearId, lockEquipment } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -101,6 +101,10 @@ export const AutogearPage: React.FC = () => {
 
     const handleRemoveSetPriority = (index: number) => {
         setSetPriorities(setPriorities.filter((_, i) => i !== index));
+    };
+
+    const handleLockEquipment = async (ship: Ship) => {
+        await lockEquipment(ship.id, !ship.equipmentLocked);
     };
 
     const handleAutogear = async () => {
@@ -381,6 +385,8 @@ export const AutogearPage: React.FC = () => {
                             hoveredGear={hoveredGear}
                             onHover={setHoveredGear}
                             onEquip={handleEquipSuggestions}
+                            onLockEquipment={handleLockEquipment}
+                            ship={selectedShip}
                         />
                     )}
 

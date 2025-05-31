@@ -1,10 +1,19 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.2.0';
+export const CURRENT_VERSION = '1.3.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
-        version: '1.1.1',
+        version: '1.3.0',
+        date: '2025-05-31',
+        changes: [
+            'Added lock ship equipment in Autogear page',
+            'Adjusted debuffer score to be more accurate',
+            'Added defensive debuffer role',
+        ],
+    },
+    {
+        version: '1.2.0',
         date: '2025-05-31',
         changes: [
             'Added set bonus stats to gear piece display',

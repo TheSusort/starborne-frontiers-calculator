@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { GearSlot } from '../gear/GearSlot';
-import { Button } from '../ui';
+import { Button, LockIcon, UnlockedLockIcon } from '../ui';
 import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
+import { Ship } from '../../types/ship';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -12,6 +13,8 @@ interface GearSuggestionsProps {
     hoveredGear: GearPiece | null;
     onHover: (gear: GearPiece | null) => void;
     onEquip: () => void;
+    onLockEquipment: (ship: Ship) => Promise<void>;
+    ship?: Ship;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -20,6 +23,8 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     hoveredGear,
     onHover,
     onEquip,
+    onLockEquipment,
+    ship,
 }) => {
     const [expanded, setExpanded] = useState(false);
 
@@ -79,6 +84,22 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                     <Button aria-label="Equip all suggestions" variant="primary" onClick={onEquip}>
                         Equip All Suggestions
                     </Button>
+                    {onLockEquipment && ship && (
+                        <Button
+                            variant="secondary"
+                            title={ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'}
+                            onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                    await onLockEquipment(ship);
+                                } catch (error) {
+                                    console.error('Failed to update lock state:', error);
+                                }
+                            }}
+                        >
+                            {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
+                        </Button>
+                    )}
                     <Button
                         aria-label="Expand suggestions"
                         variant="secondary"

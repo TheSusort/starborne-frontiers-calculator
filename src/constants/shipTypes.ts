@@ -13,7 +13,12 @@ export const SHIP_TYPES: Record<string, ShipType> = {
     },
     DEBUFFER: {
         name: 'Debuffer',
-        description: 'Maximize damage output while having 270 hacking or more',
+        description: 'Maximize hacking, then damage',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
+    },
+    DEBUFFER_DEFENSIVE: {
+        name: 'Debuffer(Defensive)',
+        description: 'Maximize hacking, then effective HP',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
     SUPPORTER: {

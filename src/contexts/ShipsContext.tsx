@@ -239,7 +239,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { loadInventory } = useInventory();
+    //const { loadInventory } = useInventory();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
@@ -729,7 +729,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory, setShips]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const equipMultipleGear = useCallback(
@@ -775,7 +775,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory, setShips]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const removeGear = useCallback(
@@ -818,7 +818,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory, setShips]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const lockEquipment = useCallback(
@@ -929,7 +929,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, loadInventory, setShips]
+        [user?.id, loadShips, addNotification, setShips]
     );
 
     const toggleEquipmentLock = useCallback(
