@@ -6,11 +6,11 @@ import { useEngineeringStats } from '../../contexts/EngineeringStatsProvider';
 import { importPlayerData } from '../../utils/importPlayerData';
 import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
-import { syncMigratedDataToSupabase } from '../../utils/migrateLegacyData';
+import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
 
 export const ImportButton: React.FC<{ className?: string }> = ({ className = '' }) => {
-    const { setData: setShips } = useShips();
+    const { setData: setShips, loadShips } = useShips();
     const { setData: setInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
@@ -47,7 +47,9 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                         });
                     }
 
-                    addNotification('success', 'Data imported successfully');
+                    addNotification('success', 'Data imported successfully, refreshing...');
+
+                    await loadShips();
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
                 }

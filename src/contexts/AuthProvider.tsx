@@ -4,7 +4,7 @@ import { FirebaseAuthService } from '../services/auth/firebaseAuth';
 import { SupabaseAuthService } from '../services/auth/supabaseAuth';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { migrateLegacyData, syncMigratedDataToSupabase } from '../utils/migrateLegacyData';
+import { migratePlayerData, syncMigratedDataToSupabase } from '../utils/migratePlayerData';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -35,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Dispatch migration start event
                 window.dispatchEvent(new Event('app:migration:start'));
 
-                const migrationResult = migrateLegacyData();
+                const migrationResult = migratePlayerData();
                 if (user?.id) {
                     await syncMigratedDataToSupabase(user.id, migrationResult);
                 }

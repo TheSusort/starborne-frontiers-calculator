@@ -36,6 +36,7 @@ interface ShipsContextType {
     unequipAllEquipment: (shipId: string) => Promise<void>;
     getShipFromGearId: (gearId: string) => Ship | undefined;
     setData: (data: Ship[] | ((prev: Ship[]) => Ship[])) => Promise<void>;
+    loadShips: () => Promise<void>;
 }
 
 interface RawShipStat {
@@ -971,6 +972,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 unequipAllEquipment,
                 getShipFromGearId,
                 setData: setShips,
+                loadShips,
             }}
         >
             {children}

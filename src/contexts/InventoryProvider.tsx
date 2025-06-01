@@ -136,6 +136,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isMigrating, setIsMigrating] = useState(false);
+    const [tempInventory, setTempInventory] = useState<GearPiece[]>([]);
 
     // Use useStorage for inventory
     const { data: inventory, setData: setInventory } = useStorage<GearPiece[]>({
@@ -231,13 +232,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Update progress
                 setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
+                addNotification(
+                    totalLoaded == totalItems ? 'success' : 'info',
+                    `Loaded ${totalLoaded} of ${totalItems} items`
+                );
 
-                // Update inventory as we go
-                setInventory(allItems);
+                // Update temporary inventory with the latest batch
+                setTempInventory(allItems);
 
                 if (items.length < BATCH_SIZE) break;
             }
 
+            // Once all items are loaded, update the main inventory
+            setInventory(allItems);
             setLoadingProgress(100);
         } catch (error) {
             console.error('Error loading inventory:', error);
@@ -246,7 +253,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setInventory, isMigrating, loadBatch]);
+    }, [user?.id, addNotification, setInventory, isMigrating, loadBatch, setTempInventory]);
+
+    // Use tempInventory for display while loading
+    const displayInventory = loading ? tempInventory : inventory;
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -483,7 +493,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return (
         <InventoryContext.Provider
             value={{
-                inventory,
+                inventory: displayInventory,
                 loading,
                 loadingProgress,
                 getGearPiece,
