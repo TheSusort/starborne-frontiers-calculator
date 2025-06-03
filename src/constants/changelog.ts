@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.3.1';
+export const CURRENT_VERSION = '1.4.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.4.0',
+        date: '2025-06-03',
+        changes: ['Added bomber debuffer role'],
+    },
     {
         version: '1.3.1',
         date: '2025-06-02',
