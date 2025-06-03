@@ -23,7 +23,7 @@ export const SHIP_TYPES: Record<string, ShipType> = {
     },
     DEBUFFER_BOMBER: {
         name: 'Debuffer(Bomber)',
-        description: 'Maximize hacking, with a cap of 350, then attack',
+        description: 'Maximize hacking, then attack',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
     SUPPORTER: {
