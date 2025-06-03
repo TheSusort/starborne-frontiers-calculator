@@ -92,6 +92,9 @@ export function calculatePriorityScore(
             case 'Debuffer(Defensive)':
                 baseScore = calculateDefensiveDebufferScore(stats);
                 break;
+            case 'Debuffer(Bomber)':
+                baseScore = calculateBomberDebufferScore(stats);
+                break;
             case 'Supporter':
                 baseScore = calculateHealerScore(stats);
                 break;
@@ -157,17 +160,21 @@ function calculateDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
     const dps = calculateDPS(stats);
 
-    // Give more weight to hacking by:
-    // 1. Using a higher multiplier for hacking (20 instead of 10)
-    // 2. Adding a base score for hacking to ensure it's always considered
-    // 3. Using a square root for DPS to reduce its impact relative to hacking
-    return Math.sqrt(dps) * hacking * 20 + hacking * 100;
+    return hacking * dps;
 }
 
 function calculateDefensiveDebufferScore(stats: BaseStats): number {
     const hacking = stats.hacking || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    return Math.sqrt(effectiveHP) * hacking * 20 + hacking * 100;
+    return hacking * effectiveHP;
+}
+
+function calculateBomberDebufferScore(stats: BaseStats): number {
+    const hacking = stats.hacking || 0;
+    const attack = stats.attack || 0;
+
+    // Optimally, a bomber should have between 270 and 350 hacking, and as much attack as possible.
+    return hacking * attack;
 }
 
 function calculateHealerScore(stats: BaseStats): number {
@@ -187,7 +194,6 @@ function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number
     const boostCount = setCount?.BOOST || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
 
-    // Calculate speed score with diminishing returns after 180
     const speedScore = speed * 10; // Base weight for speed
 
     // Boost set scoring (4 pieces needed for set bonus)

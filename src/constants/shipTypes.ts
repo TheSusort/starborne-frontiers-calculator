@@ -12,13 +12,18 @@ export const SHIP_TYPES: Record<string, ShipType> = {
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314174920663053.webp',
     },
     DEBUFFER: {
-        name: 'Debuffer',
+        name: 'Debuffer(Offensive)',
         description: 'Maximize hacking, then damage',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
     DEBUFFER_DEFENSIVE: {
         name: 'Debuffer(Defensive)',
         description: 'Maximize hacking, then effective HP',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
+    },
+    DEBUFFER_BOMBER: {
+        name: 'Debuffer(Bomber)',
+        description: 'Maximize hacking, with a cap of 350, then attack',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
     SUPPORTER: {
