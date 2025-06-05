@@ -170,6 +170,7 @@ export const AutogearPage: React.FC = () => {
         // Create new equipment objects
         const currentEquipment = selectedShip.equipment;
         const suggestedEquipment = getSuggestedEquipment(newSuggestions, selectedShip);
+        console.log(suggestedEquipment);
 
         // Get active sets
         const currentSets = Object.values(currentEquipment).reduce(
@@ -238,7 +239,6 @@ export const AutogearPage: React.FC = () => {
             suggestedEquipment,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
     };
@@ -308,7 +308,6 @@ export const AutogearPage: React.FC = () => {
             selectedShip.equipment,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
     };

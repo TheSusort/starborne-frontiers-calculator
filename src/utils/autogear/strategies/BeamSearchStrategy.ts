@@ -126,7 +126,6 @@ export class BeamSearchStrategy extends BaseStrategy {
                     newEquipment,
                     getGearPiece,
                     ship.refits,
-                    ship.implants,
                     getEngineeringStatsForShipType(ship.type)
                 );
 

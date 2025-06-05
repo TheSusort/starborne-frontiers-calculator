@@ -16,7 +16,6 @@ export interface Ship {
     equipment: Partial<Record<GearSlotName, string>>;
     equipmentLocked?: boolean;
     refits: Refit[];
-    implants: Implant[];
     affinity?: AffinityName;
     imageKey?: string;
     activeSkillText?: string;
@@ -42,13 +41,6 @@ export interface ShipType {
 export interface Refit {
     id: string;
     stats: Stat[];
-}
-
-export interface Implant {
-    id: string;
-    stats: Stat[];
-    description?: string;
-    shipId?: string;
 }
 
 export interface ShipData {

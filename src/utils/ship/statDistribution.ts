@@ -38,7 +38,6 @@ export function analyzeStatDistribution(
         equipment,
         getGearPiece,
         ship.refits,
-        ship.implants,
         getEngineeringStatsForShipType(ship.type)
     ).final;
 
@@ -74,7 +73,6 @@ export function analyzeStatDistribution(
             equipmentWithoutSlot,
             getGearPiece,
             ship.refits,
-            ship.implants,
             getEngineeringStatsForShipType(ship.type)
         ).final;
 

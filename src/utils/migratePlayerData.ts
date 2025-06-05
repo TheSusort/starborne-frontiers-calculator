@@ -113,23 +113,10 @@ export const migratePlayerData = (): MigrationResult => {
                 };
             }) || [];
 
-        const updatedImplants =
-            ship.implants?.map((implant) => {
-                return {
-                    ...implant,
-                    id: ensureValidUuid(implant.id),
-                    stats: (implant.stats || []).map((stat) => ({
-                        ...stat,
-                        id: stat.id ? ensureValidUuid(stat.id) : uuidv4(),
-                    })),
-                };
-            }) || [];
-
         return {
             ...ship,
             equipment: updatedEquipment,
             refits: updatedRefits,
-            implants: updatedImplants,
         };
     });
 
@@ -359,11 +346,14 @@ export const syncMigratedDataToSupabase = async (
                 // First, get existing ships to preserve equipment_locked state
                 const { data: existingShips } = await supabase
                     .from('ships')
-                    .select('id, equipment_locked')
+                    .select('id, equipment_locked, type')
                     .eq('user_id', userId);
 
                 const existingShipsMap = new Map(
-                    existingShips?.map((ship) => [ship.id, ship.equipment_locked]) || []
+                    existingShips?.map((ship) => [
+                        ship.id,
+                        { equipment_locked: ship.equipment_locked, type: ship.type },
+                    ]) || []
                 );
 
                 // Prepare batch of ship records with preserved equipment_locked state
@@ -373,9 +363,10 @@ export const syncMigratedDataToSupabase = async (
                     name: ship.name,
                     rarity: ship.rarity,
                     faction: ship.faction,
-                    type: ship.type,
+                    type: existingShipsMap.get(ship.id)?.type ?? ship.type,
                     affinity: ship.affinity,
-                    equipment_locked: existingShipsMap.get(ship.id) ?? ship.equipmentLocked,
+                    equipment_locked:
+                        existingShipsMap.get(ship.id)?.equipment_locked ?? ship.equipmentLocked,
                     copies: ship.copies,
                     rank: ship.rank,
                     level: ship.level,
@@ -473,30 +464,6 @@ export const syncMigratedDataToSupabase = async (
                         if (refitStatsError) throw refitStatsError;
                     }
                 }
-
-                // Collect all implants with valid IDs
-                const implantRecords = validShips.flatMap((ship) =>
-                    (ship.implants || [])
-                        .filter((implant) => !!implant.id)
-                        .map((implant) => ({
-                            id: implant.id,
-                            ship_id: ship.id,
-                        }))
-                );
-
-                // Collect all implant stats
-                const implantStatsRecords = validShips.flatMap((ship) =>
-                    (ship.implants || [])
-                        .filter((implant) => !!implant.id)
-                        .flatMap((implant) =>
-                            (implant.stats || []).map((stat) => ({
-                                implant_id: implant.id,
-                                name: stat.name,
-                                value: stat.value,
-                                type: stat.type,
-                            }))
-                        )
-                );
 
                 // Equipment records - filter out undefined gear IDs
                 const equipmentRecords = validShips.flatMap((ship) =>

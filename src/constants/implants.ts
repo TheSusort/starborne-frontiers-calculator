@@ -15,8 +15,25 @@ export interface ImplantVariant {
     description?: string;
 }
 
-export const IMPLANTS: ImplantData[] = [
-    {
+export const IMPLANTS: Record<string, ImplantData> = {
+    MARTYRDOM: {
+        name: 'Martyrdom',
+        type: 'ultimate',
+        variants: [
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Applies Disable for 2 turns on the enemy that killed this Unit.',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Applies Disable for 1 turn on the enemy that killed this Unit.',
+            },
+        ],
+        imageKey: 'martyrdom-Photoroom',
+    },
+    ABUNDANT_RENEWAL: {
         name: 'Abundant Renewal',
         type: 'ultimate',
         variants: [
@@ -35,10 +52,20 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'abundantrenewal-Photoroom',
     },
-    {
+    ARCANE_SIEGE: {
         name: 'Arcane Siege',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description: 'Increases outgoing Direct Damage by 3% while shielded',
+            },
+            {
+                rarity: 'rare',
+                stats: [],
+                description: 'Increases outgoing Direct Damage by 10% while shielded',
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -49,10 +76,15 @@ export const IMPLANTS: ImplantData[] = [
                 stats: [],
                 description: 'Increases outgoing direct damage by 15% while shielded.',
             },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Increases outgoing direct damage by 20% while shielded.',
+            },
         ],
         imageKey: 'arcanesiege-Photoroom',
     },
-    {
+    CHRONO_REAVER: {
         name: 'Chrono Reaver',
         type: 'ultimate',
         variants: [
@@ -69,7 +101,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'chronoreaver-Photoroom',
     },
-    {
+    CODE_GUARD: {
         name: 'Code Guard',
         type: 'ultimate',
         variants: [
@@ -94,23 +126,65 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'codeguard-Photoroom',
     },
-    {
+    HYPERION_GAZE: {
         name: 'Hyperion Gaze',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Decreases Damage by 7% when critically hit by an enemy that has stealth. Does not stack with similar effects',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Decreases Damage by 14% when critically hit by an enemy that has stealth. Does not stack with similar effects',
+            },
             {
                 rarity: 'rare',
                 stats: [],
                 description:
                     'Decreases Damage by 21% when critically hit by an enemy that has stealth. Does not stack with similar effects',
             },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'Decreases Damage by 28% when critically hit by an enemy that has stealth. Does not stack with similar effects',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Decreases Damage by 35% when critically hit by an enemy that has stealth. Does not stack with similar effects',
+            },
         ],
         imageKey: 'hyperiongaze-Photoroom',
     },
-    {
+    INTRUSION: {
         name: 'Intrusion',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Increases damage dealt by 1% for each debuff on the target when directly damaging them.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Increases damage dealt by 5% for each debuff on the target when directly damaging them.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'Increases damage dealt by 4% for each debuff on the target when directly damaging them.',
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -126,10 +200,16 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'intrusion-Photoroom',
     },
-    {
+    LIFELINE: {
         name: 'Lifeline',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 4000 plus 100% of this unit's attack stat. This can occur once per battle",
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -143,6 +223,12 @@ export const IMPLANTS: ImplantData[] = [
                     "When direct damage would cause HP to drop below 30%, gain a Shield equal to 8000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
             },
             {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    "When direct damage would cause HP to drop below 30%, gain a Shield equal to 10000 plus 100% of this unit's Attack stat (capped at max HP). This can occur once per battle.",
+            },
+            {
                 rarity: 'legendary',
                 stats: [],
                 description:
@@ -151,11 +237,17 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'lifeline-Photoroom',
     },
-    {
+    CIPHER_LINK: {
         name: 'Cipher Link',
         type: 'ultimate',
         imageKey: 'cipherlink-Photoroom',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'This unit increases Hacking by 20% of its own Security at the start of combat.',
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -163,17 +255,41 @@ export const IMPLANTS: ImplantData[] = [
                     'This unit increases Hacking by 25% of its own Security at the start of combat.',
             },
             {
+                rarity: 'rare',
+                stats: [],
+                description:
+                    'This unit increases Hacking by 31% of its own Security at the start of combat.',
+            },
+            {
                 rarity: 'epic',
                 stats: [],
                 description:
-                    'This unit increases Security by 35% of its own Hacking at the start of combat.',
+                    'This unit increases Security by 37% of its own Hacking at the start of combat.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'This unit increases Security by 45% of its own Hacking at the start of combat.',
             },
         ],
     },
-    {
+    NEBULA_NULLIFIER: {
         name: 'Nebula Nullifier',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Decrease damage by 7% when directly damaged while under Stasis or Disable.',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Decrease damage by 14% when directly damaged while under Stasis or Disable.',
+            },
             {
                 rarity: 'rare',
                 stats: [],
@@ -185,13 +301,24 @@ export const IMPLANTS: ImplantData[] = [
                 stats: [],
                 description: 'Decrease Direct Damage by 28% when the unit is in Stasis or Disable',
             },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Decrease damage by 35% when directly damaged while under Stasis or Disable.',
+            },
         ],
         imageKey: 'nebulanullifier-Photoroom',
     },
-    {
+    NOURISHMENT: {
         name: 'Nourishment',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Increases repair by 20% when targeting an ally with lower HP',
+            },
             {
                 rarity: 'rare',
                 stats: [],
@@ -210,10 +337,22 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'nourishment-Photoroom',
     },
-    {
+    SYNAPTIC_RESONANCE: {
         name: 'Synaptic Resonance',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 2%',
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 4%',
+            },
             {
                 rarity: 'rare',
                 stats: [],
@@ -221,18 +360,30 @@ export const IMPLANTS: ImplantData[] = [
                     'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 6%',
             },
             {
-                rarity: 'uncommon',
+                rarity: 'epic',
                 stats: [],
                 description:
-                    'Gains Speed Up 3 for 1 turn when and enemy gets directly repaired. Increases the critDamage of the next crit by 4%',
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 8%',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Gains Speed Up 3 for 1 turn when an enemy gets directly repaired. Increases the critDamage of the next crit by 10%',
             },
         ],
         imageKey: 'synapticresponse-Photoroom',
     },
-    {
+    VOIDFIRE_CATALYST: {
         name: 'Voidfire Catalyst',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Deals 2% more detonation damage and bombs additionally deal 4% more splash damage.',
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -258,28 +409,52 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'voidfirecatalyst-Photoroom',
     },
-    {
+    VOIDSHADE: {
         name: 'Voidshade',
         type: 'ultimate',
         variants: [
             {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'Decreases Damage Received by 4% When Directly Damaged While Stealth is Active.',
+            },
+            {
                 rarity: 'uncommon',
                 stats: [],
-                description: 'Decreases direct damage by 8% while self has Stealth.',
+                description:
+                    'Decreases Damage Received by 8% When Directly Damaged While Stealth is Active.',
             },
             {
                 rarity: 'rare',
                 stats: [],
                 description:
-                    'Decreases Damage Received by 12% When Directly Damaged While Stealth is Active',
+                    'Decreases Damage Received by 12% When Directly Damaged While Stealth is Active.',
+            },
+            {
+                rarity: 'epic',
+                stats: [],
+                description:
+                    'Decreases Damage Received by 16% When Directly Damaged While Stealth is Active.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'Decreases Damage Received by 20% When Directly Damaged While Stealth is Active.',
             },
         ],
         imageKey: 'voidshade-Photoroom',
     },
-    {
+    VORTEX_VEIL: {
         name: 'Vortex Veil',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 6%.',
+            },
             {
                 rarity: 'uncommon',
                 stats: [],
@@ -290,13 +465,35 @@ export const IMPLANTS: ImplantData[] = [
                 stats: [],
                 description: 'Reduces damage taken from Inferno or Corrosion by 18%.',
             },
+            {
+                rarity: 'epic',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 24%.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description: 'Reduces damage taken from Inferno or Corrosion by 30%.',
+            },
         ],
         imageKey: 'vortexveil-Photoroom',
     },
-    {
+    WARPSTRIKE: {
         name: 'Warpstrike',
         type: 'ultimate',
         variants: [
+            {
+                rarity: 'common',
+                stats: [],
+                description:
+                    "Increases damage by 1% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn",
+            },
+            {
+                rarity: 'uncommon',
+                stats: [],
+                description:
+                    "Increases damage by 2% when directly damaging an enemy while debuffed, and reduces a random active debuff's duration by 1 turn",
+            },
             {
                 rarity: 'rare',
                 stats: [],
@@ -318,7 +515,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'warpstrike-Photoroom',
     },
-    {
+    CITADEL: {
         name: 'Citadel',
         type: 'sigma(minor)',
         variants: [
@@ -383,7 +580,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'citadel-Photoroom',
     },
-    {
+    HASTE: {
         name: 'Haste',
         type: 'sigma(minor)',
         variants: [
@@ -446,7 +643,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'hastesigma-Photoroom',
     },
-    {
+    HASTE_GAMMA: {
         name: 'Haste',
         type: 'gamma(minor)',
         variants: [
@@ -499,7 +696,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'hastegamma-Photoroom',
     },
-    {
+    ONSLAUGHT: {
         name: 'Onslaught',
         type: 'sigma(minor)',
         variants: [
@@ -552,7 +749,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'onslaughtsigma-Photoroom',
     },
-    {
+    ONSLAUGHT_ALPHA: {
         name: 'Onslaught',
         type: 'alpha(minor)',
         variants: [
@@ -615,7 +812,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'onslaughtalpha-Photoroom',
     },
-    {
+    PRECISION: {
         name: 'Precision',
         type: 'sigma(minor)',
         variants: [
@@ -678,7 +875,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'precisionsigma-Photoroom',
     },
-    {
+    PRECISION_GAMMA: {
         name: 'Precision',
         type: 'gamma(minor)',
         variants: [
@@ -745,7 +942,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'precisiongamma-Photoroom',
     },
-    {
+    SENTRY: {
         name: 'Sentry',
         type: 'gamma(minor)',
         variants: [
@@ -812,7 +1009,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'sentry-Photoroom',
     },
-    {
+    STRIKE: {
         name: 'Strike',
         type: 'sigma(minor)',
         variants: [
@@ -877,7 +1074,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'strike-Photoroom',
     },
-    {
+    ADAPTIVE_PLATING: {
         name: 'Adaptive Plating',
         type: 'major',
         variants: [
@@ -909,10 +1106,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     "When directly damaged, there's a 19% chance to gain a shield equal to 42% of the damage taken, limited to once per round.",
             },
+            {
+                rarity: 'uncommon',
+                stats: [
+                    { name: 'attack', value: 70, type: 'flat', min: 70, max: 100 },
+                    { name: 'hacking', value: 5, type: 'flat', min: 5, max: 6 },
+                ],
+                description:
+                    "When directly damaged, there's a 12% chance to gain a shield equal to 21% of the damage taken, limited to once per round.",
+            },
         ],
         imageKey: 'adaptiveplating-Photoroom',
     },
-    {
+    ALACRITY: {
         name: 'Alacrity',
         type: 'major',
         variants: [
@@ -991,7 +1197,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'alacrity-Photoroom',
     },
-    {
+    AMBUSH: {
         name: 'Ambush',
         type: 'major',
         variants: [
@@ -1095,7 +1301,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'ambush-Photoroom',
     },
-    {
+    BATTLECRY: {
         name: 'Battlecry',
         type: 'major',
         variants: [
@@ -1154,7 +1360,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'battlecry-Photoroom',
     },
-    {
+    BLOODTHIRST: {
         name: 'Bloodthirst',
         type: 'major',
         variants: [
@@ -1196,10 +1402,25 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'On a critical hit, there is a 17% chance for this unit to repair itself for 17% of the damage dealt',
             },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 15,
+                        type: 'percentage',
+                        min: 16,
+                        max: 20,
+                    },
+                    { name: 'attack', value: 340, type: 'flat', min: 340, max: 400 },
+                ],
+                description:
+                    'On a critical hit, there is a 20% chance for this unit to repair itself for 20% of the damage dealt',
+            },
         ],
         imageKey: 'bloodthirst-Photoroom',
     },
-    {
+    BULWARK: {
         name: 'Bulwark',
         type: 'major',
         variants: [
@@ -1295,7 +1516,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'bulwark-Photoroom',
     },
-    {
+    DOOMSAYER: {
         name: 'Doomsayer',
         type: 'major',
         variants: [
@@ -1350,10 +1571,31 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'At the end of the round, if this unit was the first to activate, there is a 7% chance to apply Concentrate Fire to the enemy with the highest attack for 1 turn',
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 10,
+                        type: 'percentage',
+                        min: 10,
+                        max: 15,
+                    },
+                    {
+                        name: 'hacking',
+                        value: 14,
+                        type: 'flat',
+                        min: 11,
+                        max: 16,
+                    },
+                ],
+                description:
+                    'At the end of the round, if this unit was the first to activate, there is a 12% chance to apply Concentrate Fire to the enemy with the highest attack for 1 turn',
+            },
         ],
         imageKey: 'doomsayer-Photoroom',
     },
-    {
+    EXUBERANCE: {
         name: 'Exuberance',
         type: 'major',
         variants: [
@@ -1416,7 +1658,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'exuberance-Photoroom',
     },
-    {
+    FIREWALL: {
         name: 'Firewall',
         type: 'major',
         variants: [
@@ -1495,7 +1737,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'firewall-Photoroom',
     },
-    {
+    FONT_OF_POWER: {
         name: 'Font of Power',
         type: 'major',
         variants: [
@@ -1529,10 +1771,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'When applying repair to another ally, there is a 16% chance to grant Power Infused Nanobots for 1 turn.',
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'hp', value: 1200, type: 'flat', min: 1200, max: 1440 },
+                    { name: 'crit', value: 10, type: 'percentage', min: 10, max: 15 },
+                ],
+                description:
+                    'When applying repair to another ally, there is a 12% chance to grant Power Infused Nanobots for 1 turn.',
+            },
         ],
         imageKey: 'fontofpower-Photoroom',
     },
-    {
+    FORTIFYING_SHROUD: {
         name: 'Fortifying Shroud',
         type: 'major',
         variants: [
@@ -1555,7 +1806,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 32% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
+                    'Every turn, there is a 32% chance to grant all adjacent allies Defense Up 1 for 1 turn',
             },
             {
                 rarity: 'epic',
@@ -1572,7 +1823,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 26% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
+                    'Every turn, there is a 26% chance to grant all adjacent allies Defense Up 1 for 1 turn',
             },
             {
                 rarity: 'rare',
@@ -1593,7 +1844,7 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 21% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
+                    'Every turn, there is a 21% chance to grant all adjacent allies Defense Up 1 for 1 turn',
             },
             {
                 rarity: 'uncommon',
@@ -1610,12 +1861,12 @@ export const IMPLANTS: ImplantData[] = [
                     },
                 ],
                 description:
-                    'Every turn, there is a 18% chance to grant all adjacent allies defenceense Up 1 for 1 turn',
+                    'Every turn, there is a 18% chance to grant all adjacent allies Defense Up 1 for 1 turn',
             },
         ],
         imageKey: 'fortifyingshroud-Photoroom',
     },
-    {
+    GIANT_SLAYER: {
         name: 'Giant Slayer',
         type: 'major',
         variants: [
@@ -1682,10 +1933,31 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     "When directly damaging an enemy with a higher attack, there's a 14% chance to increase that damage by 50%",
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 11,
+                        type: 'percentage',
+                        min: 10,
+                        max: 15,
+                    },
+                    {
+                        name: 'speed',
+                        value: 8,
+                        type: 'flat',
+                        min: 8,
+                        max: 10,
+                    },
+                ],
+                description:
+                    "When directly damaging an enemy with a higher attack, there's a 16% chance to increase that damage by 50%",
+            },
         ],
         imageKey: 'giantslayer-Photoroom',
     },
-    {
+    INSIDIOUSNESS: {
         name: 'Insidiousness',
         type: 'major',
         variants: [
@@ -1786,7 +2058,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'insidiousness-Photoroom',
     },
-    {
+    IRONCLAD: {
         name: 'Ironclad',
         type: 'major',
         variants: [
@@ -1867,7 +2139,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'ironclad-Photoroom',
     },
-    {
+    LAST_STAND: {
         name: 'Last Stand',
         type: 'major',
         variants: [
@@ -1930,31 +2202,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'laststand-Photoroom',
     },
-    {
-        name: 'Last stand',
-        type: 'major',
-        variants: [
-            {
-                rarity: 'legendary',
-                stats: [
-                    {
-                        name: 'defence',
-                        value: 530,
-                        type: 'flat',
-                    },
-                    {
-                        name: 'attack',
-                        value: 373,
-                        type: 'flat',
-                    },
-                ],
-                description:
-                    'When this unit becomes the last one standing, there is a 32% chance to gain Block Damage and Block Debuff for 1 turn',
-            },
-        ],
-        imageKey: 'laststand-Photoroom',
-    },
-    {
+    LAST_WISH: {
         name: 'Last Wish',
         type: 'major',
         variants: [
@@ -2009,7 +2257,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'lastwish-Photoroom',
     },
-    {
+    LOCKDOWN: {
         name: 'Lockdown',
         type: 'major',
         variants: [
@@ -2081,10 +2329,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'When resisting a debuff, there is a 5% chance to grant Buff Protection to all allies for 1 turn',
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'defence', value: 340, type: 'flat', min: 340, max: 400 },
+                    { name: 'security', value: 11, type: 'flat', min: 11, max: 16 },
+                ],
+                description:
+                    'When resisting a debuff, there is a 12% chance to grant Buff Protection to all allies for 1 turn.',
+            },
         ],
         imageKey: 'lockdown-Photoroom',
     },
-    {
+    MENACE: {
         name: 'Menace',
         type: 'major',
         variants: [
@@ -2108,27 +2365,6 @@ export const IMPLANTS: ImplantData[] = [
                 ],
                 description:
                     'When critically damaging an enemy, there is an 8% chance to increase that damage by 20%',
-            },
-            {
-                rarity: 'legendary',
-                stats: [
-                    {
-                        name: 'crit',
-                        value: 16,
-                        type: 'percentage',
-                        min: 16,
-                        max: 19,
-                    },
-                    {
-                        name: 'attack',
-                        value: 19,
-                        type: 'percentage',
-                        min: 17,
-                        max: 19,
-                    },
-                ],
-                description:
-                    'When critically damaging an enemy, there is an 12% chance to increase that damage by 45%',
             },
             {
                 rarity: 'uncommon',
@@ -2193,10 +2429,31 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'When critically damaging an enemy, there is a 10% chance to icnreawse that damage by 30%',
             },
+            {
+                rarity: 'legendary',
+                stats: [
+                    {
+                        name: 'crit',
+                        value: 16,
+                        type: 'percentage',
+                        min: 16,
+                        max: 19,
+                    },
+                    {
+                        name: 'attack',
+                        value: 19,
+                        type: 'percentage',
+                        min: 17,
+                        max: 19,
+                    },
+                ],
+                description:
+                    'When critically damaging an enemy, there is an 12% chance to increase that damage by 45%',
+            },
         ],
         imageKey: 'menace-Photoroom',
     },
-    {
+    REACTIVE_WARD: {
         name: 'Reactive Ward',
         type: 'major',
         variants: [
@@ -2283,10 +2540,31 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'reactiveward-Photoroom',
     },
-    {
+    RESONATING_FURY: {
         name: 'Resonating Fury',
         type: 'major',
         variants: [
+            {
+                rarity: 'uncommon',
+                stats: [
+                    {
+                        name: 'critDamage',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                    {
+                        name: 'attack',
+                        value: 5,
+                        type: 'percentage',
+                        min: 5,
+                        max: 6,
+                    },
+                ],
+                description:
+                    'When applying a shield, there is a 7% chance to grant Crit Power Up 3 for 1 turn',
+            },
             {
                 rarity: 'rare',
                 stats: [
@@ -2342,10 +2620,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'When applying a shield, there is a 5% chance to grant Crit Power Up 3 for 1 turn',
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'critDamage', value: 15, type: 'percentage', min: 10, max: 15 },
+                    { name: 'attack', value: 15, type: 'percentage', min: 10, max: 15 },
+                ],
+                description:
+                    'When applying a shield, there is a 12% chance to grant Crit Power Up 3 for 1 turn',
+            },
         ],
         imageKey: 'resonatingfury-Photoroom',
     },
-    {
+    SECOND_WIND: {
         name: 'Second Wind',
         type: 'major',
         variants: [
@@ -2432,7 +2719,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'secondwind-Photoroom',
     },
-    {
+    SHADOWGUARD: {
         name: 'Shadowguard',
         type: 'major',
         variants: [
@@ -2478,10 +2765,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'When directly damaged while in stealth, there is a 7% chance to block the damage, limited to once per round',
             },
+            {
+                rarity: 'legendary',
+                stats: [
+                    { name: 'hp', value: 16, type: 'percentage', min: 16, max: 20 },
+                    { name: 'speed', value: 11, type: 'flat', min: 11, max: 16 },
+                ],
+                description:
+                    'When directly damaged while in stealth, there is a 16% chance to block the damage, limited to once per round',
+            },
         ],
         imageKey: 'shadowguard-Photoroom',
     },
-    {
+    SMOKESCREEN: {
         name: 'Smokescreen',
         type: 'major',
         variants: [
@@ -2527,7 +2823,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'smokescreen-Photoroom',
     },
-    {
+    SPEARHEAD: {
         name: 'Spearhead',
         type: 'major',
         variants: [
@@ -2627,7 +2923,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'spearhead-Photoroom',
     },
-    {
+    TENACITY: {
         name: 'Tenacity',
         type: 'major',
         variants: [
@@ -2661,10 +2957,19 @@ export const IMPLANTS: ImplantData[] = [
                 description:
                     'Upon directly recieving damage exceeding 25% of max HP, there is a 16% chance to grant Buff Protection to all allies for 2 turns.',
             },
+            {
+                rarity: 'epic',
+                stats: [
+                    { name: 'security', value: 15, type: 'flat', min: 10, max: 15 },
+                    { name: 'defence', value: 15, type: 'percentage', min: 11, max: 16 },
+                ],
+                description:
+                    'Upon directly receiving damage exceeding 25% of max HP, there is a 12% chance to grant Buff Protection to all allies for 2 turns.',
+            },
         ],
         imageKey: 'tenacity-Photoroom',
     },
-    {
+    VIVACIOUS_REPAIR: {
         name: 'Vivacious Repair',
         type: 'major',
         variants: [
@@ -2732,7 +3037,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'vivaciousrepair-Photoroom',
     },
-    {
+    BARRIER: {
         name: 'Barrier',
         type: 'gamma(minor)',
         variants: [
@@ -2787,7 +3092,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'barrier-Photoroom',
     },
-    {
+    OVERRIDE: {
         name: 'Override',
         type: 'gamma(minor)',
         variants: [
@@ -2854,7 +3159,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'overridegamma-Photoroom',
     },
-    {
+    OVERRIDE_ALPHA: {
         name: 'Override',
         type: 'alpha(minor)',
         variants: [
@@ -2919,7 +3224,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'overridealpha-Photoroom',
     },
-    {
+    BASTION: {
         name: 'Bastion',
         type: 'alpha(minor)',
         variants: [
@@ -2984,7 +3289,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'bastion-Photoroom',
     },
-    {
+    DEVASTATION: {
         name: 'Devastation',
         type: 'alpha(minor)',
         variants: [
@@ -3037,7 +3342,7 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'devastationalpha-Photoroom',
     },
-    {
+    GUARDIAN: {
         name: 'Guardian',
         type: 'alpha(minor)',
         variants: [
@@ -3102,6 +3407,26 @@ export const IMPLANTS: ImplantData[] = [
         ],
         imageKey: 'guardian-Photoroom',
     },
-];
+};
 
 export default IMPLANTS;
+
+export type ImplantName = keyof typeof IMPLANTS;
+
+export const IMPLANT_SLOTS = {
+    implant_major: {
+        label: 'Major',
+    },
+    implant_minor_alpha: {
+        label: 'Alpha',
+    },
+    implant_minor_gamma: {
+        label: 'Gamma',
+    },
+    implant_minor_sigma: {
+        label: 'Sigma',
+    },
+    implant_ultimate: {
+        label: 'Ultimate',
+    },
+};

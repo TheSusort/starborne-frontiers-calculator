@@ -82,13 +82,10 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
     const upgradedPiece = { ...piece };
 
     // Calculate main stat at target level
-    const newMainStatValue = calculateMainStatValue(
-        piece.mainStat.name,
-        piece.mainStat.type,
-        piece.stars,
-        targetLevel
-    );
-    upgradedPiece.mainStat = { ...piece.mainStat, value: newMainStatValue };
+    const newMainStatValue = piece.mainStat
+        ? calculateMainStatValue(piece.mainStat.name, piece.mainStat.type, piece.stars, targetLevel)
+        : 0;
+    upgradedPiece.mainStat = piece.mainStat ? { ...piece.mainStat, value: newMainStatValue } : null;
 
     // Simulate substat upgrades
     const newSubStats = [...piece.subStats];
@@ -99,7 +96,9 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
 
     remainingLevels.forEach((level) => {
         if (config.additions.includes(level)) {
-            const availableStats = getAvailableStats(newSubStats, piece.mainStat);
+            const availableStats = piece.mainStat
+                ? getAvailableStats(newSubStats, piece.mainStat)
+                : [];
             if (availableStats.length > 0) {
                 const randomStat =
                     availableStats[Math.floor(Math.random() * availableStats.length)];
@@ -158,7 +157,6 @@ function calculateGearStats(piece: GearPiece): BaseStats {
         // Gear piece getter
         (id) => (id === piece.id ? piece : undefined),
         // No refits, implants, or engineering
-        [],
         [],
         undefined
     );

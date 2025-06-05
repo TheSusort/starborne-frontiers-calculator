@@ -225,7 +225,6 @@ export function calculateTotalScore(
         equipment,
         getGearPiece,
         ship.refits,
-        ship.implants,
         getEngineeringStatsForShipType(ship.type)
     );
 

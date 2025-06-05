@@ -9,9 +9,9 @@ export interface GearPiece {
     level: number;
     stars: number;
     rarity: RarityName;
-    mainStat: Stat;
+    mainStat: Stat | null;
     subStats: Stat[];
-    setBonus: GearSetName;
+    setBonus: GearSetName | null;
     shipId?: string;
 }
 
@@ -20,7 +20,7 @@ export interface GearSetBonus {
     stats: Stat[];
     iconUrl?: string;
     minPieces?: number;
-    description?: string;
+    description?: string | Record<string, string>;
 }
 
 export interface GearLoadout {
@@ -37,3 +37,10 @@ export type GearSlot = {
     availableMainStats: StatName[];
     expectedContribution: number;
 };
+
+export interface Implant {
+    id: string;
+    subStats: Stat[];
+    description?: string;
+    shipId?: string;
+}

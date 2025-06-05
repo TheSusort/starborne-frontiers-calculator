@@ -167,7 +167,6 @@ export class SetFirstStrategy extends BaseStrategy {
                             { ...testEquipment, [slot]: current.id },
                             getGearPiece,
                             ship.refits,
-                            ship.implants,
                             getEngineeringStatsForShipType(ship.type)
                         );
                         const currentScore = this.calculateStatScore(
@@ -239,7 +238,6 @@ export class SetFirstStrategy extends BaseStrategy {
                     testEquipment,
                     getGearPiece,
                     ship.refits,
-                    ship.implants,
                     getEngineeringStatsForShipType(ship.type)
                 );
 
@@ -293,7 +291,6 @@ export class SetFirstStrategy extends BaseStrategy {
                         testEquipment,
                         getGearPiece,
                         ship.refits,
-                        ship.implants,
                         getEngineeringStatsForShipType(ship.type)
                     );
 

@@ -1,10 +1,13 @@
 import { memo, useMemo, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName } from '../../types/stats';
-import { GEAR_SETS, GEAR_SLOTS, RARITIES, STATS } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
+import { ImplantName } from '../../constants/implants';
+import IMPLANTS from '../../constants/implants';
+import { Image } from '../ui/Image';
 
 interface Props {
     gear: GearPiece;
@@ -28,10 +31,12 @@ export const GearPieceDisplay = memo(
     }: Props) => {
         const { getShipName, getShipFromGearId } = useShips();
         const shipName = gear.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
+        const isImplant = gear.slot.startsWith('implant_');
 
         // Memoize computed values
-        const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus].iconUrl, [gear.setBonus]);
+        const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
         const rarityInfo = useMemo(() => RARITIES[gear.rarity], [gear.rarity]);
+        const implantInfo = useMemo(() => IMPLANTS[gear.setBonus as ImplantName], [gear.setBonus]);
 
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);
@@ -55,16 +60,38 @@ export const GearPieceDisplay = memo(
                 >
                     <div>
                         <div className="capitalize flex items-center gap-2">
-                            <img
-                                src={slotInfo}
-                                alt={GEAR_SETS[gear.setBonus].name}
-                                className="w-6 h-auto"
-                            />
-                            <span className="font-secondary">{GEAR_SLOTS[gear.slot].label}</span>
+                            {isImplant && implantInfo && implantInfo.imageKey && (
+                                <Image
+                                    src={implantInfo.imageKey}
+                                    alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
+                                    className="w-6 h-auto"
+                                />
+                            )}
+                            {!isImplant && slotInfo && (
+                                <img
+                                    src={slotInfo}
+                                    alt={GEAR_SETS[gear.setBonus || '']?.name}
+                                    className="w-6 h-auto"
+                                />
+                            )}
+                            <span className="font-secondary">
+                                {isImplant
+                                    ? IMPLANTS[gear.setBonus as ImplantName]?.name
+                                    : GEAR_SLOTS[gear.slot]?.label}
+                            </span>
                         </div>
                         <div className="flex items-center">
-                            <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
-                            <div className="text-sm ps-3">Lvl {gear.level}</div>
+                            {!isImplant && (
+                                <>
+                                    <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
+                                    <div className="text-sm ps-3">Lvl {gear.level}</div>
+                                </>
+                            )}
+                            {isImplant && (
+                                <span className="text-sm">
+                                    {IMPLANT_SLOTS[gear.slot as keyof typeof IMPLANT_SLOTS]?.label}
+                                </span>
+                            )}
                         </div>
                     </div>
                     {mode === 'manage' ? (
@@ -111,14 +138,28 @@ export const GearPieceDisplay = memo(
                 {showDetails && (
                     <div className="p-4 pb-2 space-y-4 flex-grow">
                         {/* Main Stat */}
-                        <div className="bg-dark-lighter p-3">
-                            <div className="text-sm text-gray-400 mb-1">Main Stat</div>
-                            <div className="font-medium capitalize ">
-                                {STATS[gear.mainStat.name as StatName].label}: {gear.mainStat.value}
-                                {gear.mainStat.type === 'percentage' ? '%' : ''}
+                        {gear.mainStat && (
+                            <div className="bg-dark-lighter p-3">
+                                <div className="text-sm text-gray-400 mb-1">Main Stat</div>
+                                <div className="font-medium capitalize ">
+                                    {STATS[gear.mainStat.name as StatName].label}:{' '}
+                                    {gear.mainStat.value}
+                                    {gear.mainStat.type === 'percentage' ? '%' : ''}
+                                </div>
                             </div>
-                        </div>
-
+                        )}
+                        {isImplant &&
+                            (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
+                                <div className="bg-dark-lighter p-3">
+                                    <div className="text-sm text-gray-400 mb-2">
+                                        {
+                                            implantInfo?.variants.find(
+                                                (variant) => variant.rarity === gear.rarity
+                                            )?.description
+                                        }
+                                    </div>
+                                </div>
+                            )}
                         {/* Sub Stats */}
                         {gear.subStats.length > 0 && (
                             <div>
@@ -126,12 +167,19 @@ export const GearPieceDisplay = memo(
                                 <StatDisplay stats={gear.subStats} />
                             </div>
                         )}
-                        {gear.setBonus && (
+                        {gear.setBonus && !isImplant && (
                             <div>
                                 <div className="text-sm text-gray-400 mb-2">
                                     Set Bonus: {GEAR_SETS[gear.setBonus].name}
                                 </div>
-                                <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
+                                {GEAR_SETS[gear.setBonus].stats && (
+                                    <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
+                                )}
+                                {GEAR_SETS[gear.setBonus].description && (
+                                    <div className="text-sm text-gray-400 mb-2">
+                                        {GEAR_SETS[gear.setBonus]?.description as string}
+                                    </div>
+                                )}
                             </div>
                         )}
                         {shipName && (
@@ -169,9 +217,9 @@ export const GearPieceDisplay = memo(
 
         // Compare main stat
         if (
-            prevGear.mainStat.name !== nextGear.mainStat.name ||
-            prevGear.mainStat.value !== nextGear.mainStat.value ||
-            prevGear.mainStat.type !== nextGear.mainStat.type
+            prevGear.mainStat?.name !== nextGear.mainStat?.name ||
+            prevGear.mainStat?.value !== nextGear.mainStat?.value ||
+            prevGear.mainStat?.type !== nextGear.mainStat?.type
         ) {
             return false;
         }

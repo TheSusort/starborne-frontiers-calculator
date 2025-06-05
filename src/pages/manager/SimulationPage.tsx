@@ -16,7 +16,6 @@ import { useNotification } from '../../hooks/useNotification';
 import { GearSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
 import { ImplantTesting } from '../../components/simulation/ImplantTesting';
-import { Implant } from '../../types/ship';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -39,7 +38,6 @@ export const SimulationPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
     const { equipMultipleGear, updateShip } = useShips();
-    const [temporaryImplants, setTemporaryImplants] = useState<Implant[]>([]);
 
     useEffect(() => {
         const shipId = searchParams.get('shipId');
@@ -60,7 +58,6 @@ export const SimulationPage: React.FC = () => {
             selectedShip.equipment,
             getGearPiece,
             selectedShip.refits,
-            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
@@ -69,7 +66,6 @@ export const SimulationPage: React.FC = () => {
             temporaryGear,
             getGearPiece,
             selectedShip.refits,
-            temporaryImplants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
@@ -86,12 +82,7 @@ export const SimulationPage: React.FC = () => {
         return JSON.stringify(temporaryGear) !== JSON.stringify(selectedShip.equipment);
     };
 
-    const hasImplantChanges = () => {
-        if (!selectedShip) return false;
-        return JSON.stringify(temporaryImplants) !== JSON.stringify(selectedShip.implants);
-    };
-
-    const hasChanges = () => hasGearChanges() || hasImplantChanges();
+    const hasChanges = () => hasGearChanges();
 
     const handleSaveGearChanges = () => {
         if (!selectedShip) return;
@@ -112,25 +103,6 @@ export const SimulationPage: React.FC = () => {
         }
     };
 
-    const handleSaveImplantChanges = () => {
-        if (!selectedShip) return;
-
-        const updatedShip = {
-            ...selectedShip,
-            implants: temporaryImplants,
-        };
-
-        updateShip(selectedShip.id, updatedShip);
-        addNotification('success', 'Implant changes saved successfully');
-    };
-
-    const handleResetImplantChanges = () => {
-        if (selectedShip) {
-            setTemporaryImplants(selectedShip.implants);
-            setSimulation(null);
-        }
-    };
-
     const handleRoleChange = (role: ShipTypeName) => {
         setSelectedRole(role);
         setSimulation(null);
@@ -145,7 +117,6 @@ export const SimulationPage: React.FC = () => {
     useEffect(() => {
         if (selectedShip) {
             setTemporaryGear(selectedShip.equipment);
-            setTemporaryImplants(selectedShip.implants);
             setSelectedRole(SHIP_TYPES[selectedShip.type].name);
         }
     }, [selectedShip]);
@@ -210,14 +181,6 @@ export const SimulationPage: React.FC = () => {
                                 />
 
                                 <hr className="border-gray-700" />
-
-                                <ImplantTesting
-                                    temporaryImplants={temporaryImplants}
-                                    onImplantsChange={setTemporaryImplants}
-                                    onSaveChanges={handleSaveImplantChanges}
-                                    onResetChanges={handleResetImplantChanges}
-                                    hasChanges={hasImplantChanges()}
-                                />
                             </div>
                         </div>
                     )}

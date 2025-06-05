@@ -101,7 +101,6 @@ export class TwoPassStrategy extends BaseStrategy {
                         testEquipment,
                         getGearPiece,
                         ship.refits,
-                        ship.implants,
                         getEngineeringStatsForShipType(ship.type)
                     );
 
