@@ -274,6 +274,25 @@ export const syncMigratedDataToSupabase = async (
 
             if (validInventory.length > 0) {
                 // Process inventory in batches to avoid timeouts
+
+                // get existing inventory items
+                const { data: existingInventory } = await supabase
+                    .from('inventory_items')
+                    .select('id')
+                    .eq('user_id', userId);
+
+                // find any deleted inventory items
+                const deletedInventory = existingInventory?.filter(
+                    (item) => !validInventory.some((s) => s.id === item.id)
+                );
+
+                // delete any deleted inventory items
+                const { error: deleteInventoryError } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .in('id', deletedInventory?.map((item) => item.id) || []);
+                if (deleteInventoryError) throw deleteInventoryError;
+
                 const BATCH_SIZE = 500;
                 for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
                     const batch = validInventory.slice(i, i + BATCH_SIZE);
@@ -365,6 +384,18 @@ export const syncMigratedDataToSupabase = async (
                 const existingShipsMap = new Map(
                     existingShips?.map((ship) => [ship.id, ship.equipment_locked]) || []
                 );
+
+                // find any deleted ships
+                const deletedShips = existingShips?.filter(
+                    (ship) => !validShips.some((s) => s.id === ship.id)
+                );
+
+                // delete any deleted ships
+                const { error: deleteShipsError } = await supabase
+                    .from('ships')
+                    .delete()
+                    .in('id', deletedShips?.map((ship) => ship.id) || []);
+                if (deleteShipsError) throw deleteShipsError;
 
                 // Prepare batch of ship records with preserved equipment_locked state
                 const shipRecords = validShips.map((ship) => ({
@@ -474,6 +505,17 @@ export const syncMigratedDataToSupabase = async (
                     }
                 }
 
+                // Delete all implants in batches
+                for (let i = 0; i < shipIds.length; i += BATCH_SIZE) {
+                    const batchIds = shipIds.slice(i, i + BATCH_SIZE);
+                    const { error: deleteImplantsError } = await supabase
+                        .from('ship_implants')
+                        .delete()
+                        .in('ship_id', batchIds);
+
+                    if (deleteImplantsError) throw deleteImplantsError;
+                }
+
                 // Collect all implants with valid IDs
                 const implantRecords = validShips.flatMap((ship) =>
                     (ship.implants || [])
@@ -483,6 +525,18 @@ export const syncMigratedDataToSupabase = async (
                             ship_id: ship.id,
                         }))
                 );
+
+                // insert implants in batches
+                for (let i = 0; i < implantRecords.length; i += BATCH_SIZE) {
+                    const batch = implantRecords.slice(i, i + BATCH_SIZE);
+                    if (batch.length > 0) {
+                        const { error: implantsError } = await supabase
+                            .from('ship_implants')
+                            .insert(batch);
+
+                        if (implantsError) throw implantsError;
+                    }
+                }
 
                 // Collect all implant stats
                 const implantStatsRecords = validShips.flatMap((ship) =>
@@ -497,6 +551,18 @@ export const syncMigratedDataToSupabase = async (
                             }))
                         )
                 );
+
+                // insert implant stats in batches
+                for (let i = 0; i < implantStatsRecords.length; i += BATCH_SIZE) {
+                    const batch = implantStatsRecords.slice(i, i + BATCH_SIZE);
+                    if (batch.length > 0) {
+                        const { error: implantStatsError } = await supabase
+                            .from('ship_implant_stats')
+                            .insert(batch);
+
+                        if (implantStatsError) throw implantStatsError;
+                    }
+                }
 
                 // Equipment records - filter out undefined gear IDs
                 const equipmentRecords = validShips.flatMap((ship) =>
