@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.4.1';
+export const CURRENT_VERSION = '1.5.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.5.0',
+        date: '2025-06-06',
+        changes: [
+            'Added defense penetration to attacker autogear calculation',
+            'Added search by equipped ship to gear inventory',
+        ],
+    },
     {
         version: '1.4.1',
         date: '2025-06-06',

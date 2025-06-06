@@ -20,8 +20,38 @@ export function calculateEffectiveHP(hp: number, defense: number): number {
     return hp * (100 / (100 - damageReduction));
 }
 
+// Defense penetration lookup table with known values
+const DEFENSE_PENETRATION_LOOKUP: Record<number, number> = {
+    0: 74.21,
+    7: 72.71,
+    14: 71.04,
+    20: 69.45,
+    21: 69.17,
+    27: 67.38,
+    34: 65.04,
+    41: 62.37,
+};
+
+// Default defense value for calculations
+const DEFAULT_DEFENSE = 10000;
+
 export function calculateDPS(stats: BaseStats): number {
-    return (stats.attack || 0) * calculateCritMultiplier(stats);
+    const attack = stats.attack || 0;
+    const critMultiplier = calculateCritMultiplier(stats);
+    const defensePenetration = stats.defensePenetration || 0;
+
+    // Get damage reduction from lookup table or calculate it
+    let damageReduction: number;
+    if (DEFENSE_PENETRATION_LOOKUP[defensePenetration] !== undefined) {
+        damageReduction = DEFENSE_PENETRATION_LOOKUP[defensePenetration];
+    } else {
+        // Fallback to full calculation for unknown values
+        const effectiveDefense = DEFAULT_DEFENSE * (1 - defensePenetration / 100);
+        damageReduction = calculateDamageReduction(effectiveDefense);
+    }
+
+    // Calculate final DPS with damage reduction
+    return attack * critMultiplier * (1 - damageReduction / 100);
 }
 
 export function calculateHealingPerHit(stats: BaseStats): number {
