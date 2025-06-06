@@ -92,7 +92,7 @@ export const STATS: Record<
         maxValue: { percentage: 0, flat: 0 },
     },
     defensePenetration: {
-        label: 'Defense Penetration',
+        label: 'Defense Pen.',
         shortLabel: 'DP',
         allowedTypes: ['percentage'],
         engineeringAllowedTypes: [],

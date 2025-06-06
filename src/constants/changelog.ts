@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.5.0';
+export const CURRENT_VERSION = '1.6.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.6.0',
+        date: '2025-06-07',
+        changes: [
+            'Added IndexedDB for gear inventory, to support HUGE inventories',
+            'Add sorting ships by specific stats',
+        ],
+    },
     {
         version: '1.5.0',
         date: '2025-06-06',

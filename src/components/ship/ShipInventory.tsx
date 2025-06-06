@@ -10,11 +10,15 @@ import {
     SHIP_TYPES,
     RARITY_ORDER,
     sortRarities,
+    ALL_STAT_NAMES,
 } from '../../constants';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
 import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 import { Button } from '../ui';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { STATS } from '../../constants/stats';
+import { StatName } from '../../types/stats';
 
 const ITEMS_PER_PAGE = 48;
 
@@ -45,6 +49,7 @@ export const ShipInventory: React.FC<Props> = ({
     const [searchQuery, setSearchQuery] = useState('');
 
     const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters');
+    const { getGearPiece } = useInventory();
 
     const hasActiveFilters =
         (state.filters.factions?.length ?? 0) > 0 ||
@@ -126,12 +131,35 @@ export const ShipInventory: React.FC<Props> = ({
                         ? (a.name || '').localeCompare(b.name || '')
                         : (b.name || '').localeCompare(a.name || '');
                 default:
+                    // Handle stat-based sorting
+                    if (ALL_STAT_NAMES.includes(state.sort.field as StatName)) {
+                        const aStats = calculateTotalStats(
+                            a.baseStats,
+                            a.equipment,
+                            getGearPiece,
+                            a.refits,
+                            a.implants,
+                            undefined // engineering stats
+                        );
+                        const bStats = calculateTotalStats(
+                            b.baseStats,
+                            b.equipment,
+                            getGearPiece,
+                            b.refits,
+                            b.implants,
+                            undefined // engineering stats
+                        );
+                        const statName = state.sort.field as StatName;
+                        const aValue = aStats.final[statName] || 0;
+                        const bValue = bStats.final[statName] || 0;
+                        return state.sort.direction === 'asc' ? aValue - bValue : bValue - aValue;
+                    }
                     return state.sort.direction === 'asc'
                         ? a.id.localeCompare(b.id)
                         : b.id.localeCompare(a.id);
             }
         });
-    }, [filteredInventory, state.sort]);
+    }, [filteredInventory, state.sort, getGearPiece]);
 
     // Calculate pagination
     const totalPages = Math.ceil(sortedInventory.length / ITEMS_PER_PAGE);
@@ -164,8 +192,6 @@ export const ShipInventory: React.FC<Props> = ({
         const rarities = new Set(ships.map((ship) => ship.rarity));
         return sortRarities(Array.from(rarities));
     }, [ships]);
-
-    const { getGearPiece } = useInventory();
 
     const filters: FilterConfig[] = [
         {
@@ -207,6 +233,11 @@ export const ShipInventory: React.FC<Props> = ({
         { value: 'faction', label: 'Faction' },
         { value: 'rarity', label: 'Rarity' },
         { value: 'gearCount', label: 'Gear' },
+        // Add stat-based sort options
+        ...ALL_STAT_NAMES.map((stat) => ({
+            value: stat,
+            label: STATS[stat].label,
+        })),
     ];
 
     const handlePageChange = (page: number) => {
