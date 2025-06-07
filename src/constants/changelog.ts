@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.7.0';
+export const CURRENT_VERSION = '1.7.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.7.1',
+        date: '2025-06-07',
+        changes: [
+            'Fixed a bug with offensive debuffer score calculation',
+            'Moved ship data to indexedDB',
+            'Fixed a bug with equipping gear already equipped, not always unequipping from other ships',
+        ],
+    },
     {
         version: '1.7.0',
         date: '2025-06-07',
