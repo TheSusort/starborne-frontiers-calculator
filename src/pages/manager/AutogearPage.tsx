@@ -89,6 +89,7 @@ export const AutogearPage: React.FC = () => {
 
     // Helper functions
     const handleAddStatPriority = (priority: StatPriority) => {
+        addNotification('success', 'Stat priority added');
         setStatPriorities([...statPriorities, priority]);
     };
 
@@ -97,6 +98,7 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleAddSetPriority = (priority: SetPriority) => {
+        addNotification('success', 'Set priority added');
         setSetPriorities([...setPriorities, priority]);
     };
 
@@ -109,6 +111,7 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleAddStatBonus = (bonus: StatBonus) => {
+        addNotification('success', 'Stat bonus added');
         setStatBonuses([...statBonuses, bonus]);
     };
 

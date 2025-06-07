@@ -75,15 +75,17 @@ const SetPriorityForm: React.FC<{
                     noDefaultSelection
                     helpLabel="Select a gear set to be met by the gear you equip."
                 />
-                <Input
-                    label="No. of pieces"
-                    type="number"
-                    min="2"
-                    max="6"
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
-                    helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
-                />
+                <div className="w-32">
+                    <Input
+                        label="No. of pieces"
+                        type="number"
+                        min="2"
+                        max="6"
+                        value={count}
+                        onChange={(e) => setCount(parseInt(e.target.value))}
+                        helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
+                    />
+                </div>
                 <Button type="submit" disabled={!selectedSet} variant="secondary">
                     Add
                 </Button>
@@ -198,9 +200,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="bg-dark p-4 space-y-2">
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-gray-400">
-                            Add stat bonuses that contribute to the role score. For example, a ship
-                            that gains extra damage equal to 10% of HP would add HP with 10%
-                            percentage.
+                            Add stat bonuses that contribute to the role score. For example, an
+                            attacker that gains extra damage equal to 10% of HP.
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}

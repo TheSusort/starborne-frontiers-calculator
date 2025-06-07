@@ -39,16 +39,18 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                         noDefaultSelection
                         helpLabel="Select a stat to contribute to the role score."
                     />
-                    <Input
-                        label="Percentage"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={percentage}
-                        onChange={(e) => setPercentage(parseFloat(e.target.value))}
-                        helpLabel="Set the percentage of the stat value to add to the role score."
-                    />
+                    <div className="w-32">
+                        <Input
+                            label="Percentage"
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            value={percentage}
+                            onChange={(e) => setPercentage(parseFloat(e.target.value))}
+                            helpLabel="Set the percentage of the stat value to add to the role score."
+                        />
+                    </div>
                     <Button type="submit" disabled={!selectedStat} variant="secondary">
                         Add
                     </Button>
