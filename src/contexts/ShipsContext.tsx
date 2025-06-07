@@ -12,6 +12,7 @@ import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { GearPiece } from '../types/gear';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -240,19 +241,26 @@ const transformShipData = (data: RawShipData): Ship | null => {
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    //const { loadInventory } = useInventory();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [isMigrating, setIsMigrating] = useState(false);
+    const [localShips, setLocalShips] = useState<Ship[]>([]);
 
     // Use useStorage for ships
-    const { data: ships, setData: setShips } = useStorage<Ship[]>({
+    const { data: storageShips, setData: setStorageShips } = useStorage<Ship[]>({
         key: StorageKey.SHIPS,
         defaultValue: [],
     });
+
+    // Synchronize local state with storage
+    useEffect(() => {
+        if (storageShips) {
+            setLocalShips(storageShips);
+        }
+    }, [storageShips]);
 
     const loadShips = useCallback(async () => {
         // Skip loading if we're in the middle of migration
@@ -290,7 +298,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         equipment: ship.equipment || {},
                     }));
 
-                setShips(transformedShips);
+                setLocalShips(transformedShips);
+                // Update storage directly instead of using syncToStorage
+                await setStorageShips(transformedShips);
             }
         } catch (error) {
             console.error('Error loading ships:', error);
@@ -299,7 +309,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setShips, isMigrating]);
+    }, [user?.id, addNotification, setStorageShips, isMigrating]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -310,7 +320,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setShips([]);
+                setLocalShips([]);
             }
         };
 
@@ -318,7 +328,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setShips, isMigrating]);
+    }, [setLocalShips, isMigrating]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -341,23 +351,27 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Ensure equipment is properly initialized for all ships
     useEffect(() => {
-        if (ships.length > 0) {
-            const updatedShips = ships.map((ship) => ({
+        if (localShips.length > 0) {
+            const updatedShips = localShips.map((ship) => ({
                 ...ship,
                 equipment: ship.equipment || {},
             }));
-            if (JSON.stringify(updatedShips) !== JSON.stringify(ships)) {
-                setShips(updatedShips);
+            if (JSON.stringify(updatedShips) !== JSON.stringify(localShips)) {
+                setLocalShips(updatedShips);
+                setStorageShips(updatedShips);
             }
         }
-    }, [ships, setShips]);
+    }, [localShips, setStorageShips]);
 
     const getShipName = useCallback(
-        (id: string) => ships.find((ship) => ship.id === id)?.name,
-        [ships]
+        (id: string) => localShips.find((ship) => ship.id === id)?.name,
+        [localShips]
     );
 
-    const getShipById = useCallback((id: string) => ships.find((ship) => ship.id === id), [ships]);
+    const getShipById = useCallback(
+        (id: string) => localShips.find((ship) => ship.id === id),
+        [localShips]
+    );
 
     const addShip = useCallback(
         async (newShip: Omit<Ship, 'id'>) => {
@@ -367,7 +381,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 ...newShip,
                 id: tempId,
             };
-            setShips((prev) => [...prev, optimisticShip]);
+            setLocalShips((prev) => [...prev, optimisticShip]);
+            setStorageShips([...localShips, optimisticShip]);
+
             if (!user?.id) return getShipById(tempId) as Ship;
 
             try {
@@ -484,26 +500,27 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     }
                 }
 
-                // Update state with real data
-                //await loadShips();
                 return getShipById(insertedShip.id) as Ship;
             } catch (error) {
                 // Revert optimistic update on error
-                setShips((prev) => prev.filter((s) => s.id !== tempId));
+                setLocalShips((prev) => prev.filter((s) => s.id !== tempId));
+                setStorageShips(localShips.filter((s) => s.id !== tempId));
                 console.error('Error adding ship:', error);
                 addNotification('error', 'Failed to add ship');
                 throw error;
             }
         },
-        [user?.id, loadShips, getShipById, addNotification, setShips]
+        [user?.id, getShipById, addNotification, localShips, setStorageShips]
     );
 
     const updateShip = useCallback(
         async (id: string, updates: Partial<Ship>) => {
             // Optimistic update
-            setShips((prev) =>
-                prev.map((ship) => (ship.id === id ? { ...ship, ...updates } : ship))
+            const updatedShips = localShips.map((ship) =>
+                ship.id === id ? { ...ship, ...updates } : ship
             );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -627,8 +644,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         }
                     }
                 }
-                // Update state with real data
-                //await loadShips();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -637,13 +652,15 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const deleteShip = useCallback(
         async (id: string) => {
             // Optimistic update
-            setShips((prev) => prev.filter((ship) => ship.id !== id));
+            const updatedShips = localShips.filter((ship) => ship.id !== id);
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -658,42 +675,42 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 if (error) throw error;
             } catch (error) {
                 // Revert optimistic update on error
-                //await loadShips();
+                await loadShips();
                 console.error('Error deleting ship:', error);
                 addNotification('error', 'Failed to delete ship');
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const equipGear = useCallback(
         async (shipId: string, slot: GearSlotName, gearId: string) => {
             // Optimistic update
-            setShips((prevShips) => {
-                return prevShips.map((ship) => {
-                    if (ship.id === shipId) {
-                        return {
-                            ...ship,
-                            equipment: {
-                                ...ship.equipment,
-                                [slot]: gearId,
-                            },
-                        };
-                    }
-                    // For all other ships, remove this gear if it's equipped
-                    const equipment = { ...ship.equipment };
-                    Object.entries(equipment).forEach(([key, value]) => {
-                        if (value === gearId) {
-                            equipment[key as GearSlotName] = undefined;
-                        }
-                    });
+            const updatedShips = localShips.map((ship) => {
+                if (ship.id === shipId) {
                     return {
                         ...ship,
-                        equipment,
+                        equipment: {
+                            ...ship.equipment,
+                            [slot]: gearId,
+                        },
                     };
+                }
+                // For all other ships, remove this gear if it's equipped
+                const equipment = { ...ship.equipment };
+                Object.entries(equipment).forEach(([key, value]) => {
+                    if (value === gearId) {
+                        equipment[key as GearSlotName] = undefined;
+                    }
                 });
+                return {
+                    ...ship,
+                    equipment,
+                };
             });
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -718,10 +735,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('slot', slot);
 
                 if (error) throw error;
-
-                // Update state with real data
-                //await loadShips();
-                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -730,25 +743,25 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const equipMultipleGear = useCallback(
         async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
             // Optimistic update
-            setShips((prev) =>
-                prev.map((ship) =>
-                    ship.id === shipId
-                        ? {
-                              ...ship,
-                              equipment: gearAssignments.reduce(
-                                  (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
-                                  {}
-                              ),
-                          }
-                        : ship
-                )
+            const updatedShips = localShips.map((ship) =>
+                ship.id === shipId
+                    ? {
+                          ...ship,
+                          equipment: gearAssignments.reduce(
+                              (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                              {}
+                          ),
+                      }
+                    : ship
             );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -766,35 +779,31 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('ship_id', shipId);
 
                 if (error) throw error;
-
-                // Update state with real data
-                //await loadShips();
-                //await loadInventory();
             } catch (error) {
                 console.error('Error equipping multiple gear:', error);
                 addNotification('error', 'Failed to equip multiple gear');
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const removeGear = useCallback(
         async (shipId: string, slot: GearSlotName) => {
             // Optimistic update
-            setShips((prev) =>
-                prev.map((ship) =>
-                    ship.id === shipId
-                        ? {
-                              ...ship,
-                              equipment: {
-                                  ...ship.equipment,
-                                  [slot]: undefined,
-                              },
-                          }
-                        : ship
-                )
+            const updatedShips = localShips.map((ship) =>
+                ship.id === shipId
+                    ? {
+                          ...ship,
+                          equipment: {
+                              ...ship.equipment,
+                              [slot]: undefined,
+                          },
+                      }
+                    : ship
             );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -807,10 +816,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('slot', slot);
 
                 if (error) throw error;
-
-                // Update state with real data
-                //await loadShips();
-                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -819,22 +824,22 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const lockEquipment = useCallback(
         async (shipId: string, locked: boolean) => {
             // Optimistic update
-            setShips((prev) =>
-                prev.map((ship) =>
-                    ship.id === shipId
-                        ? {
-                              ...ship,
-                              equipmentLocked: locked,
-                          }
-                        : ship
-                )
+            const updatedShips = localShips.map((ship) =>
+                ship.id === shipId
+                    ? {
+                          ...ship,
+                          equipmentLocked: locked,
+                      }
+                    : ship
             );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -847,9 +852,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('user_id', user.id);
 
                 if (error) throw error;
-
-                // Update state with real data
-                //await loadShips();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -858,55 +860,54 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const validateGearAssignments = useCallback(() => {
         // This function is used to validate gear assignments across ships
         // It's called when gear is moved between ships to ensure no conflicts
-        setShips((prev) => {
-            const gearAssignments = new Map<string, string>(); // gearId -> shipId
-            const updatedShips = [...prev];
+        const gearAssignments = new Map<string, string>(); // gearId -> shipId
+        const updatedShips = [...localShips];
 
-            // First pass: collect all gear assignments
-            updatedShips.forEach((ship) => {
-                Object.entries(ship.equipment).forEach(([_, gearId]) => {
-                    if (gearId) {
-                        gearAssignments.set(gearId, ship.id);
-                    }
-                });
+        // First pass: collect all gear assignments
+        updatedShips.forEach((ship) => {
+            Object.entries(ship.equipment).forEach(([_, gearId]) => {
+                if (gearId) {
+                    gearAssignments.set(gearId, ship.id);
+                }
             });
-
-            // Second pass: validate and fix conflicts
-            updatedShips.forEach((ship) => {
-                Object.entries(ship.equipment).forEach(([slot, gearId]) => {
-                    if (gearId) {
-                        const assignedShipId = gearAssignments.get(gearId);
-                        if (assignedShipId && assignedShipId !== ship.id) {
-                            // Remove conflicting gear
-                            ship.equipment[slot as GearSlotName] = undefined;
-                        }
-                    }
-                });
-            });
-
-            return updatedShips;
         });
-    }, [setShips]);
+
+        // Second pass: validate and fix conflicts
+        updatedShips.forEach((ship) => {
+            Object.entries(ship.equipment).forEach(([slot, gearId]) => {
+                if (gearId) {
+                    const assignedShipId = gearAssignments.get(gearId);
+                    if (assignedShipId && assignedShipId !== ship.id) {
+                        // Remove conflicting gear
+                        ship.equipment[slot as GearSlotName] = undefined;
+                    }
+                }
+            });
+        });
+
+        setLocalShips(updatedShips);
+        setStorageShips(updatedShips);
+    }, [localShips, setStorageShips]);
 
     const unequipAllEquipment = useCallback(
         async (shipId: string) => {
             // Optimistic update
-            setShips((prev) =>
-                prev.map((ship) =>
-                    ship.id === shipId
-                        ? {
-                              ...ship,
-                              equipment: {},
-                          }
-                        : ship
-                )
+            const updatedShips = localShips.map((ship) =>
+                ship.id === shipId
+                    ? {
+                          ...ship,
+                          equipment: {},
+                      }
+                    : ship
             );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -918,10 +919,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .eq('ship_id', shipId);
 
                 if (error) throw error;
-
-                // Update state with real data
-                //await loadShips();
-                //await loadInventory();
             } catch (error) {
                 // Revert optimistic update on error
                 await loadShips();
@@ -930,30 +927,30 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, setShips]
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const toggleEquipmentLock = useCallback(
         async (shipId: string) => {
-            const ship = ships.find((s) => s.id === shipId);
+            const ship = localShips.find((s) => s.id === shipId);
             if (!ship) throw new Error('Ship not found');
             await lockEquipment(shipId, !ship.equipmentLocked);
         },
-        [ships, lockEquipment]
+        [localShips, lockEquipment]
     );
 
     const getShipFromGearId = useCallback(
         (gearId: string) => {
-            const ship = ships.find((s) => Object.values(s.equipment).includes(gearId));
+            const ship = localShips.find((s) => Object.values(s.equipment).includes(gearId));
             return ship;
         },
-        [ships]
+        [localShips]
     );
 
     return (
         <ShipsContext.Provider
             value={{
-                ships,
+                ships: localShips,
                 loading,
                 error,
                 editingShip,
@@ -971,7 +968,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 validateGearAssignments,
                 unequipAllEquipment,
                 getShipFromGearId,
-                setData: setShips,
+                setData: setStorageShips,
                 loadShips,
             }}
         >

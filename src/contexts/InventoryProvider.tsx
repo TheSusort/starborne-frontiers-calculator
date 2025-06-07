@@ -9,6 +9,7 @@ import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { v4 as uuidv4 } from 'uuid';
 
 interface InventoryContextType {
     inventory: GearPiece[];
@@ -326,7 +327,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const addGear = useCallback(
         async (newGear: Omit<GearPiece, 'id'>) => {
-            const tempId = `gear-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const tempId = uuidv4();
             try {
                 // Ensure all properties are properly initialized
                 const optimisticGear: GearPiece = {

@@ -268,9 +268,9 @@ export const AutogearPage: React.FC = () => {
                     const previousShip = getShipById(gear.shipId);
                     if (previousShip) {
                         return {
-                            fromShip: previousShip.name,
-                            slot: GEAR_SLOTS[suggestion.slotName].label,
-                            toShip: selectedShip.name,
+                            fromShip: previousShip,
+                            gear: gear,
+                            toShip: selectedShip,
                         };
                     }
                 }
@@ -286,8 +286,8 @@ export const AutogearPage: React.FC = () => {
                     <ul className="list-disc pl-4 space-y-1">
                         {gearMovements.map((movement, index) => (
                             <li key={index}>
-                                {movement.slot} from{' '}
-                                <span className="font-semibold">{movement.fromShip}</span>
+                                {GEAR_SLOTS[movement.gear.slot].label} from{' '}
+                                <span className="font-semibold">{movement.fromShip.name}</span>
                             </li>
                         ))}
                     </ul>
@@ -306,6 +306,7 @@ export const AutogearPage: React.FC = () => {
             slot: suggestion.slotName as GearSlotName,
             gearId: suggestion.gearId,
         }));
+
         // Update ships equipment
         equipMultipleGear(selectedShip.id, gearAssignments);
 
