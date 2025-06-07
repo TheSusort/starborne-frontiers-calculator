@@ -253,10 +253,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Update progress
                 setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
-                addNotification(
-                    totalLoaded == totalItems ? 'success' : 'info',
-                    `Loaded ${totalLoaded} of ${totalItems} items`
-                );
+                if (totalLoaded == totalItems) {
+                    addNotification(
+                        totalLoaded == totalItems ? 'success' : 'info',
+                        `Loaded ${totalLoaded} of ${totalItems} items`
+                    );
+                }
 
                 // Update temporary inventory with the latest batch
                 setTempInventory(allItems);

@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats } from '../../../types/stats';
@@ -38,7 +38,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearSuggestion[]> {
         // Calculate total operations:
         // For each slot:
@@ -71,7 +72,8 @@ export class BeamSearchStrategy extends BaseStrategy {
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 shipRole,
-                setPriorities
+                setPriorities,
+                statBonuses
             );
         }
 
@@ -97,7 +99,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearConfiguration[]> {
         const newConfigurations: GearConfiguration[] = [];
 
@@ -136,7 +139,8 @@ export class BeamSearchStrategy extends BaseStrategy {
                     newEquipment,
                     getGearPiece,
                     shipRole,
-                    setPriorities
+                    setPriorities,
+                    statBonuses
                 );
 
                 newConfigurations.push({
@@ -164,7 +168,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         equipment: Partial<Record<GearSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): number {
         const setCount: Record<string, number> = {};
         Object.values(equipment).forEach((gearId) => {
@@ -174,6 +179,13 @@ export class BeamSearchStrategy extends BaseStrategy {
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
         });
 
-        return calculatePriorityScore(stats, priorities, shipRole, setCount, setPriorities);
+        return calculatePriorityScore(
+            stats,
+            priorities,
+            shipRole,
+            setCount,
+            setPriorities,
+            statBonuses
+        );
     }
 }

@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats } from '../../../types/stats';
@@ -30,7 +30,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearSuggestion[]> {
         // Initialize progress tracking (slots * gear + potential set combinations)
         const totalOperations =
@@ -46,7 +47,8 @@ export class TwoPassStrategy extends BaseStrategy {
             getGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
-            setPriorities
+            setPriorities,
+            statBonuses
         );
 
         // Second pass: Look for set bonus opportunities
@@ -58,7 +60,8 @@ export class TwoPassStrategy extends BaseStrategy {
             getGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
-            setPriorities
+            setPriorities,
+            statBonuses
         );
 
         // Ensure progress is complete
@@ -81,7 +84,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
@@ -110,7 +114,8 @@ export class TwoPassStrategy extends BaseStrategy {
                         priorities,
                         shipRole,
                         undefined,
-                        setPriorities
+                        setPriorities,
+                        statBonuses
                     );
                     if (score > bestScore) {
                         bestScore = score;
@@ -135,7 +140,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(
@@ -157,7 +163,9 @@ export class TwoPassStrategy extends BaseStrategy {
                     priorities,
                     getGearPiece,
                     getEngineeringStatsForShipType,
-                    shipRole
+                    shipRole,
+                    setPriorities,
+                    statBonuses
                 );
 
                 // Try each possible piece that could complete the set
@@ -171,7 +179,9 @@ export class TwoPassStrategy extends BaseStrategy {
                         priorities,
                         getGearPiece,
                         getEngineeringStatsForShipType,
-                        shipRole
+                        shipRole,
+                        setPriorities,
+                        statBonuses
                     );
 
                     // If this improves our score, keep it
@@ -239,9 +249,17 @@ export class TwoPassStrategy extends BaseStrategy {
         priorities: StatPriority[],
         shipRole?: ShipTypeName,
         setCount?: Record<string, number>,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): number {
-        return calculatePriorityScore(stats, priorities, shipRole, setCount, setPriorities);
+        return calculatePriorityScore(
+            stats,
+            priorities,
+            shipRole,
+            setCount,
+            setPriorities,
+            statBonuses
+        );
     }
 
     private evaluateEquipment(
@@ -250,7 +268,9 @@ export class TwoPassStrategy extends BaseStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): number {
         return calculateTotalScore(
             ship,
@@ -258,7 +278,9 @@ export class TwoPassStrategy extends BaseStrategy {
             priorities,
             getGearPiece,
             getEngineeringStatsForShipType,
-            shipRole
+            shipRole,
+            setPriorities,
+            statBonuses
         );
     }
 }

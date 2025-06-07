@@ -17,3 +17,8 @@ export interface GearSuggestion {
     gearId: string;
     score: number;
 }
+
+export interface StatBonus {
+    stat: string;
+    percentage: number;
+}

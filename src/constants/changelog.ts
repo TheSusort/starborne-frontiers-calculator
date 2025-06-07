@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.6.0';
+export const CURRENT_VERSION = '1.7.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.7.0',
+        date: '2025-06-07',
+        changes: ['Added stat bonuses to autogear settings'],
+    },
     {
         version: '1.6.0',
         date: '2025-06-07',

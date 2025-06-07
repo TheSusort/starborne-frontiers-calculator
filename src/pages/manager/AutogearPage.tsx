@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
-import { GearSuggestion, StatPriority, SetPriority } from '../../types/autogear';
+import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { PageLayout, ProgressBar } from '../../components/ui';
@@ -70,6 +70,7 @@ export const AutogearPage: React.FC = () => {
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
     const [ignoreUnleveled, setIgnoreUnleveled] = useState(true);
+    const [statBonuses, setStatBonuses] = useState<StatBonus[]>([]);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -107,11 +108,20 @@ export const AutogearPage: React.FC = () => {
         await lockEquipment(ship.id, !ship.equipmentLocked);
     };
 
+    const handleAddStatBonus = (bonus: StatBonus) => {
+        setStatBonuses([...statBonuses, bonus]);
+    };
+
+    const handleRemoveStatBonus = (index: number) => {
+        setStatBonuses(statBonuses.filter((_, i) => i !== index));
+    };
+
     const handleAutogear = async () => {
         if (!selectedShip) return;
 
         setOptimizationProgress(null);
         setSuggestions([]);
+        setShowSecondaryRequirements(false);
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
@@ -158,7 +168,8 @@ export const AutogearPage: React.FC = () => {
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 selectedShipRole || undefined,
-                setPriorities
+                setPriorities,
+                statBonuses
             )
         );
 
@@ -363,19 +374,22 @@ export const AutogearPage: React.FC = () => {
                         priorities={statPriorities}
                         ignoreEquipped={ignoreEquipped}
                         ignoreUnleveled={ignoreUnleveled}
-                        onIgnoreEquippedChange={setIgnoreEquipped}
-                        onIgnoreUnleveledChange={setIgnoreUnleveled}
+                        showSecondaryRequirements={showSecondaryRequirements}
+                        setPriorities={setPriorities}
+                        statBonuses={statBonuses}
                         onShipSelect={(ship) => setSelectedShipId(ship.id)}
                         onRoleSelect={handleRoleChange}
                         onAlgorithmSelect={setSelectedAlgorithm}
                         onAddPriority={handleAddStatPriority}
                         onRemovePriority={handleRemoveStatPriority}
                         onFindOptimalGear={handleAutogear}
-                        showSecondaryRequirements={showSecondaryRequirements}
+                        onIgnoreEquippedChange={setIgnoreEquipped}
+                        onIgnoreUnleveledChange={setIgnoreUnleveled}
                         onToggleSecondaryRequirements={setShowSecondaryRequirements}
-                        setPriorities={setPriorities}
                         onAddSetPriority={handleAddSetPriority}
                         onRemoveSetPriority={handleRemoveSetPriority}
+                        onAddStatBonus={handleAddStatBonus}
+                        onRemoveStatBonus={handleRemoveStatBonus}
                     />
 
                     {suggestions.length > 0 && (

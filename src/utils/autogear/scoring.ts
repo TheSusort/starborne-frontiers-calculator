@@ -1,5 +1,5 @@
-import { BaseStats } from '../../types/stats';
-import { StatPriority, SetPriority } from '../../types/autogear';
+import { BaseStats, StatName } from '../../types/stats';
+import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
@@ -68,7 +68,8 @@ export function calculatePriorityScore(
     priorities: StatPriority[],
     shipRole?: ShipTypeName,
     setCount?: Record<string, number>,
-    setPriorities?: SetPriority[]
+    setPriorities?: SetPriority[],
+    statBonuses?: StatBonus[]
 ): number {
     let penalties = 0;
 
@@ -111,25 +112,25 @@ export function calculatePriorityScore(
     if (shipRole) {
         switch (shipRole) {
             case 'Attacker':
-                baseScore = calculateAttackerScore(stats);
+                baseScore = calculateAttackerScore(stats, statBonuses);
                 break;
             case 'Defender':
-                baseScore = calculateDefenderScore(stats);
+                baseScore = calculateDefenderScore(stats, statBonuses);
                 break;
             case 'Debuffer':
-                baseScore = calculateDebufferScore(stats);
+                baseScore = calculateDebufferScore(stats, statBonuses);
                 break;
             case 'Debuffer(Defensive)':
-                baseScore = calculateDefensiveDebufferScore(stats);
+                baseScore = calculateDefensiveDebufferScore(stats, statBonuses);
                 break;
             case 'Debuffer(Bomber)':
-                baseScore = calculateBomberDebufferScore(stats);
+                baseScore = calculateBomberDebufferScore(stats, statBonuses);
                 break;
             case 'Supporter':
-                baseScore = calculateHealerScore(stats);
+                baseScore = calculateHealerScore(stats, statBonuses);
                 break;
             case 'Supporter(Buffer)':
-                baseScore = calculateBufferScore(stats, setCount);
+                baseScore = calculateBufferScore(stats, setCount, statBonuses);
                 break;
         }
     } else {
@@ -154,13 +155,28 @@ function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): nu
     return totalScore;
 }
 
-function calculateAttackerScore(stats: BaseStats): number {
-    return calculateDPS(stats);
+// Helper function to apply role stat bonuses
+function applystatBonuses(stats: BaseStats, statBonuses?: StatBonus[]): number {
+    if (!statBonuses || statBonuses.length === 0) return 0;
+
+    return statBonuses.reduce((total, bonus) => {
+        const statValue = stats[bonus.stat as keyof BaseStats] || 0;
+        return total + statValue * (bonus.percentage / 100);
+    }, 0);
 }
 
-function calculateDefenderScore(stats: BaseStats): number {
+function calculateAttackerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
+    const baseDPS = calculateDPS(stats);
+
+    const bonusScore = applystatBonuses(stats, statBonuses);
+    return baseDPS + bonusScore;
+}
+
+function calculateDefenderScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const damageReduction = calculateDamageReduction(stats.defence || 0);
     const totalEffectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    const bonusScore = applystatBonuses(stats, statBonuses);
+
     // Calculate incoming damage per round
     const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
 
@@ -174,55 +190,59 @@ function calculateDefenderScore(stats: BaseStats): number {
     const healingWithShieldPerRound = healingPerRound + shieldPerRound;
 
     // Calculate survival rounds
-    // If healing >= damage, technically infinite survival
     if (healingWithShieldPerRound >= damagePerRound) {
         return Number.MAX_SAFE_INTEGER;
     }
 
-    // Otherwise, calculate rounds until death
-    // totalEffectiveHP / (damagePerRound - healingWithShieldPerRound)
     const survivalRounds = totalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
-
-    return Math.max(survivalRounds * 1000, 0); // Multiply by 1000 to make the score more meaningful
+    return Math.max(survivalRounds * 1000 + bonusScore, 0);
 }
 
-function calculateDebufferScore(stats: BaseStats): number {
+function calculateDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const hacking = stats.hacking || 0;
     const dps = calculateDPS(stats);
+    const bonusScore = applystatBonuses(stats, statBonuses);
 
-    return hacking * dps;
+    return hacking * dps + bonusScore;
 }
 
-function calculateDefensiveDebufferScore(stats: BaseStats): number {
+function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const hacking = stats.hacking || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
-    return hacking * effectiveHP;
+    const bonusScore = applystatBonuses(stats, statBonuses);
+    return hacking * effectiveHP + bonusScore;
 }
 
-function calculateBomberDebufferScore(stats: BaseStats): number {
+function calculateBomberDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const hacking = stats.hacking || 0;
     const attack = stats.attack || 0;
+    const bonusScore = applystatBonuses(stats, statBonuses);
 
-    // Optimally, a bomber should have between 270 and 350 hacking, and as much attack as possible.
-    return hacking * attack;
+    return hacking * attack + bonusScore;
 }
 
-function calculateHealerScore(stats: BaseStats): number {
+function calculateHealerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const baseHealing = (stats.hp || 0) * BASE_HEAL_PERCENT; // 15% of HP
 
     // Use same crit calculation as DPS
     const critMultiplier = calculateCritMultiplier(stats);
+    const bonusScore = applystatBonuses(stats, statBonuses);
 
     // Apply heal modifier after crit calculations
     const healModifier = stats.healModifier || 0;
 
-    return baseHealing * critMultiplier * (1 + healModifier / 100);
+    return baseHealing * critMultiplier * (1 + healModifier / 100) + bonusScore;
 }
 
-function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number>): number {
+function calculateBufferScore(
+    stats: BaseStats,
+    setCount?: Record<string, number>,
+    statBonuses?: StatBonus[]
+): number {
     const speed = stats.speed || 0;
     const boostCount = setCount?.BOOST || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    const bonusScore = applystatBonuses(stats, statBonuses);
 
     const speedScore = speed * 10; // Base weight for speed
 
@@ -237,7 +257,7 @@ function calculateBufferScore(stats: BaseStats, setCount?: Record<string, number
     // Scale it down to not overshadow primary stats
     const ehpScore = Math.sqrt(effectiveHP) * 2;
 
-    return speedScore + boostScore + ehpScore;
+    return speedScore + boostScore + ehpScore + bonusScore;
 }
 
 // Update calculateTotalScore to include shipRole and setPriorities
@@ -248,7 +268,8 @@ export function calculateTotalScore(
     getGearPiece: (id: string) => GearPiece | undefined,
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
     shipRole?: ShipTypeName,
-    setPriorities?: SetPriority[]
+    setPriorities?: SetPriority[],
+    statBonuses?: StatBonus[]
 ): number {
     const totalStats = calculateTotalStats(
         ship.baseStats,
@@ -273,7 +294,8 @@ export function calculateTotalScore(
         priorities,
         shipRole,
         setCount,
-        setPriorities
+        setPriorities,
+        statBonuses
     );
 
     return score;
