@@ -117,7 +117,7 @@ export function calculatePriorityScore(
             case 'Defender':
                 baseScore = calculateDefenderScore(stats, statBonuses);
                 break;
-            case 'Debuffer':
+            case 'Debuffer(Offensive)':
                 baseScore = calculateDebufferScore(stats, statBonuses);
                 break;
             case 'Debuffer(Defensive)':

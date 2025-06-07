@@ -749,23 +749,46 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const equipMultipleGear = useCallback(
         async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
-                ship.id === shipId
-                    ? {
-                          ...ship,
-                          equipment: gearAssignments.reduce(
-                              (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
-                              {}
-                          ),
-                      }
-                    : ship
-            );
+            const updatedShips = localShips.map((ship) => {
+                if (ship.id === shipId) {
+                    // For the target ship, set all the new gear assignments
+                    return {
+                        ...ship,
+                        equipment: gearAssignments.reduce(
+                            (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                            {}
+                        ),
+                    };
+                }
+                // For all other ships, remove any gear that's being equipped
+                const equipment = { ...ship.equipment };
+                gearAssignments.forEach(({ gearId }) => {
+                    Object.entries(equipment).forEach(([key, value]) => {
+                        if (value === gearId) {
+                            equipment[key as GearSlotName] = undefined;
+                        }
+                    });
+                });
+                return {
+                    ...ship,
+                    equipment,
+                };
+            });
             setLocalShips(updatedShips);
             setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
             try {
+                // Delete existing equipment for all gear being equipped
+                const gearIds = gearAssignments.map(({ gearId }) => gearId);
+                const { error: deleteError } = await supabase
+                    .from('ship_equipment')
+                    .delete()
+                    .in('gear_id', gearIds);
+
+                if (deleteError) throw deleteError;
+
                 // Update equipment in database
                 const { error } = await supabase
                     .from('ship_equipment')
@@ -780,6 +803,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
                 if (error) throw error;
             } catch (error) {
+                // Revert optimistic update on error
+                await loadShips();
                 console.error('Error equipping multiple gear:', error);
                 addNotification('error', 'Failed to equip multiple gear');
                 throw error;
