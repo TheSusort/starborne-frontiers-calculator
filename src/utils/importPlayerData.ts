@@ -120,7 +120,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             critDamage: Math.round(unit.Attributes.BaseWithLevelAndRank.CritBoost * 100),
             speed: unit.Attributes.BaseWithLevelAndRank.Initiative,
             healModifier: 0, // Not present in exported data
-            hpRegen: 0, // Not present in exported data
+            hpRegen: getHpRegen(unit.Name),
             shield: 0,
             defensePenetration: Math.round(
                 unit.Attributes.BaseWithLevelAndRank.DefensePenetration * 100
@@ -439,6 +439,15 @@ function getStatName(exportStatName: string): StatName | null {
             return null;
     }
 }
+
+const getHpRegen = (name: string): number => {
+    if (name === 'Isha') {
+        return 5;
+    } else if (name === 'Heliodor') {
+        return 8;
+    }
+    return 0;
+};
 
 function createStat(name: StatName, value: number, type: StatType): Stat {
     if (PERCENTAGE_ONLY_STATS.includes(name as PercentageOnlyStats) || type === 'percentage') {

@@ -111,25 +111,28 @@ export function calculatePriorityScore(
     let baseScore = 0;
     if (shipRole) {
         switch (shipRole) {
-            case 'Attacker':
+            case 'ATTACKER':
                 baseScore = calculateAttackerScore(stats, statBonuses);
                 break;
-            case 'Defender':
+            case 'DEFENDER':
                 baseScore = calculateDefenderScore(stats, statBonuses);
                 break;
-            case 'Debuffer(Offensive)':
+            case 'DEFENDER_SECURITY':
+                baseScore = calculateDefenderSecurityScore(stats, statBonuses);
+                break;
+            case 'DEBUFFER_OFFENSIVE':
                 baseScore = calculateDebufferScore(stats, statBonuses);
                 break;
-            case 'Debuffer(Defensive)':
+            case 'DEBUFFER_DEFENSIVE':
                 baseScore = calculateDefensiveDebufferScore(stats, statBonuses);
                 break;
-            case 'Debuffer(Bomber)':
+            case 'DEBUFFER_BOMBER':
                 baseScore = calculateBomberDebufferScore(stats, statBonuses);
                 break;
-            case 'Supporter':
+            case 'SUPPORTER':
                 baseScore = calculateHealerScore(stats, statBonuses);
                 break;
-            case 'Supporter(Buffer)':
+            case 'SUPPORTER_BUFFER':
                 baseScore = calculateBufferScore(stats, setCount, statBonuses);
                 break;
         }
@@ -196,6 +199,13 @@ function calculateDefenderScore(stats: BaseStats, statBonuses?: StatBonus[]): nu
 
     const survivalRounds = totalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
     return Math.max(survivalRounds * 1000 + bonusScore, 0);
+}
+
+function calculateDefenderSecurityScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
+    const baseDefenderScore = calculateDefenderScore(stats, statBonuses);
+    const security = stats.security || 0;
+
+    return baseDefenderScore * security;
 }
 
 function calculateDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {

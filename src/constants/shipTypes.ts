@@ -11,6 +11,11 @@ export const SHIP_TYPES: Record<string, ShipType> = {
         description: 'Maximize HP and defense',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314174920663053.webp',
     },
+    DEFENDER_SECURITY: {
+        name: 'Defender(Security)',
+        description: 'Maximize security, then effective HP',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314174920663053.webp',
+    },
     DEBUFFER: {
         name: 'Debuffer(Offensive)',
         description: 'Maximize hacking, then damage',

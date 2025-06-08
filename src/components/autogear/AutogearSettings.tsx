@@ -128,10 +128,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
             <div className="p-4 bg-dark space-y-2">
                 <span className=" text-sm">Predefined Strategies</span>
+                {/* value should be the key of SHIP_TYPES */}
                 <Select
                     data-testid="role-select"
-                    options={Object.values(SHIP_TYPES).map((type) => ({
-                        value: type.name,
+                    options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
+                        value: key,
                         label: `${type.name} (${type.description})`,
                     }))}
                     value={selectedShipRole || ''}

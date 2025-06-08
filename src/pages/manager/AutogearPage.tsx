@@ -82,7 +82,7 @@ export const AutogearPage: React.FC = () => {
             const ship = getShipById(shipId);
             if (ship) {
                 setSelectedShipId(shipId);
-                setSelectedShipRole(SHIP_TYPES[ship.type].name);
+                setSelectedShipRole(ship.type);
             }
         }
     }, [searchParams, getShipById]);
