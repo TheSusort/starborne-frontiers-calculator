@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.7.1';
+export const CURRENT_VERSION = '1.7.2';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.7.2',
+        date: '2025-06-08',
+        changes: ['Added high security defender role', 'Roles are now persisted between imports'],
+    },
     {
         version: '1.7.1',
         date: '2025-06-07',
