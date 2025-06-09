@@ -14,6 +14,7 @@ export interface Ship {
     type: ShipTypeName;
     baseStats: BaseStats;
     equipment: Partial<Record<GearSlotName, string>>;
+    implants: Partial<Record<GearSlotName, string>>;
     equipmentLocked?: boolean;
     refits: Refit[];
     affinity?: AffinityName;

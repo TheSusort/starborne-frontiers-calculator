@@ -1,7 +1,16 @@
 import React, { memo, useMemo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
-import { Button, CloseIcon, EditIcon, LockIcon, UnlockedLockIcon, InfoIcon, CopyIcon } from '../ui';
+import {
+    Button,
+    CloseIcon,
+    EditIcon,
+    LockIcon,
+    UnlockedLockIcon,
+    InfoIcon,
+    CopyIcon,
+    Tooltip,
+} from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -13,6 +22,9 @@ import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
+import { StatDisplay } from '../stats/StatDisplay';
+import { GearPieceDisplay } from '../gear/GearPieceDisplay';
+import { GearPiece } from '../../types/gear';
 
 interface Props {
     ship: Ship;
@@ -265,6 +277,48 @@ export const ShipDisplay: React.FC<Props> = memo(
 
                 <div className="px-4 pb-4 relative flex-grow">
                     <div className="space-y-1 text-sm">
+                        {ship.implants &&
+                            Object.keys(ship.implants).length > 0 &&
+                            variant === 'full' && (
+                                <div className="relative">
+                                    <div
+                                        className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter"
+                                        onMouseEnter={() => setIsTooltipVisible(true)}
+                                        onMouseLeave={() => setIsTooltipVisible(false)}
+                                    >
+                                        <span>Implants:</span>
+                                        <span>{Object.keys(ship.implants || {}).length}</span>
+                                    </div>
+                                    <Tooltip
+                                        isVisible={isTooltipVisible}
+                                        className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                    >
+                                        {Object.entries(ship.implants || {}).map(
+                                            ([slot, implant], index) => (
+                                                <React.Fragment key={slot}>
+                                                    {implant && (
+                                                        <GearPieceDisplay
+                                                            gear={
+                                                                getGearPiece(implant) as GearPiece
+                                                            }
+                                                            mode="compact"
+                                                            className={`${
+                                                                index <
+                                                                Object.keys(ship.implants || {})
+                                                                    .length -
+                                                                    1
+                                                                    ? 'border-b border-dark-lighter pb-2'
+                                                                    : ''
+                                                            }`}
+                                                            small
+                                                        />
+                                                    )}
+                                                </React.Fragment>
+                                            )
+                                        )}
+                                    </Tooltip>
+                                </div>
+                            )}
                         <div className="flex items-center justify-between">
                             <div className="flex-grow">
                                 {variant === 'full' && <StatList stats={statsBreakdown.final} />}

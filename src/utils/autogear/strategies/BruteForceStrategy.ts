@@ -12,7 +12,7 @@ interface GearConfiguration {
 }
 
 /**
- * Brute Force Strategy
+ * Brute Force Strategy DEPRECATED
  *
  * This strategy tries every possible combination to find the absolute best gear setup.
  * It is a very slow strategy that is not likely to find the optimal gear combinations.

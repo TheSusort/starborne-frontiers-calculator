@@ -50,6 +50,9 @@ describe('AutogearSettings Component', () => {
         onRemoveSetPriority: vi.fn(),
         ignoreUnleveled: false,
         onIgnoreUnleveledChange: vi.fn(),
+        statBonuses: [],
+        onAddStatBonus: vi.fn(),
+        onRemoveStatBonus: vi.fn(),
     };
 
     beforeEach(() => {

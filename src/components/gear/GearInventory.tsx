@@ -7,6 +7,7 @@ import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 import { Button } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
+import { useShips } from '../../contexts/ShipsContext';
 
 const ITEMS_PER_PAGE = 48;
 
@@ -30,6 +31,8 @@ export const GearInventory: React.FC<Props> = ({
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
+
+    const { getShipName, getShipFromGearId } = useShips();
 
     const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters');
 
@@ -70,11 +73,14 @@ export const GearInventory: React.FC<Props> = ({
                     (stat) =>
                         stat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         stat.value.toString().includes(searchQuery)
-                );
+                ) ||
+                (piece.shipId ? getShipName(piece.shipId) : getShipFromGearId(piece.id)?.name)
+                    ?.toLowerCase()
+                    .includes(searchQuery.toLowerCase());
 
             return matchesSet && matchesType && matchesRarity && matchesEquipped && matchesSearch;
         });
-    }, [inventory, state.filters, searchQuery]);
+    }, [inventory, state.filters, searchQuery, getShipName, getShipFromGearId]);
 
     const sortedInventory = useMemo(() => {
         return [...filteredInventory].sort((a, b) => {
@@ -128,27 +134,6 @@ export const GearInventory: React.FC<Props> = ({
         const rarities = new Set(inventory.map((piece) => piece.rarity));
         return sortRarities(Array.from(rarities));
     }, [inventory]);
-
-    const setSelectedSlots = (slots: string[]) => {
-        setState((prev: FilterState) => ({
-            ...prev,
-            filters: { ...prev.filters, slots },
-        }));
-    };
-
-    const setSelectedRarities = (rarities: string[]) => {
-        setState((prev: FilterState) => ({
-            ...prev,
-            filters: { ...prev.filters, rarities },
-        }));
-    };
-
-    const setSelectedSetBonuses = (setBonuses: string[]) => {
-        setState((prev: FilterState) => ({
-            ...prev,
-            filters: { ...prev.filters, setBonuses },
-        }));
-    };
 
     const setSort = (sort: SortConfig) => {
         setState((prev: FilterState) => ({ ...prev, sort }));

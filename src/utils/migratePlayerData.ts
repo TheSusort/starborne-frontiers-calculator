@@ -261,6 +261,25 @@ export const syncMigratedDataToSupabase = async (
 
             if (validInventory.length > 0) {
                 // Process inventory in batches to avoid timeouts
+
+                // get existing inventory items
+                const { data: existingInventory } = await supabase
+                    .from('inventory_items')
+                    .select('id')
+                    .eq('user_id', userId);
+
+                // find any deleted inventory items
+                const deletedInventory = existingInventory?.filter(
+                    (item) => !validInventory.some((s) => s.id === item.id)
+                );
+
+                // delete any deleted inventory items
+                const { error: deleteInventoryError } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .in('id', deletedInventory?.map((item) => item.id) || []);
+                if (deleteInventoryError) throw deleteInventoryError;
+
                 const BATCH_SIZE = 500;
                 for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
                     const batch = validInventory.slice(i, i + BATCH_SIZE);
@@ -352,9 +371,21 @@ export const syncMigratedDataToSupabase = async (
                 const existingShipsMap = new Map(
                     existingShips?.map((ship) => [
                         ship.id,
-                        { equipment_locked: ship.equipment_locked, type: ship.type },
+                        { equipmentLocked: ship.equipment_locked, type: ship.type },
                     ]) || []
                 );
+
+                // find any deleted ships
+                const deletedShips = existingShips?.filter(
+                    (ship) => !validShips.some((s) => s.id === ship.id)
+                );
+
+                // delete any deleted ships
+                const { error: deleteShipsError } = await supabase
+                    .from('ships')
+                    .delete()
+                    .in('id', deletedShips?.map((ship) => ship.id) || []);
+                if (deleteShipsError) throw deleteShipsError;
 
                 // Prepare batch of ship records with preserved equipment_locked state
                 const shipRecords = validShips.map((ship) => ({
@@ -366,7 +397,7 @@ export const syncMigratedDataToSupabase = async (
                     type: existingShipsMap.get(ship.id)?.type ?? ship.type,
                     affinity: ship.affinity,
                     equipment_locked:
-                        existingShipsMap.get(ship.id)?.equipment_locked ?? ship.equipmentLocked,
+                        existingShipsMap.get(ship.id)?.equipmentLocked ?? ship.equipmentLocked,
                     copies: ship.copies,
                     rank: ship.rank,
                     level: ship.level,
@@ -463,6 +494,17 @@ export const syncMigratedDataToSupabase = async (
 
                         if (refitStatsError) throw refitStatsError;
                     }
+                }
+
+                // Delete all implants in batches
+                for (let i = 0; i < shipIds.length; i += BATCH_SIZE) {
+                    const batchIds = shipIds.slice(i, i + BATCH_SIZE);
+                    const { error: deleteImplantsError } = await supabase
+                        .from('ship_implants')
+                        .delete()
+                        .in('ship_id', batchIds);
+
+                    if (deleteImplantsError) throw deleteImplantsError;
                 }
 
                 // Equipment records - filter out undefined gear IDs

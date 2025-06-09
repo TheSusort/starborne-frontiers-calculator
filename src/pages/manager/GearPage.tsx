@@ -21,7 +21,6 @@ export const GearPage: React.FC = () => {
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
     const [activeTab, setActiveTab] = useState('inventory');
-
     const tabs = [
         { id: 'inventory', label: 'Inventory' },
         { id: 'analysis', label: 'Upgrade Analysis' },

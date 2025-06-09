@@ -1,8 +1,52 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.4.0';
+export const CURRENT_VERSION = '1.7.2';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.7.2',
+        date: '2025-06-08',
+        changes: ['Added high security defender role', 'Roles are now persisted between imports'],
+    },
+    {
+        version: '1.7.1',
+        date: '2025-06-07',
+        changes: [
+            'Fixed a bug with offensive debuffer score calculation',
+            'Moved ship data to indexedDB',
+            'Fixed a bug with equipping gear already equipped, not always unequipping from other ships',
+        ],
+    },
+    {
+        version: '1.7.0',
+        date: '2025-06-07',
+        changes: ['Added stat bonuses to autogear settings'],
+    },
+    {
+        version: '1.6.0',
+        date: '2025-06-07',
+        changes: [
+            'Added IndexedDB for gear inventory, to support HUGE inventories',
+            'Add sorting ships by specific stats',
+        ],
+    },
+    {
+        version: '1.5.0',
+        date: '2025-06-06',
+        changes: [
+            'Added defense penetration to attacker autogear calculation',
+            'Added search by equipped ship to gear inventory',
+        ],
+    },
+    {
+        version: '1.4.1',
+        date: '2025-06-06',
+        changes: [
+            'Fixed a bug with implant import',
+            'Fixed a bug with ship import',
+            'Fixed a bug with inventory import',
+        ],
+    },
     {
         version: '1.4.0',
         date: '2025-06-03',

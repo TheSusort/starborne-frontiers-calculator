@@ -1,7 +1,7 @@
 import { AutogearStrategy } from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import { calculateTotalScore } from '../scoring';
@@ -51,7 +51,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearSuggestion[]> {
         // Initialize progress tracking (population size * generations)
         const totalOperations =
@@ -71,7 +72,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
-            setPriorities
+            setPriorities,
+            statBonuses
         );
 
         for (let generation = 0; generation < generations; generation++) {
@@ -94,7 +96,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 shipRole,
-                setPriorities
+                setPriorities,
+                statBonuses
             );
 
             // Allow UI to update
@@ -117,7 +120,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private initializePopulation(
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Individual[] {
         const population: Individual[] = [];
 
@@ -148,7 +152,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Individual[] {
         return population
             .map((individual) => ({
@@ -160,7 +165,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     getGearPiece,
                     getEngineeringStatsForShipType,
                     shipRole,
-                    setPriorities
+                    setPriorities,
+                    statBonuses
                 ),
             }))
             .sort((a, b) => b.fitness - a.fitness);
@@ -173,7 +179,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): number {
         return calculateTotalScore(
             ship,
@@ -182,7 +189,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
-            setPriorities
+            setPriorities,
+            statBonuses
         );
     }
 
@@ -214,7 +222,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         individual: Individual,
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): void {
         Object.keys(GEAR_SLOTS).forEach((slotKey) => {
             const slot = slotKey as GearSlotName;

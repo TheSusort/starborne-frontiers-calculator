@@ -72,7 +72,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                 if (!gear) return null;
                                 return (
                                     <div key={slotName} className="flex justify-center">
-                                        <GearPieceDisplay gear={gear} />
+                                        <GearPieceDisplay gear={gear} small />
                                     </div>
                                 );
                             })}

@@ -9,6 +9,7 @@ import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { v4 as uuidv4 } from 'uuid';
 
 interface InventoryContextType {
     inventory: GearPiece[];
@@ -137,12 +138,33 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [isMigrating, setIsMigrating] = useState(false);
     const [tempInventory, setTempInventory] = useState<GearPiece[]>([]);
+    const [localInventory, setLocalInventory] = useState<GearPiece[]>([]);
 
     // Use useStorage for inventory
-    const { data: inventory, setData: setInventory } = useStorage<GearPiece[]>({
+    const { data: storageInventory, setData: setStorageInventory } = useStorage<GearPiece[]>({
         key: StorageKey.INVENTORY,
         defaultValue: [],
+        useIndexedDB: true,
     });
+
+    // Synchronize local state with storage
+    useEffect(() => {
+        if (storageInventory) {
+            setLocalInventory(storageInventory);
+        }
+    }, [storageInventory]);
+
+    // Synchronize local state back to storage
+    const syncToStorage = useCallback(
+        async (newInventory: GearPiece[] | ((prev: GearPiece[]) => GearPiece[])) => {
+            if (typeof newInventory === 'function') {
+                await setStorageInventory(newInventory(localInventory));
+            } else {
+                await setStorageInventory(newInventory);
+            }
+        },
+        [setStorageInventory, localInventory]
+    );
 
     const loadBatch = useCallback(
         async (
@@ -232,10 +254,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Update progress
                 setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
-                addNotification(
-                    totalLoaded == totalItems ? 'success' : 'info',
-                    `Loaded ${totalLoaded} of ${totalItems} items`
-                );
+                if (totalLoaded == totalItems) {
+                    addNotification(
+                        totalLoaded == totalItems ? 'success' : 'info',
+                        `Loaded ${totalLoaded} of ${totalItems} items`
+                    );
+                }
 
                 // Update temporary inventory with the latest batch
                 setTempInventory(allItems);
@@ -244,7 +268,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
 
             // Once all items are loaded, update the main inventory
-            setInventory(allItems);
+            setLocalInventory(allItems);
             setLoadingProgress(100);
         } catch (error) {
             console.error('Error loading inventory:', error);
@@ -253,10 +277,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setInventory, isMigrating, loadBatch, setTempInventory]);
+    }, [user?.id, addNotification, loadBatch, setTempInventory, isMigrating]);
 
     // Use tempInventory for display while loading
-    const displayInventory = loading ? tempInventory : inventory;
+    const displayInventory = loading ? tempInventory : localInventory;
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -267,7 +291,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setInventory([]);
+                setLocalInventory([]);
             }
         };
 
@@ -275,7 +299,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setInventory, isMigrating]);
+    }, [setLocalInventory, isMigrating]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -297,13 +321,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }, []);
 
     const getGearPiece = useCallback(
-        (id: string) => inventory.find((gear) => gear.id === id),
-        [inventory]
+        (id: string) => localInventory.find((gear) => gear.id === id),
+        [localInventory]
     );
 
     const addGear = useCallback(
         async (newGear: Omit<GearPiece, 'id'>) => {
-            const tempId = `gear-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            const tempId = uuidv4();
             try {
                 // Ensure all properties are properly initialized
                 const optimisticGear: GearPiece = {
@@ -312,8 +336,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     subStats: newGear.subStats || [],
                 };
 
-                // Optimistic update
-                setInventory((prev) => [...prev, optimisticGear]);
+                // Optimistic update using local state
+                setLocalInventory((prev) => [...prev, optimisticGear]);
+                syncToStorage([...localInventory, optimisticGear]);
 
                 if (!user?.id) return optimisticGear;
 
@@ -360,20 +385,21 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 return transformGearData(gearData as RawGearData) as GearPiece;
             } catch (error) {
                 // Revert optimistic update on error
-                setInventory((prev) => prev.filter((g) => g.id !== tempId));
+                setLocalInventory((prev) => prev.filter((g) => g.id !== tempId));
+                syncToStorage(localInventory.filter((g) => g.id !== tempId));
                 console.error('Error adding gear:', error);
                 addNotification('error', 'Failed to add gear');
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification, setInventory]
+        [user?.id, addNotification, localInventory, syncToStorage]
     );
 
     const updateGearPiece = useCallback(
         async (id: string, updates: Partial<GearPiece>) => {
             try {
-                // Get the current piece to update
-                const currentPiece = inventory.find((gear) => gear.id === id);
+                // Get the current piece to update from local state
+                const currentPiece = localInventory.find((gear) => gear.id === id);
                 if (!currentPiece) {
                     throw new Error('Gear piece not found');
                 }
@@ -386,8 +412,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     subStats: updates.subStats || currentPiece.subStats || [],
                 };
 
-                // Optimistic update
-                setInventory((prev) => prev.map((gear) => (gear.id === id ? updatedPiece : gear)));
+                // Optimistic update using local state
+                const updatedInventory = localInventory.map((gear) =>
+                    gear.id === id ? updatedPiece : gear
+                );
+                setLocalInventory(updatedInventory);
+                syncToStorage(updatedInventory);
 
                 if (!user?.id) return;
 
@@ -455,29 +485,26 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification, inventory, setInventory]
+        [user?.id, loadInventory, addNotification, localInventory, syncToStorage]
     );
 
     const deleteGearPiece = useCallback(
         async (id: string) => {
             try {
-                // Optimistic update
-                setInventory((prev) => prev.filter((gear) => gear.id !== id));
+                // Optimistic update using local state
+                const updatedInventory = localInventory.filter((gear) => gear.id !== id);
+                setLocalInventory(updatedInventory);
+                syncToStorage(updatedInventory);
 
-                if (!user?.id) return;
-
-                // Delete gear record (this will cascade delete related records)
-                const { error } = await supabase
-                    .from('inventory_items')
-                    .delete()
-                    .eq('id', id)
-                    .eq('user_id', user.id);
-
-                if (error) throw error;
-
-                // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
                 if (user?.id) {
-                    //await loadInventory();
+                    // Delete gear record (this will cascade delete related records)
+                    const { error } = await supabase
+                        .from('inventory_items')
+                        .delete()
+                        .eq('id', id)
+                        .eq('user_id', user.id);
+
+                    if (error) throw error;
                 }
             } catch (error) {
                 // Revert optimistic update on error
@@ -487,7 +514,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification, setInventory]
+        [user?.id, loadInventory, addNotification, localInventory, syncToStorage]
     );
 
     return (
@@ -501,7 +528,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 updateGearPiece,
                 deleteGearPiece,
                 loadInventory,
-                setData: setInventory,
+                setData: syncToStorage,
             }}
         >
             {children}

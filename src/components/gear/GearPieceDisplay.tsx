@@ -1,6 +1,6 @@
 import { memo, useMemo, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
-import { StatName } from '../../types/stats';
+import { Stat, StatName } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, STATS } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
@@ -17,6 +17,7 @@ interface Props {
     onEdit?: (piece: GearPiece) => void;
     onEquip?: (piece: GearPiece) => void;
     className?: string;
+    small?: boolean;
 }
 
 export const GearPieceDisplay = memo(
@@ -28,11 +29,14 @@ export const GearPieceDisplay = memo(
         onEdit,
         onEquip,
         className = '',
+        small = false,
     }: Props) => {
         const { getShipName, getShipFromGearId } = useShips();
         const shipName = gear.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
         const isImplant = gear.slot.startsWith('implant_');
-
+        if (isImplant) {
+            console.log(gear);
+        }
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
         const rarityInfo = useMemo(() => RARITIES[gear.rarity], [gear.rarity]);
@@ -52,11 +56,11 @@ export const GearPieceDisplay = memo(
 
         return (
             <div
-                className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className}`}
+                className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className} ${small ? 'text-xs' : 'text-sm'}`}
             >
                 {/* Header */}
                 <div
-                    className={`px-4 py-2 border-b ${rarityInfo.textColor} ${rarityInfo.borderColor} flex justify-between items-center`}
+                    className={`py-2 border-b ${rarityInfo.textColor} ${rarityInfo.borderColor} flex justify-between items-center ${small ? 'px-2' : 'px-4'}`}
                 >
                     <div>
                         <div className="capitalize flex items-center gap-2">
@@ -74,7 +78,7 @@ export const GearPieceDisplay = memo(
                                     className="w-6 h-auto"
                                 />
                             )}
-                            <span className="font-secondary">
+                            <span className={`font-secondary`}>
                                 {isImplant
                                     ? IMPLANTS[gear.setBonus as ImplantName]?.name
                                     : GEAR_SLOTS[gear.slot]?.label}
@@ -83,12 +87,12 @@ export const GearPieceDisplay = memo(
                         <div className="flex items-center">
                             {!isImplant && (
                                 <>
-                                    <span className="text-yellow-400 text-sm">★ {gear.stars}</span>
-                                    <div className="text-sm ps-3">Lvl {gear.level}</div>
+                                    <span className="text-yellow-400">★ {gear.stars}</span>
+                                    <div className="ps-3">Lvl {gear.level}</div>
                                 </>
                             )}
                             {isImplant && (
-                                <span className="text-sm">
+                                <span className="ps-8">
                                     {IMPLANT_SLOTS[gear.slot as keyof typeof IMPLANT_SLOTS]?.label}
                                 </span>
                             )}
@@ -136,18 +140,17 @@ export const GearPieceDisplay = memo(
                 </div>
 
                 {showDetails && (
-                    <div className="p-4 pb-2 space-y-4 flex-grow">
+                    <div className={`pb-2 flex-grow ${small ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}>
                         {/* Main Stat */}
-                        {gear.mainStat && (
-                            <div className="bg-dark-lighter p-3">
-                                <div className="text-sm text-gray-400 mb-1">Main Stat</div>
-                                <div className="font-medium capitalize ">
-                                    {STATS[gear.mainStat.name as StatName].label}:{' '}
-                                    {gear.mainStat.value}
-                                    {gear.mainStat.type === 'percentage' ? '%' : ''}
+                        {!isImplant && (
+                            <div>
+                                <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-1'}`}>
+                                    Main Stat
                                 </div>
+                                <StatDisplay stats={[gear.mainStat as Stat]} />
                             </div>
                         )}
+                        {/* Implant Description */}
                         {isImplant &&
                             (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
                                 <div className="bg-dark-lighter p-3">
@@ -160,23 +163,24 @@ export const GearPieceDisplay = memo(
                                     </div>
                                 </div>
                             )}
+
                         {/* Sub Stats */}
                         {gear.subStats.length > 0 && (
                             <div>
-                                <div className="text-sm text-gray-400 mb-2">Sub Stats</div>
+                                <div className="text-gray-400 mb-2">Sub Stats</div>
                                 <StatDisplay stats={gear.subStats} />
                             </div>
                         )}
                         {gear.setBonus && !isImplant && (
                             <div>
-                                <div className="text-sm text-gray-400 mb-2">
+                                <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-2'}`}>
                                     Set Bonus: {GEAR_SETS[gear.setBonus].name}
                                 </div>
-                                {GEAR_SETS[gear.setBonus].stats && (
+                                {GEAR_SETS[gear.setBonus].stats && !small && (
                                     <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
                                 )}
-                                {GEAR_SETS[gear.setBonus].description && (
-                                    <div className="text-sm text-gray-400 mb-2">
+                                {GEAR_SETS[gear.setBonus].description && !small && (
+                                    <div className="text-gray-400 mb-2">
                                         {GEAR_SETS[gear.setBonus]?.description as string}
                                     </div>
                                 )}

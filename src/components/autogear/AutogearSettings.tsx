@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
+import { StatBonusForm } from './StatBonusForm';
 import {
     Button,
     Select,
@@ -14,10 +15,10 @@ import {
 } from '../ui';
 import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
-import { StatPriority } from '../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { SHIP_TYPES, ShipTypeName, STATS } from '../../constants';
 import { GearSetName, GEAR_SETS } from '../../constants/gearSets';
-import { SetPriority } from '../../types/autogear';
+import { StatName } from '../../types/stats';
 
 interface AutogearSettingsProps {
     selectedShip: Ship | null;
@@ -28,6 +29,7 @@ interface AutogearSettingsProps {
     ignoreUnleveled: boolean;
     showSecondaryRequirements: boolean;
     setPriorities: SetPriority[];
+    statBonuses: StatBonus[];
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -39,6 +41,8 @@ interface AutogearSettingsProps {
     onToggleSecondaryRequirements: (value: boolean) => void;
     onAddSetPriority: (priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
+    onAddStatBonus: (bonus: StatBonus) => void;
+    onRemoveStatBonus: (index: number) => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -71,15 +75,17 @@ const SetPriorityForm: React.FC<{
                     noDefaultSelection
                     helpLabel="Select a gear set to be met by the gear you equip."
                 />
-                <Input
-                    label="No. of pieces"
-                    type="number"
-                    min="2"
-                    max="6"
-                    value={count}
-                    onChange={(e) => setCount(parseInt(e.target.value))}
-                    helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
-                />
+                <div className="w-32">
+                    <Input
+                        label="No. of pieces"
+                        type="number"
+                        min="2"
+                        max="6"
+                        value={count}
+                        onChange={(e) => setCount(parseInt(e.target.value))}
+                        helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
+                    />
+                </div>
                 <Button type="submit" disabled={!selectedSet} variant="secondary">
                     Add
                 </Button>
@@ -97,6 +103,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     ignoreUnleveled,
     showSecondaryRequirements,
     setPriorities,
+    statBonuses,
     onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
@@ -108,6 +115,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onToggleSecondaryRequirements,
     onAddSetPriority,
     onRemoveSetPriority,
+    onAddStatBonus,
+    onRemoveStatBonus,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
@@ -119,10 +128,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
             <div className="p-4 bg-dark space-y-2">
                 <span className=" text-sm">Predefined Strategies</span>
+                {/* value should be the key of SHIP_TYPES */}
                 <Select
                     data-testid="role-select"
-                    options={Object.values(SHIP_TYPES).map((type) => ({
-                        value: type.name,
+                    options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
+                        value: key,
                         label: `${type.name} (${type.description})`,
                     }))}
                     value={selectedShipRole || ''}
@@ -176,7 +186,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     selectedShipRole === '' ||
                     showSecondaryRequirements
                 }
-                className="!mt-0"
             >
                 <div className="space-y-4">
                     <StatPriorityForm
@@ -188,57 +197,100 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="bg-dark p-4 space-y-2">
                         <SetPriorityForm onAdd={onAddSetPriority} />
                     </div>
+
+                    <div className="bg-dark p-4 space-y-2">
+                        <h3 className="font-semibold">Stat Bonuses</h3>
+                        <p className="text-sm text-gray-400">
+                            Add stat bonuses that contribute to the role score. For example, an
+                            attacker that gains extra damage equal to 10% of HP.
+                        </p>
+                        <StatBonusForm
+                            onAdd={onAddStatBonus}
+                            existingBonuses={statBonuses}
+                            onRemove={onRemoveStatBonus}
+                        />
+                    </div>
                 </div>
             </CollapsibleForm>
-
-            {priorities.length > 0 && (
-                <div className="bg-dark p-4 space-y-2 ">
-                    <h3 className="text-lg font-semibold">Stat Priority List</h3>
-                    {priorities.map((priority, index) => (
-                        <div key={index} className="flex items-center">
-                            <span>
-                                {STATS[priority.stat].label}
-                                {' ('}
-                                {priority.minLimit ? `Min: ${priority.minLimit}` : ''}
-                                {priority.minLimit && priority.maxLimit ? `, ` : ''}
-                                {priority.maxLimit ? ` Max: ${priority.maxLimit}` : ''}
-                                {priority.weight !== 1 ? ` (Weight: ${priority.weight})` : ''}
-                                {') '}
-                            </span>
-                            <Button
-                                aria-label="Remove priority"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => onRemovePriority(index)}
-                                className="ml-auto"
-                            >
-                                <CloseIcon />
-                            </Button>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {setPriorities.length > 0 && (
+            {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
                 <div className="bg-dark p-4 space-y-2">
-                    <h3 className="text-lg font-semibold">Set Priority List</h3>
-                    {setPriorities.map((priority, index) => (
-                        <div key={index} className="flex items-center">
-                            <span>
-                                {GEAR_SETS[priority.setName as GearSetName].name} ({priority.count}{' '}
-                                pieces)
-                            </span>
-                            <Button
-                                aria-label="Remove set priority"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => onRemoveSetPriority(index)}
-                                className="ml-auto"
-                            >
-                                <CloseIcon />
-                            </Button>
-                        </div>
-                    ))}
+                    {statBonuses.length > 0 && (
+                        <>
+                            <h3 className="font-semibold">Role Stat Bonuses</h3>
+                            {statBonuses.map((bonus, index) => (
+                                <div key={index} className="flex items-center text-sm">
+                                    <span>
+                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
+                                    </span>
+                                    <Button
+                                        aria-label="Remove bonus"
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={() => onRemoveStatBonus(index)}
+                                        className="ml-auto"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
+                                </div>
+                            ))}
+                            <hr className="my-2 border-dark-lighter" />
+                        </>
+                    )}
+
+                    {priorities.length > 0 && (
+                        <>
+                            <h3 className="font-semibold">Stat Priority List</h3>
+                            {priorities.map((priority, index) => (
+                                <div key={index} className="flex items-center text-sm">
+                                    <span>
+                                        {STATS[priority.stat].label}
+                                        {' ('}
+                                        {priority.minLimit ? `Min: ${priority.minLimit}` : ''}
+                                        {priority.minLimit && priority.maxLimit ? `, ` : ''}
+                                        {priority.maxLimit ? ` Max: ${priority.maxLimit}` : ''}
+                                        {priority.weight !== 1
+                                            ? ` (Weight: ${priority.weight})`
+                                            : ''}
+                                        {') '}
+                                    </span>
+                                    <Button
+                                        aria-label="Remove priority"
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={() => onRemovePriority(index)}
+                                        className="ml-auto"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
+                                </div>
+                            ))}
+
+                            <hr className="my-2 border-dark-lighter" />
+                        </>
+                    )}
+
+                    {setPriorities.length > 0 && (
+                        <>
+                            <h3 className="font-semibold">Set Priority List</h3>
+                            {setPriorities.map((priority, index) => (
+                                <div key={index} className="flex items-center text-sm">
+                                    <span>
+                                        {GEAR_SETS[priority.setName as GearSetName].name} (
+                                        {priority.count} pieces)
+                                    </span>
+                                    <Button
+                                        aria-label="Remove set priority"
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={() => onRemoveSetPriority(index)}
+                                        className="ml-auto"
+                                    >
+                                        <CloseIcon />
+                                    </Button>
+                                </div>
+                            ))}
+                        </>
+                    )}
                 </div>
             )}
 

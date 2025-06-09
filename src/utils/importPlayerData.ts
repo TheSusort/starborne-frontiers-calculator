@@ -119,7 +119,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             critDamage: Math.round(unit.Attributes.BaseWithLevelAndRank.CritBoost * 100),
             speed: unit.Attributes.BaseWithLevelAndRank.Initiative,
             healModifier: 0, // Not present in exported data
-            hpRegen: 0, // Not present in exported data
+            hpRegen: getHpRegen(unit.Name),
             shield: 0,
             defensePenetration: Math.round(
                 unit.Attributes.BaseWithLevelAndRank.DefensePenetration * 100
@@ -170,7 +170,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             baseStats,
             equipment: {}, // Will be populated from equipment data
             refits,
-            implants: [], // Will be populated from equipment data
+            implants: {}, // Will be populated from equipment data
             copies,
             equipmentLocked: false,
         };
@@ -268,7 +268,7 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
 
             const shipImplants = implants.filter((implant) => implant.shipId === ship.id);
             shipImplants.forEach((implant) => {
-                ship.equipment[implant.slot] = implant.id;
+                ship.implants[implant.slot] = implant.id;
             });
         });
 
@@ -569,6 +569,15 @@ function getStatName(exportStatName: string): StatName | null {
             return null;
     }
 }
+
+const getHpRegen = (name: string): number => {
+    if (name === 'Isha') {
+        return 5;
+    } else if (name === 'Heliodor') {
+        return 8;
+    }
+    return 0;
+};
 
 function createStat(name: StatName, value: number, type: StatType): Stat {
     if (PERCENTAGE_ONLY_STATS.includes(name as PercentageOnlyStats) || type === 'percentage') {

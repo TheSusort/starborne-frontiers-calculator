@@ -48,8 +48,6 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                     }
 
                     addNotification('success', 'Data imported successfully, refreshing...');
-
-                    await loadShips();
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
                 }
@@ -62,6 +60,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                 );
             } finally {
                 setLoading(false);
+                window.location.reload();
             }
 
             // Reset the file input

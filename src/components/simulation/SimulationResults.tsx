@@ -365,13 +365,16 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
 
     const renderStats = (simulation: SimulationSummary, isComparison = false) => {
         switch (role) {
-            case 'Defender':
+            case 'DEFENDER':
+            case 'DEFENDER_SECURITY':
                 return renderDefenderStats(simulation, isComparison);
-            case 'Debuffer':
+            case 'DEBUFFER_OFFENSIVE':
+            case 'DEBUFFER_DEFENSIVE':
+            case 'DEBUFFER_BOMBER':
                 return renderDebufferStats(simulation, isComparison);
-            case 'Supporter':
+            case 'SUPPORTER':
                 return renderSupporterStats(simulation, isComparison);
-            case 'Supporter(Buffer)':
+            case 'SUPPORTER_BUFFER':
                 return renderSupporterBufferStats(simulation, isComparison);
             default:
                 return renderAttackerStats(simulation, isComparison);

@@ -66,6 +66,7 @@ export const IMPLANT_SLOTS: Record<string, GearSlot> = {
 };
 
 export type GearSlotName = keyof typeof GEAR_SLOTS | keyof typeof IMPLANT_SLOTS;
+export type ImplantSlotName = keyof typeof IMPLANT_SLOTS;
 
 export const GEAR_SLOT_ORDER: GearSlotName[] = Object.keys({
     ...GEAR_SLOTS,

@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority } from '../../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats } from '../../../types/stats';
@@ -37,7 +37,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearSuggestion[]> {
         const setGroups = this.groupInventoryBySets(
             availableInventory,
@@ -77,7 +78,8 @@ export class SetFirstStrategy extends BaseStrategy {
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 shipRole,
-                setPriorities
+                setPriorities,
+                statBonuses
             );
 
             setPieces.forEach((piece) => {
@@ -97,7 +99,8 @@ export class SetFirstStrategy extends BaseStrategy {
             getGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
-            setPriorities
+            setPriorities,
+            statBonuses
         );
 
         // Ensure progress is complete
@@ -205,7 +208,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<GearPiece[]> {
         const availableSlots = pieces.map((p) => p.slot).filter((slot) => !usedSlots.has(slot));
 
@@ -247,7 +251,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         priorities,
                         shipRole,
                         undefined,
-                        setPriorities
+                        setPriorities,
+                        statBonuses
                     ) * priorityMultiplier;
 
                 if (score > bestScore) {
@@ -270,7 +275,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): Promise<void> {
         for (const slotKey of Object.keys(GEAR_SLOTS)) {
             const slot = slotKey as GearSlotName;
@@ -299,7 +305,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         priorities,
                         shipRole,
                         undefined,
-                        setPriorities
+                        setPriorities,
+                        statBonuses
                     );
                     if (score > bestScore) {
                         bestScore = score;
@@ -320,8 +327,16 @@ export class SetFirstStrategy extends BaseStrategy {
         priorities: StatPriority[],
         shipRole?: ShipTypeName,
         setCount?: Record<string, number>,
-        setPriorities?: SetPriority[]
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[]
     ): number {
-        return calculatePriorityScore(stats, priorities, shipRole, setCount, setPriorities);
+        return calculatePriorityScore(
+            stats,
+            priorities,
+            shipRole,
+            setCount,
+            setPriorities,
+            statBonuses
+        );
     }
 }

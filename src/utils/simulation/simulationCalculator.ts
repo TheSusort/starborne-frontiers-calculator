@@ -22,6 +22,8 @@ export interface SimulationSummary {
     healingPerHit?: number;
     hp?: number;
     hpRegen?: number;
+    security?: number;
+
     // Debuffer specific
     hackSuccessRate?: number;
 
@@ -43,18 +45,19 @@ export function runSimulation(
     activeSets?: string[]
 ): SimulationSummary {
     switch (role) {
-        case 'Attacker':
-            return runDamageSimulation(stats);
-        case 'Defender':
+        case 'DEFENDER':
+        case 'DEFENDER_SECURITY':
             return {
                 ...runDefenderSimulation(stats),
                 activeSets: activeSets,
             };
-        case 'Debuffer':
+        case 'DEBUFFER_OFFENSIVE':
+        case 'DEBUFFER_DEFENSIVE':
+        case 'DEBUFFER_BOMBER':
             return runDebufferSimulation(stats);
-        case 'Supporter':
+        case 'SUPPORTER':
             return runHealingSimulation(stats);
-        case 'Supporter(Buffer)':
+        case 'SUPPORTER_BUFFER':
             return {
                 ...runDefenderSimulation(stats),
                 speed: stats.speed,
@@ -122,6 +125,7 @@ function runDefenderSimulation(stats: BaseStats): SimulationSummary {
         survivedRounds: survivalRounds,
         hp: stats.hp,
         hpRegen: stats.hpRegen,
+        security: stats.security,
     };
 }
 
