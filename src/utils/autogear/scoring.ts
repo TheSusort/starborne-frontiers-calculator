@@ -110,7 +110,7 @@ export function calculatePriorityScore(
     // Get base score from role-specific calculation
     let baseScore = 0;
     if (shipRole) {
-        switch (shipRole) {
+        switch (shipRole as ShipTypeName) {
             case 'ATTACKER':
                 baseScore = calculateAttackerScore(stats, statBonuses);
                 break;
@@ -120,7 +120,7 @@ export function calculatePriorityScore(
             case 'DEFENDER_SECURITY':
                 baseScore = calculateDefenderSecurityScore(stats, statBonuses);
                 break;
-            case 'DEBUFFER_OFFENSIVE':
+            case 'DEBUFFER':
                 baseScore = calculateDebufferScore(stats, statBonuses);
                 break;
             case 'DEBUFFER_DEFENSIVE':

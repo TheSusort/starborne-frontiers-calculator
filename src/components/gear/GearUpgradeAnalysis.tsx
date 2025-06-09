@@ -24,7 +24,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
             </span>
 
             {shipRoles.map((role) => {
-                const results = analyzePotentialUpgrades(inventory, SHIP_TYPES[role].name);
+                const results = analyzePotentialUpgrades(inventory, role);
 
                 if (results.length === 0) return null;
                 return (
