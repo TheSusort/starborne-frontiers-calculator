@@ -40,7 +40,7 @@ const mockShip: Ship = {
         hull: 'gear2',
     },
     refits: [],
-    implants: [],
+    implants: {},
     baseStats: {
         hp: 1000,
         attack: 100,

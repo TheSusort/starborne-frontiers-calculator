@@ -74,7 +74,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                     </div>
 
                     <Tooltip isVisible={hoveredGear === gear}>
-                        <GearPieceDisplay gear={gear} className="min-w-[170px]" small />
+                        <GearPieceDisplay gear={gear} className="w-48" small />
                     </Tooltip>
                 </div>
             );

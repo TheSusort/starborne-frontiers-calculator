@@ -362,9 +362,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 const stats = [
                     {
                         gear_id: gearData.id,
-                        name: newGear.mainStat.name,
-                        value: newGear.mainStat.value,
-                        type: newGear.mainStat.type,
+                        name: newGear.mainStat?.name as StatName,
+                        value: newGear.mainStat?.value as number,
+                        type: newGear.mainStat?.type as StatType,
                         is_main: true,
                     },
                     ...(newGear.subStats || []).map((stat) => ({
@@ -450,9 +450,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     const stats = [
                         {
                             gear_id: id,
-                            name: updatedPiece.mainStat.name,
-                            value: updatedPiece.mainStat.value,
-                            type: updatedPiece.mainStat.type,
+                            name: updatedPiece.mainStat?.name as StatName,
+                            value: updatedPiece.mainStat?.value as number,
+                            type: updatedPiece.mainStat?.type as StatType,
                             is_main: true,
                         },
                         ...(updatedPiece.subStats?.map((stat) => ({

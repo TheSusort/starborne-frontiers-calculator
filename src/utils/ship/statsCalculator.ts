@@ -1,6 +1,6 @@
 import { BaseStats, EngineeringStat, PERCENTAGE_ONLY_STATS, Stat } from '../../types/stats';
 import { Refit } from '../../types/ship';
-import { GearPiece, Implant } from '../../types/gear';
+import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
 import { PercentageOnlyStats } from '../../types/stats';
@@ -19,6 +19,7 @@ export const calculateTotalStats = (
     equipment: Partial<Record<GearSlotName, string>>,
     getGearPiece: (id: string) => GearPiece | undefined,
     refits: Refit[] = [],
+    implants: Partial<Record<GearSlotName, string>> = {},
     engineeringStats: EngineeringStat | undefined
 ): StatBreakdown => {
     const breakdown: StatBreakdown = {
@@ -53,7 +54,7 @@ export const calculateTotalStats = (
         if (gear.mainStat) {
             addStatModifier(gear.mainStat, breakdown.afterGear, breakdown.afterEngineering);
         }
-        gear.subStats.forEach((stat) =>
+        gear.subStats?.forEach((stat) =>
             addStatModifier(stat, breakdown.afterGear, breakdown.afterEngineering)
         );
     });
@@ -62,6 +63,17 @@ export const calculateTotalStats = (
     // Process set bonuses separately
     applySetBonuses();
     Object.assign(breakdown.final, breakdown.afterSets);
+
+    // Process implants
+    Object.values(implants || {}).forEach((implantId) => {
+        if (!implantId) return;
+        const implant = getGearPiece(implantId);
+        if (!implant) return;
+
+        implant.subStats?.forEach((stat) =>
+            addStatModifier(stat, breakdown.final, breakdown.afterEngineering)
+        );
+    });
 
     return breakdown;
 
@@ -75,19 +87,17 @@ export const calculateTotalStats = (
 
             const gearWithBonus = Object.values(equipment)
                 .map((id) => id && getGearPiece(id))
-                .find(
-                    (gear) => gear && gear.setBonus && GEAR_SETS[gear.setBonus]?.name === setType
-                );
+                .find((gear) => gear && gear.setBonus && GEAR_SETS[gear.setBonus].name === setType);
 
             if (
                 !gearWithBonus ||
                 !gearWithBonus.setBonus ||
-                !GEAR_SETS[gearWithBonus.setBonus]?.stats
+                !GEAR_SETS[gearWithBonus.setBonus].stats
             )
                 return;
 
             for (let i = 0; i < bonusCount; i++) {
-                GEAR_SETS[gearWithBonus.setBonus]?.stats.forEach((stat) =>
+                GEAR_SETS[gearWithBonus.setBonus].stats.forEach((stat) =>
                     addStatModifier(stat, breakdown.afterSets, breakdown.afterEngineering)
                 );
             }
@@ -101,10 +111,10 @@ export const calculateTotalStats = (
         Object.values(equipment || {}).forEach((gearId) => {
             if (!gearId) return;
             const gear = getGearPiece(gearId);
-            if (!gear?.setBonus || !GEAR_SETS[gear.setBonus]?.name) return;
+            if (!gear?.setBonus || !GEAR_SETS[gear.setBonus].name) return;
 
-            setCounts[GEAR_SETS[gear.setBonus]?.name] =
-                (setCounts[GEAR_SETS[gear.setBonus]?.name] || 0) + 1;
+            setCounts[GEAR_SETS[gear.setBonus].name] =
+                (setCounts[GEAR_SETS[gear.setBonus].name] || 0) + 1;
         });
 
         return setCounts;

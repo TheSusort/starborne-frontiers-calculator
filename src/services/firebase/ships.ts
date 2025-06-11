@@ -184,7 +184,7 @@ class ShipsService {
             } as BaseStats,
             equipment: {},
             refits: [],
-            implants: [],
+            implants: {},
             affinity: ship.affinity.toLowerCase() as AffinityName,
             imageKey: ship.imageKey,
             activeSkillText: ship.activeSkillText,

@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
-import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
+import { SHIP_TYPES, FACTIONS, RARITIES, IMPLANT_SLOT_ORDER } from '../../constants';
 import {
     Button,
     CloseIcon,
@@ -22,7 +22,6 @@ import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
-import { StatDisplay } from '../stats/StatDisplay';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
 
@@ -124,6 +123,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                     ship.equipment,
                     getGearPiece,
                     ship.refits,
+                    ship.implants,
                     getEngineeringStatsForShipType(ship.type)
                 ),
             [
@@ -133,6 +133,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                 ship.refits,
                 getEngineeringStatsForShipType,
                 ship.type,
+                ship.implants,
             ]
         );
 
@@ -293,29 +294,25 @@ export const ShipDisplay: React.FC<Props> = memo(
                                         isVisible={isTooltipVisible}
                                         className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
                                     >
-                                        {Object.entries(ship.implants || {}).map(
-                                            ([slot, implant], index) => (
-                                                <React.Fragment key={slot}>
-                                                    {implant && (
-                                                        <GearPieceDisplay
-                                                            gear={
-                                                                getGearPiece(implant) as GearPiece
-                                                            }
-                                                            mode="compact"
-                                                            className={`${
-                                                                index <
-                                                                Object.keys(ship.implants || {})
-                                                                    .length -
-                                                                    1
-                                                                    ? 'border-b border-dark-lighter pb-2'
-                                                                    : ''
-                                                            }`}
-                                                            small
-                                                        />
-                                                    )}
-                                                </React.Fragment>
-                                            )
-                                        )}
+                                        {IMPLANT_SLOT_ORDER.map((slot) => (
+                                            <React.Fragment key={slot}>
+                                                {ship.implants?.[slot] && (
+                                                    <GearPieceDisplay
+                                                        gear={
+                                                            getGearPiece(
+                                                                ship.implants[slot] as string
+                                                            ) as GearPiece
+                                                        }
+                                                        showDetails={
+                                                            getGearPiece(ship.implants[slot])
+                                                                ?.subStats?.length !== 0
+                                                        }
+                                                        mode="subcompact"
+                                                        small
+                                                    />
+                                                )}
+                                            </React.Fragment>
+                                        ))}
                                     </Tooltip>
                                 </div>
                             )}

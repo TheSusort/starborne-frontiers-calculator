@@ -10,7 +10,7 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { GEAR_SETS, GearSlotName, ShipTypeName } from '../../constants';
 import { AutogearSettings } from '../../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
@@ -184,7 +184,6 @@ export const AutogearPage: React.FC = () => {
         // Create new equipment objects
         const currentEquipment = selectedShip.equipment;
         const suggestedEquipment = getSuggestedEquipment(newSuggestions, selectedShip);
-        console.log(suggestedEquipment);
 
         // Get active sets
         const currentSets = Object.values(currentEquipment).reduce(
@@ -253,6 +252,7 @@ export const AutogearPage: React.FC = () => {
             suggestedEquipment,
             getGearPiece,
             selectedShip.refits,
+            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
     };
@@ -323,6 +323,7 @@ export const AutogearPage: React.FC = () => {
             selectedShip.equipment,
             getGearPiece,
             selectedShip.refits,
+            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
     };

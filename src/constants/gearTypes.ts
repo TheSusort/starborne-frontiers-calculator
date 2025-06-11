@@ -38,18 +38,8 @@ export const GEAR_SLOTS: Record<string, GearSlot> = {
 } satisfies Record<string, GearSlot>;
 
 export const IMPLANT_SLOTS: Record<string, GearSlot> = {
-    implant_minor_alpha: {
-        label: 'Minor (Alpha)',
-        availableMainStats: [],
-        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
-    },
-    implant_minor_sigma: {
-        label: 'Minor (Sigma)',
-        availableMainStats: [],
-        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
-    },
-    implant_minor_gamma: {
-        label: 'Minor (Gamma)',
+    implant_ultimate: {
+        label: 'Ultimate',
         availableMainStats: [],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
@@ -58,8 +48,18 @@ export const IMPLANT_SLOTS: Record<string, GearSlot> = {
         availableMainStats: [],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
-    implant_ultimate: {
-        label: 'Ultimate',
+    implant_minor_alpha: {
+        label: 'Minor (Alpha)',
+        availableMainStats: [],
+        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
+    },
+    implant_minor_gamma: {
+        label: 'Minor (Gamma)',
+        availableMainStats: [],
+        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
+    },
+    implant_minor_sigma: {
+        label: 'Minor (Sigma)',
         availableMainStats: [],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
@@ -70,5 +70,8 @@ export type ImplantSlotName = keyof typeof IMPLANT_SLOTS;
 
 export const GEAR_SLOT_ORDER: GearSlotName[] = Object.keys({
     ...GEAR_SLOTS,
-    ...IMPLANT_SLOTS,
 }) as GearSlotName[];
+
+export const IMPLANT_SLOT_ORDER: ImplantSlotName[] = Object.keys({
+    ...IMPLANT_SLOTS,
+}) as ImplantSlotName[];

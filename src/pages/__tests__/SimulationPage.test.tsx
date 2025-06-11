@@ -29,7 +29,7 @@ const mockShip: Ship = {
         healModifier: 0,
     },
     refits: [],
-    implants: [],
+    implants: {},
 };
 
 // Mock hooks

@@ -70,6 +70,7 @@ export const ShipDetailsPage: React.FC = () => {
             ship.equipment,
             getGearPiece,
             ship.refits,
+            ship.implants,
             getEngineeringStatsForShipType(ship.type)
         ).final,
         orphanSetPieces

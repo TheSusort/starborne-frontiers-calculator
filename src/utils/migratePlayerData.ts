@@ -496,6 +496,17 @@ export const syncMigratedDataToSupabase = async (
                     }
                 }
 
+                // Implant records - filter out undefined gear IDs
+                const implantRecords = validShips.flatMap((ship) =>
+                    Object.entries(ship.implants || {})
+                        .filter(([, gearId]) => !!gearId)
+                        .map(([slot, gearId]) => ({
+                            ship_id: ship.id,
+                            slot,
+                            id: gearId as string,
+                        }))
+                );
+
                 // Delete all implants in batches
                 for (let i = 0; i < shipIds.length; i += BATCH_SIZE) {
                     const batchIds = shipIds.slice(i, i + BATCH_SIZE);
@@ -505,6 +516,18 @@ export const syncMigratedDataToSupabase = async (
                         .in('ship_id', batchIds);
 
                     if (deleteImplantsError) throw deleteImplantsError;
+                }
+
+                // Insert implants in batches
+                for (let i = 0; i < implantRecords.length; i += BATCH_SIZE) {
+                    const batch = implantRecords.slice(i, i + BATCH_SIZE);
+                    if (batch.length > 0) {
+                        const { error: implantError } = await supabase
+                            .from('ship_implants')
+                            .insert(batch);
+
+                        if (implantError) throw implantError;
+                    }
                 }
 
                 // Equipment records - filter out undefined gear IDs

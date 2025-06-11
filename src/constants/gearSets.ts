@@ -177,7 +177,6 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     PIERCER: {
         name: 'Piercer',
         stats: [{ name: 'defensePenetration', value: 7, type: 'percentage' }],
-        description: 'Ignore 7% Defense',
         iconUrl: 'https://cdn.discordapp.com/emojis/1379810146212909097.webp',
     },
 } satisfies Record<string, GearSetBonus>;

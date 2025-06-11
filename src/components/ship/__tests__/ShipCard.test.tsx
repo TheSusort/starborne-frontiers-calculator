@@ -28,7 +28,7 @@ const mockShip: Ship = {
     },
     equipmentLocked: false,
     refits: [],
-    implants: [],
+    implants: {},
     baseStats: {
         hp: 1000,
         attack: 100,

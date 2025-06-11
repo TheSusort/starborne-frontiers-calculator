@@ -1,7 +1,7 @@
 import { memo, useMemo, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
-import { Stat, StatName } from '../../types/stats';
-import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, STATS } from '../../constants';
+import { Stat } from '../../types/stats';
+import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
 import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
@@ -12,7 +12,7 @@ import { Image } from '../ui/Image';
 interface Props {
     gear: GearPiece;
     showDetails?: boolean;
-    mode?: 'manage' | 'select' | 'full' | 'compact';
+    mode?: 'manage' | 'select' | 'full' | 'compact' | 'subcompact';
     onRemove?: (id: string) => void;
     onEdit?: (piece: GearPiece) => void;
     onEquip?: (piece: GearPiece) => void;
@@ -32,11 +32,9 @@ export const GearPieceDisplay = memo(
         small = false,
     }: Props) => {
         const { getShipName, getShipFromGearId } = useShips();
-        const shipName = gear.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
+        const shipName = gear?.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
         const isImplant = gear.slot.startsWith('implant_');
-        if (isImplant) {
-            console.log(gear);
-        }
+
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
         const rarityInfo = useMemo(() => RARITIES[gear.rarity], [gear.rarity]);
@@ -54,28 +52,29 @@ export const GearPieceDisplay = memo(
             onEquip?.(gear);
         }, [gear, onEquip]);
 
+        if (!gear?.id) return null;
         return (
             <div
                 className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className} ${small ? 'text-xs' : 'text-sm'}`}
             >
                 {/* Header */}
                 <div
-                    className={`py-2 border-b ${rarityInfo.textColor} ${rarityInfo.borderColor} flex justify-between items-center ${small ? 'px-2' : 'px-4'}`}
+                    className={`py-2 ${rarityInfo.textColor} ${mode === 'subcompact' && !showDetails ? '' : 'border-b ' + rarityInfo.borderColor} flex justify-between items-center ${small ? 'px-2' : 'px-4'}`}
                 >
                     <div>
-                        <div className="capitalize flex items-center gap-2">
+                        <div className="flex items-center gap-2">
                             {isImplant && implantInfo && implantInfo.imageKey && (
                                 <Image
                                     src={implantInfo.imageKey}
                                     alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
-                                    className="w-6 h-auto"
+                                    className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6'}`}
                                 />
                             )}
                             {!isImplant && slotInfo && (
                                 <img
                                     src={slotInfo}
                                     alt={GEAR_SETS[gear.setBonus || '']?.name}
-                                    className="w-6 h-auto"
+                                    className={`h-auto ${small ? 'w-4' : 'w-6'}`}
                                 />
                             )}
                             <span className={`font-secondary`}>
@@ -84,15 +83,15 @@ export const GearPieceDisplay = memo(
                                     : GEAR_SLOTS[gear.slot]?.label}
                             </span>
                         </div>
-                        <div className="flex items-center">
+                        <div className="flex items-center text-xs">
                             {!isImplant && (
                                 <>
                                     <span className="text-yellow-400">★ {gear.stars}</span>
                                     <div className="ps-3">Lvl {gear.level}</div>
                                 </>
                             )}
-                            {isImplant && (
-                                <span className="ps-8">
+                            {isImplant && mode !== 'subcompact' && (
+                                <span className="ps-8 text-xs">
                                     {IMPLANT_SLOTS[gear.slot as keyof typeof IMPLANT_SLOTS]?.label}
                                 </span>
                             )}
@@ -100,7 +99,7 @@ export const GearPieceDisplay = memo(
                     </div>
                     {mode === 'manage' ? (
                         <div className="flex gap-2">
-                            {onEdit && (
+                            {!isImplant && onEdit && (
                                 <Button
                                     aria-label="Edit gear piece"
                                     title="Edit gear piece"
@@ -152,9 +151,13 @@ export const GearPieceDisplay = memo(
                         )}
                         {/* Implant Description */}
                         {isImplant &&
+                            mode !== 'subcompact' &&
                             (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
-                                <div className="bg-dark-lighter p-3">
-                                    <div className="text-sm text-gray-400 mb-2">
+                                <div>
+                                    <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-1'}`}>
+                                        Description
+                                    </div>
+                                    <div className="bg-dark-lighter py-1.5 px-3">
                                         {
                                             implantInfo?.variants.find(
                                                 (variant) => variant.rarity === gear.rarity
@@ -167,7 +170,9 @@ export const GearPieceDisplay = memo(
                         {/* Sub Stats */}
                         {gear.subStats.length > 0 && (
                             <div>
-                                <div className="text-gray-400 mb-2">Sub Stats</div>
+                                {mode !== 'subcompact' && (
+                                    <div className="text-gray-400 mb-2">Sub Stats</div>
+                                )}
                                 <StatDisplay stats={gear.subStats} />
                             </div>
                         )}
@@ -186,7 +191,7 @@ export const GearPieceDisplay = memo(
                                 )}
                             </div>
                         )}
-                        {shipName && (
+                        {shipName && mode !== 'subcompact' && (
                             <span className="text-xxs text-gray-500"> Equipped by: {shipName}</span>
                         )}
                     </div>

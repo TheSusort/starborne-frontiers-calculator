@@ -15,7 +15,7 @@ const mockShips: Ship[] = [
         equipment: {},
         equipmentLocked: false,
         refits: [],
-        implants: [],
+        implants: {},
         baseStats: {
             hp: 1000,
             attack: 100,
@@ -37,7 +37,7 @@ const mockShips: Ship[] = [
         equipment: {},
         equipmentLocked: false,
         refits: [],
-        implants: [],
+        implants: {},
         baseStats: {
             hp: 1000,
             attack: 100,

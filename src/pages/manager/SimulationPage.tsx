@@ -15,7 +15,7 @@ import { GearInventory } from '../../components/gear/GearInventory';
 import { useNotification } from '../../hooks/useNotification';
 import { GearSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
-import { ImplantTesting } from '../../components/simulation/ImplantTesting';
+//import { ImplantTesting } from '../../components/simulation/ImplantTesting';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -37,7 +37,10 @@ export const SimulationPage: React.FC = () => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
-    const { equipMultipleGear, updateShip } = useShips();
+    const { equipMultipleGear } = useShips();
+    const [temporaryImplants, setTemporaryImplants] = useState<
+        Partial<Record<GearSlotName, string>>
+    >({});
 
     useEffect(() => {
         const shipId = searchParams.get('shipId');
@@ -58,6 +61,7 @@ export const SimulationPage: React.FC = () => {
             selectedShip.equipment,
             getGearPiece,
             selectedShip.refits,
+            selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
@@ -66,6 +70,7 @@ export const SimulationPage: React.FC = () => {
             temporaryGear,
             getGearPiece,
             selectedShip.refits,
+            temporaryImplants,
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
@@ -82,7 +87,12 @@ export const SimulationPage: React.FC = () => {
         return JSON.stringify(temporaryGear) !== JSON.stringify(selectedShip.equipment);
     };
 
-    const hasChanges = () => hasGearChanges();
+    const hasImplantChanges = () => {
+        if (!selectedShip) return false;
+        return JSON.stringify(temporaryImplants) !== JSON.stringify(selectedShip.implants);
+    };
+
+    const hasChanges = () => hasGearChanges() || hasImplantChanges();
 
     const handleSaveGearChanges = () => {
         if (!selectedShip) return;
@@ -102,6 +112,25 @@ export const SimulationPage: React.FC = () => {
             setSimulation(null);
         }
     };
+    /*
+    const handleSaveImplantChanges = () => {
+        if (!selectedShip) return;
+
+        const updatedShip = {
+            ...selectedShip,
+            implants: temporaryImplants,
+        };
+
+        updateShip(selectedShip.id, updatedShip);
+        addNotification('success', 'Implant changes saved successfully');
+    };
+
+    const handleResetImplantChanges = () => {
+        if (selectedShip) {
+            setTemporaryImplants(selectedShip.implants);
+            setSimulation(null);
+        }
+    };*/
 
     const handleRoleChange = (role: ShipTypeName) => {
         setSelectedRole(role);
@@ -117,6 +146,7 @@ export const SimulationPage: React.FC = () => {
     useEffect(() => {
         if (selectedShip) {
             setTemporaryGear(selectedShip.equipment);
+            setTemporaryImplants(selectedShip.implants);
             setSelectedRole(SHIP_TYPES[selectedShip.type].name);
         }
     }, [selectedShip]);
@@ -126,7 +156,7 @@ export const SimulationPage: React.FC = () => {
             <Seo {...SEO_CONFIG.simulation} />
             <PageLayout
                 title="Simulation"
-                description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear and implants to see how they affect the simulation. Choose the ship role to choose scenario. "
+                description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear to see how they affect the simulation. Choose the ship role to choose scenario. "
             >
                 <SimulationInfo />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -179,8 +209,16 @@ export const SimulationPage: React.FC = () => {
                                     onResetChanges={handleResetGearChanges}
                                     hasChanges={hasGearChanges()}
                                 />
-
+                                {/*
                                 <hr className="border-gray-700" />
+
+                                <ImplantTesting
+                                    temporaryImplants={temporaryImplants}
+                                    onImplantsChange={setTemporaryImplants}
+                                    onSaveChanges={handleSaveImplantChanges}
+                                    onResetChanges={handleResetImplantChanges}
+                                    hasChanges={hasImplantChanges()}
+                                />*/}
                             </div>
                         </div>
                     )}

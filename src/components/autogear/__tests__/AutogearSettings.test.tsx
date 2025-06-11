@@ -27,7 +27,7 @@ describe('AutogearSettings Component', () => {
         equipment: {},
         equipmentLocked: false,
         refits: [],
-        implants: [],
+        implants: {},
     };
 
     const defaultProps = {
