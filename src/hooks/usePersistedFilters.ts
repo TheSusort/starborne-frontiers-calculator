@@ -13,6 +13,7 @@ export interface FilterState {
         types?: string[];
         equipped?: string;
         equipmentLocked?: boolean;
+        affinities?: string[];
     };
 }
 
@@ -26,6 +27,7 @@ const DEFAULT_STATE: FilterState = {
         types: [],
         equipped: '',
         equipmentLocked: false,
+        affinities: [],
     },
 };
 

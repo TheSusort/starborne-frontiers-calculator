@@ -66,12 +66,13 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 69,
         imageKey: 'Gelecek_11_Portrait.png',
         activeSkillText:
-            'This Unit deals 165% damage, inflicts Out. DoT Damage Down 2 for 2 turns, and Corrosion 1 for 2 turns.',
+            'This Unit deals 140% damage, inflicts Out. Damage Down 2 for 2 turns, and Corrosion 1 for 2 turns.',
         chargeSkillText:
-            'This Unit deals 215% damage and, if the enemy has a debuff, applies Provoke for 3 turns and inflicts Corrosion 3 on them for 2 turns.',
-        firstPassiveSkillText: 'This unit receives 15% less damage from debuffed enemies.',
+            'This Unit deals 200% damage and inflicts Corrosion 3 for 2 turns. If the primary target has 3 or more DoT effects, this unit gains Taunt for 1 turn.',
+        firstPassiveSkillText:
+            'This unit receives 25% less direct damage from enemies with a DoT effect.',
         secondPassiveSkillText:
-            'This unit receives 15% less damage from debuffed enemies. When an enemy takes damage from a damage over time effect, repairs 10% of damage dealt.',
+            "This unit receives 25% less direct damage from enemies with a DoT effect. When an enemy takes damage from a DoT effect, repairs 5% this unit's max HP.",
     },
     ANJIAN: {
         name: 'Anjian',
@@ -271,7 +272,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 62,
         speed: 68,
-        imageKey: 'chakara.png',
+        imageKey: 'Terran_7_Portrait.png',
         activeSkillText:
             'This unit deals 180% damage with additional damage equal to 80% of its Defense. If all damaged enemies have more Speed than this unit, it adds 1 charge to its charged skill.',
         chargeSkillText:
@@ -534,9 +535,9 @@ export const SHIPS: Record<string, ShipData> = {
         chargeSkillText:
             'This Unit deals 210% damage bypassing enemy shield and removes 1 charge from the enemy.',
         firstPassiveSkillText:
-            'This unit gains Attack Up 3 for 2 turns after damaging an enemy with Affinity Advantage.',
+            'This ship has 20% Shield Penetration. While shielded, it gains 2500 additional defense. This unit gains Shield equal to 25% of its max HP at the start of combat.',
         secondPassiveSkillText:
-            'This unit gains Attack Up 3 for 2 turns after damaging an enemy with Affinity Advantage. Additionally, if this unit has a shield, it removes 1 charge from the enemy with the most charges on its charged skill.',
+            'This ship has 20% Shield Penetration. While shielded, it gains 2500 additional defense. This unit gains Shield equal to 25% of its max HP at the start of combat. When an enemy uses their charged skill, it deals 80% damage and gains a Shield equal to 30% of the damage dealt, once per round.',
     },
     GALLANT: {
         name: 'Gallant',
@@ -714,7 +715,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 20,
         critDamage: 0,
         speed: 100,
-        imageKey: 'howler.png',
+        imageKey: 'Marauder_15_Portrait.png',
         activeSkillText: 'This Unit grants Attack Up 3 for 2 turns and repairs 90% of its attack.',
         chargeSkillText: 'This Unit grants Overclock 3 for 2 turns and repairs 140% of its attack.',
         firstPassiveSkillText: 'This Unit cleanses 1 debuff when an ally crits an enemy.',
@@ -1175,7 +1176,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 16,
         speed: 72,
-        imageKey: 'malvex.png',
+        imageKey: 'Atlas_14_Portrait.png',
         activeSkillText:
             'This Unit deals 140% damage with additional damage equal to 7% of its current shield, bypassing enemy shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
         chargeSkillText:
@@ -1922,6 +1923,30 @@ export const SHIPS: Record<string, ShipData> = {
             'When this unit purges a buff from an enemy, it repairs itself for 8% max HP.',
         secondPassiveSkillText:
             'When this unit purges a buff from an enemy, it repairs itself for 12% max HP and purges 1 more buff from the enemy.',
+    },
+    SELENITE: {
+        name: 'Selenite',
+        affinity: 'chemical',
+        rarity: 'epic',
+        faction: 'MPL',
+        role: 'ATTACKER',
+        hp: 16075,
+        attack: 4390,
+        defense: 1984,
+        hacking: 77,
+        security: 15,
+        critRate: 14,
+        critDamage: 54,
+        speed: 76,
+        imageKey: 'MPL_7_Portrait.png',
+        activeSkillText:
+            "This Unit Deals 200% damage with additional damage equal to 10% of this unit's max HP. If any target is Stealthed, it adds 1 charge to this Unit's Charged skill. This attack can target Stealthed enemies.",
+        chargeSkillText:
+            "This Unit deals 300% damage with additional damage equal to 17.5% of this unit's max HP. This attack can target Stealthed enemies.",
+        firstPassiveSkillText:
+            'This unit deals 10% more direct damage for every enemy with Stealth.',
+        secondPassiveSkillText:
+            'This unit deals 10% more direct damage for every enemy with Stealth. At the start of the round, the highest attack enemy is applied with Concentrate Fire for 1 turn.',
     },
     SENTINEL: {
         name: 'Sentinel',

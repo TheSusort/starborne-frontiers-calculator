@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { ShipCard } from './ShipCard';
@@ -55,6 +55,7 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
+        (state.filters.affinities?.length ?? 0) > 0 ||
         state.filters.equipmentLocked ||
         searchQuery.length > 0;
 
@@ -76,6 +77,13 @@ export const ShipInventory: React.FC<Props> = ({
         setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, rarities },
+        }));
+    };
+
+    const setSelectedAffinities = (affinities: string[]) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: { ...prev.filters, affinities },
         }));
     };
 
@@ -101,6 +109,9 @@ export const ShipInventory: React.FC<Props> = ({
             const matchesRarity =
                 (state.filters.rarities?.length ?? 0) === 0 ||
                 (state.filters.rarities?.includes(ship.rarity) ?? false);
+            const matchesAffinity =
+                (state.filters.affinities?.length ?? 0) === 0 ||
+                ((ship.affinity && state.filters.affinities?.includes(ship.affinity)) ?? false);
             const matchesEquipmentLocked = !state.filters.equipmentLocked || ship.equipmentLocked;
             const matchesSearch =
                 searchQuery === '' ||
@@ -113,6 +124,7 @@ export const ShipInventory: React.FC<Props> = ({
                 matchesFaction &&
                 matchesType &&
                 matchesRarity &&
+                matchesAffinity &&
                 matchesEquipmentLocked &&
                 matchesSearch
             );
@@ -208,6 +220,15 @@ export const ShipInventory: React.FC<Props> = ({
         return sortRarities(Array.from(rarities));
     }, [ships]);
 
+    const uniqueAffinities = useMemo(() => {
+        const affinities = new Set(
+            ships
+                .map((ship) => ship.affinity)
+                .filter((affinity): affinity is AffinityName => affinity !== undefined)
+        );
+        return Array.from(affinities).sort((a, b) => a.localeCompare(b));
+    }, [ships]);
+
     const filters: FilterConfig[] = [
         {
             id: 'faction',
@@ -237,6 +258,16 @@ export const ShipInventory: React.FC<Props> = ({
             options: uniqueRarities.map((rarity) => ({
                 value: rarity,
                 label: RARITIES[rarity]?.label,
+            })),
+        },
+        {
+            id: 'affinity',
+            label: 'Affinity',
+            values: state.filters.affinities ?? [],
+            onChange: setSelectedAffinities,
+            options: uniqueAffinities.map((affinity) => ({
+                value: affinity,
+                label: affinity.charAt(0).toUpperCase() + affinity.slice(1),
             })),
         },
         {

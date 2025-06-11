@@ -30,7 +30,7 @@ export const Image = memo(({ src, alt = '', className = '' }: ImageProps) => {
     const myImage = cld.image(src);
 
     return (
-        <div className={`${className} relative`}>
+        <div className={`${className} ${className.includes('absolute') ? '' : 'relative'}`}>
             <AdvancedImage
                 cldImg={myImage}
                 plugins={[lazyload()]}
