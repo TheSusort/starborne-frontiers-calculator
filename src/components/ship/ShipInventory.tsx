@@ -55,6 +55,7 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
+        state.filters.equipmentLocked ||
         searchQuery.length > 0;
 
     const setSelectedFactions = (factions: string[]) => {
@@ -78,6 +79,13 @@ export const ShipInventory: React.FC<Props> = ({
         }));
     };
 
+    const setEquipmentLocked = (locked: boolean) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: { ...prev.filters, equipmentLocked: locked },
+        }));
+    };
+
     const setSort = (sort: SortConfig) => {
         setState((prev: FilterState) => ({ ...prev, sort }));
     };
@@ -93,6 +101,7 @@ export const ShipInventory: React.FC<Props> = ({
             const matchesRarity =
                 (state.filters.rarities?.length ?? 0) === 0 ||
                 (state.filters.rarities?.includes(ship.rarity) ?? false);
+            const matchesEquipmentLocked = !state.filters.equipmentLocked || ship.equipmentLocked;
             const matchesSearch =
                 searchQuery === '' ||
                 ship.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -100,7 +109,13 @@ export const ShipInventory: React.FC<Props> = ({
                 FACTIONS[ship.faction]?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 ship.affinity?.toLowerCase().includes(searchQuery.toLowerCase());
 
-            return matchesFaction && matchesType && matchesRarity && matchesSearch;
+            return (
+                matchesFaction &&
+                matchesType &&
+                matchesRarity &&
+                matchesEquipmentLocked &&
+                matchesSearch
+            );
         });
     }, [ships, state.filters, searchQuery]);
 
@@ -223,6 +238,13 @@ export const ShipInventory: React.FC<Props> = ({
                 value: rarity,
                 label: RARITIES[rarity]?.label,
             })),
+        },
+        {
+            id: 'equipmentLocked',
+            label: 'Equipment Lock',
+            values: state.filters.equipmentLocked ? ['true'] : [],
+            onChange: (values) => setEquipmentLocked(values.length > 0),
+            options: [{ value: 'true', label: 'Show only locked ships' }],
         },
     ];
 

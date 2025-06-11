@@ -76,6 +76,13 @@ export const GearInventory: React.FC<Props> = ({
                 ) ||
                 (piece.shipId ? getShipName(piece.shipId) : getShipFromGearId(piece.id)?.name)
                     ?.toLowerCase()
+                    .includes(searchQuery.toLowerCase()) ||
+                IMPLANT_SLOTS[piece.slot || '']?.label
+                    .toLowerCase()
+                    .includes(searchQuery.toLowerCase()) ||
+                piece.setBonus
+                    ?.toLowerCase()
+                    .replace(/_/g, ' ')
                     .includes(searchQuery.toLowerCase());
 
             return matchesSet && matchesType && matchesRarity && matchesEquipped && matchesSearch;

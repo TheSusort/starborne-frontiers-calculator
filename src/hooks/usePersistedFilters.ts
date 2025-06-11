@@ -12,6 +12,7 @@ export interface FilterState {
         sets?: string[];
         types?: string[];
         equipped?: string;
+        equipmentLocked?: boolean;
     };
 }
 
@@ -24,6 +25,7 @@ const DEFAULT_STATE: FilterState = {
         sets: [],
         types: [],
         equipped: '',
+        equipmentLocked: false,
     },
 };
 
