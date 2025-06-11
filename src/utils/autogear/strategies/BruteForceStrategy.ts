@@ -130,7 +130,7 @@ export class BruteForceStrategy extends BaseStrategy {
         };
         const stats = relevantStats[role] || [];
         const gearStats = gear.subStats.map((stat) => stat.name);
-        gearStats.push(gear.mainStat.name);
+        gearStats.push(gear.mainStat?.name as StatName);
         return stats.some((stat) => gearStats.includes(stat as StatName));
     }
 

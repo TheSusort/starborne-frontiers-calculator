@@ -10,7 +10,7 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { GEAR_SETS, GearSlotName, ShipTypeName } from '../../constants';
 import { AutogearSettings } from '../../components/autogear/AutogearSettings';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';

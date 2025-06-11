@@ -1,8 +1,10 @@
 import { memo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GearSlotName, RARITIES, STATS } from '../../constants';
+import { GEAR_SETS, GearSetName, GearSlotName, RARITIES, STATS } from '../../constants';
 import { Button, Tooltip, CloseIcon } from '../ui';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { ImplantName, IMPLANTS } from '../../constants/implants';
+import { Image } from '../ui/Image';
 interface GearSlotProps {
     slotKey: GearSlotName;
     gear?: GearPiece;
@@ -14,6 +16,7 @@ interface GearSlotProps {
 
 export const GearSlot: React.FC<GearSlotProps> = memo(
     ({ slotKey, gear, hoveredGear, onSelect, onRemove, onHover }) => {
+        const isImplant = gear?.slot.startsWith('implant_');
         if (gear) {
             return (
                 <div className="relative">
@@ -25,20 +28,36 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                     >
                         {/* Gear display logic */}
                         <div className="absolute top-1 left-1">
-                            <img
-                                src={GEAR_SETS[gear.setBonus]?.iconUrl}
-                                alt={gear.setBonus}
-                                className="w-5"
-                            />
+                            {isImplant && (
+                                <Image
+                                    src={IMPLANTS[gear.setBonus as ImplantName].imageKey as string}
+                                    alt={IMPLANTS[gear.setBonus as ImplantName].name}
+                                    className="w-5"
+                                />
+                            )}
+                            {!isImplant && (
+                                <img
+                                    src={GEAR_SETS[gear.setBonus as GearSetName]?.iconUrl as string}
+                                    alt={gear.setBonus as string}
+                                    className="w-5"
+                                />
+                            )}
                         </div>
                         {/* main stat and stars */}
-                        <div className="text-xs  font-bold">
-                            {STATS[gear.mainStat.name].shortLabel}
-                            {gear.mainStat.type === 'percentage' ? '%' : ''}
-                        </div>
-                        <span className="text-xs text-yellow-400 absolute top-1 right-1 text-center">
-                            ★ {gear.stars}
-                        </span>
+
+                        {!isImplant && (
+                            <>
+                                <div className="text-xs  font-bold">
+                                    {gear.mainStat && STATS[gear.mainStat.name].shortLabel}
+                                    {gear.mainStat && gear.mainStat.type === 'percentage'
+                                        ? '%'
+                                        : ''}
+                                </div>
+                                <span className="text-xs text-yellow-400 absolute top-1 right-1 text-center">
+                                    ★ {gear.stars}
+                                </span>
+                            </>
+                        )}
 
                         {/* Remove Button */}
                         {onRemove && (
@@ -55,7 +74,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                     </div>
 
                     <Tooltip isVisible={hoveredGear === gear}>
-                        <GearPieceDisplay gear={gear} className="min-w-[170px]" small />
+                        <GearPieceDisplay gear={gear} className="w-48" small />
                     </Tooltip>
                 </div>
             );

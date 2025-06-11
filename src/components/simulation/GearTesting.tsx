@@ -1,6 +1,6 @@
 import React from 'react';
 import { GearPiece } from '../../types/gear';
-import { GearSlotName, GEAR_SLOT_ORDER } from '../../constants';
+import { GearSlotName, GEAR_SLOTS } from '../../constants';
 import { GearSlot } from '../gear/GearSlot';
 import { Button } from '../ui';
 
@@ -32,7 +32,7 @@ export const GearTesting: React.FC<GearTestingProps> = ({
             <h4 className="font-semibold">Gear</h4>
             <div className="p-4 bg-dark">
                 <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
-                    {GEAR_SLOT_ORDER.map((slotKey) => (
+                    {Object.entries(GEAR_SLOTS).map(([slotKey, _]) => (
                         <GearSlot
                             key={slotKey}
                             slotKey={slotKey}

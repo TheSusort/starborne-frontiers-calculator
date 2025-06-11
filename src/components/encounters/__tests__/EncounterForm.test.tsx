@@ -28,7 +28,7 @@ const mockShip: Ship = {
     equipment: {},
     equipmentLocked: false,
     refits: [],
-    implants: [],
+    implants: {},
 };
 
 // Mock ship selector component since it's a complex component with its own tests

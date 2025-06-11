@@ -116,7 +116,7 @@ export function analyzeUpgrades(
                 if (existingSuggestion) {
                     existingSuggestion.reasons.push({
                         title: 'Not optimal set bonus',
-                        reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus].name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                        reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus || '']?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
                     });
                 } else {
                     suggestions.push({
@@ -125,7 +125,7 @@ export function analyzeUpgrades(
                         reasons: [
                             {
                                 title: 'Not optimal set bonus',
-                                reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus].name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                                reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus || '']?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
                             },
                         ],
                     });

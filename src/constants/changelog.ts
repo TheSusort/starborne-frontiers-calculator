@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.7.2';
+export const CURRENT_VERSION = '1.8.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.8.0',
+        date: '2025-06-11',
+        changes: [
+            'Added implants as gear, as a first step to autoimplants, so you can browse implants in the gear inventory. NOTE: This require a re-import of your data.',
+        ],
+    },
     {
         version: '1.7.2',
         date: '2025-06-08',

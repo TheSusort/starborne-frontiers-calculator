@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
-import { SHIP_TYPES, FACTIONS, RARITIES } from '../../constants';
+import { SHIP_TYPES, FACTIONS, RARITIES, IMPLANT_SLOT_ORDER } from '../../constants';
 import {
     Button,
     CloseIcon,
@@ -8,8 +8,8 @@ import {
     LockIcon,
     UnlockedLockIcon,
     InfoIcon,
-    Tooltip,
     CopyIcon,
+    Tooltip,
 } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -21,8 +21,9 @@ import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
-import { StatDisplay } from '../stats/StatDisplay';
 import { CheckIcon } from '../ui/icons/CheckIcon';
+import { GearPieceDisplay } from '../gear/GearPieceDisplay';
+import { GearPiece } from '../../types/gear';
 
 interface Props {
     ship: Ship;
@@ -130,9 +131,9 @@ export const ShipDisplay: React.FC<Props> = memo(
                 ship.equipment,
                 getGearPiece,
                 ship.refits,
-                ship.implants,
                 getEngineeringStatsForShipType,
                 ship.type,
+                ship.implants,
             ]
         );
 
@@ -277,35 +278,44 @@ export const ShipDisplay: React.FC<Props> = memo(
 
                 <div className="px-4 pb-4 relative flex-grow">
                     <div className="space-y-1 text-sm">
-                        {ship.implants?.length > 0 && variant === 'full' && (
-                            <div className="relative">
-                                <div
-                                    className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter"
-                                    onMouseEnter={() => setIsTooltipVisible(true)}
-                                    onMouseLeave={() => setIsTooltipVisible(false)}
-                                >
-                                    <span>Implants:</span>
-                                    <span>{ship.implants?.length}</span>
+                        {ship.implants &&
+                            Object.keys(ship.implants).length > 0 &&
+                            variant === 'full' && (
+                                <div className="relative">
+                                    <div
+                                        className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter"
+                                        onMouseEnter={() => setIsTooltipVisible(true)}
+                                        onMouseLeave={() => setIsTooltipVisible(false)}
+                                    >
+                                        <span>Implants:</span>
+                                        <span>{Object.keys(ship.implants || {}).length}</span>
+                                    </div>
+                                    <Tooltip
+                                        isVisible={isTooltipVisible}
+                                        className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                    >
+                                        {IMPLANT_SLOT_ORDER.map((slot) => (
+                                            <React.Fragment key={slot}>
+                                                {ship.implants?.[slot] && (
+                                                    <GearPieceDisplay
+                                                        gear={
+                                                            getGearPiece(
+                                                                ship.implants[slot] as string
+                                                            ) as GearPiece
+                                                        }
+                                                        showDetails={
+                                                            getGearPiece(ship.implants[slot])
+                                                                ?.subStats?.length !== 0
+                                                        }
+                                                        mode="subcompact"
+                                                        small
+                                                    />
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </Tooltip>
                                 </div>
-                                <Tooltip
-                                    isVisible={isTooltipVisible}
-                                    className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
-                                >
-                                    {ship.implants?.map((implant, index) => (
-                                        <StatDisplay
-                                            key={index}
-                                            stats={implant.stats}
-                                            className={`${
-                                                index < ship.implants.length - 1
-                                                    ? 'border-b border-dark-lighter pb-2'
-                                                    : ''
-                                            }`}
-                                            compact
-                                        />
-                                    ))}
-                                </Tooltip>
-                            </div>
-                        )}
+                            )}
                         <div className="flex items-center justify-between">
                             <div className="flex-grow">
                                 {variant === 'full' && <StatList stats={statsBreakdown.final} />}

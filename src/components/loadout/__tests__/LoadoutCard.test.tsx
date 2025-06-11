@@ -53,7 +53,7 @@ describe('LoadoutCard Component', () => {
         type: 'ATTACKER',
         equipment: {},
         refits: [],
-        implants: [],
+        implants: {},
         baseStats: {
             hp: 1000,
             attack: 100,

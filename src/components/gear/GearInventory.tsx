@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
+import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
@@ -47,7 +47,7 @@ export const GearInventory: React.FC<Props> = ({
         return inventory.filter((piece) => {
             const matchesSet =
                 (state.filters.sets?.length ?? 0) === 0 ||
-                (state.filters.sets?.includes(piece.setBonus) ?? false);
+                (state.filters.sets?.includes(piece.setBonus || '') ?? false);
             const matchesType =
                 (state.filters.types?.length ?? 0) === 0 ||
                 (state.filters.types?.includes(piece.slot) ?? false);
@@ -63,10 +63,12 @@ export const GearInventory: React.FC<Props> = ({
 
             const matchesSearch =
                 searchQuery === '' ||
-                GEAR_SLOTS[piece.slot].label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                GEAR_SETS[piece.setBonus].name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                GEAR_SLOTS[piece.slot]?.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                GEAR_SETS[piece.setBonus || '']?.name
+                    .toLowerCase()
+                    .includes(searchQuery.toLowerCase()) ||
                 RARITIES[piece.rarity].label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                piece.mainStat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                piece.mainStat?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 piece.subStats.some(
                     (stat) =>
                         stat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -111,14 +113,20 @@ export const GearInventory: React.FC<Props> = ({
     }, [state.filters, state.sort, searchQuery]);
 
     const uniqueSets = useMemo(() => {
-        const sets = new Set(inventory.map((piece) => piece.setBonus));
-        return Array.from(sets).sort((a, b) => GEAR_SETS[a].name.localeCompare(GEAR_SETS[b].name));
+        const sets = new Set(
+            inventory.map((piece) =>
+                piece.setBonus && GEAR_SETS[piece.setBonus] ? piece.setBonus : null
+            )
+        );
+        return Array.from(sets).sort((a, b) =>
+            GEAR_SETS[a || '']?.name.localeCompare(GEAR_SETS[b || '']?.name)
+        );
     }, [inventory]);
 
     const uniqueTypes = useMemo(() => {
         const types = new Set(inventory.map((piece) => piece.slot));
         return Array.from(types).sort((a, b) =>
-            GEAR_SLOTS[a].label.localeCompare(GEAR_SLOTS[b].label)
+            GEAR_SLOTS[a || '']?.label.localeCompare(GEAR_SLOTS[b || '']?.label)
         );
     }, [inventory]);
 
@@ -140,7 +148,7 @@ export const GearInventory: React.FC<Props> = ({
                 setState((prev: FilterState) => ({ ...prev, filters: { ...prev.filters, types } })),
             options: uniqueTypes.map((type) => ({
                 value: type,
-                label: GEAR_SLOTS[type].label,
+                label: GEAR_SLOTS[type || '']?.label || IMPLANT_SLOTS[type || '']?.label,
             })),
         },
         {
@@ -163,10 +171,12 @@ export const GearInventory: React.FC<Props> = ({
             values: state.filters.sets ?? [],
             onChange: (sets) =>
                 setState((prev: FilterState) => ({ ...prev, filters: { ...prev.filters, sets } })),
-            options: uniqueSets.map((set) => ({
-                value: set,
-                label: GEAR_SETS[set].name,
-            })),
+            options: uniqueSets
+                .filter((set) => set)
+                .map((set) => ({
+                    value: set || '',
+                    label: GEAR_SETS[set || '']?.name || '',
+                })),
         },
         {
             id: 'equipped',

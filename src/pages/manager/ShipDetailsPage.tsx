@@ -162,13 +162,18 @@ export const ShipDetailsPage: React.FC = () => {
                         </section>
 
                         <section className="bg-dark p-4">
-                            <h3 className="mb-4">Implants ({ship.implants.length})</h3>
-                            {ship.implants.length > 0 ? (
+                            <h3 className="mb-4">
+                                Implants ({Object.keys(ship.equipment).length})
+                            </h3>
+                            {Object.keys(ship.equipment).length > 0 ? (
                                 <div className="space-y-2">
-                                    {ship.implants.map((implant, index) => (
+                                    {Object.keys(ship.equipment).map((implant, index) => (
                                         <StatDisplay
                                             key={index}
-                                            stats={implant.stats}
+                                            stats={
+                                                getGearPiece(ship.equipment[implant] || '')
+                                                    ?.subStats || []
+                                            }
                                             className="p-2 bg-dark-lighter"
                                         />
                                     ))}

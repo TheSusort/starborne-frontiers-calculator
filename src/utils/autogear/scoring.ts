@@ -1,4 +1,4 @@
-import { BaseStats, StatName } from '../../types/stats';
+import { BaseStats } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
@@ -135,6 +135,9 @@ export function calculatePriorityScore(
             case 'SUPPORTER_BUFFER':
                 baseScore = calculateBufferScore(stats, setCount, statBonuses);
                 break;
+            case 'SUPPORTER_OFFENSIVE':
+                baseScore = calculateOffensiveSupporterScore(stats, setCount, statBonuses);
+                break;
         }
     } else {
         // Default scoring logic for manual mode
@@ -259,8 +262,8 @@ function calculateBufferScore(
     // Boost set scoring (4 pieces needed for set bonus)
     // Heavily reward having the full set
     let boostScore = 0;
-    if (boostCount >= 4) {
-        boostScore = 3000; // Major bonus for complete set
+    if (boostCount === 4) {
+        boostScore = 30000; // Major bonus for complete set
     }
 
     // Add effective HP as a secondary consideration
@@ -268,6 +271,24 @@ function calculateBufferScore(
     const ehpScore = Math.sqrt(effectiveHP) * 2;
 
     return speedScore + boostScore + ehpScore + bonusScore;
+}
+
+function calculateOffensiveSupporterScore(
+    stats: BaseStats,
+    setCount?: Record<string, number>,
+    statBonuses?: StatBonus[]
+): number {
+    const speed = stats.speed || 0;
+    const boostCount = setCount?.BOOST || 0;
+    const attack = Math.sqrt(stats.attack || 0) * 2;
+    const bonusScore = applystatBonuses(stats, statBonuses);
+
+    let boostScore = 0;
+    if (boostCount === 4) {
+        boostScore = 30000; // Major bonus for complete set
+    }
+
+    return speed * 10 + attack + boostScore + bonusScore;
 }
 
 // Update calculateTotalScore to include shipRole and setPriorities

@@ -52,7 +52,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [type, setType] = useState(editingShip?.type || '');
     const [rarity, setRarity] = useState(editingShip?.rarity || '');
     const [refits, setRefits] = useState(editingShip?.refits || []);
-    const [implants, setImplants] = useState(editingShip?.implants || []);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { addNotification } = useNotification();
@@ -66,7 +65,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setType(editingShip.type);
             setRarity(editingShip.rarity);
             setRefits(editingShip.refits);
-            setImplants(editingShip.implants);
             setAffinity(editingShip.affinity);
         }
     }, [editingShip]);
@@ -84,7 +82,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             equipment: editingShip?.equipment || {},
             equipmentLocked: editingShip?.equipmentLocked || false,
             refits,
-            implants,
+            implants: editingShip?.implants || {},
         };
 
         try {
@@ -95,7 +93,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setType('');
             setRarity('');
             setRefits([]);
-            setImplants([]);
         } catch (error) {
             addNotification('error', 'Failed to save ship data');
             console.error('Error saving ship:', error);
@@ -151,12 +148,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         value: rarity.value,
         label: rarity.label,
     }));
-
-    const handleImplantDelete = (index: number) => {
-        if (window.confirm('Are you sure you want to remove this implant?')) {
-            setImplants(implants.filter((_, i) => i !== index));
-        }
-    };
 
     const handleRefitDelete = (index: number) => {
         if (window.confirm('Are you sure you want to remove this refit?')) {
@@ -314,49 +305,6 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 >
                     Add Refit
                 </Button>
-            </div>
-
-            {/* Implants Section */}
-            <div className="space-y-4">
-                <h3 className="text-lg font-medium ">Implants</h3>
-                {implants?.map((implant, index) => (
-                    <div key={index} className="p-4 border border-gray-700 relative">
-                        <div className="absolute top-4 right-4">
-                            <Button
-                                aria-label="Delete implant"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => handleImplantDelete(index)}
-                            >
-                                <CloseIcon />
-                            </Button>
-                        </div>
-                        <StatModifierInput
-                            stats={implant.stats}
-                            onChange={(newStats) => {
-                                const newImplants = [...implants];
-                                newImplants[index] = { ...implant, stats: newStats };
-                                setImplants(newImplants);
-                            }}
-                            maxStats={2}
-                            defaultExpanded={editingShip ? false : true}
-                            excludedStats={[
-                                { name: 'shield', type: 'percentage' },
-                                { name: 'hpRegen', type: 'percentage' },
-                            ]}
-                        />
-                    </div>
-                ))}
-                {implants?.length < 5 && (
-                    <Button
-                        aria-label="Add implant"
-                        type="button"
-                        variant="primary"
-                        onClick={() => setImplants([...implants, { id: '', stats: [] }])}
-                    >
-                        Add Implant
-                    </Button>
-                )}
             </div>
 
             {/* Submit Button */}

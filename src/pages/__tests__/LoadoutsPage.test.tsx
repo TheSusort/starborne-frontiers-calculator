@@ -91,7 +91,7 @@ const mockShips: Ship[] = [
             healModifier: 0,
         },
         refits: [],
-        implants: [],
+        implants: {},
     },
     {
         id: 'ship2',
@@ -113,7 +113,7 @@ const mockShips: Ship[] = [
             healModifier: 0,
         },
         refits: [],
-        implants: [],
+        implants: {},
     },
 ];
 

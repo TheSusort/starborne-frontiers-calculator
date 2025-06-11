@@ -32,7 +32,7 @@ const mockShips: Ship[] = [
             healModifier: 0,
         },
         refits: [],
-        implants: [],
+        implants: {},
     },
 ];
 
@@ -154,7 +154,7 @@ vi.mock('../../components/ship/ShipForm', () => ({
                         healModifier: 0,
                     },
                     refits: [],
-                    implants: [],
+                    implants: {},
                 });
             }}
         >

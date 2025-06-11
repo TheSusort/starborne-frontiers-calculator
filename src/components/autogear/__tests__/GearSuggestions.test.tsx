@@ -72,7 +72,7 @@ describe('GearSuggestions Component', () => {
 
         mockSuggestions.forEach((suggestion) => {
             const gear = mockGearPieces[suggestion.gearId];
-            const statLabel = STATS[gear.mainStat.name].shortLabel;
+            const statLabel = STATS[gear.mainStat?.name || 'attack'].shortLabel;
             expect(screen.getByText(statLabel)).toBeInTheDocument();
         });
     });
@@ -112,7 +112,7 @@ describe('GearSuggestions Component', () => {
 
         mockSuggestions.forEach((suggestion) => {
             const gear = mockGearPieces[suggestion.gearId];
-            const setIcon = screen.getByAltText(gear.setBonus);
+            const setIcon = screen.getByAltText(gear.setBonus || 'FORTITUDE');
             expect(setIcon).toBeInTheDocument();
         });
     });

@@ -5,14 +5,12 @@ import { supabase } from '../config/supabase';
 import { useAuth } from './AuthProvider';
 import { useNotification } from '../hooks/useNotification';
 import { v4 as uuidv4 } from 'uuid';
-import { useInventory } from './InventoryProvider';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
-import { GearPiece } from '../types/gear';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -59,7 +57,7 @@ interface RawShipRefit {
 
 interface RawShipImplant {
     id: string;
-    ship_implant_stats: RawShipStat[];
+    slot: GearSlotName;
 }
 
 interface RawShipBaseStats {
@@ -149,10 +147,6 @@ const isValidShip = (ship: unknown): ship is Ship => {
         console.error('Invalid ship: refits is not an array');
         return false;
     }
-    if (!Array.isArray(shipData.implants)) {
-        console.error('Invalid ship: implants is not an array');
-        return false;
-    }
 
     // Check equipmentLocked boolean
     if (shipData.equipmentLocked !== undefined && typeof shipData.equipmentLocked !== 'boolean') {
@@ -226,10 +220,13 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 id: refit.id,
                 stats: refit.ship_refit_stats.map(createStat),
             })),
-            implants: data.ship_implants.map((implant) => ({
-                id: implant.id,
-                stats: implant.ship_implant_stats.map(createStat),
-            })),
+            implants: data.ship_implants.reduce(
+                (acc: Record<GearSlotName, string>, implant) => {
+                    acc[implant.slot] = implant.id;
+                    return acc;
+                },
+                {} as Record<GearSlotName, string>
+            ),
         };
         return isValidShip(ship) ? ship : null;
     } catch (error) {
@@ -280,10 +277,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         *,
                         ship_refit_stats (*)
                     ),
-                    ship_implants (
-                        *,
-                        ship_implant_stats (*)
-                    )
+                    ship_implants (*)
                 `
                     )
                     .eq('user_id', user.id);
@@ -468,38 +462,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     }
                 }
 
-                // Create implants
-                for (const implant of newShip.implants) {
-                    const { data: implantsData, error: implantsError } = await supabase
-                        .from('ship_implants')
-                        .insert({
-                            ship_id: insertedShip.id,
-                        })
-                        .select('id')
-                        .single();
-
-                    if (implantsError) {
-                        console.error('Error inserting implant:', implantsError);
-                        throw implantsError;
-                    }
-
-                    for (const stat of implant.stats) {
-                        const { error: implantStatsError } = await supabase
-                            .from('ship_implant_stats')
-                            .insert({
-                                implant_id: implantsData.id,
-                                name: stat.name,
-                                value: stat.value,
-                                type: stat.type,
-                            });
-
-                        if (implantStatsError) {
-                            console.error('Error inserting implant stats:', implantStatsError);
-                            throw implantStatsError;
-                        }
-                    }
-                }
-
                 return getShipById(insertedShip.id) as Ship;
             } catch (error) {
                 // Revert optimistic update on error
@@ -594,47 +556,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                                     .from('ship_refit_stats')
                                     .insert({
                                         refit_id: refitId,
-                                        name: stat.name,
-                                        value: stat.value,
-                                        type: stat.type,
-                                    });
-                                if (statError) throw statError;
-                            }
-                        }
-                    }
-                }
-
-                if (updates.implants) {
-                    for (const implant of updates.implants) {
-                        let implantId;
-                        if (implant.id) {
-                            implantId = implant.id;
-                        } else {
-                            const { data: implantData, error: implantError } = await supabase
-                                .from('ship_implants')
-                                .insert({ ship_id: id })
-                                .select('id')
-                                .single();
-                            if (implantError) throw implantError;
-                            implantId = implantData.id;
-                        }
-
-                        for (const stat of implant.stats) {
-                            if (stat.id) {
-                                const { error: statError } = await supabase
-                                    .from('ship_implant_stats')
-                                    .update({
-                                        name: stat.name,
-                                        value: stat.value,
-                                        type: stat.type,
-                                    })
-                                    .eq('id', stat.id);
-                                if (statError) throw statError;
-                            } else {
-                                const { error: statError } = await supabase
-                                    .from('ship_implant_stats')
-                                    .insert({
-                                        implant_id: implantId,
                                         name: stat.name,
                                         value: stat.value,
                                         type: stat.type,

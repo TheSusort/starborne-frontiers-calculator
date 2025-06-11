@@ -1,5 +1,5 @@
 import { BaseStats, EngineeringStat, PERCENTAGE_ONLY_STATS, Stat } from '../../types/stats';
-import { Implant, Refit } from '../../types/ship';
+import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
@@ -19,7 +19,7 @@ export const calculateTotalStats = (
     equipment: Partial<Record<GearSlotName, string>>,
     getGearPiece: (id: string) => GearPiece | undefined,
     refits: Refit[] = [],
-    implants: Implant[] = [],
+    implants: Partial<Record<GearSlotName, string>> = {},
     engineeringStats: EngineeringStat | undefined
 ): StatBreakdown => {
     const breakdown: StatBreakdown = {
@@ -51,8 +51,10 @@ export const calculateTotalStats = (
         const gear = getGearPiece(gearId);
         if (!gear) return;
 
-        addStatModifier(gear.mainStat, breakdown.afterGear, breakdown.afterEngineering);
-        gear.subStats.forEach((stat) =>
+        if (gear.mainStat) {
+            addStatModifier(gear.mainStat, breakdown.afterGear, breakdown.afterEngineering);
+        }
+        gear.subStats?.forEach((stat) =>
             addStatModifier(stat, breakdown.afterGear, breakdown.afterEngineering)
         );
     });
@@ -63,8 +65,12 @@ export const calculateTotalStats = (
     Object.assign(breakdown.final, breakdown.afterSets);
 
     // Process implants
-    implants.forEach((implant) => {
-        implant.stats.forEach((stat) =>
+    Object.values(implants || {}).forEach((implantId) => {
+        if (!implantId) return;
+        const implant = getGearPiece(implantId);
+        if (!implant) return;
+
+        implant.subStats?.forEach((stat) =>
             addStatModifier(stat, breakdown.final, breakdown.afterEngineering)
         );
     });

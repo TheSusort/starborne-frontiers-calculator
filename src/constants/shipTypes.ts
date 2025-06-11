@@ -41,6 +41,11 @@ export const SHIP_TYPES: Record<string, ShipType> = {
         description: 'Max speed, then HP/defense, big bonus if boost set',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314233301188750.webp',
     },
+    SUPPORTER_OFFENSIVE: {
+        name: 'Supporter(Offensive)',
+        description: 'Max speed, then attack, big bonus if boost set',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314233301188750.webp',
+    },
 } satisfies Record<string, ShipType>;
 
 export type ShipTypeName = keyof typeof SHIP_TYPES;

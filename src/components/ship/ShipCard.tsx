@@ -158,7 +158,7 @@ export const ShipCard: React.FC<Props> = ({
                                             >
                                                 {GEAR_SETS[setName].description && (
                                                     <li className="bg-dark-lighter p-2">
-                                                        {GEAR_SETS[setName].description}
+                                                        {GEAR_SETS[setName].description as string}
                                                     </li>
                                                 )}
                                                 {GEAR_SETS[setName].stats.map((stat) => (

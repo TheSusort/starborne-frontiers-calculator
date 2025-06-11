@@ -33,12 +33,7 @@ const mockShip: Ship = {
             id: '',
         },
     ],
-    implants: [
-        {
-            stats: [{ name: 'attack', value: 100, type: 'flat' }],
-            id: '',
-        },
-    ],
+    implants: {},
     baseStats: {
         hp: 1000,
         attack: 100,

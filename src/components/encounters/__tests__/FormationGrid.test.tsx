@@ -25,7 +25,7 @@ const mockShips: Ship[] = [
         equipment: {},
         equipmentLocked: false,
         refits: [],
-        implants: [],
+        implants: {},
     },
     {
         id: 'ship2',
@@ -47,7 +47,7 @@ const mockShips: Ship[] = [
         equipment: {},
         equipmentLocked: false,
         refits: [],
-        implants: [],
+        implants: {},
     },
 ];
 

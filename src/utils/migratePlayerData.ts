@@ -113,23 +113,10 @@ export const migratePlayerData = (): MigrationResult => {
                 };
             }) || [];
 
-        const updatedImplants =
-            ship.implants?.map((implant) => {
-                return {
-                    ...implant,
-                    id: ensureValidUuid(implant.id),
-                    stats: (implant.stats || []).map((stat) => ({
-                        ...stat,
-                        id: stat.id ? ensureValidUuid(stat.id) : uuidv4(),
-                    })),
-                };
-            }) || [];
-
         return {
             ...ship,
             equipment: updatedEquipment,
             refits: updatedRefits,
-            implants: updatedImplants,
         };
     });
 
@@ -509,6 +496,17 @@ export const syncMigratedDataToSupabase = async (
                     }
                 }
 
+                // Implant records - filter out undefined gear IDs
+                const implantRecords = validShips.flatMap((ship) =>
+                    Object.entries(ship.implants || {})
+                        .filter(([, gearId]) => !!gearId)
+                        .map(([slot, gearId]) => ({
+                            ship_id: ship.id,
+                            slot,
+                            id: gearId as string,
+                        }))
+                );
+
                 // Delete all implants in batches
                 for (let i = 0; i < shipIds.length; i += BATCH_SIZE) {
                     const batchIds = shipIds.slice(i, i + BATCH_SIZE);
@@ -520,51 +518,15 @@ export const syncMigratedDataToSupabase = async (
                     if (deleteImplantsError) throw deleteImplantsError;
                 }
 
-                // Collect all implants with valid IDs
-                const implantRecords = validShips.flatMap((ship) =>
-                    (ship.implants || [])
-                        .filter((implant) => !!implant.id)
-                        .map((implant) => ({
-                            id: implant.id,
-                            ship_id: ship.id,
-                        }))
-                );
-
-                // insert implants in batches
+                // Insert implants in batches
                 for (let i = 0; i < implantRecords.length; i += BATCH_SIZE) {
                     const batch = implantRecords.slice(i, i + BATCH_SIZE);
                     if (batch.length > 0) {
-                        const { error: implantsError } = await supabase
+                        const { error: implantError } = await supabase
                             .from('ship_implants')
                             .insert(batch);
 
-                        if (implantsError) throw implantsError;
-                    }
-                }
-
-                // Collect all implant stats
-                const implantStatsRecords = validShips.flatMap((ship) =>
-                    (ship.implants || [])
-                        .filter((implant) => !!implant.id)
-                        .flatMap((implant) =>
-                            (implant.stats || []).map((stat) => ({
-                                implant_id: implant.id,
-                                name: stat.name,
-                                value: stat.value,
-                                type: stat.type,
-                            }))
-                        )
-                );
-
-                // insert implant stats in batches
-                for (let i = 0; i < implantStatsRecords.length; i += BATCH_SIZE) {
-                    const batch = implantStatsRecords.slice(i, i + BATCH_SIZE);
-                    if (batch.length > 0) {
-                        const { error: implantStatsError } = await supabase
-                            .from('ship_implant_stats')
-                            .insert(batch);
-
-                        if (implantStatsError) throw implantStatsError;
+                        if (implantError) throw implantError;
                     }
                 }
 

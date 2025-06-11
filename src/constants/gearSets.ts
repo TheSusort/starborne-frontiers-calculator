@@ -1,4 +1,5 @@
 import { GearSetBonus } from '../types/gear';
+import { ImplantName } from './implants';
 
 export const GEAR_SETS: Record<string, GearSetBonus> = {
     FORTITUDE: {
@@ -50,13 +51,13 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         stats: [],
         iconUrl: 'https://cdn.discordapp.com/emojis/1212063630842011678.webp',
         minPieces: 4,
-        description: 'All buffs lasts an extra turn',
+        description: 'All buffs last an extra turn',
     },
     BURNER: {
         name: 'Burner',
         stats: [{ name: 'attack', value: 15, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034712268832808.webp',
-        description: 'Applies inferno',
+        description: 'Applies Inferno',
     },
     DECIMATION: {
         name: 'Decimation',
@@ -176,9 +177,8 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     PIERCER: {
         name: 'Piercer',
         stats: [{ name: 'defensePenetration', value: 7, type: 'percentage' }],
-        description: 'Ignore 7% Defense',
         iconUrl: 'https://cdn.discordapp.com/emojis/1379810146212909097.webp',
     },
 } satisfies Record<string, GearSetBonus>;
 
-export type GearSetName = keyof typeof GEAR_SETS;
+export type GearSetName = keyof typeof GEAR_SETS | ImplantName;

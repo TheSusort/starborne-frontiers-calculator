@@ -1,9 +1,8 @@
 import { ExportedPlayData } from '../types/exportedPlayData';
 import { EngineeringStats } from '../types/stats';
 import { Ship, Refit } from '../types/ship';
-import { GearPiece } from '../types/gear';
-import { Implant } from '../types/ship';
-import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
+import { GearPiece, Implant } from '../types/gear';
+import { GEAR_SLOTS, GearSlotName, IMPLANT_SLOTS } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import {
@@ -31,7 +30,7 @@ interface ImportResult {
 
 interface TransformInventoryResult {
     gear: GearPiece[];
-    implants: Implant[];
+    implants: GearPiece[];
 }
 
 /**
@@ -171,7 +170,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             baseStats,
             equipment: {}, // Will be populated from equipment data
             refits,
-            implants: [], // Will be populated from equipment data
+            implants: {}, // Will be populated from equipment data
             copies,
             equipmentLocked: false,
         };
@@ -183,7 +182,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
  */
 function transformInventory(items: ExportedPlayData['Equipment']): TransformInventoryResult {
     const gear: GearPiece[] = [];
-    const implants: Implant[] = [];
+    const implants: GearPiece[] = [];
 
     items.forEach((item) => {
         const slot = getSlotName(item.Slot.toLowerCase());
@@ -225,7 +224,12 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
         } else {
             implants.push({
                 id: item.Id,
-                stats: [...item.MainStats, ...item.SubStats].map((stat) =>
+                slot: item.Slot.toLowerCase() as GearSlotName,
+                level: item.Level,
+                stars: item.Rank,
+                rarity: item.Rarity.toLowerCase() as RarityName,
+                mainStat: null,
+                subStats: [...item.MainStats, ...item.SubStats].map((stat) =>
                     createStat(
                         getStatName(stat.Attribute.Attribute) as StatName,
                         getPercentageStatValue(
@@ -236,9 +240,9 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                         getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
                     )
                 ),
-                description: item.Name,
                 shipId: item.EquippedOnUnit || undefined,
-            } as Implant);
+                setBonus: getImplantSetBonus(item.Set) as GearSetName,
+            } as GearPiece);
         }
     });
 
@@ -264,7 +268,7 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
 
             const shipImplants = implants.filter((implant) => implant.shipId === ship.id);
             shipImplants.forEach((implant) => {
-                ship.implants.push(implant);
+                ship.implants[implant.slot] = implant.id;
             });
         });
 
@@ -273,7 +277,7 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
             data: {
                 engineeringStats,
                 ships,
-                inventory: gear,
+                inventory: [...gear, ...implants],
             },
         };
     } catch (error) {
@@ -363,6 +367,132 @@ const getSetBonus = (set: GearSetName): GearSetName | null => {
             return 'EXPLOIT';
         case 'Defense_Ignore':
             return 'PIERCER';
+        default:
+            return null;
+    }
+};
+
+const getImplantSetBonus = (set: string): GearSetName | null => {
+    switch (set) {
+        // Ultimate
+        case 'Implant_Ultimate_On_Hit_Dealt_While_Debuffed':
+            return 'WARPSTRIKE';
+        case 'Implant_Ultimate_On_Turn_Fill_Charge':
+            return 'CHRONO_REAVER';
+        case 'Implant_Ultimate_Out_Damage_Per_Debuff':
+            return 'INTRUSION';
+        case 'Implant_Ultimate_Startof_Combat_Security_To_Hacking':
+            return 'CODE_GUARD';
+        case 'Implant_Ultimate_On_Damage_Taken_From_Dots_Or_Bombs':
+            return 'VORTEX_VEIL';
+        case 'Implant_Ultimate_Extra_Repair_When_Less_Hp':
+            return 'NOURISHMENT';
+        case 'Implant_Ultimate_On_Enemy_Repaired_Speed_Up':
+            return 'SYNAPTIC_RESONANCE';
+        case 'Implant_Ultimate_On_Drop_Below_30_Shield':
+            return 'LIFELINE';
+        case 'Implant_Ultimate_On_Death_Disable':
+            return 'MARTYRDOM';
+        case 'Implant_Ultimate_On_Repair_Shield':
+            return 'ABUNDANT_RENEWAL';
+        case 'Implant_Ultimate_On_Hit_Taken_While_Stealthed':
+            return 'VOIDSHADE';
+        case 'Implant_Ultimate_Startof_Combat_Hacking_To_Security':
+            return 'CIPHER_LINK';
+        case 'Implant_Ultimate_On_Crit_Taken_From_Stealthed':
+            return 'HYPERION_GAZE';
+        case 'Implant_Ultimate_ON_Damage_Dealt_By_Bomb_Splash':
+            return 'VOIDFIRE_CATALYST';
+        case 'Implant_Ultimate_On_Hit_Dealt_While_Shielded':
+            return 'ARCANE_SIEGE';
+        case 'Implant_Ultimate_On_Hit_Taken_While_Stasised_Or_Disabled':
+            return 'NEBULA_NULLIFIER';
+        // Major
+        case 'Implant_Major_On_Hit_Taken_Stealth':
+            return 'SMOKESCREEN';
+        case 'Implant_Major_On_Death_Repair':
+            return 'LAST_WISH';
+        case 'Implant_Major_On_Turn_Defense_Up':
+            return 'FORTIFYING_SHROUD';
+        case 'Implant_Major_On_Crit_Extra_Damage':
+            return 'MENACE';
+        case 'Implant_Major_On_Charged_Attack_Up':
+            return 'SPEARHEAD';
+        case 'Implant_Major_On_Hit_Higher_Attack_Extra_Damage':
+            return 'GIANT_SLAYER';
+        case 'Implant_Major_On_Debuff_Deal_Damage':
+            return 'INSIDIOUSNESS';
+        case 'Implant_Major_Startof_Round_Stealth_Crit_Dmg_Up':
+            return 'AMBUSH';
+        case 'Implant_Major_On_Ally_Damaged_Provoke':
+            return 'BULWARK';
+        case 'Implant_Major_On_Hit_Taken_Cleanse':
+            return 'REACTIVE_WARD';
+        case 'Implant_Major_Endof_Round_Contentrate_Fire':
+            return 'DOOMSAYER';
+        case 'Implant_Major_On_Debuffed_Block_Debuff':
+            return 'FIREWALL';
+        case 'Implant_Major_On_Debuff_Resist_Buff_Protection':
+            return 'LOCKDOWN';
+        case 'Implant_Major_On_Crit_Taken_Repair':
+            return 'SECOND_WIND';
+        case 'Implant_Major_On_Hit_Taken_Second_Time_Block_Damage':
+            return 'IRONCLAD';
+        case 'Implant_Major_On_Hit_Taken_Buff_Protection':
+            return 'TENACITY';
+        case 'Implant_Major_On_Repair_Extra_Repair':
+            return 'VIVACIOUS_REPAIR';
+        case 'Implant_Major_On_Repair_Share_Power':
+            return 'FONT_OF_POWER';
+        case 'Implant_Major_Last_Stand_Block_Damage':
+            return 'LAST_STAND';
+        case 'Implant_Major_On_Crit_Repair':
+            return 'BLOODTHIRST';
+        case 'Implant_Major_On_Hit_Taken_Shield':
+            return 'ADAPTIVE_PLATING';
+        case 'Implant_Major_On_Shield_Out_Crit_Dmg_Up':
+            return 'RESONATING_FURY';
+        case 'Implant_Major_On_Hit_Taken_Stealth_Block_Damage':
+            return 'SHADOWGUARD';
+        case 'Implant_Major_On_Death_Inc_Dmg_Down':
+            return 'BATTLECRY';
+        case 'Implant_Major_On_Repaired_Extra_Repair':
+            return 'EXUBERANCE';
+        case 'Implant_Major_Endof_Round_Speed_Up':
+            return 'ALACRITY';
+        // Minor Gamma
+        case 'Implant_Minor_Gamma_CritChance_Flat':
+            return 'PRECISION_GAMMA';
+        case 'Implant_Minor_Gamma_Security_Flat':
+            return 'SENTRY';
+        case 'Implant_Minor_Gamma_Defense_Perc':
+            return 'BARRIER';
+        case 'Implant_Minor_Gamma_Manipulation_Flat':
+            return 'OVERRIDE';
+        case 'Implant_Minor_Gamma_Initiative_Flat':
+            return 'HASTE_GAMMA';
+        // Minor Sigma
+        case 'Implant_Minor_Sigma_CritChance_Flat':
+            return 'PRECISION';
+        case 'Implant_Minor_Sigma_HullPoints_Flat':
+            return 'CITADEL';
+        case 'Implant_Minor_Sigma_Initiative_Flat':
+            return 'HASTE';
+        case 'Implant_Minor_Sigma_Power_Flat':
+            return 'STRIKE';
+        case 'Implant_Minor_Sigma_Power_Perc':
+            return 'ONSLAUGHT';
+        // Minor Alpha
+        case 'Implant_Minor_Alpha_Power_Perc':
+            return 'ONSLAUGHT_ALPHA';
+        case 'Implant_Minor_Alpha_HullPoints_Perc':
+            return 'BASTION';
+        case 'Implant_Minor_Alpha_Defense_Flat':
+            return 'GUARDIAN';
+        case 'Implant_Minor_Alpha_CritBoost_Flat':
+            return 'DEVASTATION';
+        case 'Implant_Minor_Alpha_Manipulation_Flat':
+            return 'OVERRIDE_ALPHA';
         default:
             return null;
     }

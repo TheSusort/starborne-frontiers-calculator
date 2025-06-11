@@ -10,7 +10,7 @@ import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
 
 export const ImportButton: React.FC<{ className?: string }> = ({ className = '' }) => {
-    const { setData: setShips, loadShips } = useShips();
+    const { setData: setShips } = useShips();
     const { setData: setInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
@@ -66,7 +66,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
             // Reset the file input
             event.target.value = '';
         },
-        [setShips, setInventory, setEngineeringStats, addNotification]
+        [setShips, setInventory, setEngineeringStats, addNotification, user]
     );
 
     return (

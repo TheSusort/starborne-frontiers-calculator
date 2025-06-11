@@ -35,11 +35,13 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     useEffect(() => {
         if (editingPiece) {
             setSlot(editingPiece.slot);
-            setMainStat(editingPiece.mainStat);
+            setMainStat(
+                editingPiece.mainStat || ({ name: 'attack', value: 0, type: 'flat' } as Stat)
+            );
             setSubStats(editingPiece.subStats);
             setRarity(editingPiece.rarity);
             setStars(editingPiece.stars);
-            setSetBonus(editingPiece.setBonus);
+            setSetBonus(editingPiece.setBonus || 'FORTITUDE');
             setLevel(editingPiece.level);
         }
     }, [editingPiece]);
