@@ -244,7 +244,7 @@ export const ShipInventory: React.FC<Props> = ({
             label: 'Equipment Lock',
             values: state.filters.equipmentLocked ? ['true'] : [],
             onChange: (values) => setEquipmentLocked(values.length > 0),
-            options: [{ value: 'true', label: 'Show only locked ships' }],
+            options: [{ value: 'true', label: 'Locked ships' }],
         },
     ];
 

@@ -116,7 +116,7 @@ export const Offcanvas: React.FC<Props> = ({
                 )}
                 <div
                     className={`
-                    transition-opacity duration-200 ease-in-out delay-150 h-[calc(100vh-3rem)]
+                    transition-opacity duration-200 ease-in-out delay-150
                     ${isAnimating ? 'opacity-100' : 'opacity-0'}
                 `}
                 >
