@@ -29,7 +29,7 @@ export function analyzeStatDistribution(
         [],
         getGearPiece,
         getEngineeringStatsForShipType,
-        SHIP_TYPES[ship.type].name
+        ship.type
     );
 
     // Calculate total stats with all equipment
@@ -62,7 +62,7 @@ export function analyzeStatDistribution(
             [],
             getGearPiece,
             getEngineeringStatsForShipType,
-            SHIP_TYPES[ship.type].name
+            ship.type
         );
 
         const slotScore = totalScore - scoreWithoutSlot;

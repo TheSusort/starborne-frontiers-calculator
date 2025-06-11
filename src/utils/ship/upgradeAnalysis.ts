@@ -9,7 +9,7 @@ import { GEAR_SETS } from '../../constants/gearSets';
 import { ShipTypeName } from '../../constants/shipTypes';
 
 const DESIRED_SETS: Record<ShipTypeName, string[]> = {
-    ATTACKER: ['ATTACK', 'CRITICAL', 'ABYSSAL_ASSULT', 'AMBUSH'],
+    ATTACKER: ['ATTACK', 'CRITICAL', 'ABYSSAL_ASSULT', 'AMBUSH', 'PIERCER'],
     DEFENDER: ['DEFENSE', 'FORTITUDE', 'ABYSSAL_SAFEGUARD', 'ABYSSAL_WARD', 'PROTECTION'],
     SUPPORTER: ['REPAIR', 'FORTITUDE', 'CRITICAL', 'ABYSSAL_SAFEGUARD'],
     SUPPORTER_BUFFER: ['BOOST', 'SPEED', 'FORTITUDE', 'AMBUSH'],
