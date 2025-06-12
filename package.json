@@ -51,7 +51,7 @@
         "lint-staged": "lint-staged",
         "fetch-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
-        "migrate-ships": "tsx scripts/migrate-ships.ts",
+        "migrate-ships": "tsx scripts/migrate-ships-to-supabase.ts",
         "migrate-implants": "tsx scripts/migrate-implants.ts",
         "migrate-to-supabase": "tsx scripts/migrate-to-supabase.ts"
     },

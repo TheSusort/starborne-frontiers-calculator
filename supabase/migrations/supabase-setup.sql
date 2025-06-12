@@ -1,212 +1,186 @@
--- Users table (handled by Supabase Auth)
-create table users (
-  id uuid references auth.users primary key,
-  email text unique,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
-);
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- Ships table
-create table ships (
-  id uuid default uuid_generate_v4() primary key,
-  user_id uuid references users(id) on delete cascade,
-  firebase_id text,
-  name text not null,
-  rarity text not null,
-  faction text not null,
-  type text not null,
-  affinity text,
-  equipment_locked boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+CREATE TABLE public.encounter_formations (
+  note_id uuid NOT NULL,
+  position text NOT NULL,
+  ship_id uuid,
+  CONSTRAINT encounter_formations_pkey PRIMARY KEY (note_id, position),
+  CONSTRAINT encounter_formations_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.encounter_notes(id),
+  CONSTRAINT encounter_formations_new_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Ship base stats
-create table ship_base_stats (
-  ship_id uuid references ships(id) on delete cascade,
-  hp integer not null,
-  attack integer not null,
-  defence integer not null,
-  hacking integer not null,
-  security integer not null,
-  crit integer not null,
-  crit_damage integer not null,
-  speed integer not null,
-  heal_modifier integer not null,
+CREATE TABLE public.encounter_notes (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  description text,
+  is_public boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT encounter_notes_pkey PRIMARY KEY (id),
+  CONSTRAINT encounter_notes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.engineering_stats (
+  user_id uuid NOT NULL,
+  ship_type text NOT NULL,
+  stat_name text NOT NULL,
+  value numeric NOT NULL,
+  type text NOT NULL,
+  CONSTRAINT engineering_stats_pkey PRIMARY KEY (user_id, ship_type, stat_name),
+  CONSTRAINT engineering_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.gear_stats (
+  gear_id uuid NOT NULL,
+  name text NOT NULL,
+  value numeric NOT NULL,
+  type text NOT NULL,
+  is_main boolean NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  CONSTRAINT gear_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT gear_stats_gear_id_fkey FOREIGN KEY (gear_id) REFERENCES public.inventory_items(id)
+);
+CREATE TABLE public.inventory_items (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  slot text NOT NULL,
+  level integer NOT NULL,
+  stars integer NOT NULL,
+  rarity text NOT NULL,
+  set_bonus text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  firebase_id text UNIQUE,
+  CONSTRAINT inventory_items_pkey PRIMARY KEY (id),
+  CONSTRAINT inventory_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.loadout_equipment (
+  loadout_id uuid NOT NULL,
+  slot text NOT NULL,
+  gear_id uuid,
+  CONSTRAINT loadout_equipment_pkey PRIMARY KEY (loadout_id, slot),
+  CONSTRAINT loadout_equipment_loadout_id_fkey FOREIGN KEY (loadout_id) REFERENCES public.loadouts(id),
+  CONSTRAINT loadout_equipment_new_gear_id_fkey FOREIGN KEY (gear_id) REFERENCES public.inventory_items(id)
+);
+CREATE TABLE public.loadouts (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  ship_id uuid,
+  CONSTRAINT loadouts_pkey PRIMARY KEY (id),
+  CONSTRAINT loadouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT loadouts_new_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
+);
+CREATE TABLE public.ship_base_stats (
+  ship_id uuid NOT NULL,
+  hp integer NOT NULL,
+  attack integer NOT NULL,
+  defence integer NOT NULL,
+  hacking integer NOT NULL,
+  security integer NOT NULL,
+  crit integer NOT NULL,
+  crit_damage integer NOT NULL,
+  speed integer NOT NULL,
+  heal_modifier integer NOT NULL,
   hp_regen integer,
   shield integer,
-  primary key (ship_id)
+  defense_penetration integer,
+  CONSTRAINT ship_base_stats_pkey PRIMARY KEY (ship_id),
+  CONSTRAINT ship_base_stats_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Ship refits
-create table ship_refits (
-  id uuid default uuid_generate_v4() primary key,
-  ship_id uuid references ships(id) on delete cascade,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+CREATE TABLE public.ship_equipment (
+  ship_id uuid NOT NULL,
+  slot text NOT NULL,
+  gear_id uuid,
+  CONSTRAINT ship_equipment_pkey PRIMARY KEY (ship_id, slot),
+  CONSTRAINT ship_equipment_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id),
+  CONSTRAINT ship_equipment_new_gear_id_fkey FOREIGN KEY (gear_id) REFERENCES public.inventory_items(id)
 );
-
--- Ship refit stats
-create table ship_refit_stats (
-  id uuid default uuid_generate_v4() primary key,
-  refit_id uuid references ship_refits(id) on delete cascade,
-  name text not null,
-  value numeric not null,
-  type text not null
+CREATE TABLE public.ship_implant_stats (
+  implant_id uuid NOT NULL,
+  name text NOT NULL,
+  value numeric NOT NULL,
+  type text NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  CONSTRAINT ship_implant_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT ship_implant_stats_implant_id_fkey FOREIGN KEY (implant_id) REFERENCES public.ship_implants(id)
 );
-
--- Ship implants
-create table ship_implants (
-  id uuid default uuid_generate_v4() primary key,
-  ship_id uuid references ships(id) on delete cascade,
+CREATE TABLE public.ship_implants (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  ship_id uuid,
   description text,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  slot text,
+  CONSTRAINT ship_implants_pkey PRIMARY KEY (id),
+  CONSTRAINT ship_implants_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Ship implant stats
-create table ship_implant_stats (
-  id uuid default uuid_generate_v4() primary key,
-  implant_id uuid references ship_implants(id) on delete cascade,
-  name text not null,
-  value numeric not null,
-  type text not null
+CREATE TABLE public.ship_refit_stats (
+  refit_id uuid NOT NULL,
+  name text NOT NULL,
+  value numeric NOT NULL,
+  type text NOT NULL,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  CONSTRAINT ship_refit_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT ship_refit_stats_refit_id_fkey FOREIGN KEY (refit_id) REFERENCES public.ship_refits(id)
 );
-
--- Inventory items
-create table inventory_items (
-  id uuid default uuid_generate_v4() primary key,
-  user_id uuid references users(id) on delete cascade,
-  firebase_id text,
-  slot text not null,
-  level integer not null,
-  stars integer not null,
-  rarity text not null,
-  set_bonus text not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+CREATE TABLE public.ship_refits (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  ship_id uuid,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT ship_refits_pkey PRIMARY KEY (id),
+  CONSTRAINT ship_refits_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Ship equipment
-create table ship_equipment (
-  ship_id uuid references ships(id) on delete cascade,
-  slot text not null,
-  gear_id text references inventory_items(id),
-  primary key (ship_id, slot)
+CREATE TABLE public.ships (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  rarity text NOT NULL,
+  faction text NOT NULL,
+  type text NOT NULL,
+  affinity text,
+  equipment_locked boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  copies integer,
+  rank integer,
+  level integer,
+  CONSTRAINT ships_pkey PRIMARY KEY (id),
+  CONSTRAINT ships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- Gear stats
-create table gear_stats (
-  id uuid default uuid_generate_v4() primary key,
-  gear_id uuid references inventory_items(id) on delete cascade,
-  name text not null,
-  value numeric not null,
-  type text not null,
-  is_main boolean not null
+CREATE TABLE public.team_loadout_equipment (
+  team_loadout_id uuid NOT NULL,
+  slot text,
+  gear_id uuid,
+  ship_id uuid,
+  CONSTRAINT team_loadout_equipment_team_loadout_id_fkey FOREIGN KEY (team_loadout_id) REFERENCES public.team_loadouts(id),
+  CONSTRAINT team_loadout_equipment_new_gear_id_fkey FOREIGN KEY (gear_id) REFERENCES public.inventory_items(id),
+  CONSTRAINT team_loadout_equipment_new_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Encounter notes
-create table encounter_notes (
-  id uuid default uuid_generate_v4() primary key,
-  user_id uuid references users(id) on delete cascade,
-  name text not null,
-  description text,
-  is_public boolean default false,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+CREATE TABLE public.team_loadout_ships (
+  team_loadout_id uuid NOT NULL,
+  position integer NOT NULL,
+  ship_id uuid,
+  CONSTRAINT team_loadout_ships_pkey PRIMARY KEY (team_loadout_id, position),
+  CONSTRAINT team_loadout_ships_team_loadout_id_fkey FOREIGN KEY (team_loadout_id) REFERENCES public.team_loadouts(id),
+  CONSTRAINT team_loadout_ships_new_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
 );
-
--- Encounter formations
-create table encounter_formations (
-  note_id uuid references encounter_notes(id) on delete cascade,
-  ship_id uuid references ships(id) on delete cascade,
-  position text not null,
-  primary key (note_id, position)
+CREATE TABLE public.team_loadouts (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT team_loadouts_pkey PRIMARY KEY (id),
+  CONSTRAINT team_loadouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- Loadouts
-create table loadouts (
-  id uuid default uuid_generate_v4() primary key,
-  user_id uuid references users(id) on delete cascade,
-  name text not null,
-  ship_id uuid references ships(id) on delete cascade,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  email character varying UNIQUE,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
-
--- Loadout equipment
-create table loadout_equipment (
-  loadout_id uuid references loadouts(id) on delete cascade,
-  slot text not null,
-  gear_id uuid references inventory_items(id),
-  primary key (loadout_id, slot)
-);
-
--- Team loadouts
-create table team_loadouts (
-  id uuid default uuid_generate_v4() primary key,
-  user_id uuid references users(id) on delete cascade,
-  name text not null,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  updated_at timestamp with time zone default timezone('utc'::text, now())
-);
-
--- Team loadout ships
-create table team_loadout_ships (
-  team_loadout_id uuid references team_loadouts(id) on delete cascade,
-  position integer not null,
-  ship_id uuid references ships(id) on delete cascade,
-  primary key (team_loadout_id, position)
-);
-
--- Team loadout equipment
-create table team_loadout_equipment (
-  team_loadout_id uuid references team_loadouts(id) on delete cascade,
-  ship_id uuid references ships(id) on delete cascade,
-  slot text not null,
-  gear_id uuid references inventory_items(id),
-  primary key (team_loadout_id, ship_id, slot)
-);
-
--- Engineering stats
-create table engineering_stats (
-  user_id uuid references users(id) on delete cascade,
-  ship_type text not null,
-  stat_name text not null,
-  value numeric not null,
-  type text not null,
-  primary key (user_id, ship_type, stat_name)
-);
-
--- Row Level Security Policies
-alter table ships enable row level security;
-alter table inventory_items enable row level security;
-alter table encounter_notes enable row level security;
-alter table loadouts enable row level security;
-alter table team_loadouts enable row level security;
-alter table engineering_stats enable row level security;
-
--- RLS Policies
-create policy "Users can only access their own ships"
-  on ships for all
-  using (auth.uid() = user_id);
-
-create policy "Users can only access their own inventory"
-  on inventory_items for all
-  using (auth.uid() = user_id);
-
-create policy "Users can only access their own encounter notes"
-  on encounter_notes for all
-  using (auth.uid() = user_id);
-
-create policy "Users can only access their own loadouts"
-  on loadouts for all
-  using (auth.uid() = user_id);
-
-create policy "Users can only access their own team loadouts"
-  on team_loadouts for all
-  using (auth.uid() = user_id);
-
-create policy "Users can only access their own engineering stats"
-  on engineering_stats for all
-  using (auth.uid() = user_id);
