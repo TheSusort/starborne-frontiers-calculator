@@ -228,7 +228,7 @@ export const ShipIndexPage: React.FC = () => {
                                     <div className="flex flex-col items-center justify-center border-b border-gray-700 pb-2 m-3">
                                         {ship.imageKey && (
                                             <Image
-                                                src={ship.imageKey}
+                                                src={`${ship.imageKey}_Portrait.png`}
                                                 alt={ship.name}
                                                 className="max-w-full max-h-full w-[152px] h-[206px]"
                                             />

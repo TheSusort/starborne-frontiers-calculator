@@ -16,7 +16,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 98,
-        imageKey: 'Atlas_11_Portrait.png',
+        imageKey: 'Atlas_11',
         activeSkillText:
             'This Unit grants a shield equal to 21% of its Max HP and grants Hacking Up 3 and Atlas Coordination 3 for 2 turns.',
         chargeSkillText:
@@ -40,7 +40,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 22,
         speed: 85,
-        imageKey: 'Atlas_16_Portrait.png',
+        imageKey: 'Atlas_16',
         activeSkillText:
             'This Unit Deals 120% damage, bypassing enemy shield, and removes 30% of the enemy shield. It inflicts Speed Down 2 for 2 turns and Crit Power Down 3 for 2 turns.',
         chargeSkillText:
@@ -64,7 +64,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 0,
         speed: 69,
-        imageKey: 'Gelecek_11_Portrait.png',
+        imageKey: 'Gelecek_11',
         activeSkillText:
             'This Unit deals 140% damage, inflicts Out. Damage Down 2 for 2 turns, and Corrosion 1 for 2 turns.',
         chargeSkillText:
@@ -88,7 +88,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 34,
         speed: 82,
-        imageKey: 'Tianchao_3_Portrait.png',
+        imageKey: 'Tianchao_3',
         activeSkillText: 'This Unit Deals 130% damage, ignoring Taunt and Provoke.',
         chargeSkillText:
             'This Unit deals 180% damage, ignores Taunt and Provoke, and inflicts Speed Down 2 for 2 turns.',
@@ -111,7 +111,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 10,
         speed: 80,
-        imageKey: 'Gelecek_8_Portrait.png',
+        imageKey: 'Gelecek_8',
         activeSkillText: 'This Unit deals 135% damage and inflicts Attack Down 2 for 1 turn.',
         chargeSkillText:
             'This Unit deals 175% damage and inflicts Attack Down 3 and Crit Rate Down 3 on the target for 2 turns.',
@@ -134,7 +134,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 2,
         critDamage: 54,
         speed: 86,
-        imageKey: 'Gelecek_15_Portrait.png',
+        imageKey: 'Gelecek_15',
         activeSkillText:
             'This Unit grants Gelecek Contagion 2 for 3 turns to all allies and deals 195% damage.',
         chargeSkillText: 'This Unit inflicts Inc. Damage Up 2 for 2 turns and deals 250% damage.',
@@ -157,7 +157,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 22,
         critDamage: 10,
         speed: 93,
-        imageKey: 'Marauder_11_Portrait.png',
+        imageKey: 'Marauder_11',
         activeSkillText:
             'This Unit inflicts Defense Down 3 to a target enemy for 1 turn before dealing 175% damage. Additionally, it inflicts the enemy and adjacent enemies with Inferno 3 for 3 turns.',
         chargeSkillText:
@@ -181,7 +181,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 25,
         critDamage: 38,
         speed: 81,
-        imageKey: 'Marauder_3_Portrait.png',
+        imageKey: 'Marauder_3',
         activeSkillText: 'This Unit Deals 125% damage.',
         chargeSkillText: 'This Unit deals 160% damage.',
         firstPassiveSkillText:
@@ -203,7 +203,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 15,
         critDamage: 52,
         speed: 82,
-        imageKey: 'XAOC_15_Portrait.png',
+        imageKey: 'XAOC_15',
         activeSkillText:
             'This Unit deals 150% damage, inflicts Defense Down 2 for 1 turn and Speed Down 2 for 2 turns.',
         chargeSkillText:
@@ -227,7 +227,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 23,
         critDamage: 38,
         speed: 83,
-        imageKey: 'Marauder_5_Portrait.png',
+        imageKey: 'Marauder_5',
         activeSkillText: 'This Unit Deals 160% damage and inflicts Inferno 2 for 3 turns.',
         chargeSkillText:
             'This Unit deals 150% damage, with an additional 35% for each buff on the enemy, inflicts Inferno 3 for 3 turns, and inflicts Block Buff for 1 turn.',
@@ -250,7 +250,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 20,
         speed: 60,
-        imageKey: 'Terran_4_Portrait.png',
+        imageKey: 'Terran_4',
         activeSkillText:
             'This Unit Deals 60% damage plus additional Damage equal to 60% of its Defense.',
         chargeSkillText:
@@ -272,7 +272,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 62,
         speed: 68,
-        imageKey: 'Terran_7_Portrait.png',
+        imageKey: 'Terran_7',
         activeSkillText:
             'This unit deals 180% damage with additional damage equal to 80% of its Defense. If all damaged enemies have more Speed than this unit, it adds 1 charge to its charged skill.',
         chargeSkillText:
@@ -295,7 +295,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 24,
         speed: 97,
-        imageKey: 'Tianchao_13_Portrait.png',
+        imageKey: 'Tianchao_13',
         activeSkillText:
             'This Unit repairs 9% of its max HP to all allies and grants Out. Detonation Damage Up 3 and Attack Up 3 to them for 1 turn.',
         chargeSkillText:
@@ -319,7 +319,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 58,
         speed: 73,
-        imageKey: 'MPL_15_Portrait.png',
+        imageKey: 'MPL_15',
         activeSkillText:
             "This Unit purges 1 buff from the enemy and deals 200% damage. If this Unit has more HP than the enemy, it additionally deals Damage equal to 25% of this Unit's Max HP.",
         chargeSkillText:
@@ -343,7 +343,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 4,
         critDamage: 18,
         speed: 89,
-        imageKey: 'Gelecek_12_Portrait.png',
+        imageKey: 'Gelecek_12',
         activeSkillText:
             'This Unit deals 150% damage and inflicts Corrosion 2 for 2 turns. If the target has more than 3 Debuffs, it inflicts Stasis for 2 turns.',
         chargeSkillText:
@@ -367,7 +367,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 17,
         critDamage: 42,
         speed: 79,
-        imageKey: 'Atlas_3_Portrait.png',
+        imageKey: 'Atlas_3',
         shield: 20,
         activeSkillText:
             'This Unit Deals 120% damage, bypassing enemy shield, with additional 130% damage on critical hits.',
@@ -393,7 +393,7 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 20,
         speed: 88,
         hpRegen: 6,
-        imageKey: 'Binderburg_9_Portrait.png',
+        imageKey: 'Binderburg_9',
         activeSkillText: 'This Unit grants Defense Up 3 for 2 turns and Cleanses 1 debuff.',
         chargeSkillText:
             'This Unit grants Inc. Damage Down 3 for 3 turns and Binderburg Resilience 3 for 3 turns and Cleanses 1 debuff.',
@@ -416,7 +416,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 2,
         critDamage: 30,
         speed: 77,
-        imageKey: 'Binderburg_12_Portrait.png',
+        imageKey: 'Binderburg_12',
         activeSkillText: 'This unit deals 185% damage and inflicts Attack Down 3 for 2 turns.',
         chargeSkillText: 'This Unit deals 225% damage and inflicts Out. Damage Down 3 for 2 turns.',
         firstPassiveSkillText: 'This unit deals 60% damage when an enemy uses their charged skill.',
@@ -437,7 +437,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 7,
         critDamage: 12,
         speed: 71,
-        imageKey: 'Legion_10_Portrait.png',
+        imageKey: 'Legion_10',
         activeSkillText: 'This Unit Deals 145% damage and applies Provoke for 1 turn.',
         chargeSkillText: 'This Unit deals 195% damage and inflicts Stasis for 1 turn.',
         firstPassiveSkillText:
@@ -459,7 +459,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 28,
         critDamage: 30,
         speed: 88,
-        imageKey: 'Marauder_1_Portrait.png',
+        imageKey: 'Marauder_1',
         activeSkillText: 'This Unit Deals 170% damage and inflicts Bomb 3 for 2 turns.',
         chargeSkillText:
             'This Unit deals 240% damage, detonates Bomb effects, and inflicts Bomb 2 for 2 turns.',
@@ -482,7 +482,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 20,
         speed: 88,
-        imageKey: 'Everliving_6_Portrait.png',
+        imageKey: 'Everliving_6',
         activeSkillText:
             'This Unit Repairs 22.5% of its Max HP and grants Security Up 2 for 1 turn.',
         chargeSkillText:
@@ -506,7 +506,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 7,
         critDamage: 20,
         speed: 90,
-        imageKey: 'Everliving_8_Portrait.png',
+        imageKey: 'Everliving_8',
         activeSkillText:
             'This Unit Repairs 13% of its Max HP and grants Repair Over Time 1% for 2 turns.',
         chargeSkillText:
@@ -529,7 +529,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 16,
         critDamage: 58,
         speed: 78,
-        imageKey: 'Atlas_12_Portrait.png',
+        imageKey: 'Atlas_12',
         activeSkillText:
             'This Unit Deals 200% damage bypassing enemy shield and gains a shield equal to 10% of the damage dealt.',
         chargeSkillText:
@@ -553,7 +553,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 42,
         speed: 80,
-        imageKey: 'Legion_4_Portrait.png',
+        imageKey: 'Legion_4',
         activeSkillText: 'This unit Deals 115% damage, increased to 155% against Defenders.',
         chargeSkillText:
             'This Unit deals 175% damage, increased to 205% with additional Stasis applied for 1 turn against Defenders.',
@@ -574,7 +574,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 34,
         speed: 90,
-        imageKey: 'XAOC_12_Portrait.png',
+        imageKey: 'XAOC_12',
         activeSkillText:
             '(All) allies are granted Out. Damage Up 3 for 2 turns and XAOC Swiftness 3 for 2 turns.',
         chargeSkillText:
@@ -598,7 +598,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 68,
-        imageKey: 'Binderburg_14_Portrait.png',
+        imageKey: 'Binderburg_14',
         activeSkillText:
             'This Unit Deals 165% damage, applies Provoke for 1 turn, and inflicts Crit Power Down 2 for 1 turn.',
         chargeSkillText: 'This Unit deals 210% damage and inflicts Crit Rate Down 2 for 3 turns.',
@@ -621,7 +621,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 20,
         speed: 81,
-        imageKey: 'Binderburg_6_Portrait.png',
+        imageKey: 'Binderburg_6',
         activeSkillText:
             'This Unit grants Crit Rate Up 2 and Attack Up 2 for 2 turns and Cleanses 1 debuff.',
         chargeSkillText: 'This Unit grants Crit Power 3 and Attack Up 3 for 2 turns.',
@@ -644,7 +644,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 20,
         speed: 91,
-        imageKey: 'Everliving_3_Portrait.png',
+        imageKey: 'Everliving_3',
         activeSkillText:
             'This Unit Repairs 12% of its Max HP, grants Hacking Up 2 for 1 turn, and Cleanses 1 debuff from all allies.',
         chargeSkillText:
@@ -669,7 +669,7 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 20,
         speed: 85,
         hpRegen: 8,
-        imageKey: 'MPL_10_Portrait.png',
+        imageKey: 'MPL_10',
         activeSkillText: 'This Unit grants Inc. Damage Down 2 and Defense Up 3 for 1 turn.',
         chargeSkillText:
             'This Unit grants Security Up 3 for 2 turns and Defense Matrix for 4 turns.',
@@ -692,7 +692,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 36,
         speed: 79,
-        imageKey: 'Everliving_9_Portrait.png',
+        imageKey: 'Everliving_9',
         activeSkillText: 'This Unit Repairs 27% of its Max HP.',
         chargeSkillText:
             'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
@@ -715,7 +715,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 20,
         critDamage: 0,
         speed: 100,
-        imageKey: 'Marauder_15_Portrait.png',
+        imageKey: 'Marauder_15',
         activeSkillText: 'This Unit grants Attack Up 3 for 2 turns and repairs 90% of its attack.',
         chargeSkillText: 'This Unit grants Overclock 3 for 2 turns and repairs 140% of its attack.',
         firstPassiveSkillText: 'This Unit cleanses 1 debuff when an ally crits an enemy.',
@@ -736,7 +736,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 22,
         speed: 83,
-        imageKey: 'Tianchao_8_Portrait.png',
+        imageKey: 'Tianchao_8',
         activeSkillText:
             'This Unit Deals 120% damage and inflicts Bomb 1 for 2 turns, ignoring Taunt and Provoke.',
         chargeSkillText:
@@ -760,7 +760,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 24,
         critDamage: 38,
         speed: 84,
-        imageKey: 'Marauder_12_Portrait.png',
+        imageKey: 'Marauder_12',
         activeSkillText: 'This Unit Deals 185% damage and inflicts Inferno 3 for 3 turns.',
         chargeSkillText:
             'This Unit deals 225% damage, detonates Inferno effects, and inflicts Inferno 3 for 3 turns.',
@@ -783,7 +783,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 50,
         speed: 75,
-        imageKey: 'Atlas_4_Portrait.png',
+        imageKey: 'Atlas_4',
         activeSkillText: 'This Unit Deals 150% damage.',
         chargeSkillText:
             'This Unit deals 190% damage, but when attacking a Defender, it deals 220% damage and inflicts Disable for 1 turn.',
@@ -806,7 +806,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 4,
         speed: 63,
-        imageKey: 'MPL_5_Portrait.png',
+        imageKey: 'MPL_5',
         activeSkillText:
             'This Unit deals 40% damage, with an additional damage equal to 9% of its Max HP bypassing enemy Shield, and repairs itself 15% of damage dealt.',
         chargeSkillText:
@@ -830,7 +830,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 3,
         critDamage: 8,
         speed: 79,
-        imageKey: 'Terran_16_Portrait.png',
+        imageKey: 'Terran_16',
         activeSkillText:
             'This Unit Taunts for 1 turn, deals 110% damage with additional Damage equal to 60% of its Defense.',
         chargeSkillText:
@@ -854,7 +854,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 19,
         critDamage: 50,
         speed: 87,
-        imageKey: 'Legion_5_Portrait.png',
+        imageKey: 'Legion_5',
         activeSkillText:
             'This attack ignores Taunt and Provoke, deals 230% damage, and applies Concentrate Fire for 1 turn.',
         chargeSkillText: 'This Unit deals 320% damage, ignoring Taunt and Provoke.',
@@ -877,7 +877,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 20,
         speed: 60,
-        imageKey: 'Terran_3_Portrait.png',
+        imageKey: 'Terran_3',
         activeSkillText:
             'This Unit Deals 50% damage plus additional Damage equal to 60% of its Defense and inflicts Defense Down 1 for 1 turn.',
         chargeSkillText:
@@ -902,7 +902,7 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 4,
         speed: 64,
         shield: 4,
-        imageKey: 'Atlas_9_Portrait.png',
+        imageKey: 'Atlas_9',
         activeSkillText: 'This Unit Deals 110% damage and inflicts Defense Down 1 for 1 turn.',
         chargeSkillText:
             'This Unit deals 140% damage, inflicts Defense Down 2 and Out. Damage Down 2 for 2 turns.',
@@ -923,7 +923,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 34,
         speed: 72,
-        imageKey: 'XAOC_4_Portrait.png',
+        imageKey: 'XAOC_4',
         activeSkillText: 'This Unit cleanses 1 debuff and deals 110% damage.',
         chargeSkillText: 'This Unit removes 40% of the enemy shield and deals 150% damage.',
         firstPassiveSkillText:
@@ -945,7 +945,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 2,
         speed: 78,
-        imageKey: 'Gelecek_7_Portrait.png',
+        imageKey: 'Gelecek_7',
         activeSkillText: 'This Unit deals 110% damage and inflicts Inc. Repair Down 2 for 1 turn.',
         chargeSkillText:
             'This Unit deals 140% damage and inflicts Inc. Repair Down 3 and Inc. Damage Up 2 for 2 turns.',
@@ -968,7 +968,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 26,
         critDamage: 56,
         speed: 78,
-        imageKey: 'XAOC_17_Portrait.png',
+        imageKey: 'XAOC_17',
         activeSkillText:
             'This Unit cleanses 1 debuff and deals 180% damage with an additional 15% for each debuff on the enemy.',
         chargeSkillText:
@@ -992,7 +992,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 23,
         critDamage: 50,
         speed: 87,
-        imageKey: 'Legion_6_Portrait.png',
+        imageKey: 'Legion_6',
         activeSkillText: 'This Unit Deals 170% damage, bypassing enemy Shields.',
         chargeSkillText:
             'This Unit grants Legion Discipline 3 to all allies for 1 turn and deals 220% damage, bypassing enemy Shield.',
@@ -1014,7 +1014,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 16,
         speed: 80,
-        imageKey: 'Legion_12_Portrait.png',
+        imageKey: 'Legion_12',
         activeSkillText:
             'This Unit deals 170% damage and grants Defense Up 2 for 2 turns. If the hit is critical, it additionally grants Attack Up 2 to all adjacent allies for 1 turn.',
         chargeSkillText:
@@ -1038,7 +1038,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 16,
         critDamage: 42,
         speed: 78,
-        imageKey: 'MPL_14_Portrait.png',
+        imageKey: 'MPL_14',
         activeSkillText:
             'This Unit targets Stealthed enemies, dealing 240% damage plus an additional damage equal to 10% of its Max HP. If the target is not a Defender, Concentrate Fire is applied for 1 turn.',
         chargeSkillText:
@@ -1062,7 +1062,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 56,
         speed: 78,
-        imageKey: 'XAOC_6_Portrait.png',
+        imageKey: 'XAOC_6',
         activeSkillText: 'This Unit deals 205% damage.',
         chargeSkillText:
             'This Unit grants XAOC Swfitness 3 to all allies for 2 turns and deals 255% damage.',
@@ -1085,7 +1085,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 15,
         critDamage: 58,
         speed: 77,
-        imageKey: 'Atlas_5_Portrait.png',
+        imageKey: 'Atlas_5',
         activeSkillText: 'This Unit Deals 130% damage, bypassing enemy shield.',
         chargeSkillText:
             'This Unit gains Atlas Coordination 2 for 2 turns and deals 150% damage, bypassing enemy shield.',
@@ -1107,7 +1107,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 12,
         speed: 63,
-        imageKey: 'Terran_6_Portrait.png',
+        imageKey: 'Terran_6',
         activeSkillText:
             'This Unit grants Taunt for 1 turn and deals Damage equal to 70% plus an additional 60% of its Defense.',
         chargeSkillText:
@@ -1130,7 +1130,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 3,
         critDamage: 22,
         speed: 85,
-        imageKey: 'Gelecek_3_Portrait.png',
+        imageKey: 'Gelecek_3',
         activeSkillText: 'This Unit deals 130% damage and inflicts Inferno 1 for 2 turns.',
         chargeSkillText: 'This Unit deals 180% damage and inflicts Inferno 2 for 2 turns.',
         firstPassiveSkillText:
@@ -1152,7 +1152,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 4,
         speed: 83,
-        imageKey: 'Terran_15_Portrait.png',
+        imageKey: 'Terran_15',
         activeSkillText:
             'This Unit cleanses 1 debuff, repairs 5% of its max HP with an additional repair equal to 100% of its defense, and grants Inc. Damage Down 2 for 2 turns.',
         chargeSkillText:
@@ -1176,7 +1176,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 16,
         speed: 72,
-        imageKey: 'Atlas_14_Portrait.png',
+        imageKey: 'Atlas_14',
         activeSkillText:
             'This Unit deals 140% damage with additional damage equal to 7% of its current shield, bypassing enemy shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
         chargeSkillText:
@@ -1199,7 +1199,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 25,
         critDamage: 30,
         speed: 85,
-        imageKey: 'Marauder_4_Portrait.png',
+        imageKey: 'Marauder_4',
         activeSkillText: 'This Unit Deals 120% damage and inflicts Bomb 1 for 2 turns.',
         chargeSkillText: 'This Unit deals 160% damage and inflicts Bomb 2 for 2 turns.',
         firstPassiveSkillText:
@@ -1221,7 +1221,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 64,
         speed: 75,
-        imageKey: 'XAOC_9_Portrait.png',
+        imageKey: 'XAOC_9',
         activeSkillText: 'This Unit deals 130% damage, bypassing enemy shield.',
         chargeSkillText:
             'This Unit deals 180% damage bypassing enemy shield and inflicts Stasis for 2 turns.',
@@ -1242,7 +1242,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 42,
         speed: 85,
-        imageKey: 'Tianchao_6_Portrait.png',
+        imageKey: 'Tianchao_6',
         activeSkillText:
             'This Unit Attacks by dealing 200% damage, ignoring Taunt and Provoke effects. When targeting a Supporter, it deals an additional 100% damage.',
         chargeSkillText:
@@ -1266,7 +1266,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 4,
         critDamage: 20,
         speed: 62,
-        imageKey: 'Terran_5_Portrait.png',
+        imageKey: 'Terran_5',
         activeSkillText:
             'This Unit Deals 70% damage with additional Damage equal to 60% of its Defense and applies Provoke for 1 turn.',
         chargeSkillText:
@@ -1289,7 +1289,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 2,
         critDamage: 18,
         speed: 81,
-        imageKey: 'Terran_17_Portrait.png',
+        imageKey: 'Terran_17',
         activeSkillText:
             'This Unit Deals 130% damage, with additional Damage equal to 30% of its Defense, and inflicts Crit Rate Down 2 for 2 turns and Security Down 2 for 2 turns. If the target was repaired this round, this Unit inflicts Stasis for 1 turn.',
         chargeSkillText:
@@ -1313,7 +1313,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 12,
         speed: 66,
-        imageKey: 'Atlas_10_Portrait.png',
+        imageKey: 'Atlas_10',
         activeSkillText: 'This Unit Deals 170% damage and inflicts Attack Down 2 for 1 turn.',
         chargeSkillText:
             'This Unit gains Atlas Readiness 2 for 2 turns, deals 220% damage, and inflicts Attack Down 3 for 2 turns.',
@@ -1335,7 +1335,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 10,
         critDamage: 18,
         speed: 66,
-        imageKey: 'XAOC_10_Portrait.png',
+        imageKey: 'XAOC_10',
         activeSkillText: 'This Unit Deals 160% damage.',
         chargeSkillText: 'This Unit Deals 210% damage and Cleanses 1 debuff',
         firstPassiveSkillText:
@@ -1357,7 +1357,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 16,
         critDamage: 58,
         speed: 78,
-        imageKey: 'Terran_11_Portrait.png',
+        imageKey: 'Terran_11',
         activeSkillText:
             'This unit deals 140% Damage, with additional damage equal to 80% of its defense plus an extra 30% for each buff on the enemy. If the target has 3 or more buffs, the unit gains 2 charges to its charged skill.',
         chargeSkillText:
@@ -1381,7 +1381,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 83,
-        imageKey: 'Atlas_15_Portrait.png',
+        imageKey: 'Atlas_15',
         activeSkillText:
             'This Unit cleanses 2 bombs, grants shield equal to 15% of its max HP, and applies Atlas Readiness 2 for 1 turn.',
         chargeSkillText:
@@ -1403,7 +1403,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 16,
         critDamage: 50,
         speed: 70,
-        imageKey: 'MPL_12_Portrait.png',
+        imageKey: 'MPL_12',
         activeSkillText:
             'This Unit purges 1 buff from the enemy and deals 200% damage, including additional damage equal to 20% of its Max HP.',
         chargeSkillText:
@@ -1427,7 +1427,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 8,
         speed: 88,
-        imageKey: 'Gelecek_13_Portrait.png',
+        imageKey: 'Gelecek_13',
         activeSkillText:
             'This Unit grants Hacking Up 3 for 2 turns and repairs 10% of its Max HP, with an additional 7% repair for each debuffed enemy.',
         chargeSkillText:
@@ -1451,7 +1451,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 66,
-        imageKey: 'MPL_4_Portrait.png',
+        imageKey: 'MPL_4',
         activeSkillText:
             'This Unit deals 40% damage with an additional Damage equal to 8% of its Max HP, and repairs 10% of Damage dealt. This attack bypasses enemy shield.',
         chargeSkillText:
@@ -1475,7 +1475,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 10,
         critDamage: 26,
         speed: 74,
-        imageKey: 'XAOC_14_Portrait.png',
+        imageKey: 'XAOC_14',
         activeSkillText: 'This Unit deals 160% damage and applies Provoke for 1 turn.',
         chargeSkillText: 'This Unit deals 210% damage and grants Taunt for 1 turn.',
         firstPassiveSkillText:
@@ -1497,7 +1497,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 9,
         critDamage: 46,
         speed: 84,
-        imageKey: 'Everliving_11_Portrait.png',
+        imageKey: 'Everliving_11',
         activeSkillText:
             'This unit deals 200% damage. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.',
         chargeSkillText: 'This unit steals 1 buff from the primary target, then deals 260% damage.',
@@ -1520,7 +1520,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 18,
         critDamage: 50,
         speed: 81,
-        imageKey: 'Tianchao_7_Portrait.png',
+        imageKey: 'Tianchao_7',
         activeSkillText:
             'This Unit Deals 145% damage, increasing by 30% for each Unit adjacent to the enemy, and inflicts Bomb 1 for 2 turns.',
         chargeSkillText:
@@ -1543,7 +1543,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 4,
         speed: 71,
-        imageKey: 'Terran_12_Portrait.png',
+        imageKey: 'Terran_12',
         activeSkillText:
             'This Unit grants all Allies Terran Guard 2 for 2 turns and deals 80% damage with additional Damage equal to 70% of its Defense. If this Unit is Provoked or Taunted, it instead grants all allies Terran Guard 2 for 2 turns and deals 120% damage with additional Damage equal to 90% of its Defense.',
         chargeSkillText:
@@ -1567,7 +1567,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 20,
         speed: 88,
-        imageKey: 'Everliving_5_Portrait.png',
+        imageKey: 'Everliving_5',
         activeSkillText: 'This unit grants Attack Up 2 and Crit Power Up 2 for 2 turns.',
         chargeSkillText:
             'This unit grants Attack Up 3 and Crit Power Up 3 for 1 turns and cleanses 2 debuffs.',
@@ -1590,7 +1590,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 2,
         critDamage: 12,
         speed: 60,
-        imageKey: 'MPL_3_Portrait.png',
+        imageKey: 'MPL_3',
         activeSkillText:
             'This Unit deals 30% damage with an additional damage equal to 8% of its max HP and inflicts Attack Down 1 for 1 turn.',
         chargeSkillText:
@@ -1614,7 +1614,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 22,
         speed: 80,
-        imageKey: 'Binderburg_15_Portrait.png',
+        imageKey: 'Binderburg_15',
         activeSkillText:
             'This Unit Deals 175% damage and inflicts Hacking Down 2 and Security Down 1 for 1 turn.',
         chargeSkillText:
@@ -1638,7 +1638,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 20,
         speed: 81,
-        imageKey: 'Binderburg_7_Portrait.png',
+        imageKey: 'Binderburg_7',
         activeSkillText:
             'This Unit grants Hacking Up 2 and Binderburg Resilience 2 for 1 turn and Cleanses 1 debuff.',
         chargeSkillText: 'This Unit grants Hacking Up 3 and Security Up 3 for 1 turn.',
@@ -1659,7 +1659,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 9,
         critDamage: 24,
         speed: 69,
-        imageKey: 'Atlas_17_Portrait.png',
+        imageKey: 'Atlas_17',
         activeSkillText:
             'This unit deals 80% damage plus an additional damage equal to 10% of its current shield, and if it has any shield, gains Taunt for 1 turn.',
         chargeSkillText:
@@ -1683,7 +1683,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 28,
         critDamage: 30,
         speed: 88,
-        imageKey: 'Marauder_6_Portrait.png',
+        imageKey: 'Marauder_6',
         activeSkillText: 'This Unit Deals 190% damage and inflicts Inferno 2 for 3 turns.',
         chargeSkillText:
             'This Unit deals 190% damage, increasing by 25% for each debuff on the enemy, and inflicts Inferno 3 for 3 turns.',
@@ -1706,7 +1706,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 12,
         speed: 69,
-        imageKey: 'Legion_9_Portrait.png',
+        imageKey: 'Legion_9',
         activeSkillText: 'This Unit Deals 160% damage.',
         chargeSkillText: 'This Unit gains Legion Discipline 2 for 2 turns and deals 200% damage.',
         firstPassiveSkillText:
@@ -1728,7 +1728,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 20,
         speed: 83,
-        imageKey: 'MPL_8_Portrait.png',
+        imageKey: 'MPL_8',
         activeSkillText: 'This Unit grants Supercharged 1 for 1 turn and Hacking Up 1 for 2 turns.',
         chargeSkillText:
             'This Unit grants Supercharged 3 for 2 turns and Hacking Up 2 for 2 turns.',
@@ -1751,7 +1751,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 15,
         critDamage: 58,
         speed: 77,
-        imageKey: 'MPL_16_Portrait.png',
+        imageKey: 'MPL_16',
         activeSkillText:
             'This Unit deals 140% damage, gains a charge and deals additional 22.5% damage for each buff on the enemy. This attack can target Stealthed enemies.',
         chargeSkillText:
@@ -1775,7 +1775,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 13,
         critDamage: 50,
         speed: 71,
-        imageKey: 'Terran_9_Portrait.png',
+        imageKey: 'Terran_9',
         activeSkillText:
             'This Unit Deals 140% damage, with an additional 60% damage against Taunted or Provoked enemies.',
         chargeSkillText:
@@ -1799,7 +1799,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 13,
         critDamage: 10,
         speed: 88,
-        imageKey: 'Marauder_9_Portrait.png',
+        imageKey: 'Marauder_9',
         activeSkillText:
             'This Unit Deals 165% damage and inflicts Incoming Repair Down 2 for 1 turn.',
         chargeSkillText:
@@ -1823,7 +1823,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 17,
         critDamage: 2,
         speed: 84,
-        imageKey: 'Marauder_14_Portrait.png',
+        imageKey: 'Marauder_14',
         activeSkillText:
             'This Unit Deals 160% damage, inflicts Incoming Repair Down 2 for 2 turns, and inflicts Inferno 1 for 3 turns.',
         chargeSkillText:
@@ -1847,7 +1847,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 7,
         critDamage: 56,
         speed: 79,
-        imageKey: 'XAOC_3_Portrait.png',
+        imageKey: 'XAOC_3',
         activeSkillText: 'This Unit deals 150% damage.',
         chargeSkillText:
             'This Unit gains Hacking Up 3 for 1 turn, deals 180% damage, and inflicts Speed Down 2 for 2 turns.',
@@ -1870,7 +1870,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 3,
         critDamage: 20,
         speed: 87,
-        imageKey: 'Binderburg_8_Portrait.png',
+        imageKey: 'Binderburg_8',
         activeSkillText:
             'This Unit Repairs 25% of its Max HP and grants Binderburg Resilience 2 for 1 turn.',
         chargeSkillText:
@@ -1893,7 +1893,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 7,
         critDamage: 12,
         speed: 82,
-        imageKey: 'Tianchao_11_Portrait.png',
+        imageKey: 'Tianchao_11',
         activeSkillText: 'This unit Deals 170% damage and applies Provoke for 1 turn.',
         chargeSkillText:
             'This Unit deals 230% damage and grants Taunt for 1 turn and Block Attacks for 1 hit.',
@@ -1916,7 +1916,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 15,
         critDamage: 50,
         speed: 77,
-        imageKey: 'Terran_10_Portrait.png',
+        imageKey: 'Terran_10',
         activeSkillText: 'This Unit Deals 160% damage and Purges 1 buff from the enemy.',
         chargeSkillText: 'This Unit deals 200% damage and removes 2 charges from the enemy.',
         firstPassiveSkillText:
@@ -1938,7 +1938,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 54,
         speed: 76,
-        imageKey: 'MPL_7_Portrait.png',
+        imageKey: 'MPL_7',
         activeSkillText:
             "This Unit Deals 200% damage with additional damage equal to 10% of this unit's max HP. If any target is Stealthed, it adds 1 charge to this Unit's Charged skill. This attack can target Stealthed enemies.",
         chargeSkillText:
@@ -1962,7 +1962,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 15,
         critDamage: 20,
         speed: 95,
-        imageKey: 'Legion_11_Portrait.png',
+        imageKey: 'Legion_11',
         activeSkillText:
             'This unit grants Attack Up 3 for 1 turn, Crit Power Up 3, and Legion Discipline 3.',
         chargeSkillText: 'This Unit grants Out. Damage Up 3 for 3 turns and Charged Override 2.',
@@ -1985,7 +1985,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 9,
         critDamage: 42,
         speed: 88,
-        imageKey: 'Tianchao_5_Portrait.png',
+        imageKey: 'Tianchao_5',
         activeSkillText:
             'This unit deals 140% damage, inflicts Inc. Repair Down 2 for 1 turn, and Bomb 1 for 2 turns.',
         chargeSkillText:
@@ -2009,7 +2009,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 7,
         critDamage: 42,
         speed: 82,
-        imageKey: 'Tianchao_4_Portrait.png',
+        imageKey: 'Tianchao_4',
         activeSkillText:
             'This Unit Deals 90% damage and inflicts Incoming Repair Down 1 for 2 turns.',
         chargeSkillText: 'This Unit deals 120% damage and inflicts Inc. Repair Down 2 for 2 turns.',
@@ -2032,7 +2032,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 20,
         speed: 79,
-        imageKey: 'MPL_9_Portrait.png',
+        imageKey: 'MPL_9',
         activeSkillText:
             'This Unit repairs 17.5% of its max HP and grants Hacking Up 1 for 1 turn.',
         chargeSkillText: 'This Unit repairs 20% of its Max HP and grants Hacking Up 2 for 2 turns.',
@@ -2055,7 +2055,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 12,
         speed: 66,
-        imageKey: 'Binderburg_3_Portrait.png',
+        imageKey: 'Binderburg_3',
         activeSkillText: 'This Unit Repairs 6% of its Max HP and Deals 125% damage.',
         chargeSkillText: 'This Unit repairs 9% of its Max HP and deals 160% damage.',
         firstPassiveSkillText:
@@ -2077,7 +2077,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 21,
         critDamage: 38,
         speed: 83,
-        imageKey: 'Gelecek_4_Portrait.png',
+        imageKey: 'Gelecek_4',
         activeSkillText: 'This Unit inflicts Defense Down 2 for 2 turns and deals 160% damage.',
         chargeSkillText:
             'This Unit inflicts Inc. DoT Damage Up 2 for 2 turns and deals 180% damage.',
@@ -2098,7 +2098,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 13,
         critDamage: 64,
         speed: 85,
-        imageKey: 'XAOC_5_Portrait.png',
+        imageKey: 'XAOC_5',
         activeSkillText: 'This Unit deals 130% damage.',
         chargeSkillText: 'This Unit deals 150% damage and extends active debuffs by 1 turn.',
         firstPassiveSkillText: 'This unit gains Blast every turn, up to a limit of 4.',
@@ -2119,7 +2119,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 42,
         speed: 86,
-        imageKey: 'Legion_8_Portrait.png',
+        imageKey: 'Legion_8',
         activeSkillText:
             'This Unit Deals 200% damage, ignoring Taunt and Provoke, and applies Concentrate Fire for 1 turn.',
         chargeSkillText:
@@ -2143,7 +2143,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 42,
         speed: 76,
-        imageKey: 'Binderburg_11_Portrait.png',
+        imageKey: 'Binderburg_11',
         activeSkillText:
             'This Unit Cleanses 2 debuffs from itself and deals 160% damage, with an additional 25% for each buff on itself.',
         chargeSkillText:
@@ -2167,7 +2167,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 14,
         critDamage: 54,
         speed: 81,
-        imageKey: 'Everliving_13_Portrait.png',
+        imageKey: 'Everliving_13',
         activeSkillText:
             'This unit deals 170% damage and all allies repair 7% of the damage dealt and this repair cannot critically hit.',
         chargeSkillText: 'This unit purges 2 buffs from the enemy and deals 210% damage',
@@ -2190,7 +2190,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 8,
         critDamage: 50,
         speed: 78,
-        imageKey: 'Binderburg_16_Portrait.png',
+        imageKey: 'Binderburg_16',
         activeSkillText:
             "This unit gains Attack Up 3 for 1 turn and deals 240% damage. If the target is a Defender, this unit removes 1 charge for the enemy and adds 1 charge to this unit's charged skill.",
         chargeSkillText:
@@ -2213,7 +2213,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 10,
         speed: 82,
-        imageKey: 'Marauder_8_Portrait.png',
+        imageKey: 'Marauder_8',
         activeSkillText: 'This Unit Deals 90% damage and inflicts Inferno 1 for 2 turns.',
         chargeSkillText:
             'This Unit deals 140% damage, inflicts Inferno 2 for 3 turns, and inflicts Speed Down 1 for 2 turns.',
@@ -2236,7 +2236,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 16,
         speed: 76,
-        imageKey: 'Marauder_13_Portrait.png',
+        imageKey: 'Marauder_13',
         activeSkillText:
             'This Unit Deals 160% damage with a guaranteed critical hit and grants Out. Damage Up 1 to itself and all adjacent allies for 1 turn.',
         chargeSkillText:
@@ -2259,7 +2259,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 4,
         speed: 69,
-        imageKey: 'Everliving_10_Portrait.png',
+        imageKey: 'Everliving_10',
         activeSkillText: 'This Unit Deals 130% damage.',
         chargeSkillText: 'This Unit deals 190% damage and applies Provoke for 2 turns.',
         firstPassiveSkillText:
@@ -2281,7 +2281,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 44,
         speed: 83,
-        imageKey: 'XAOC_13_Portrait.png',
+        imageKey: 'XAOC_13',
         activeSkillText:
             'This Unit deals 180% damage and inflicts Security Down 2 for 2 turns. If it damages 2 or more enemies, it adds 1 active to its active skill.',
         chargeSkillText: 'This Unit deals 210% damage and inflicts Stasis for 2 turns.',
@@ -2304,7 +2304,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 26,
         speed: 81,
-        imageKey: 'Gelecek_9_Portrait.png',
+        imageKey: 'Gelecek_9',
         activeSkillText: 'This Unit deals 145% damage and inflicts Corrosion 3 for 3 turns.',
         chargeSkillText: 'This Unit deals 175% damage and inflicts Corrosion 3 for 3 turns.',
         firstPassiveSkillText:
@@ -2326,7 +2326,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 16,
         critDamage: 50,
         speed: 84,
-        imageKey: 'Legion_3_Portrait.png',
+        imageKey: 'Legion_3',
         activeSkillText: 'This Unit Deals 110% damage.',
         chargeSkillText:
             'This Unit gains Legion Discipline 2 for 2 turns and deals 145% damage, increased by 22.5% for each buff on itself.',
@@ -2349,7 +2349,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 9,
         critDamage: 14,
         speed: 96,
-        imageKey: 'Legion_13_Portrait.png',
+        imageKey: 'Legion_13',
         activeSkillText:
             'This unit deals 200% damage ignoring taunt and provoke, inflicts Defense Down 2 for 2 turns, and applies Concentrate Fire for 1 turn.',
         chargeSkillText:
@@ -2373,7 +2373,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 12,
         speed: 65,
-        imageKey: 'Binderburg_13_Portrait.png',
+        imageKey: 'Binderburg_13',
         activeSkillText:
             'This Unit Deals 180% damage and to all adjacent enemies, applies Provoke for 1 turn.',
         chargeSkillText:
@@ -2397,7 +2397,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 17,
         critDamage: 26,
         speed: 89,
-        imageKey: 'XAOC_16_Portrait.png',
+        imageKey: 'XAOC_16',
         activeSkillText: 'This Unit grants Crit Rate Up 3 for 2 turns and Attack Up 2 for 2 turns.',
         chargeSkillText:
             'This Unit grants Crit Power Up 3 for 3 turns and Out. Damage Up 2 for 3 turns.',
@@ -2420,7 +2420,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 30,
         speed: 75,
-        imageKey: 'XAOC_11_Portrait.png',
+        imageKey: 'XAOC_11',
         activeSkillText: 'This Unit deals 160% damage and inflicts Out. Damage Down 2 for 2 turns.',
         chargeSkillText: 'This Unit deals 230% damage and purges 1 buff from the enemy.',
         firstPassiveSkillText:
@@ -2442,7 +2442,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 64,
-        imageKey: 'Binderburg_4_Portrait.png',
+        imageKey: 'Binderburg_4',
         activeSkillText: 'This Unit Deals 165% damage and applies Provoke for 1 turn.',
         chargeSkillText: 'This Unit deals 200% damage and inflicts Corrosion 3 for 3 turns.',
         firstPassiveSkillText:
@@ -2464,7 +2464,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 25,
         critDamage: 46,
         speed: 79,
-        imageKey: 'Gelecek_14_Portrait.png',
+        imageKey: 'Gelecek_14',
         activeSkillText: 'This Unit deals 155% damage and inflicts Corrosion 3 for 3 turns.',
         chargeSkillText: 'This Unit deals 185% damage and inflicts Corrosion 3 for 3 turns.',
         firstPassiveSkillText:
@@ -2486,7 +2486,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 20,
         critDamage: 62,
         speed: 83,
-        imageKey: 'Tianchao_12_Portrait.png',
+        imageKey: 'Tianchao_12',
         activeSkillText: 'This unit gains Crit Power Up 2 for 1 turn, then deals 200% damage.',
         chargeSkillText:
             'This unit grants Tianchao Precision 2 for 3 turns to all allies with stealth and deals 220% damage with affinity advantage.',
@@ -2510,7 +2510,7 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 34,
         speed: 82,
         shield: 5.5,
-        imageKey: 'Atlas_6_Portrait.png',
+        imageKey: 'Atlas_6',
         activeSkillText:
             'This Unit Deals 200% damage bypassing enemy shield and inflicts Speed Down 2 for 2 turns.',
         chargeSkillText:
@@ -2533,7 +2533,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 2,
         speed: 82,
-        imageKey: 'Gelecek_6_Portrait.png',
+        imageKey: 'Gelecek_6',
         activeSkillText: 'This Unit deals 110% damage and inflicts Corrosion 1 for 2 turns.',
         chargeSkillText: 'This Unit deals 130% damage and inflicts Corrosion 3 for 3 turns.',
         firstPassiveSkillText:
@@ -2555,7 +2555,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 4,
         critDamage: 12,
         speed: 71,
-        imageKey: 'Everliving_4_Portrait.png',
+        imageKey: 'Everliving_4',
         activeSkillText: 'This Unit Repairs 8.5% of its Max HP and Deals 190% damage.',
         chargeSkillText:
             'This Unit gains Everliving Regeneration 2 for 2 turns and deals 250% damage.',
@@ -2578,7 +2578,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 30,
         speed: 81,
-        imageKey: 'Tianchao_9_Portrait.png',
+        imageKey: 'Tianchao_9',
         activeSkillText:
             'This attack ignores Taunt and Provoke, deals 190% damage, applies Concentrate Fire for 1 turn, and inflicts Defense Down 2 for 2 turns.',
         chargeSkillText:
@@ -2601,7 +2601,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 30,
         speed: 83,
-        imageKey: 'MPL_13_Portrait.png',
+        imageKey: 'MPL_13',
         activeSkillText:
             'This Unit purges 1 buff from the enemy, inflicts Defense Down 2 for 2 turns, and deals 150% damage.',
         chargeSkillText: 'This Unit inflicts Inc. Damage Up 3 for 2 turns and deals 190% damage.',
@@ -2624,7 +2624,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 6,
         critDamage: 22,
         speed: 88,
-        imageKey: 'Everliving_7_Portrait.png',
+        imageKey: 'Everliving_7',
         activeSkillText:
             'This Unit Deals 180% damage and inflicts Incoming Repair Down 2 for 2 turns and Incoming Damage Up 2 for 2 turns.',
         chargeSkillText:
