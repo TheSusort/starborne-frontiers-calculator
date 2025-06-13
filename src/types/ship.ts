@@ -46,18 +46,18 @@ export interface Refit {
 
 export interface ShipData {
     name: string;
-    affinity: AffinityName;
-    rarity: RarityName;
-    faction: FactionName;
-    role: ShipTypeName;
-    hp: number;
-    attack: number;
-    defense: number;
-    hacking: number;
-    security: number;
-    critRate: number;
-    critDamage: number;
-    speed: number;
+    affinity?: AffinityName;
+    rarity?: RarityName;
+    faction?: FactionName;
+    role?: ShipTypeName;
+    hp?: number;
+    attack?: number;
+    defense?: number;
+    hacking?: number;
+    security?: number;
+    critRate?: number;
+    critDamage?: number;
+    speed?: number;
     hpRegen?: number;
     shield?: number;
     imageKey?: string;

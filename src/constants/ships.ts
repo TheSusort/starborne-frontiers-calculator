@@ -167,6 +167,38 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'At the start of the round, if an enemy has 3 or more debuffs, this Unit gains Overload with a limit of 10 and Marauder Rage 2 for 3 turns. Upon killing an enemy, this Unit loses Overload. Additionally, after inflicting a debuff with a critical hit, the duration Newly Applied debuffs is extended by 1 turn.',
     },
+    BAYAH: {
+        name: 'Bayah',
+        affinity: 'electric',
+        rarity: 'epic',
+        faction: 'TERRAN_COMBINE',
+        role: 'DEBUFFER',
+        hp: 10334,
+        attack: 3844,
+        defense: 2420,
+        hacking: 108,
+        security: 25,
+        critRate: 1,
+        critDamage: 14,
+        speed: 78,
+        imageKey: 'Terran_13',
+        activeSkillText:
+            'This Unit deals 120% damage with an additional damage equal to 20% of its Defense and inflicts Crit Power Down 2 and Attack Down 2 on the target for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 150% damage plus an additional amount equal to 30% of its Defense and inflicts Crit Rate Down 2 for 2 turns. If this unit has more Crit Power than the target, it inflicts Statis for 1 turn.',
+        firstPassiveSkillText:
+            'This unit gains Terran Bolster 2 and inflicts Speed Down 2 on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+        secondPassiveSkillText:
+            'This unit gains Terran Bolster 2 and inflicts Speed Down 2 and Out. Damage Down 2 on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+    },
+    BEDROCK: {
+        name: 'Bedrock',
+        affinity: 'electric',
+        rarity: 'common',
+        faction: 'MPL',
+        role: 'DEFENDER',
+        imageKey: 'MPL_1',
+    },
     BERSERKER: {
         name: 'Berserker',
         affinity: 'electric',
@@ -236,6 +268,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This Unit gains Overload every turn with a limit of 10, loses Overload upon killing an enemy, and gains Marauder Rage 2 for 3 turns upon applying a debuff.',
     },
+    CARNATION: {
+        name: 'Carnation',
+        affinity: 'chemical',
+        rarity: 'uncommon',
+        faction: 'GELECEK',
+        role: 'DEBUFFER',
+        imageKey: 'Gelecek_5',
+    },
     CINYA: {
         name: 'Cinya',
         affinity: 'antimatter',
@@ -304,6 +344,14 @@ export const SHIPS: Record<string, ShipData> = {
             "At the end of the round, non-defender allies below 40% HP are granted Stealth for 1 turn. At the start of the round, allies with Stealth applied repairs 10% of this unit's max HP. When over-repairing a damaged ally, the ally with the lowest current health percentage repairs an amount equivalent to the over-repair.",
         secondPassiveSkillText:
             "This Unit starts combat fully charged. At the end of the round, non-defender allies below 40% HP are granted Stealth for 1 turn. At the start of the round, allies with Stealth applied repairs 10% of this unit's max HP. When over-repairing a damaged ally, the ally with the lowest current health percentage repairs an amount equivalent to the over-repair",
+    },
+    CHISEL: {
+        name: 'Chisel',
+        affinity: 'thermal',
+        rarity: 'uncommon',
+        faction: 'MPL',
+        role: 'DEFENDER',
+        imageKey: 'MPL_2',
     },
     COBALT: {
         name: 'Cobalt',
@@ -378,6 +426,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'At the start of combat, this unit gains a shield equal to 30% of its max HP and receives Atlas Coordination 2 for 12 turns.',
     },
+    CRUSHER: {
+        name: 'Crusher',
+        affinity: 'thermal',
+        rarity: 'common',
+        faction: 'MARAUDERS',
+        role: 'ATTACKER',
+        imageKey: 'Marauder_1',
+    },
     CULTIVATOR: {
         name: 'Cultivator',
         affinity: 'chemical',
@@ -422,6 +478,14 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText: 'This unit deals 60% damage when an enemy uses their charged skill.',
         secondPassiveSkillText:
             'This unit deals 90% damage and inflicts Crit Rate Down 2 for 2 turns when an enemy uses their charged skill.',
+    },
+    CUSTODIAN: {
+        name: 'Custodian',
+        affinity: 'thermal',
+        rarity: 'common',
+        faction: 'BINDERBURG',
+        role: 'DEFENDER',
+        imageKey: 'Binderburg_1',
     },
     DEFIANT: {
         name: 'Defiant',
@@ -514,6 +578,14 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText: 'This unit inflicts Speed Down 1 for 2 turns when directly damaged.',
         secondPassiveSkillText:
             'When directly damaged, this unit inflicts Speed Down 1 for 2 turns and Stasis for 1 turn.',
+    },
+    FORSYTHIA: {
+        name: 'Forsythia',
+        affinity: 'thermal',
+        rarity: 'common',
+        faction: 'GELECEK',
+        role: 'DEFENDER',
+        imageKey: 'Gelecek_10',
     },
     FRONTLINE: {
         name: 'Frontline',
@@ -840,6 +912,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'At the start of a round, this unit gains Defensive Affinity Override. If Nayra is on the same team, this unit also gains Offensive Affinity Override. When directly damaged, this unit repairs 3% of its max HP but if the unit was a critical, this unit repairs 9% of its max HP instead.',
     },
+    JEMPOL: {
+        name: 'Jempol',
+        affinity: 'thermal',
+        rarity: 'common',
+        faction: 'TERRAN_COMBINE',
+        role: 'DEFENDER',
+        imageKey: 'Terran_1',
+    },
     JUDGE: {
         name: 'Judge',
         affinity: 'electric',
@@ -909,6 +989,14 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText: 'This unit gains a shield equal to 4% of its max HP every turn.',
         secondPassiveSkillText: 'This unit gains a shield equal to 7% of its max HP every turn.',
     },
+    KRYSA: {
+        name: 'Krysa',
+        affinity: 'electric',
+        rarity: 'common',
+        faction: 'XAOC',
+        role: 'ATTACKER',
+        imageKey: 'XAOC_1',
+    },
     LAIKA: {
         name: 'Laika',
         affinity: 'thermal',
@@ -931,8 +1019,8 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This unit gains a shield equal to 30% of its max HP upon removing shield from an enemy.',
     },
-    LAKSPUR: {
-        name: 'Lakspur',
+    LARKSPUR: {
+        name: 'Larkspur',
         affinity: 'electric',
         rarity: 'rare',
         faction: 'GELECEK',
@@ -953,6 +1041,22 @@ export const SHIPS: Record<string, ShipData> = {
             'When an enemy cleanses a debuff, this unit gains gelecek contagion 1 for 2 turns.',
         secondPassiveSkillText:
             'When an enemy cleanses a debuff, this unit gains gelecek contagion 2 for 3 turns.',
+    },
+    LASKA: {
+        name: 'Laska',
+        affinity: 'electric',
+        rarity: 'uncommon',
+        faction: 'XAOC',
+        role: 'ATTACKER',
+        imageKey: 'XAOC_2',
+    },
+    LESABRE: {
+        name: 'LeSabre',
+        affinity: 'thermal',
+        rarity: 'uncommon',
+        faction: 'ATLAS_SYNDICATE',
+        role: 'ATTACKER',
+        imageKey: 'Atlas_2',
     },
     LEV: {
         name: 'Lev',
@@ -1251,6 +1355,14 @@ export const SHIPS: Record<string, ShipData> = {
             'Upon killing an enemy with a debuff, this unit inflicts Stasis on all adjacent enemies for 1 turn.',
         secondPassiveSkillText:
             'Upon killing an enemy with a debuff, this unit inflicts Stasis on all adjacent enemies for 1 turn. At the start of combat and every turn, this unit gains Stealth for 2 turns.',
+    },
+    MENDER: {
+        name: 'Mender',
+        affinity: 'thermal',
+        rarity: 'uncommon',
+        faction: 'BINDERBURG',
+        role: 'SUPPORTER',
+        imageKey: 'Terran_2',
     },
     MORAO: {
         name: 'Morao',
@@ -1692,6 +1804,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             "This Unit gains Overload every turn up to a limit of 10. Upon killing an enemy, it loses Overload and gains Marauder Rage 3 for 3 turns. This Unit's attacks bypass 10% of the target's defense. When its debuff is resisted, it gains Hacking Module Overdrive for 1 turn.",
     },
+    RAZI: {
+        name: 'Razi',
+        affinity: 'chemical',
+        rarity: 'uncommon',
+        faction: 'EVERLIVING',
+        role: 'DEFENDER',
+        imageKey: 'Everliving_2',
+    },
     REDEEMER: {
         name: 'Redeemer',
         affinity: 'thermal',
@@ -1808,6 +1928,14 @@ export const SHIPS: Record<string, ShipData> = {
             'Upon applying a debuff to an enemy, this unit receives Marauder Rage 2 for 3 turns.',
         secondPassiveSkillText:
             "Upon applying a debuff to an enemy, this Unit receives Marauder Rage 2 for 3 turns and also extends all allies' active Buffs by 1 turn.",
+    },
+    ROOKIE: {
+        name: 'Rookie',
+        affinity: 'electric',
+        rarity: 'common',
+        faction: 'FRONTIER_LEGION',
+        role: 'ATTACKER',
+        imageKey: 'Legion_1',
     },
     RUINER: {
         name: 'Ruiner',
@@ -2041,8 +2169,8 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This unit gains Block Damage for 1 turn and Incoming Damage Down 2 for 3 turns when HP drops below 20%, once per battle.',
     },
-    SHEPARD: {
-        name: 'Shepard',
+    SHEPHERD: {
+        name: 'Shepherd',
         affinity: 'electric',
         rarity: 'rare',
         faction: 'BINDERBURG',
@@ -2128,6 +2256,14 @@ export const SHIPS: Record<string, ShipData> = {
             'When this unit is directly damaged as a primary target, it deals 30% damage to that enemy and gains Legion Discipline 2 for 3 turns.',
         secondPassiveSkillText:
             'When this unit is directly damaged as a primary target, it deals 70% damage to that enemy and gains Legion Discipline 2 for 3 turns. Additionally, when this unit is adjacent to a supporter, this unit gains 20% Attack.',
+    },
+    SUKU: {
+        name: 'Suku',
+        affinity: 'antimatter',
+        rarity: 'uncommon',
+        faction: 'TERRAN_COMBINE',
+        role: 'DEFENDER',
+        imageKey: 'Terran_2',
     },
     SUSTAINER: {
         name: 'Sustainer',
@@ -2245,6 +2381,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This Unit always lands critical hits and gains up to 30% damage reduction as its health decreases.',
     },
+    TRYDENT: {
+        name: 'Trydent',
+        affinity: 'thermal',
+        rarity: 'common',
+        faction: 'ATLAS_SYNDICATE',
+        role: 'ATTACKER',
+        imageKey: 'Atlas_1',
+    },
     TYCHO: {
         name: 'Tycho',
         affinity: 'thermal',
@@ -2289,6 +2433,14 @@ export const SHIPS: Record<string, ShipData> = {
             "This Unit's attacks do not break Stasis and deal 20% more damage to enemies under Stasis or Disable.",
         secondPassiveSkillText:
             "This unit's attacks do not break stasis and deal 20% more damage to enemies under stasis or disable. After dealing damage to an enemy affected by stasis once per round, this unit is granted one extra action.",
+    },
+    UMAYL: {
+        name: 'Umayl',
+        affinity: 'electric',
+        rarity: 'common',
+        faction: 'EVERLIVING',
+        role: 'DEFENDER',
+        imageKey: 'Everliving_1',
     },
     VALERIAN: {
         name: 'Valerian',
@@ -2358,6 +2510,14 @@ export const SHIPS: Record<string, ShipData> = {
             'This unit gains Speed Up 2 for 1 turn at the start of the round. When an Echoing Burst explodes on an enemy, repairs 5% of damage dealt to this unit and the ally with the lowest current health percentage.',
         secondPassiveSkillText:
             'This unit starts combat fully charged. This unit gains Speed Up 2 for 1 turn at the start of the round. When an Echoing Burst explodes on an enemy, repairs 5% of damage dealt to this unit and the ally with the lowest current health percentage.',
+    },
+    VANGUARD: {
+        name: 'Vanguard',
+        affinity: 'chemical',
+        rarity: 'uncommon',
+        faction: 'FRONTIER_LEGION',
+        role: 'ATTACKER',
+        imageKey: 'Legion_2',
     },
     VINDICATOR: {
         name: 'Vindicator',
@@ -2472,6 +2632,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'After applying corrosion with a critical hit, this unit inflicts inferno 2 for 2 turns and extends newly applied corrosion by 1 turn with a chance to hit equal to its Crit power after applying corrosion with a critical hit.',
     },
+    WRECKER: {
+        name: 'Wrecker',
+        affinity: 'thermal',
+        rarity: 'uncommon',
+        faction: 'MARAUDERS',
+        role: 'ATTACKER',
+        imageKey: 'Marauder_2',
+    },
     WUSHENG: {
         name: 'Wusheng',
         affinity: 'antimatter',
@@ -2519,6 +2687,14 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This unit gains a shield equal to 5.5% of its max HP every turn. When an enemy resists a debuff application, this unit deals 75% damage.',
     },
+    XIAODAO: {
+        name: 'Xiaodao',
+        affinity: 'electric',
+        rarity: 'common',
+        faction: 'TIANCHAO',
+        role: 'ATTACKER',
+        imageKey: 'Tianchao_1',
+    },
     YARROW: {
         name: 'Yarrow',
         affinity: 'antimatter',
@@ -2563,6 +2739,14 @@ export const SHIPS: Record<string, ShipData> = {
             'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death.',
         secondPassiveSkillText:
             'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death. Once per battle, when Cheat Death activates, this unit repairs itself for 60% of its max HP and gains Block Damage for 1 turn.',
+    },
+    YIN_JIAN: {
+        name: 'Yin Jian',
+        affinity: 'electric',
+        rarity: 'uncommon',
+        faction: 'TIANCHAO',
+        role: 'ATTACKER',
+        imageKey: 'Tianchao_1',
     },
     YUYAN: {
         name: 'Yuyan',

@@ -90,6 +90,9 @@ interface RawShipData {
     equipment_locked: boolean;
     ship_refits: RawShipRefit[];
     ship_implants: RawShipImplant[];
+    ship_templates: {
+        image_key: string;
+    };
 }
 
 // Type guard for valid ship data
@@ -227,6 +230,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 },
                 {} as Record<GearSlotName, string>
             ),
+            imageKey: data.ship_templates.image_key,
         };
         return isValidShip(ship) ? ship : null;
     } catch (error) {
@@ -277,7 +281,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         *,
                         ship_refit_stats (*)
                     ),
-                    ship_implants (*)
+                    ship_implants (*),
+                    ship_templates!inner (
+                        image_key
+                    )
                 `
                     )
                     .eq('user_id', user.id);

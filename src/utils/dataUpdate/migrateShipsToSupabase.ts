@@ -3,19 +3,6 @@ import { SHIPS } from '../../constants/ships';
 
 export const migrateShipsToSupabase = async () => {
     try {
-        // First, create the ship_templates table if it doesn't exist
-        const { error: createTableError } = await supabase.rpc('create_ship_templates_table');
-        if (createTableError) {
-            throw createTableError;
-        }
-
-        // Clear existing ship templates
-        const { error: deleteError } = await supabase.from('ship_templates').delete().neq('id', '');
-        if (deleteError) {
-            throw deleteError;
-        }
-
-        // Transform and insert the ships data
         const shipsData = Object.entries(SHIPS).map(([id, shipData]) => ({
             id,
             name: shipData.name,
@@ -38,18 +25,16 @@ export const migrateShipsToSupabase = async () => {
                 crit_damage: shipData.critDamage,
                 speed: shipData.speed,
             },
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
         }));
 
-        // Insert in batches of 100 to avoid hitting limits
-        const batchSize = 100;
-        for (let i = 0; i < shipsData.length; i += batchSize) {
-            const batch = shipsData.slice(i, i + batchSize);
-            const { error: insertError } = await supabase.from('ship_templates').insert(batch);
-            if (insertError) {
-                throw insertError;
-            }
+        // Use upsert instead of delete and insert
+        const { error } = await supabase.from('ship_templates').upsert(shipsData, {
+            onConflict: 'id',
+            ignoreDuplicates: false,
+        });
+
+        if (error) {
+            throw error;
         }
 
         // eslint-disable-next-line no-console
