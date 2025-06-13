@@ -42,7 +42,7 @@ function getAvailableStats(
 
     Object.entries(STATS).forEach(([statName, statConfig]) => {
         const name = statName as StatName;
-        if (name === mainStat.name) return;
+        if (name === mainStat?.name) return;
 
         const availableTypes = statConfig.allowedTypes.filter(
             (type) => !currentStats.some((s) => s.name === name && s.type === type)
