@@ -57,7 +57,7 @@ function getAvailableStats(
 }
 
 function getSubstatIncrease(stat: Stat, rarity: string): number {
-    const range = SUBSTAT_RANGES[stat.name]?.[stat.type];
+    const range = SUBSTAT_RANGES[stat?.name]?.[stat?.type];
     if (!range) return 0;
 
     const { min, max } = range;

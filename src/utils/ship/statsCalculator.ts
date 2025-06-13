@@ -111,7 +111,7 @@ export const calculateTotalStats = (
         Object.values(equipment || {}).forEach((gearId) => {
             if (!gearId) return;
             const gear = getGearPiece(gearId);
-            if (!gear?.setBonus || !GEAR_SETS[gear.setBonus].name) return;
+            if (!gear?.setBonus || !GEAR_SETS[gear.setBonus]?.name) return;
 
             setCounts[GEAR_SETS[gear.setBonus].name] =
                 (setCounts[GEAR_SETS[gear.setBonus].name] || 0) + 1;

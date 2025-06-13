@@ -17,7 +17,7 @@ export const SHIP_TYPES: Record<string, ShipType> = {
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314174920663053.webp',
     },
     DEBUFFER: {
-        name: 'Debuffer(Offensive)',
+        name: 'Debuffer',
         description: 'Maximize hacking, then damage',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
