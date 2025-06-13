@@ -84,4 +84,11 @@ export const SEO_CONFIG = {
         description: 'Browse and search through all available implants in Starborne Frontiers.',
         keywords: 'starborne, frontiers, implants, database, stats, effects',
     },
+    documentation: {
+        title: 'Documentation',
+        description:
+            'Comprehensive guide to using the Starborne Planner tool for ship management, gear optimization, and battle simulations.',
+        keywords:
+            'starborne, frontiers, documentation, guide, tutorial, ship management, gear optimization, battle simulation',
+    },
 } as const;
