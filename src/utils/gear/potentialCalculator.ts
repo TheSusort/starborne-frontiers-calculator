@@ -187,7 +187,10 @@ export function analyzePotentialUpgrades(
     count: number = 6
 ): PotentialResult[] {
     const eligiblePieces = inventory.filter(
-        (piece) => piece.level < 16 && ['rare', 'epic', 'legendary'].includes(piece.rarity)
+        (piece) =>
+            piece.level < 16 &&
+            ['rare', 'epic', 'legendary'].includes(piece.rarity) &&
+            !piece.slot.includes('implant')
     );
 
     const results: PotentialResult[] = eligiblePieces.map((piece) => {
