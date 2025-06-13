@@ -1,4 +1,4 @@
-import { memo, useMemo, useCallback } from 'react';
+import { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
@@ -8,6 +8,7 @@ import { StatDisplay } from '../stats/StatDisplay';
 import { ImplantName } from '../../constants/implants';
 import IMPLANTS from '../../constants/implants';
 import { Image } from '../ui/Image';
+import { Tooltip } from '../ui/layout/Tooltip';
 
 interface Props {
     gear: GearPiece;
@@ -34,11 +35,16 @@ export const GearPieceDisplay = memo(
         const { getShipName, getShipFromGearId } = useShips();
         const shipName = gear?.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
         const isImplant = gear.slot.startsWith('implant_');
+        const [showSetTooltip, setShowSetTooltip] = useState(false);
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
         const rarityInfo = useMemo(() => RARITIES[gear.rarity], [gear.rarity]);
         const implantInfo = useMemo(() => IMPLANTS[gear.setBonus as ImplantName], [gear.setBonus]);
+        const gearSetInfo = useMemo(
+            () => (gear.setBonus ? GEAR_SETS[gear.setBonus] : null),
+            [gear.setBonus]
+        );
 
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);
@@ -67,15 +73,45 @@ export const GearPieceDisplay = memo(
                                 <Image
                                     src={implantInfo.imageKey}
                                     alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
-                                    className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6'}`}
+                                    className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6 translate-y-1'}`}
                                 />
                             )}
                             {!isImplant && slotInfo && (
-                                <img
-                                    src={slotInfo}
-                                    alt={GEAR_SETS[gear.setBonus || '']?.name}
-                                    className={`h-auto ${small ? 'w-4' : 'w-6'}`}
-                                />
+                                <div className="relative">
+                                    <img
+                                        src={slotInfo}
+                                        alt={GEAR_SETS[gear.setBonus || '']?.name}
+                                        className={`h-auto ${small ? 'w-4' : 'w-6'} cursor-help`}
+                                        onMouseEnter={() => setShowSetTooltip(true)}
+                                        onMouseLeave={() => setShowSetTooltip(false)}
+                                    />
+                                    {gearSetInfo && (
+                                        <Tooltip
+                                            isVisible={showSetTooltip}
+                                            className="bg-dark p-2 border border-dark-border min-w-[200px] text-gray-300"
+                                        >
+                                            <div className="space-y-2">
+                                                <div className="font-semibold">
+                                                    {gearSetInfo.name}
+                                                </div>
+                                                {typeof gearSetInfo.description === 'string' && (
+                                                    <div className="text-sm bg-dark-lighter p-2">
+                                                        {gearSetInfo.description}
+                                                    </div>
+                                                )}
+                                                {gearSetInfo.stats &&
+                                                    gearSetInfo.stats.length > 0 && (
+                                                        <StatDisplay stats={gearSetInfo.stats} />
+                                                    )}
+                                                {gearSetInfo.minPieces && (
+                                                    <div className="text-xs">
+                                                        Requires {gearSetInfo.minPieces} pieces
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </Tooltip>
+                                    )}
+                                </div>
                             )}
                             <span className={`font-secondary`}>
                                 {isImplant
@@ -178,23 +214,8 @@ export const GearPieceDisplay = memo(
                                 <StatDisplay stats={gear.subStats} />
                             </div>
                         )}
-                        {gear.setBonus && !isImplant && (
-                            <div>
-                                <div className={`text-gray-400 text-xs`}>
-                                    Set Bonus: {GEAR_SETS[gear.setBonus].name}
-                                </div>
-                                {/*GEAR_SETS[gear.setBonus].stats && !small && (
-                                    <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
-                                )}
-                                {GEAR_SETS[gear.setBonus].description && !small && (
-                                    <div className="text-gray-400 mb-2">
-                                        {GEAR_SETS[gear.setBonus]?.description as string}
-                                    </div>
-                                )*/}
-                            </div>
-                        )}
                         {shipName && mode !== 'subcompact' && (
-                            <span className="text-xs !mt-auto pt-2"> Equipped by: {shipName}</span>
+                            <span className="text-xs"> Equipped by: {shipName}</span>
                         )}
                     </div>
                 )}
