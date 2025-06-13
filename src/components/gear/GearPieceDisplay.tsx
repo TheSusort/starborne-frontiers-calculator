@@ -139,11 +139,13 @@ export const GearPieceDisplay = memo(
                 </div>
 
                 {showDetails && (
-                    <div className={`pb-2 flex-grow ${small ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}>
+                    <div
+                        className={`pb-2 flex-grow flex flex-col ${small ? 'p-2 space-y-2' : 'p-4 space-y-4'}`}
+                    >
                         {/* Main Stat */}
                         {!isImplant && (
                             <div>
-                                <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-1'}`}>
+                                <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
                                     Main Stat
                                 </div>
                                 <StatDisplay stats={[gear.mainStat as Stat]} />
@@ -154,7 +156,7 @@ export const GearPieceDisplay = memo(
                             mode !== 'subcompact' &&
                             (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
                                 <div>
-                                    <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-1'}`}>
+                                    <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
                                         Description
                                     </div>
                                     <div className="bg-dark-lighter py-1.5 px-3">
@@ -178,21 +180,21 @@ export const GearPieceDisplay = memo(
                         )}
                         {gear.setBonus && !isImplant && (
                             <div>
-                                <div className={`text-gray-400 ${small ? 'text-xxs' : 'mb-2'}`}>
+                                <div className={`text-gray-400 text-xs`}>
                                     Set Bonus: {GEAR_SETS[gear.setBonus].name}
                                 </div>
-                                {GEAR_SETS[gear.setBonus].stats && !small && (
+                                {/*GEAR_SETS[gear.setBonus].stats && !small && (
                                     <StatDisplay stats={GEAR_SETS[gear.setBonus].stats} />
                                 )}
                                 {GEAR_SETS[gear.setBonus].description && !small && (
                                     <div className="text-gray-400 mb-2">
                                         {GEAR_SETS[gear.setBonus]?.description as string}
                                     </div>
-                                )}
+                                )*/}
                             </div>
                         )}
                         {shipName && mode !== 'subcompact' && (
-                            <span className="text-xxs text-gray-500"> Equipped by: {shipName}</span>
+                            <span className="text-xs !mt-auto pt-2"> Equipped by: {shipName}</span>
                         )}
                     </div>
                 )}
