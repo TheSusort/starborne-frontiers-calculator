@@ -3,6 +3,9 @@ module.exports = {
     content: ['./src/**/*.{js,jsx,ts,tsx}', './index.html'],
     theme: {
         extend: {
+            screens: {
+                '2xl': '1579px',
+            },
             fontFamily: {
                 secondary: ['Electrolize', 'sans-serif'],
             },

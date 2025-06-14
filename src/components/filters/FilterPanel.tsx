@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button, Input } from '../ui';
 import { SortConfig, SortOption, SortPanel } from './SortPanel';
 import { SearchIcon } from '../ui/icons/SearchIcon';
+import { ListIcon } from '../ui/icons/ListIcon';
+import { ImageIcon } from '../ui/icons/ImageIcon';
 
 export interface FilterOption {
     label: string;
@@ -28,6 +30,8 @@ interface Props {
     searchValue?: string;
     onSearchChange?: (value: string) => void;
     searchPlaceholder?: string;
+    viewMode?: 'list' | 'image';
+    onViewModeChange?: (mode: 'list' | 'image') => void;
 }
 
 export const FilterPanel: React.FC<Props> = ({
@@ -42,6 +46,8 @@ export const FilterPanel: React.FC<Props> = ({
     searchValue,
     onSearchChange,
     searchPlaceholder = 'Search...',
+    viewMode = 'list',
+    onViewModeChange,
 }) => {
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -102,8 +108,32 @@ export const FilterPanel: React.FC<Props> = ({
                     </div>
                 )}
                 <div className="flex gap-2 ml-auto">
+                    {onViewModeChange && (
+                        <div className="flex">
+                            {viewMode === 'image' && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => onViewModeChange('list')}
+                                    aria-label="List view"
+                                    title="List view"
+                                >
+                                    <ListIcon />
+                                </Button>
+                            )}
+                            {viewMode === 'list' && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => onViewModeChange('image')}
+                                    aria-label="Image view"
+                                    title="Image view"
+                                >
+                                    <ImageIcon />
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     {onSearchChange && (
-                        <div className="relative">
+                        <div className="relative min-w-[50px]">
                             <div
                                 className={`flex items-center transition-all duration-300 ease-in-out ${isSearchExpanded ? 'w-64' : 'w-0'}`}
                             >

@@ -11,6 +11,7 @@ interface Props {
     width?: string;
     hideCloseButton?: boolean;
     className?: string;
+    scrollable?: boolean;
 }
 
 export const Offcanvas: React.FC<Props> = ({
@@ -22,6 +23,7 @@ export const Offcanvas: React.FC<Props> = ({
     width = 'w-80',
     hideCloseButton = false,
     className,
+    scrollable = true,
 }) => {
     const [isAnimating, setIsAnimating] = useState(false);
     const [shouldRender, setShouldRender] = useState(false);
@@ -94,7 +96,8 @@ export const Offcanvas: React.FC<Props> = ({
                 className={`
                     fixed ${position}-0 top-0 h-full ${width}
                     bg-dark p-6 shadow-lg
-                    transform transition-transform duration-300 ease-in-out overflow-y-auto
+                    transform transition-transform duration-300 ease-in-out
+                    ${scrollable ? 'overflow-y-auto' : ''}
                     ${translateClass}
                     ${className}
                 `}
@@ -116,7 +119,7 @@ export const Offcanvas: React.FC<Props> = ({
                 )}
                 <div
                     className={`
-                    transition-opacity duration-200 ease-in-out delay-150
+                    transition-opacity duration-200 ease-in-out delay-150 h-full
                     ${isAnimating ? 'opacity-100' : 'opacity-0'}
                 `}
                 >

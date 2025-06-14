@@ -11,9 +11,10 @@ interface ImageProps {
     src: string;
     alt?: string;
     className?: string;
+    imageClassName?: string;
 }
 
-export const Image = memo(({ src, alt = '', className = '' }: ImageProps) => {
+export const Image = memo(({ src, alt = '', className = '', imageClassName = '' }: ImageProps) => {
     const [imageError, setImageError] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -37,6 +38,7 @@ export const Image = memo(({ src, alt = '', className = '' }: ImageProps) => {
                 onError={() => setImageError(true)}
                 onLoad={() => setIsLoading(false)}
                 alt={alt}
+                className={imageClassName}
             />
             {isLoading && <div className="animate-pulse bg-gray-700 absolute inset-0" />}
         </div>

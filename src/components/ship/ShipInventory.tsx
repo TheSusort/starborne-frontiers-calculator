@@ -15,6 +15,7 @@ import {
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
 import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { usePersistedViewMode } from '../../hooks/usePersistedViewMode';
 import { Button } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { STATS } from '../../constants/stats';
@@ -47,6 +48,7 @@ export const ShipInventory: React.FC<Props> = ({
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
+    const [viewMode, setViewMode] = usePersistedViewMode('ship-inventory-view-mode');
 
     const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters');
     const { getGearPiece } = useInventory();
@@ -324,6 +326,8 @@ export const ShipInventory: React.FC<Props> = ({
                     searchValue={searchQuery}
                     onSearchChange={setSearchQuery}
                     searchPlaceholder="Search ships..."
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
                 />
             </div>
 
@@ -349,6 +353,7 @@ export const ShipInventory: React.FC<Props> = ({
                                 onRemoveGear={onRemoveGear}
                                 onUnequipAll={onUnequipAll}
                                 onHoverGear={setHoveredGear}
+                                viewMode={viewMode}
                             />
                         ))}
                     </div>

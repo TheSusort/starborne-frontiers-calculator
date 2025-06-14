@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.9.0';
+export const CURRENT_VERSION = '1.10.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.10.0',
+        date: '2025-06-14',
+        changes: ['Added ship image view mode'],
+    },
     {
         version: '1.9.0',
         date: '2025-06-13',

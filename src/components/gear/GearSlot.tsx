@@ -21,7 +21,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
             return (
                 <div className="relative">
                     <div
-                        className={`w-16 h-16 bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
+                        className={`w-16 h-16 bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group/gear ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
                         onClick={() => onSelect && onSelect(slotKey)}
                         onMouseEnter={() => onHover(gear)}
                         onMouseLeave={() => onHover(null)}
@@ -66,7 +66,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                                 variant="danger"
                                 size="sm"
                                 onClick={() => onRemove(slotKey)}
-                                className="!absolute -top-2 -right-2 rounded-full hidden group-hover:block"
+                                className="!absolute -top-2 -right-2 hidden group-hover/gear:block"
                             >
                                 <CloseIcon />
                             </Button>

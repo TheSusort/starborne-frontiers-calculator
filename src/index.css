@@ -22,18 +22,17 @@
 
     /* width */
     ::-webkit-scrollbar {
-        width: 10px;
+        width: thin;
     }
 
     /* Track */
     ::-webkit-scrollbar-track {
-        background: theme('colors.dark.lighter');
+        background: transparent;
     }
 
     /* Handle */
     ::-webkit-scrollbar-thumb {
         background: theme('colors.dark.border');
-        border-radius: 5px;
     }
 
     /* Handle on hover */
@@ -112,5 +111,15 @@
     .filter-antimatter {
         filter: invert(45%) sepia(96%) saturate(6155%) hue-rotate(258deg) brightness(100%)
             contrast(91%);
+    }
+}
+
+@layer components {
+    .ship-display-height {
+        @apply max-h-[calc(min((100vw-2rem-9px)*518/389,518px)+160px)]
+               sm:max-h-[calc(min((100vw-16px-2rem-9px)/2*518/389,518px)+160px)]
+               lg:max-h-[calc(min((100vw-32px-2rem-9px-16rem)/3*518/389,518px)+160px)]
+               xl:max-h-[calc(min((100vw-48px-2rem-9px-16rem)/4*518/389,518px)+160px)]
+               2xl:max-h-[calc(min(308px*518/389,518px)+160px)];
     }
 }

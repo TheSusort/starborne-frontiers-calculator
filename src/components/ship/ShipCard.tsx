@@ -3,6 +3,7 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../../constants';
 import { ShipDisplay } from './ShipDisplay';
+import { ShipDisplayImage } from './ShipDisplayImage';
 import { GearSlot } from '../gear/GearSlot';
 import { Modal } from '../ui/layout/Modal';
 import { GearInventory } from '../gear/GearInventory';
@@ -26,6 +27,7 @@ interface Props {
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onUnequipAll: (shipId: string) => void;
     variant?: 'full' | 'compact' | 'extended';
+    viewMode?: 'list' | 'image';
 }
 
 export const ShipCard: React.FC<Props> = ({
@@ -42,6 +44,7 @@ export const ShipCard: React.FC<Props> = ({
     onHoverGear,
     onUnequipAll,
     variant = 'full',
+    viewMode = 'list',
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -92,9 +95,11 @@ export const ShipCard: React.FC<Props> = ({
         }
     };
 
+    const ShipDisplayComponent = viewMode === 'image' ? ShipDisplayImage : ShipDisplay;
+
     return (
         <>
-            <ShipDisplay
+            <ShipDisplayComponent
                 ship={ship}
                 onEdit={onEdit}
                 onRemove={onRemove}
@@ -116,7 +121,7 @@ export const ShipCard: React.FC<Props> = ({
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3">
+                    <div className="flex items-center gap-2 pt-3 min-h-[36px]">
                         {activeSets.length > 0 && (
                             <div className="relative">
                                 <div
@@ -190,7 +195,7 @@ export const ShipCard: React.FC<Props> = ({
                         )}
                     </div>
                 </div>
-            </ShipDisplay>
+            </ShipDisplayComponent>
 
             <Modal
                 isOpen={selectedSlot !== null}

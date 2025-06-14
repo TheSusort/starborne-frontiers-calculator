@@ -262,7 +262,7 @@ export const Sidebar: React.FC = () => {
                 {APP_NAME}
             </h1>
 
-            <nav className="space-y-2">
+            <nav className="space-y-2 max-h-[calc(100vh-100px)] overflow-y-auto overflow-x-hidden">
                 {navigationLinks.map((item) => (
                     <NavigationItem
                         key={item.path}
@@ -275,7 +275,7 @@ export const Sidebar: React.FC = () => {
                 ))}
             </nav>
 
-            <div className="!mt-auto flex flex-col gap-2">
+            <div className="!mt-auto flex flex-col gap-2 pt-2">
                 <ImportButton className="w-full text-right" />
                 <LoginButton />
             </div>
@@ -311,7 +311,7 @@ export const Sidebar: React.FC = () => {
                 data-testid="desktop-sidebar"
                 className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20 bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"
             >
-                <div className="p-4 h-full overflow-y-auto">
+                <div className="p-4 h-full">
                     <SidebarContent />
                 </div>
             </div>
@@ -323,6 +323,7 @@ export const Sidebar: React.FC = () => {
                 position="left"
                 width="w-64"
                 hideCloseButton
+                scrollable={false}
             >
                 <SidebarContent />
             </Offcanvas>
