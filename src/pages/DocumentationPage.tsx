@@ -1,9 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { PageLayout } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { Link, useLocation } from 'react-router-dom';
 
 const DocumentationPage: React.FC = () => {
+    const location = useLocation();
+
+    useEffect(() => {
+        // If there's a hash in the URL, scroll to that section
+        if (location.hash) {
+            const element = document.getElementById(location.hash.slice(1));
+            if (element) {
+                // Add a small delay to ensure the page has rendered
+                setTimeout(() => {
+                    element.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }
+        }
+    }, [location]);
+
     return (
         <>
             <Seo {...SEO_CONFIG.documentation} />
@@ -11,65 +27,95 @@ const DocumentationPage: React.FC = () => {
                 title="Documentation"
                 description="Comprehensive guide to using the Starborne Planner tool for ship management, gear optimization, and battle simulations."
             >
-                <div className="space-y-8">
+                <div className="space-y-8 [counter-reset:section] [counter-reset:index]">
                     {/* Table of Contents */}
                     <nav className="bg-dark p-4 border border-dark-border">
                         <h2 className="text-xl font-semibold mb-4">Table of Contents</h2>
-                        <ul className="space-y-2">
-                            <li>
+                        <hr className="mb-4" />
+                        <h4 className="text-lg font-semibold mb-4">Help</h4>
+                        <ul className="space-y-2 [counter-reset:index]">
+                            <li className="[counter-increment:index]">
                                 <a
                                     href="#getting-started"
                                     className="text-primary hover:text-primary-light"
                                 >
-                                    1. Getting Started
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Getting Started
+                                    </span>
                                 </a>
                             </li>
-                            <li>
-                                <a
-                                    href="#ship-management"
-                                    className="text-primary hover:text-primary-light"
-                                >
-                                    2. Ship Management
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#inventory-management"
-                                    className="text-primary hover:text-primary-light"
-                                >
-                                    3. Inventory Management
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#gear-optimization"
-                                    className="text-primary hover:text-primary-light"
-                                >
-                                    4. Autogear
-                                </a>
-                            </li>
-                            <li>
-                                <a
-                                    href="#simulation"
-                                    className="text-primary hover:text-primary-light"
-                                >
-                                    5. Simulation
-                                </a>
-                            </li>
-                            <li>
+                            <li className="[counter-increment:index]">
                                 <a
                                     href="#tips-tricks"
                                     className="text-primary hover:text-primary-light"
                                 >
-                                    6. Tips & Tricks
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Tips & Tricks
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a href="#FAQ" className="text-primary hover:text-primary-light">
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        FAQ
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                        <hr className="my-4" />
+                        <h4 className="text-lg font-semibold mb-4">Documentation</h4>
+                        <ul className="space-y-2">
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#ship-management"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Ship Management
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#inventory-management"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Inventory Management
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#autogear"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Autogear
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#simulation"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Simulation
+                                    </span>
                                 </a>
                             </li>
                         </ul>
                     </nav>
 
+                    <h2 className="text-2xl font-bold before:mr-2">Help</h2>
+                    <hr className="mb-4" />
+
                     {/* Getting Started Section */}
-                    <section id="getting-started" className="space-y-4">
-                        <h2 className="text-2xl font-bold">1. Getting Started</h2>
+                    <section id="getting-started" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Getting Started
+                        </h2>
                         <div className="bg-dark p-4 border border-dark-border space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Introduction</h3>
                             <p className="mb-4">
@@ -79,16 +125,6 @@ const DocumentationPage: React.FC = () => {
                                 available.
                             </p>
 
-                            <div>
-                                <h3 className="text-xl font-semibold mt-6 mb-2">Key Features</h3>
-                                <ul className="list-disc pl-6 space-y-2">
-                                    <li>Ship database with detailed statistics</li>
-                                    <li>Inventory management system</li>
-                                    <li>Advanced gear optimization algorithms</li>
-                                    <li>Battle simulation tools</li>
-                                </ul>
-                                <br />
-                            </div>
                             <div>
                                 <h3 className="text-xl font-semibold mb-2">
                                     Importing Your Game Data
@@ -155,9 +191,148 @@ const DocumentationPage: React.FC = () => {
                         </div>
                     </section>
 
+                    {/* Tips & Tricks Section */}
+                    <section id="tips-tricks" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Tips & Tricks
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border">
+                            <h3 className="text-xl font-semibold mb-2">Best Practices</h3>
+                            <ul className="list-disc pl-6 space-y-2">
+                                <li>
+                                    Edit ships to give them the proper role, to make autogearing
+                                    faster. This persists between imports.
+                                </li>
+                                <li>
+                                    Use the equipment lock feature often to lock the equipment on
+                                    the ships you don&apos;t want to be touched. This persists
+                                    between imports.
+                                </li>
+                                <li>
+                                    Always run autogear multiple times to find the best combination.
+                                </li>
+                                <li>
+                                    Regularly import new data from the game, to get the latest gear.
+                                </li>
+                                <li>
+                                    Regularly run the optimizer for your MVPs, to make sure you are
+                                    getting the best possible gear.
+                                </li>
+                            </ul>
+
+                            <h3 className="text-xl font-semibold mt-6 mb-2">Example workflow</h3>
+                            <p>
+                                Here is an example workflow of how to use the calculator to autogear
+                                your fleet.
+                            </p>
+                            <ul className="list-disc pl-6 space-y-2">
+                                <li>Import your game data</li>
+                                <li>
+                                    If first time using the calculator, edit ships to give them the
+                                    proper role.
+                                </li>
+                                <li>Optimize the most important units first, arena/vault teams</li>
+                                <li>
+                                    Toggle the lock on the autogear page, when you find a good gear
+                                    combination, equip stuff in the game, before continuing to the
+                                    next ship.
+                                </li>
+                                <li>
+                                    Then depending on the content you want to do, repeat the process
+                                    on the situational ships, for example Faction Ops. Unlock the
+                                    arena/vault teams if you need the best possible gear here.
+                                </li>
+                                <li>
+                                    After the content runs are done, unlock the situational ships,
+                                    and optimize the MVPs again, if these were touched.
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    {/* FAQ Section */}
+                    <section id="FAQ" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            FAQ
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">FAQ</h3>
+                            <p className="text-gray-300">
+                                Here are some frequently asked questions about the app.
+                            </p>
+                            <ul className="list-disc pl-6 space-y-4">
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        What is the purpose of the app?
+                                    </span>
+                                    The purpose of the app is to help you with gear management and
+                                    quickly optimize your ships. Do you spend a lot of time gear
+                                    swapping when doing faction ops, or just a wild amount of
+                                    credits on gearing up all your ships? The autogear feature is a
+                                    tool to help you quickly find the best gear for your ships for
+                                    any content, and easily keep track of what gear is going where.
+                                </li>
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        Why would I use this, when I have a spreadsheet with all my
+                                        ships and gear?
+                                    </span>
+                                    This community has an untamable passion for spreadsheets, but
+                                    this is more efficient, I promise you. It has integrated import
+                                    with game data, so you can easily import your gear and fleet,
+                                    and find better gear combinations depending on a lot of
+                                    different roles and requirements. It will also tell you what
+                                    ships you need to move gear from if its already equipped.
+                                    Engineering and implants are also factored in.
+                                </li>
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        Do I need a huge game account to use this?
+                                    </span>
+                                    No, it will work with any size of game account, wether newly
+                                    started or old time whale, or anything in between.
+                                </li>
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        How do I import my game data?
+                                    </span>
+                                    <span>
+                                        You can import your game data by clicking the import button
+                                        in the sidebar. Check out the{' '}
+                                        <Link to="/documentation#getting-started">
+                                            Getting Started
+                                        </Link>{' '}
+                                        section for more information.
+                                    </span>
+                                </li>
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        Does the app work without an account?
+                                    </span>
+                                    Yes, the app works without an account. You can import your game
+                                    data and use the app, but what you do will not be synced across
+                                    devices.
+                                </li>
+                                <li className="flex flex-col gap-1">
+                                    <span className="text-primary">
+                                        How do I delete my account?
+                                    </span>
+                                    You can delete your account by clicking the delete account
+                                    button in the Home page.
+                                </li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <hr className="my-4" />
+                    <h2 className="text-2xl font-bold before:mr-2">Documentation</h2>
+                    <hr className="mb-4" />
+
                     {/* Ship Management Section */}
-                    <section id="ship-management" className="space-y-4">
-                        <h2 className="text-2xl font-bold">2. Ship Management</h2>
+                    <section id="ship-management" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Ship Management
+                        </h2>
                         <div className="bg-dark p-4 border border-dark-border space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Ship Cards</h3>
                             <p className="text-gray-300">
@@ -351,8 +526,13 @@ const DocumentationPage: React.FC = () => {
                     </section>
 
                     {/* Inventory Management Section */}
-                    <section id="inventory-management" className="space-y-4">
-                        <h2 className="text-2xl font-bold">3. Inventory Management</h2>
+                    <section
+                        id="inventory-management"
+                        className="space-y-4 [counter-increment:section]"
+                    >
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Inventory Management
+                        </h2>
                         <div className="bg-dark p-4 border border-dark-border space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Gear Cards</h3>
                             <p className="text-gray-300">
@@ -535,8 +715,10 @@ const DocumentationPage: React.FC = () => {
                     </section>
 
                     {/* Gear Optimization Section */}
-                    <section id="gear-optimization" className="space-y-4">
-                        <h2 className="text-2xl font-bold">4. Autogear</h2>
+                    <section id="autogear" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Autogear
+                        </h2>
                         <div className="bg-dark p-4 border border-dark-border">
                             <h3 className="text-xl font-semibold mb-2">Autogear System</h3>
                             <p className="mb-4">
@@ -877,8 +1059,10 @@ const DocumentationPage: React.FC = () => {
                     </section>
 
                     {/* Simulation Section */}
-                    <section id="simulation" className="space-y-4">
-                        <h2 className="text-2xl font-bold">5. Simulation</h2>
+                    <section id="simulation" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Simulation
+                        </h2>
                         <div className="bg-dark p-4 border border-dark-border">
                             <h3 className="text-xl font-semibold mb-2">Battle Simulation</h3>
                             <p className="mb-4">The simulation tools allow you to:</p>
@@ -887,63 +1071,6 @@ const DocumentationPage: React.FC = () => {
                                 <li>Simulate combat scenarios</li>
                                 <li>Calculate damage output</li>
                                 <li>Analyze defensive capabilities</li>
-                            </ul>
-                        </div>
-                    </section>
-
-                    {/* Tips & Tricks Section */}
-                    <section id="tips-tricks" className="space-y-4">
-                        <h2 className="text-2xl font-bold">6. Tips & Tricks</h2>
-                        <div className="bg-dark p-4 border border-dark-border">
-                            <h3 className="text-xl font-semibold mb-2">Best Practices</h3>
-                            <ul className="list-disc pl-6 space-y-2">
-                                <li>
-                                    Edit ships to give them the proper role, to make autogearing
-                                    faster. This persists between imports.
-                                </li>
-                                <li>
-                                    Use the equipment lock feature often to lock the equipment on
-                                    the ships you don&apos;t want to be touched. This persists
-                                    between imports.
-                                </li>
-                                <li>
-                                    Always run autogear multiple times to find the best combination.
-                                </li>
-                                <li>
-                                    Regularly import new data from the game, to get the latest gear.
-                                </li>
-                                <li>
-                                    Regularly run the optimizer for your MVPs, to make sure you are
-                                    getting the best possible gear.
-                                </li>
-                            </ul>
-
-                            <h3 className="text-xl font-semibold mt-6 mb-2">Example workflow</h3>
-                            <p>
-                                Here is an example workflow of how to use the calculator to autogear
-                                your fleet.
-                            </p>
-                            <ul className="list-disc pl-6 space-y-2">
-                                <li>Import your game data</li>
-                                <li>
-                                    If first time using the calculator, edit ships to give them the
-                                    proper role.
-                                </li>
-                                <li>Optimize the most important units first, arena/vault teams</li>
-                                <li>
-                                    Toggle the lock on the autogear page, when you find a good gear
-                                    combination, equip stuff in the game, before continuing to the
-                                    next ship.
-                                </li>
-                                <li>
-                                    Then depending on the content you want to do, repeat the process
-                                    on the situational ships, for example Faction Ops. Unlock the
-                                    arena/vault teams if you need the best possible gear here.
-                                </li>
-                                <li>
-                                    After the content runs are done, unlock the situational ships,
-                                    and optimize the MVPs again, if these were touched.
-                                </li>
                             </ul>
                         </div>
                     </section>

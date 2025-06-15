@@ -1,5 +1,6 @@
-import React from 'react';
-import { Button } from '../';
+import React, { useState } from 'react';
+import { Button, InfoIcon, Tooltip } from '../';
+import { Link } from 'react-router-dom';
 
 interface PageLayoutProps {
     title: string;
@@ -10,9 +11,19 @@ interface PageLayoutProps {
         onClick: () => void;
         variant?: 'primary' | 'secondary';
     };
+    helpLink?: string;
 }
 
-export const PageLayout: React.FC<PageLayoutProps> = ({ title, description, children, action }) => {
+export const PageLayout: React.FC<PageLayoutProps> = ({
+    title,
+    description,
+    children,
+    action,
+    helpLink,
+}) => {
+    const [pathname, hash] = helpLink?.split('#') || [''];
+    const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+
     return (
         <div className="space-y-8">
             <div>
@@ -30,6 +41,33 @@ export const PageLayout: React.FC<PageLayoutProps> = ({ title, description, chil
                 </div>
                 {description && (
                     <p className="text-sm text-gray-400 order-2 w-full">{description}</p>
+                )}
+                {helpLink && (
+                    <div
+                        onMouseEnter={() => setIsTooltipVisible(true)}
+                        onMouseLeave={() => setIsTooltipVisible(false)}
+                        className="relative w-fit"
+                    >
+                        <Button variant="secondary" size="sm" className="mt-2">
+                            <Link
+                                to={{
+                                    pathname,
+                                    hash,
+                                }}
+                                className="flex items-center gap-2"
+                            >
+                                <InfoIcon /> Feeling lost?
+                            </Link>
+                        </Button>
+                        <Tooltip
+                            isVisible={isTooltipVisible}
+                            className="bg-dark border border-dark-lighter p-2 w-48"
+                        >
+                            <p className="text-sm text-gray-300">
+                                Click to view the relevant help section
+                            </p>
+                        </Tooltip>
+                    </div>
                 )}
             </div>
             {children}

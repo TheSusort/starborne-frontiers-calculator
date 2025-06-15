@@ -262,7 +262,7 @@ export const Sidebar: React.FC = () => {
                 {APP_NAME}
             </h1>
 
-            <nav className="space-y-2 max-h-[calc(100vh-100px)] overflow-y-auto overflow-x-hidden">
+            <nav className="space-y-2 max-h-[calc(100vh-100px)] overflow-y-scroll w-[calc(100%+24px)] px-[12px] translate-x-[-12px]">
                 {navigationLinks.map((item) => (
                     <NavigationItem
                         key={item.path}

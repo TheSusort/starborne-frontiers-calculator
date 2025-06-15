@@ -109,6 +109,7 @@ export const ShipsPage: React.FC = () => {
                     },
                     variant: isFormVisible ? 'secondary' : 'primary',
                 }}
+                helpLink="/documentation#ships"
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm onSubmit={handleSaveShip} editingShip={editingShip} />

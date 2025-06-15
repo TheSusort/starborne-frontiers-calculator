@@ -88,6 +88,7 @@ export const GearPage: React.FC = () => {
                     },
                     variant: isFormVisible ? 'secondary' : 'primary',
                 }}
+                helpLink="/documentation#gear"
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
                     <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />

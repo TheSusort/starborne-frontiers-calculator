@@ -157,6 +157,7 @@ export const SimulationPage: React.FC = () => {
             <PageLayout
                 title="Simulation"
                 description="Simulate simplified attacks, hacks, heals, and defence with your ships and gear. Use the settings to change the simulation parameters. Change the gear to see how they affect the simulation. Choose the ship role to choose scenario. "
+                helpLink="/documentation#simulation"
             >
                 <SimulationInfo />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
