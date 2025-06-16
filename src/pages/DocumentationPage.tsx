@@ -218,6 +218,10 @@ const DocumentationPage: React.FC = () => {
                                     Regularly run the optimizer for your MVPs, to make sure you are
                                     getting the best possible gear.
                                 </li>
+                                <li>
+                                    Check out Gear -&gt; Upgrade Analysis, to locate gear pieces
+                                    most likely to improve role scores the most.
+                                </li>
                             </ul>
 
                             <h3 className="text-xl font-semibold mt-6 mb-2">Example workflow</h3>
@@ -677,20 +681,31 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
 
+                            <h3 className="text-xl font-semibold mb-2">Upgrade Analysis</h3>
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
                                     Upgrade Analysis
                                 </h4>
                                 <p className="text-gray-300 mb-2">
                                     The Upgrade Analysis tab provides insights into your gear
-                                    collection:
+                                    collection. It shows you which gear pieces are most likely to
+                                    improve your role scores the most, by simulating upgrading them
+                                    10 times, scoring each one using the role scoring system, and
+                                    averaging the results. Displayed per role, and sorted by total
+                                    improvement to the role score. The average improvement is how
+                                    much the gear itself, not the role score, is improved by
+                                    upgrading it.
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
-                                    <li>Overview of gear distribution by slot and rarity</li>
-                                    <li>Analysis of set completion progress</li>
-                                    <li>Identification of potential upgrade candidates</li>
-                                    <li>Recommendations for gear optimization</li>
-                                </ul>
+
+                                <p className="text-gray-300 mb-2">
+                                    You can also simulate upgrading all your unlevelled gear, by
+                                    clicking the Simulate Upgrades button. This will then run
+                                    through all gear and upgrade it randomly, like in the game. The
+                                    upgraded stats will now be displayed in the gear cards.
+                                    <br />
+                                    <br />
+                                    Clear upgrades button is used to reset the gear.
+                                </p>
                             </div>
 
                             <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
@@ -941,6 +956,11 @@ const DocumentationPage: React.FC = () => {
                                         <li>
                                             Ignore unleveled gear: When enabled, the algorithm will
                                             only consider gear that has been leveled up.
+                                        </li>
+                                        <li>
+                                            Use upgraded stats: When enabled, the algorithm will
+                                            consider gear that has been upgraded in the Upgrade
+                                            Analysis tab in the Gear page.
                                         </li>
                                     </ul>
                                 </div>

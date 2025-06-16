@@ -2,7 +2,7 @@ import { GearPiece } from '../../types/gear';
 import { FlexibleStats, Stat, StatName, StatType } from '../../types/stats';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
-import { ShipTypeName } from '../../constants';
+import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
 import { calculateTotalStats } from '../ship/statsCalculator';
@@ -184,13 +184,15 @@ function calculateGearStats(piece: GearPiece): BaseStats {
 export function analyzePotentialUpgrades(
     inventory: GearPiece[],
     shipRole: ShipTypeName,
-    count: number = 6
+    count: number = 6,
+    slot?: GearSlotName
 ): PotentialResult[] {
     const eligiblePieces = inventory.filter(
         (piece) =>
             piece.level < 16 &&
             ['rare', 'epic', 'legendary'].includes(piece.rarity) &&
-            !piece.slot.includes('implant')
+            !piece.slot.includes('implant') &&
+            (!slot || piece.slot === slot)
     );
 
     const results: PotentialResult[] = eligiblePieces.map((piece) => {

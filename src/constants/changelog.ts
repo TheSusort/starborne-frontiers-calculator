@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.11.0';
+export const CURRENT_VERSION = '1.12.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.12.0',
+        date: '2025-06-16',
+        changes: [
+            'Added gear slot tabs to gear analysis, so you can see the upgrades with the best probability of improving the role score for each slot, for each role.',
+        ],
+    },
     {
         version: '1.11.0',
         date: '2025-06-16',
