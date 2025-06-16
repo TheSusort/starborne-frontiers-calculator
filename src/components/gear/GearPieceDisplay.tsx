@@ -9,6 +9,7 @@ import { ImplantName } from '../../constants/implants';
 import IMPLANTS from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { Tooltip } from '../ui/layout/Tooltip';
+import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 
 interface Props {
     gear: GearPiece;
@@ -33,9 +34,11 @@ export const GearPieceDisplay = memo(
         small = false,
     }: Props) => {
         const { getShipName, getShipFromGearId } = useShips();
+        const { getUpgrade } = useGearUpgrades();
         const shipName = gear?.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
+        const upgrade = getUpgrade(gear.id);
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
@@ -184,7 +187,16 @@ export const GearPieceDisplay = memo(
                                 <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
                                     Main Stat
                                 </div>
-                                <StatDisplay stats={[gear.mainStat as Stat]} />
+                                <div className="space-y-1">
+                                    <StatDisplay
+                                        stats={[gear.mainStat as Stat]}
+                                        upgradedStats={
+                                            upgrade?.mainStat
+                                                ? [upgrade.mainStat as Stat]
+                                                : undefined
+                                        }
+                                    />
+                                </div>
                             </div>
                         )}
                         {/* Implant Description */}
@@ -211,7 +223,12 @@ export const GearPieceDisplay = memo(
                                 {mode !== 'subcompact' && (
                                     <div className="text-gray-400 mb-2">Sub Stats</div>
                                 )}
-                                <StatDisplay stats={gear.subStats} />
+                                <div className="space-y-1">
+                                    <StatDisplay
+                                        stats={gear.subStats}
+                                        upgradedStats={upgrade?.subStats as Stat[]}
+                                    />
+                                </div>
                             </div>
                         )}
                         {shipName && mode !== 'subcompact' && (

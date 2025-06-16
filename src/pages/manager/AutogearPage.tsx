@@ -22,6 +22,7 @@ import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { BaseStats } from '../../types/stats';
+import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 
 interface UnmetPriority {
     stat: string;
@@ -43,6 +44,7 @@ export const AutogearPage: React.FC = () => {
 
     // All hooks
     const { getGearPiece, inventory } = useInventory();
+    const { getUpgradedGearPiece } = useGearUpgrades();
     const { getShipById, ships, equipMultipleGear, getShipFromGearId, lockEquipment } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -50,7 +52,7 @@ export const AutogearPage: React.FC = () => {
 
     // useState hooks
     const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>(null);
+    const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>('ATTACKER');
     const [statPriorities, setStatPriorities] = useState<StatPriority[]>([]);
     const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -71,6 +73,7 @@ export const AutogearPage: React.FC = () => {
     const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
     const [ignoreUnleveled, setIgnoreUnleveled] = useState(true);
     const [statBonuses, setStatBonuses] = useState<StatBonus[]>([]);
+    const [useUpgradedStats, setUseUpgradedStats] = useState(false);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -168,7 +171,7 @@ export const AutogearPage: React.FC = () => {
                 selectedShip,
                 statPriorities,
                 availableInventory,
-                getGearPiece,
+                useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
                 getEngineeringStatsForShipType,
                 selectedShipRole || undefined,
                 setPriorities,
@@ -250,7 +253,7 @@ export const AutogearPage: React.FC = () => {
         return calculateTotalStats(
             selectedShip.baseStats,
             suggestedEquipment,
-            getGearPiece,
+            useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
             selectedShip.refits,
             selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
@@ -321,7 +324,7 @@ export const AutogearPage: React.FC = () => {
         return calculateTotalStats(
             selectedShip.baseStats,
             selectedShip.equipment,
-            getGearPiece,
+            useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
             selectedShip.refits,
             selectedShip.implants,
             getEngineeringStatsForShipType(selectedShip.type)
@@ -385,6 +388,7 @@ export const AutogearPage: React.FC = () => {
                         showSecondaryRequirements={showSecondaryRequirements}
                         setPriorities={setPriorities}
                         statBonuses={statBonuses}
+                        useUpgradedStats={useUpgradedStats}
                         onShipSelect={(ship) => setSelectedShipId(ship.id)}
                         onRoleSelect={handleRoleChange}
                         onAlgorithmSelect={setSelectedAlgorithm}
@@ -398,6 +402,7 @@ export const AutogearPage: React.FC = () => {
                         onRemoveSetPriority={handleRemoveSetPriority}
                         onAddStatBonus={handleAddStatBonus}
                         onRemoveStatBonus={handleRemoveStatBonus}
+                        onUseUpgradedStatsChange={setUseUpgradedStats}
                     />
 
                     {suggestions.length > 0 && (

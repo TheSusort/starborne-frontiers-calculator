@@ -30,6 +30,7 @@ interface AutogearSettingsProps {
     showSecondaryRequirements: boolean;
     setPriorities: SetPriority[];
     statBonuses: StatBonus[];
+    useUpgradedStats: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -43,6 +44,7 @@ interface AutogearSettingsProps {
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
+    onUseUpgradedStatsChange: (value: boolean) => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -104,6 +106,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     showSecondaryRequirements,
     setPriorities,
     statBonuses,
+    useUpgradedStats,
     onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
@@ -117,6 +120,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemoveSetPriority,
     onAddStatBonus,
     onRemoveStatBonus,
+    onUseUpgradedStatsChange,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
@@ -212,6 +216,32 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     </div>
                 </div>
             </CollapsibleForm>
+
+            <div className="bg-dark p-4 space-y-2">
+                <h3 className="font-semibold">Options</h3>
+                <div className="space-y-2">
+                    <Checkbox
+                        id="ignoreEquipped"
+                        label="Ignore equipped gear on other ships"
+                        checked={ignoreEquipped}
+                        onChange={onIgnoreEquippedChange}
+                    />
+                    <Checkbox
+                        id="ignoreUnleveled"
+                        label="Ignore unleveled gear"
+                        checked={ignoreUnleveled}
+                        onChange={onIgnoreUnleveledChange}
+                    />
+                    <Checkbox
+                        id="useUpgradedStats"
+                        label="Use upgraded stats"
+                        checked={useUpgradedStats}
+                        onChange={onUseUpgradedStatsChange}
+                        helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
+                    />
+                </div>
+            </div>
+
             {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
                 <div className="bg-dark p-4 space-y-2">
                     {statBonuses.length > 0 && (
@@ -244,14 +274,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <div key={index} className="flex items-center text-sm">
                                     <span>
                                         {STATS[priority.stat].label}
-                                        {' ('}
-                                        {priority.minLimit ? `Min: ${priority.minLimit}` : ''}
-                                        {priority.minLimit && priority.maxLimit ? `, ` : ''}
-                                        {priority.maxLimit ? ` Max: ${priority.maxLimit}` : ''}
-                                        {priority.weight !== 1
-                                            ? ` (Weight: ${priority.weight})`
-                                            : ''}
-                                        {') '}
+                                        {priority.minLimit && ` (min: ${priority.minLimit})`}
+                                        {priority.maxLimit && ` (max: ${priority.maxLimit})`}
+                                        {priority.weight && ` (weight: ${priority.weight})`}
                                     </span>
                                     <Button
                                         aria-label="Remove priority"
@@ -264,7 +289,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     </Button>
                                 </div>
                             ))}
-
                             <hr className="my-2 border-dark-lighter" />
                         </>
                     )}
@@ -275,8 +299,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             {setPriorities.map((priority, index) => (
                                 <div key={index} className="flex items-center text-sm">
                                     <span>
-                                        {GEAR_SETS[priority.setName as GearSetName].name} (
-                                        {priority.count} pieces)
+                                        {GEAR_SETS[priority.setName].name} ({priority.count} pieces)
                                     </span>
                                     <Button
                                         aria-label="Remove set priority"
@@ -294,57 +317,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             )}
 
-            <div className="space-y-2 p-4 bg-dark">
-                <Select
-                    label="Algorithm"
-                    data-testid="algorithm-select"
-                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
-                        value: key,
-                        label: name,
-                    }))}
-                    value={selectedAlgorithm}
-                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
-                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
-                />
-                <p className="text-sm text-gray-400">
-                    {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
-                </p>
-            </div>
-
-            <div className="p-4 bg-dark space-y-4">
-                <Checkbox
-                    label="Ignore currently equipped gear"
-                    checked={ignoreEquipped}
-                    onChange={(value) => onIgnoreEquippedChange(value)}
-                    helpLabel="When checked, the algorithm will ignore gear that is currently equipped on other
-                    ships.
-                    Unchecked, the algorithm will include gear that is currently equipped on other
-                    ships, except those you have locked."
+            <div className="flex justify-end">
+                <Button
+                    onClick={onFindOptimalGear}
+                    disabled={!selectedShip}
+                    variant="primary"
                     className="w-full"
-                />
-                <Checkbox
-                    label="Ignore unleveled gear"
-                    checked={ignoreUnleveled}
-                    onChange={(value) => onIgnoreUnleveledChange(value)}
-                    helpLabel="When checked, the algorithm will ignore gear that has not been leveled up (level 0).
-                    Unchecked, the algorithm will consider all gear regardless of level."
-                    className="w-full"
-                />
+                >
+                    Find Optimal Gear
+                </Button>
             </div>
-
-            <Button
-                aria-label="Find optimal gear"
-                variant="primary"
-                onClick={onFindOptimalGear}
-                disabled={
-                    !selectedShip ||
-                    ((selectedShipRole === '' || selectedShipRole === null) &&
-                        priorities.length === 0)
-                }
-                fullWidth
-            >
-                Find Optimal Gear
-            </Button>
         </div>
     );
 };

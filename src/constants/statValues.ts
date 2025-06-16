@@ -1,34 +1,79 @@
 type StatValueRange = {
-    min: number;
-    max: number;
+    rare: { min: number; max: number };
+    epic: { min: number; max: number };
+    legendary: { min: number; max: number };
 };
 
 export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
     hp: {
-        flat: { min: 250, max: 540 },
-        percentage: { min: 4, max: 8 },
+        flat: {
+            rare: { min: 180, max: 370 },
+            epic: { min: 220, max: 450 },
+            legendary: { min: 320, max: 600 },
+        },
+        percentage: {
+            rare: { min: 3, max: 5 },
+            epic: { min: 4, max: 6 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     attack: {
-        flat: { min: 50, max: 130 },
-        percentage: { min: 4, max: 8 },
+        flat: {
+            rare: { min: 30, max: 80 },
+            epic: { min: 60, max: 100 },
+            legendary: { min: 70, max: 140 },
+        },
+        percentage: {
+            rare: { min: 3, max: 5 },
+            epic: { min: 4, max: 6 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     defence: {
-        flat: { min: 50, max: 130 },
-        percentage: { min: 4, max: 8 },
+        flat: {
+            rare: { min: 30, max: 80 },
+            epic: { min: 60, max: 100 },
+            legendary: { min: 70, max: 140 },
+        },
+        percentage: {
+            rare: { min: 3, max: 5 },
+            epic: { min: 4, max: 6 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     hacking: {
-        flat: { min: 5, max: 8 },
+        flat: {
+            rare: { min: 3, max: 6 },
+            epic: { min: 5, max: 7 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     security: {
-        flat: { min: 5, max: 8 },
+        flat: {
+            rare: { min: 3, max: 6 },
+            epic: { min: 5, max: 7 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     speed: {
-        flat: { min: 5, max: 8 },
+        flat: {
+            rare: { min: 3, max: 4 },
+            epic: { min: 3, max: 4 },
+            legendary: { min: 4, max: 5 },
+        },
     },
     crit: {
-        percentage: { min: 4, max: 8 },
+        percentage: {
+            rare: { min: 3, max: 5 },
+            epic: { min: 4, max: 6 },
+            legendary: { min: 6, max: 8 },
+        },
     },
     critDamage: {
-        percentage: { min: 4, max: 8 },
+        percentage: {
+            rare: { min: 3, max: 5 },
+            epic: { min: 4, max: 6 },
+            legendary: { min: 6, max: 8 },
+        },
     },
 };

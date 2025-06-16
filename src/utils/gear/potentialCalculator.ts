@@ -1,6 +1,5 @@
 import { GearPiece } from '../../types/gear';
-import { Stat, StatName, StatType } from '../../types/stats';
-import { STATS } from '../../constants';
+import { FlexibleStats, Stat, StatName, StatType } from '../../types/stats';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName } from '../../constants';
@@ -35,21 +34,25 @@ interface PotentialResult {
 }
 
 function getAvailableStats(
-    currentStats: Stat[],
+    currentSubStats: Stat[],
     mainStat: Stat
 ): { name: StatName; types: StatType[] }[] {
     const availableStats: { name: StatName; types: StatType[] }[] = [];
 
-    Object.entries(STATS).forEach(([statName, statConfig]) => {
-        const name = statName as StatName;
-        if (name === mainStat?.name) return;
-
-        const availableTypes = statConfig.allowedTypes.filter(
-            (type) => !currentStats.some((s) => s.name === name && s.type === type)
-        );
+    Object.entries(SUBSTAT_RANGES).forEach(([statName, statConfig]) => {
+        const availableTypes = Object.keys(statConfig).filter((type) => {
+            return (
+                !currentSubStats.some(
+                    (s) => s.name === (statName as StatName) && s.type === type
+                ) && !(mainStat.name === (statName as StatName) && mainStat.type === type)
+            );
+        });
 
         if (availableTypes.length > 0) {
-            availableStats.push({ name, types: availableTypes });
+            availableStats.push({
+                name: statName as StatName,
+                types: availableTypes as StatType[],
+            });
         }
     });
 
@@ -60,20 +63,11 @@ function getSubstatIncrease(stat: Stat, rarity: string): number {
     const range = SUBSTAT_RANGES[stat?.name]?.[stat?.type];
     if (!range) return 0;
 
-    const { min, max } = range;
-    switch (rarity) {
-        case 'rare':
-            return min;
-        case 'epic':
-            return Math.floor((min + max) / 2);
-        case 'legendary':
-            return max;
-        default:
-            return 0;
-    }
+    const { min, max } = range[rarity as keyof typeof range];
+    return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece {
+export function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece {
     if (piece.level >= targetLevel) return piece;
 
     const config = UPGRADE_LEVELS[piece.rarity as keyof typeof UPGRADE_LEVELS];
@@ -100,6 +94,7 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
     remainingLevels.forEach((level) => {
         if (config.additions.includes(level)) {
             const availableStats = getAvailableStats(newSubStats, piece.mainStat as Stat);
+
             if (availableStats.length > 0) {
                 const randomStat =
                     availableStats[Math.floor(Math.random() * availableStats.length)];
@@ -107,11 +102,13 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
                     randomStat.types[Math.floor(Math.random() * randomStat.types.length)];
 
                 if (SUBSTAT_RANGES[randomStat.name]?.[randomType]) {
-                    const randomValue = Math.floor(
-                        SUBSTAT_RANGES[randomStat.name][randomType].min +
-                            Math.random() *
-                                (SUBSTAT_RANGES[randomStat.name][randomType].max -
-                                    SUBSTAT_RANGES[randomStat.name][randomType].min)
+                    const randomValue = getSubstatIncrease(
+                        {
+                            name: randomStat.name as FlexibleStats,
+                            type: randomType,
+                            value: 0,
+                        } as Stat,
+                        piece.rarity
                     );
                     newSubStats.push({
                         name: randomStat.name,
@@ -121,21 +118,24 @@ function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece 
                 }
             }
         } else if (config.increases.includes(level)) {
-            const randomIndex = Math.floor(Math.random() * newSubStats.length);
-            const stat = newSubStats[randomIndex];
+            if (newSubStats.length > 0) {
+                const randomIndex = Math.floor(Math.random() * newSubStats.length);
+                const stat = newSubStats[randomIndex];
 
-            const increase = getSubstatIncrease(stat, piece.rarity);
-            if (increase > 0) {
-                newSubStats[randomIndex] = {
-                    ...stat,
-                    value: stat.value + increase,
-                };
+                const increase = getSubstatIncrease(stat, piece.rarity);
+                if (increase > 0) {
+                    newSubStats[randomIndex] = {
+                        ...stat,
+                        value: stat.value + increase,
+                    };
+                }
             }
         }
     });
 
     upgradedPiece.subStats = newSubStats;
     upgradedPiece.level = targetLevel;
+
     return upgradedPiece;
 }
 
@@ -197,7 +197,7 @@ export function analyzePotentialUpgrades(
         const currentStats = calculateGearStats(piece);
         const currentScore = calculatePriorityScore(currentStats, [], shipRole);
 
-        const simulations = Array.from({ length: 100 }, () => {
+        const simulations = Array.from({ length: 20 }, () => {
             const upgradedPiece = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
