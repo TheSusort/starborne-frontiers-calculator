@@ -81,7 +81,7 @@ const SetPriorityForm: React.FC<{
                     <Input
                         label="No. of pieces"
                         type="number"
-                        min="2"
+                        min="0"
                         max="6"
                         value={count}
                         onChange={(e) => setCount(parseInt(e.target.value))}

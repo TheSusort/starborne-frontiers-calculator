@@ -139,6 +139,13 @@ export const AutogearPage: React.FC = () => {
         // Filter inventory based on both locked ships and ignoreEquipped setting
         const availableInventory = inventory
             .filter((gear) => {
+                // If any setPriorities are set to 0, exclude gear with those spesific set bonuses
+                if (setPriorities.some((priority) => priority.count === 0)) {
+                    return !setPriorities.some(
+                        (priority) => priority.setName === gear.setBonus && priority.count === 0
+                    );
+                }
+
                 // If gear is equipped on a ship (either through shipId or getShipFromGearId)
                 const equippedShip = gear.shipId
                     ? ships.find((ship) => ship.id === gear.shipId)

@@ -932,7 +932,9 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-gray-300">
                                         Specify which gear sets you want to complete and how many
                                         pieces of each set. The algorithm will prioritize completing
-                                        these sets while maintaining stat requirements.
+                                        these sets while maintaining stat requirements. Setting the
+                                        count to 0, will prevent that gear set from being in the
+                                        calculations.
                                     </p>
                                 </div>
 

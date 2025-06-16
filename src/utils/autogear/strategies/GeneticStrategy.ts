@@ -120,8 +120,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private initializePopulation(
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        setPriorities?: SetPriority[]
     ): Individual[] {
         const population: Individual[] = [];
 
