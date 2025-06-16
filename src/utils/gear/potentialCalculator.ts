@@ -7,6 +7,7 @@ import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
+import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 
 const UPGRADE_LEVELS = {
     rare: {
@@ -67,11 +68,14 @@ function getSubstatIncrease(stat: Stat, rarity: string): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-export function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): GearPiece {
-    if (piece.level >= targetLevel) return piece;
+export function simulateUpgrade(
+    piece: GearPiece,
+    targetLevel: number = 16
+): { piece: GearPiece; cost: number } {
+    if (piece.level >= targetLevel) return { piece, cost: 0 };
 
     const config = UPGRADE_LEVELS[piece.rarity as keyof typeof UPGRADE_LEVELS];
-    if (!config) return piece;
+    if (!config) return { piece, cost: 0 };
 
     const upgradedPiece = { ...piece };
 
@@ -136,9 +140,25 @@ export function simulateUpgrade(piece: GearPiece, targetLevel: number = 16): Gea
     upgradedPiece.subStats = newSubStats;
     upgradedPiece.level = targetLevel;
 
-    return upgradedPiece;
+    return {
+        piece: upgradedPiece,
+        cost: calculateUpgradeCost(piece, targetLevel),
+    };
 }
 
+function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
+    const startCost = UPGRADE_COSTS[piece.stars][piece.rarity];
+    if (!startCost || targetLevel <= piece.level) return 0;
+
+    const scale = 1.4019;
+    const from = piece.level;
+    const to = targetLevel;
+
+    const cost =
+        (startCost * Math.pow(scale, from) * (Math.pow(scale, to - from) - 1)) / (scale - 1);
+
+    return Math.round(cost);
+}
 function calculateGearStats(piece: GearPiece): BaseStats {
     const breakdown = calculateTotalStats(
         // Empty base stats
@@ -200,7 +220,7 @@ export function analyzePotentialUpgrades(
         const currentScore = calculatePriorityScore(currentStats, [], shipRole);
 
         const simulations = Array.from({ length: 20 }, () => {
-            const upgradedPiece = simulateUpgrade(piece);
+            const { piece: upgradedPiece } = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
             return { piece: upgradedPiece, score: potentialScore };

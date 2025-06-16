@@ -231,6 +231,16 @@ export const GearPieceDisplay = memo(
                                 </div>
                             </div>
                         )}
+
+                        {upgrade?.cost > 0 && (
+                            <div className="text-xs text-gray-400">
+                                Upgrade cost:{' '}
+                                {Intl.NumberFormat('en', { notation: 'compact' }).format(
+                                    upgrade.cost
+                                )}
+                            </div>
+                        )}
+
                         {shipName && mode !== 'subcompact' && (
                             <span className="text-xs"> Equipped by: {shipName}</span>
                         )}

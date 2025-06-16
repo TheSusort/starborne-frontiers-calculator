@@ -6,6 +6,7 @@ import { GearPiece } from '../../types/gear';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { Ship } from '../../types/ship';
+import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -26,10 +27,20 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onLockEquipment,
     ship,
 }) => {
+    const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(false);
-
     const getSuggestionForSlot = (slotName: GearSlotName) => {
         return suggestions.find((s) => s.slotName === slotName);
+    };
+
+    const getTotalUpgradeCost = () => {
+        return suggestions.reduce((acc, suggestion) => {
+            if (getUpgrade(suggestion.gearId)) {
+                const { cost } = getUpgrade(suggestion.gearId);
+                return acc + (cost ?? 0);
+            }
+            return acc;
+        }, 0);
     };
 
     return (
@@ -80,7 +91,13 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                     )}
                 </div>
 
-                <div className="flex justify-end pt-4 gap-2">
+                <div className="flex justify-end items-center pt-4 gap-2">
+                    <div className="text-sm text-gray-400 mr-auto">
+                        Total upgrade cost:{' '}
+                        {Intl.NumberFormat('en', { notation: 'compact' }).format(
+                            getTotalUpgradeCost()
+                        )}
+                    </div>
                     <Button aria-label="Equip all suggestions" variant="primary" onClick={onEquip}>
                         Equip All Suggestions
                     </Button>

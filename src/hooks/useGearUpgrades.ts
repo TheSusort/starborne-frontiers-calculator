@@ -17,6 +17,7 @@ interface Upgrade {
         value: number;
         type: string;
     }[];
+    cost: number;
 }
 
 interface Upgrades {
@@ -70,7 +71,7 @@ export const useGearUpgrades = () => {
                 }
 
                 // Simulate the upgrade using the potentialCalculator
-                const upgradedPiece = simulateUpgrade(piece);
+                const { piece: upgradedPiece, cost } = simulateUpgrade(piece);
 
                 // Store the upgrade
                 newUpgrades[piece.id] = {
@@ -80,6 +81,7 @@ export const useGearUpgrades = () => {
                         type: upgradedPiece.mainStat?.type as StatType,
                     },
                     subStats: upgradedPiece.subStats,
+                    cost,
                 };
 
                 //console.log(`Saved upgrade for piece ${piece.id}`);

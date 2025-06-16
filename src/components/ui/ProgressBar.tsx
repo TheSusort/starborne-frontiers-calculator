@@ -19,7 +19,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div
-                className={`w-full max-w-lg mx-4 bg-dark-lighter p-6 rounded-lg shadow-lg ${className}`}
+                className={`w-full max-w-lg mx-4 bg-dark-lighter p-6 shadow-lg ${className}`}
                 role="progressbar"
                 aria-valuenow={current}
                 aria-valuemax={total}
@@ -31,9 +31,9 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                     </span>
                     <span className="text-sm text-gray-400">{percentage}%</span>
                 </div>
-                <div className="w-full bg-gray-700 rounded-full h-2.5">
+                <div className="w-full bg-gray-700 h-2.5">
                     <div
-                        className="bg-blue-600 h-2.5 rounded-full transition-all duration-50"
+                        className="bg-gradient-to-r from-amber-700 via-primary to-amber-700 h-2.5 transition-all duration-50"
                         data-testid="progress-fill"
                         style={{ width: `${percentage}%` }}
                     />

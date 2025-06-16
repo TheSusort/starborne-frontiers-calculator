@@ -242,6 +242,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             </div>
 
+            <div className="space-y-2 p-4 bg-dark">
+                <Select
+                    label="Algorithm"
+                    data-testid="algorithm-select"
+                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
+                        value: key,
+                        label: name,
+                    }))}
+                    value={selectedAlgorithm}
+                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
+                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
+                />
+                <p className="text-sm text-gray-400">
+                    {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
+                </p>
+            </div>
+
             {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
                 <div className="bg-dark p-4 space-y-2">
                     {statBonuses.length > 0 && (

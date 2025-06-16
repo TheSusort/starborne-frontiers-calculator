@@ -13,6 +13,7 @@ export interface GearPiece {
     subStats: Stat[];
     setBonus: GearSetName | null;
     shipId?: string;
+    cost?: number;
 }
 
 export interface GearSetBonus {

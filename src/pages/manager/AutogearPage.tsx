@@ -426,13 +426,11 @@ export const AutogearPage: React.FC = () => {
 
                     {/* Show progress bar for any strategy when optimizing */}
                     {optimizationProgress && (
-                        <div className="col-span-2 p-4 bg-dark">
-                            <ProgressBar
-                                current={optimizationProgress.current}
-                                total={optimizationProgress.total}
-                                percentage={optimizationProgress.percentage}
-                            />
-                        </div>
+                        <ProgressBar
+                            current={optimizationProgress.current}
+                            total={optimizationProgress.total}
+                            percentage={optimizationProgress.percentage}
+                        />
                     )}
                 </div>
 
