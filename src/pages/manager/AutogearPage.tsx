@@ -421,6 +421,7 @@ export const AutogearPage: React.FC = () => {
                             onEquip={handleEquipSuggestions}
                             onLockEquipment={handleLockEquipment}
                             ship={selectedShip}
+                            useUpgradedStats={useUpgradedStats}
                         />
                     )}
 

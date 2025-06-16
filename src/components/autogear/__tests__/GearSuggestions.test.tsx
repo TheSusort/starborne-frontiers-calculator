@@ -44,6 +44,7 @@ describe('GearSuggestions Component', () => {
         onEquip: vi.fn(),
         onLockEquipment: vi.fn(),
         ship: undefined,
+        useUpgradedStats: false,
     };
 
     beforeEach(() => {

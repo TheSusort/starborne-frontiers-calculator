@@ -16,6 +16,7 @@ interface GearSuggestionsProps {
     onEquip: () => void;
     onLockEquipment: (ship: Ship) => Promise<void>;
     ship?: Ship;
+    useUpgradedStats: boolean;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -26,6 +27,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onEquip,
     onLockEquipment,
     ship,
+    useUpgradedStats,
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(false);
@@ -92,12 +94,14 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                 </div>
 
                 <div className="flex justify-end items-center pt-4 gap-2">
-                    <div className="text-sm text-gray-400 mr-auto">
-                        Total upgrade cost:{' '}
-                        {Intl.NumberFormat('en', { notation: 'compact' }).format(
-                            getTotalUpgradeCost()
-                        )}
-                    </div>
+                    {useUpgradedStats && (
+                        <div className="text-sm text-gray-400 mr-auto">
+                            Total upgrade cost:{' '}
+                            {Intl.NumberFormat('en', { notation: 'compact' }).format(
+                                getTotalUpgradeCost()
+                            )}
+                        </div>
+                    )}
                     <Button aria-label="Equip all suggestions" variant="primary" onClick={onEquip}>
                         Equip All Suggestions
                     </Button>
