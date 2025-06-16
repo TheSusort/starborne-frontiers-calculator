@@ -4,6 +4,7 @@ import { useStorage } from './useStorage';
 import { StorageKey } from '../constants/storage';
 import { simulateUpgrade } from '../utils/gear/potentialCalculator';
 import { StatName, StatType } from '../types/stats';
+import { useInventory } from '../contexts/InventoryProvider';
 
 interface Upgrade {
     mainStat: {
@@ -23,6 +24,7 @@ interface Upgrades {
 }
 
 export const useGearUpgrades = () => {
+    const { getGearPiece } = useInventory();
     const { data: storageUpgrades, setData: setStorageUpgrades } = useStorage<Upgrades>({
         key: StorageKey.GEAR_UPGRADES,
         defaultValue: {},
@@ -101,10 +103,21 @@ export const useGearUpgrades = () => {
         [storageUpgrades]
     );
 
+    const getUpgradedGearPiece = useCallback(
+        (id: string): GearPiece | undefined => {
+            const upgrade = getUpgrade(id);
+            const piece = getGearPiece(id);
+            if (!piece) return undefined;
+            return upgrade ? ({ ...piece, ...upgrade } as GearPiece) : piece;
+        },
+        [getUpgrade, getGearPiece]
+    );
+
     return {
         upgrades: storageUpgrades || {},
         simulateUpgrades,
         clearUpgrades,
         getUpgrade,
+        getUpgradedGearPiece,
     };
 };
