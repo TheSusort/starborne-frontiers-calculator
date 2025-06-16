@@ -6,6 +6,7 @@ export const StorageKey = {
     LOADOUTS: 'loadouts',
     TEAM_LOADOUTS: 'team_loadouts',
     CHANGELOG_STATE: 'changelog_state',
+    GEAR_UPGRADES: 'gear_upgrades',
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];
