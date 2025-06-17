@@ -55,6 +55,7 @@ describe('AutogearSettings Component', () => {
         onRemoveStatBonus: vi.fn(),
         useUpgradedStats: false,
         onUseUpgradedStatsChange: vi.fn(),
+        onResetConfig: vi.fn(),
     };
 
     beforeEach(() => {

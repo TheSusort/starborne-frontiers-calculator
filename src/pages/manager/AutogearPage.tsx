@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
+import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
@@ -49,6 +50,7 @@ export const AutogearPage: React.FC = () => {
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
+    const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
 
     // useState hooks
     const [selectedShipId, setSelectedShipId] = useState<string>('');
@@ -90,6 +92,24 @@ export const AutogearPage: React.FC = () => {
         }
     }, [searchParams, getShipById]);
 
+    // Load saved config when ship is selected
+    useEffect(() => {
+        if (selectedShipId) {
+            const savedConfig = getConfig(selectedShipId);
+            if (savedConfig) {
+                setSelectedShipRole(savedConfig.shipRole);
+                setStatPriorities(savedConfig.statPriorities);
+                setSetPriorities(savedConfig.setPriorities);
+                setStatBonuses(savedConfig.statBonuses);
+                setIgnoreEquipped(savedConfig.ignoreEquipped);
+                setIgnoreUnleveled(savedConfig.ignoreUnleveled);
+                setUseUpgradedStats(savedConfig.useUpgradedStats);
+                setSelectedAlgorithm(savedConfig.algorithm);
+                addNotification('success', 'Loaded saved configuration');
+            }
+        }
+    }, [selectedShipId, getConfig, addNotification]);
+
     // Helper functions
     const handleAddStatPriority = (priority: StatPriority) => {
         addNotification('success', 'Stat priority added');
@@ -124,6 +144,20 @@ export const AutogearPage: React.FC = () => {
 
     const handleAutogear = async () => {
         if (!selectedShip) return;
+
+        // Save current configuration before running optimization
+        const config = {
+            shipId: selectedShip.id,
+            shipRole: selectedShipRole,
+            statPriorities,
+            setPriorities,
+            statBonuses,
+            ignoreEquipped,
+            ignoreUnleveled,
+            useUpgradedStats,
+            algorithm: selectedAlgorithm,
+        };
+        saveConfig(config);
 
         setOptimizationProgress(null);
         setSuggestions([]);
@@ -376,6 +410,22 @@ export const AutogearPage: React.FC = () => {
     const currentStats = getCurrentStats();
     const suggestedStats = calculateSuggestedStats(suggestions);
 
+    // Add reset config handler
+    const handleResetConfig = () => {
+        if (selectedShipId) {
+            resetConfig(selectedShipId);
+            setSelectedShipRole('ATTACKER');
+            setStatPriorities([]);
+            setSetPriorities([]);
+            setStatBonuses([]);
+            setIgnoreEquipped(true);
+            setIgnoreUnleveled(true);
+            setUseUpgradedStats(false);
+            setSelectedAlgorithm(AutogearAlgorithm.Genetic);
+            addNotification('success', 'Reset configuration to defaults');
+        }
+    };
+
     return (
         <>
             <Seo {...SEO_CONFIG.autogear} />
@@ -410,6 +460,7 @@ export const AutogearPage: React.FC = () => {
                         onAddStatBonus={handleAddStatBonus}
                         onRemoveStatBonus={handleRemoveStatBonus}
                         onUseUpgradedStatsChange={setUseUpgradedStats}
+                        onResetConfig={handleResetConfig}
                     />
 
                     {suggestions.length > 0 && (

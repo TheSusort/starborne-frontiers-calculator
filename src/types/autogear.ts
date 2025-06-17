@@ -1,4 +1,6 @@
 import { StatName } from './stats';
+import { ShipTypeName } from '../constants';
+import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 
 export interface StatPriority {
     stat: StatName;
@@ -21,4 +23,16 @@ export interface GearSuggestion {
 export interface StatBonus {
     stat: string;
     percentage: number;
+}
+
+export interface SavedAutogearConfig {
+    shipId: string;
+    shipRole: ShipTypeName | null;
+    statPriorities: StatPriority[];
+    setPriorities: SetPriority[];
+    statBonuses: StatBonus[];
+    ignoreEquipped: boolean;
+    ignoreUnleveled: boolean;
+    useUpgradedStats: boolean;
+    algorithm: AutogearAlgorithm;
 }

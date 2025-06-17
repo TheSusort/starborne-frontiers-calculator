@@ -17,7 +17,7 @@ import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/Aut
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { SHIP_TYPES, ShipTypeName, STATS } from '../../constants';
-import { GearSetName, GEAR_SETS } from '../../constants/gearSets';
+import { GEAR_SETS } from '../../constants/gearSets';
 import { StatName } from '../../types/stats';
 
 interface AutogearSettingsProps {
@@ -45,6 +45,7 @@ interface AutogearSettingsProps {
     onAddStatBonus: (bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
+    onResetConfig: () => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -121,6 +122,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddStatBonus,
     onRemoveStatBonus,
     onUseUpgradedStatsChange,
+    onResetConfig,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
@@ -131,8 +133,19 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             <ShipSelector onSelect={onShipSelect} selected={selectedShip} />
 
             <div className="p-4 bg-dark space-y-2">
-                <span className=" text-sm">Predefined Strategies</span>
-                {/* value should be the key of SHIP_TYPES */}
+                <div className="flex justify-between items-center">
+                    <span className="text-sm">Predefined Strategies</span>
+                    {selectedShip && (
+                        <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={onResetConfig}
+                            className="text-xs"
+                        >
+                            Reset Configuration
+                        </Button>
+                    )}
+                </div>
                 <Select
                     data-testid="role-select"
                     options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
