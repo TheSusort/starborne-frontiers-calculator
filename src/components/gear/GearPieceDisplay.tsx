@@ -33,9 +33,10 @@ export const GearPieceDisplay = memo(
         className = '',
         small = false,
     }: Props) => {
-        const { getShipName, getShipFromGearId } = useShips();
+        const { getShipFromGearId } = useShips();
         const { getUpgrade } = useGearUpgrades();
-        const shipName = gear?.shipId ? getShipName(gear.shipId) : getShipFromGearId(gear.id)?.name;
+
+        const shipName = getShipFromGearId(gear.id)?.name;
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
         const upgrade = getUpgrade(gear.id);

@@ -182,9 +182,7 @@ export const AutogearPage: React.FC = () => {
                 }
 
                 // If gear is equipped on a ship (either through shipId or getShipFromGearId)
-                const equippedShip = gear.shipId
-                    ? ships.find((ship) => ship.id === gear.shipId)
-                    : getShipFromGearId(gear.id);
+                const equippedShip = getShipFromGearId(gear.id);
 
                 // If ignoreEquipped is true, only include:
                 // 1. Not equipped on any ship, OR
