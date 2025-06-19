@@ -39,6 +39,7 @@ export const GearPieceDisplay = memo(
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
         const upgrade = getUpgrade(gear.id);
+        const isMaxLevel = gear.level >= 16;
 
         // Memoize computed values
         const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
@@ -191,7 +192,7 @@ export const GearPieceDisplay = memo(
                                     <StatDisplay
                                         stats={[gear.mainStat as Stat]}
                                         upgradedStats={
-                                            upgrade?.mainStat
+                                            upgrade?.mainStat && !isMaxLevel
                                                 ? [upgrade.mainStat as Stat]
                                                 : undefined
                                         }
@@ -226,13 +227,17 @@ export const GearPieceDisplay = memo(
                                 <div className="space-y-1">
                                     <StatDisplay
                                         stats={gear.subStats}
-                                        upgradedStats={upgrade?.subStats as Stat[]}
+                                        upgradedStats={
+                                            upgrade?.subStats && !isMaxLevel
+                                                ? (upgrade.subStats as Stat[])
+                                                : undefined
+                                        }
                                     />
                                 </div>
                             </div>
                         )}
 
-                        {upgrade?.cost > 0 && (
+                        {upgrade?.cost > 0 && !isMaxLevel && (
                             <div className="text-xs text-gray-400">
                                 Upgrade cost:{' '}
                                 {Intl.NumberFormat('en', { notation: 'compact' }).format(
