@@ -42,9 +42,9 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 85,
         imageKey: 'Atlas_16',
         activeSkillText:
-            'This Unit Deals 120% damage, bypassing enemy shield, and removes 30% of the enemy shield. It inflicts Speed Down 2 for 2 turns and Crit Power Down 3 for 2 turns.',
+            'This Unit Deals 100% damage, removes 30% of the enemy shield, and inflicts Speed Down 2 for 2 turns and Crit Power Down 3 for 2 turns.',
         chargeSkillText:
-            'This unit deals 160% damage, bypassing the enemy shield, and inflicts Attack Down 2 for 2 turns and Out. Damage Down 2 for 2 turns. If this Unit has shield, it also inflicts Disable on the primary target for 1 turn.',
+            'This unit deals 220% damage, and inflicts Attack Down 2 for 2 turns and Out. Damage Down 2 for 2 turns. If this Unit has shield, the primary target is inflicted with Disable for 2 turns.',
         firstPassiveSkillText:
             'This unit gains a shield equal to 3% of its max HP when an enemy gets debuffed.',
         secondPassiveSkillText:
@@ -417,10 +417,10 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 79,
         imageKey: 'Atlas_3',
         shield: 20,
-        activeSkillText:
-            'This Unit Deals 120% damage, bypassing enemy shield, with additional 130% damage on critical hits.',
+        shieldPenetration: 20,
+        activeSkillText: 'This Unit Deals 80% damage, with additional 90% damage on critical hits.',
         chargeSkillText:
-            'This Unit deals 170% damage bypassing enemy Shield, with additional 160% Damage on critical hits.',
+            'This Unit deals 200% damage with additional 210% Damage on critical hits.',
         firstPassiveSkillText:
             'At the start of combat, this unit gains a shield equal to 20% of its max HP and receives Atlas Coordination 1 for 6 turns.',
         secondPassiveSkillText:
@@ -472,9 +472,10 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 2,
         critDamage: 30,
         speed: 77,
+        shieldPenetration: 20,
         imageKey: 'Binderburg_12',
-        activeSkillText: 'This unit deals 185% damage and inflicts Attack Down 3 for 2 turns.',
-        chargeSkillText: 'This Unit deals 225% damage and inflicts Out. Damage Down 3 for 2 turns.',
+        activeSkillText: 'This unit deals 140% damage and inflicts Attack Down 3 for 2 turns.',
+        chargeSkillText: 'This Unit deals 205% damage and inflicts Out. Damage Down 3 for 2 turns.',
         firstPassiveSkillText: 'This unit deals 60% damage when an enemy uses their charged skill.',
         secondPassiveSkillText:
             'This unit deals 90% damage and inflicts Crit Rate Down 2 for 2 turns when an enemy uses their charged skill.',
@@ -670,10 +671,11 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 4,
         speed: 68,
+        shieldPenetration: 20,
         imageKey: 'Binderburg_14',
         activeSkillText:
-            'This Unit Deals 165% damage, applies Provoke for 1 turn, and inflicts Crit Power Down 2 for 1 turn.',
-        chargeSkillText: 'This Unit deals 210% damage and inflicts Crit Rate Down 2 for 3 turns.',
+            'This Unit Deals 110% damage, applies Provoke for 1 turn, and inflicts Crit Power Down 2 for 1 turn.',
+        chargeSkillText: 'This Unit deals 170% damage and inflicts Crit Rate Down 2 for 3 turns.',
         firstPassiveSkillText:
             'This unit gains Binderburg Resilience 1 for 1 turn when it gets critically hit.',
         secondPassiveSkillText:
@@ -880,9 +882,9 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 63,
         imageKey: 'MPL_5',
         activeSkillText:
-            'This Unit deals 40% damage, with an additional damage equal to 9% of its Max HP bypassing enemy Shield, and repairs itself 15% of damage dealt.',
+            'This Unit deals 40% damage, with an additional damage equal to 9% of its Max HP and repairs itself 15% of damage dealt.',
         chargeSkillText:
-            'This Unit deals 70% damage with an additional Damage equal to 11% of its Max HP, bypassing enemy Shield, and inflicts Stasis for 2 turns.',
+            'This Unit deals 70% damage with an additional Damage equal to 11% of its Max HP and inflicts Stasis for 2 turns.',
         firstPassiveSkillText:
             'This unit inflicts Speed Down 1 for 1 turn and Purges 1 buff from the enemy when directly damaged.',
         secondPassiveSkillText:
@@ -939,9 +941,9 @@ export const SHIPS: Record<string, ShipData> = {
             'This attack ignores Taunt and Provoke, deals 230% damage, and applies Concentrate Fire for 1 turn.',
         chargeSkillText: 'This Unit deals 320% damage, ignoring Taunt and Provoke.',
         firstPassiveSkillText:
-            'At the start of the round, this unit deals 60% damage to enemies with less than 50% HP.',
+            'This unit ignores 20% of Defense. At the start of the round, if there are any enemies with less than 50% HP, it deals 60% damage to all enemies with less than 50% HP.',
         secondPassiveSkillText:
-            'At the start of the round, this unit deals 60% damage to enemies with less than 50% HP. This units attacks ignore 20% of the enemy units Defense',
+            'This unit ignores 20% of Defense. Direct damage output is increased by 20% for each dead enemy, up to 100%. At the start of the round, if there are any enemies with less than 50% HP, it deals 60% damage to all enemies with less than 50% HP.',
     },
     KAFA: {
         name: 'Kafa',
@@ -1096,10 +1098,11 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 23,
         critDamage: 50,
         speed: 87,
+        shieldPenetration: 40,
         imageKey: 'Legion_6',
-        activeSkillText: 'This Unit Deals 170% damage, bypassing enemy Shields.',
+        activeSkillText: 'This Unit Deals 140% damage.',
         chargeSkillText:
-            'This Unit grants Legion Discipline 3 to all allies for 1 turn and deals 220% damage, bypassing enemy Shield.',
+            'This Unit grants Legion Discipline 3 to all allies for 1 turn and deals 200% damage.',
         firstPassiveSkillText: 'When an enemy dies, this unit grants 1 charge to all allies.',
         secondPassiveSkillText:
             'When an enemy dies, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
@@ -1190,9 +1193,8 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 58,
         speed: 77,
         imageKey: 'Atlas_5',
-        activeSkillText: 'This Unit Deals 130% damage, bypassing enemy shield.',
-        chargeSkillText:
-            'This Unit gains Atlas Coordination 2 for 2 turns and deals 150% damage, bypassing enemy shield.',
+        activeSkillText: 'This Unit Deals 100% damage.',
+        chargeSkillText: 'This Unit gains Atlas Coordination 2 for 2 turns and deals 210% damage.',
         firstPassiveSkillText: 'Every turn, this unit gains blast with a limit of 4.',
         secondPassiveSkillText:
             'This unit gains blast every turn with a limit of 4 and gains a shield equal to 5% of its max HP every turn.',
@@ -1282,9 +1284,9 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 72,
         imageKey: 'Atlas_14',
         activeSkillText:
-            'This Unit deals 140% damage with additional damage equal to 7% of its current shield, bypassing enemy shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
+            'This Unit deals 100% damage with additional damage equal to 5% of its current shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
         chargeSkillText:
-            'This Unit deals 170% damage with additional damage equal to 9% of its current shield, bypassing enemy shield and removes 30% of the enemy shield. If the target has a shield this unit gains grants itself Block Attacks for 1 hit.',
+            'This Unit deals 220% damage with additional damage equal to 12% of its current shield and removes 30% of the enemy shield. If the target has a shield this unit gains grants itself Block Attacks for 1 hit.',
         firstPassiveSkillText: 'This unit takes 10% less damage when shielded.',
         secondPassiveSkillText:
             'This unit takes 10% less damage when shielded. This unit gains a shield equal to 15% of the damage dealt when directly damaged as a primary target.',
@@ -1325,10 +1327,10 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 11,
         critDamage: 64,
         speed: 75,
+        shieldPenetration: 20,
         imageKey: 'XAOC_9',
-        activeSkillText: 'This Unit deals 130% damage, bypassing enemy shield.',
-        chargeSkillText:
-            'This Unit deals 180% damage bypassing enemy shield and inflicts Stasis for 2 turns.',
+        activeSkillText: 'This Unit deals 110% damage.',
+        chargeSkillText: 'This Unit deals 150% damage and inflicts Stasis for 2 turns.',
         firstPassiveSkillText: 'This unit gains XAOC Swiftness 1 for 2 turns on kill.',
         secondPassiveSkillText: 'This unit gains XAOC Swiftness 2 for 3 turns on kill.',
     },
@@ -1565,9 +1567,9 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 66,
         imageKey: 'MPL_4',
         activeSkillText:
-            'This Unit deals 40% damage with an additional Damage equal to 8% of its Max HP, and repairs 10% of Damage dealt. This attack bypasses enemy shield.',
+            'This Unit deals 40% damage with an additional Damage equal to 10% of its Max HP, and repairs 10% of Damage dealt.',
         chargeSkillText:
-            'This Unit deals 70% damage with an additional damage equal to 10% of its Max HP, and removes 2 charges from the enemy, bypassing enemy shield.',
+            'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.',
         firstPassiveSkillText:
             'When this unit is directly damaged, it inflicts Attack Down 2 for 2 turns on that enemy.',
         secondPassiveSkillText:
@@ -1726,9 +1728,10 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 0,
         critDamage: 22,
         speed: 80,
+        shieldPenetration: 20,
         imageKey: 'Binderburg_15',
         activeSkillText:
-            'This Unit Deals 175% damage and inflicts Hacking Down 2 and Security Down 1 for 1 turn.',
+            'This Unit Deals 145% damage and inflicts Hacking Down 2 and Security Down 1 for 1 turn.',
         chargeSkillText:
             'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
         firstPassiveSkillText:
@@ -2279,11 +2282,12 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 42,
         speed: 76,
+        shieldPenetration: 20,
         imageKey: 'Binderburg_11',
         activeSkillText:
-            'This Unit Cleanses 2 debuffs from itself and deals 160% damage, with an additional 25% for each buff on itself.',
+            'This Unit Cleanses 2 debuffs from itself and deals 145% damage, with an additional 25% for each buff on itself.',
         chargeSkillText:
-            'This Unit deals 220% damage, with an additional 30% for each buff on itself. If this Unit has no Debuffs, it gains 1 Extra Action.',
+            'This Unit deals 205% damage, with an additional 30% for each buff on itself. If this Unit has no Debuffs, it gains 1 Extra Action.',
         firstPassiveSkillText:
             'At the start of the round, if this unit has no debuffs, it gains Outgoing Damage Up 3 for 1 turn.',
         secondPassiveSkillText:
@@ -2533,11 +2537,12 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 5,
         critDamage: 12,
         speed: 65,
+        shieldPenetration: 20,
         imageKey: 'Binderburg_13',
         activeSkillText:
-            'This Unit Deals 180% damage and to all adjacent enemies, applies Provoke for 1 turn.',
+            'This Unit Deals 100% damage and to all adjacent enemies, applies Provoke for 1 turn.',
         chargeSkillText:
-            'This Unit deals 190% damage and inflicts Corrosion 2 for 2 turns. Additionally, it inflicts Out. Damage Down 1 on all adjacent enemies for 2 turns.',
+            'This Unit deals 160% damage and inflicts Corrosion 2 for 2 turns. Additionally, it inflicts Out. Damage Down 1 on all adjacent enemies for 2 turns.',
         firstPassiveSkillText:
             'At the start of combat, this unit gains Magnetized Shielding, which cannot be removed.',
         secondPassiveSkillText:
@@ -2678,11 +2683,10 @@ export const SHIPS: Record<string, ShipData> = {
         critDamage: 34,
         speed: 82,
         shield: 5.5,
+        shieldPenetration: 20,
         imageKey: 'Atlas_6',
-        activeSkillText:
-            'This Unit Deals 200% damage bypassing enemy shield and inflicts Speed Down 2 for 2 turns.',
-        chargeSkillText:
-            'This Unit deals 260% damage that bypasses enemy Shield and inflicts Disable for 1 turn.',
+        activeSkillText: 'This Unit Deals 150% damage and inflicts Speed Down 2 for 2 turns.',
+        chargeSkillText: 'This Unit deals 280% damage and inflicts Disable for 1 turn.',
         firstPassiveSkillText: 'This unit gains a shield equal to 5.5% of its max HP every turn.',
         secondPassiveSkillText:
             'This unit gains a shield equal to 5.5% of its max HP every turn. When an enemy resists a debuff application, this unit deals 75% damage.',

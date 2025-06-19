@@ -124,6 +124,9 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             defensePenetration: Math.round(
                 unit.Attributes.BaseWithLevelAndRank.DefensePenetration * 100
             ),
+            shieldPenetration: Math.round(
+                unit.Attributes.BaseWithLevelAndRank.ShieldPenetration * 100
+            ),
         };
 
         // Distribute stats among refits

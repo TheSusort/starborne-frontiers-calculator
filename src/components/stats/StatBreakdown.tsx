@@ -39,6 +39,9 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
         'critDamage',
         'speed',
         'healModifier',
+        'shield',
+        'shieldPenetration',
+        'defensePenetration',
     ];
 
     const refitDiff = calculateDiff(breakdown.afterRefits, breakdown.base);

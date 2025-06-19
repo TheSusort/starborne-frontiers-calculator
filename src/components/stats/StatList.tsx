@@ -28,6 +28,7 @@ export const StatList: React.FC<StatListProps> = ({
         'healModifier',
         'shield',
         'defensePenetration',
+        'shieldPenetration',
         'hpRegen',
     ] satisfies (keyof BaseStats)[];
 

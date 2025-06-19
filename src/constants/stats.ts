@@ -98,6 +98,13 @@ export const STATS: Record<
         engineeringAllowedTypes: [],
         maxValue: { percentage: 0, flat: 0 },
     },
+    shieldPenetration: {
+        label: 'Shield Pen.',
+        shortLabel: 'SP',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
+    },
 };
 
 export const SLOT_MAIN_STATS: Record<GearSlotName, StatName[]> = {

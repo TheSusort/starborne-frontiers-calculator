@@ -60,6 +60,8 @@ export interface ShipData {
     speed?: number;
     hpRegen?: number;
     shield?: number;
+    shieldPenetration?: number;
+    defensePenetration?: number;
     imageKey?: string;
     activeSkillText?: string;
     chargeSkillText?: string;

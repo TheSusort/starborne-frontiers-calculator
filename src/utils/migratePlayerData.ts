@@ -425,6 +425,7 @@ export const syncMigratedDataToSupabase = async (
                     hp_regen: ship.baseStats.hpRegen || 0,
                     shield: ship.baseStats.shield || 0,
                     defense_penetration: ship.baseStats.defensePenetration || 0,
+                    shield_penetration: ship.baseStats.shieldPenetration || 0,
                 }));
 
                 // Upsert base stats

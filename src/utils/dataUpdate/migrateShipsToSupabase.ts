@@ -24,6 +24,10 @@ export const migrateShipsToSupabase = async () => {
                 crit_rate: shipData.critRate,
                 crit_damage: shipData.critDamage,
                 speed: shipData.speed,
+                shield_penetration: shipData.shieldPenetration,
+                defense_penetration: shipData.defensePenetration,
+                shield: shipData.shield,
+                hp_regen: shipData.hpRegen,
             },
         }));
 
