@@ -36,10 +36,6 @@ interface RawGearStat {
     is_main: boolean;
 }
 
-interface RawShipEquipment {
-    ship_id: string;
-}
-
 interface RawGearData {
     id: string;
     slot: GearSlotName;
@@ -48,7 +44,6 @@ interface RawGearData {
     rarity: RarityName;
     set_bonus: GearSetName;
     gear_stats: RawGearStat[];
-    ship_equipment?: RawShipEquipment[];
 }
 
 // Type guard for valid gear piece
@@ -121,7 +116,6 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
                       type: 'flat',
                   },
             subStats: subStats.length > 0 ? subStats.map(createStat) : [],
-            shipId: data.ship_equipment?.[0]?.ship_id,
         };
 
         return isValidGearPiece(gear) ? gear : null;
@@ -179,8 +173,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .select(
                         `
                     *,
-                    gear_stats (*),
-                    ship_equipment (ship_id)
+                    gear_stats (*)
                 `
                     )
                     .eq('user_id', user.id)

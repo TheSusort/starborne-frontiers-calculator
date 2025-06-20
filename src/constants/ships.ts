@@ -604,9 +604,9 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 78,
         imageKey: 'Atlas_12',
         activeSkillText:
-            'This Unit Deals 200% damage bypassing enemy shield and gains a shield equal to 10% of the damage dealt.',
+            'This Unit Deals 80% damage with additional damage equal to 60% of their current shield, and gains a shield equal to 30% of the damage dealt.',
         chargeSkillText:
-            'This Unit deals 210% damage bypassing enemy shield and removes 1 charge from the enemy.',
+            'This Unit deals 160% damage with additional damage equal to 120% of their current shield, and gains a shield equal to 40% of the damage dealt.',
         firstPassiveSkillText:
             'This ship has 20% Shield Penetration. While shielded, it gains 2500 additional defense. This unit gains Shield equal to 25% of its max HP at the start of combat.',
         secondPassiveSkillText:
