@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 export interface PerformanceTimer {
     name: string;
     startTime: number;
@@ -74,7 +75,6 @@ export class PerformanceTracker {
     printSummary(): void {
         if (!this.enabled) return;
 
-        // eslint-disable-next-line no-console
         console.group('🚀 Autogear Performance Summary');
 
         // Only show timers that were actually called and took significant time
@@ -83,9 +83,7 @@ export class PerformanceTracker {
             .sort((a, b) => b.totalTime - a.totalTime);
 
         if (significantTimers.length === 0) {
-            // eslint-disable-next-line no-console
             console.log('No significant timing data collected');
-            // eslint-disable-next-line no-console
             console.groupEnd();
             return;
         }
@@ -101,7 +99,6 @@ export class PerformanceTracker {
 
         topLevelTimers.forEach((timer) => {
             const avgTime = timer.totalTime / timer.callCount;
-            // eslint-disable-next-line no-console
             console.log(
                 `${timer.name}: ${timer.totalTime.toFixed(1)}ms (${timer.callCount} calls, ${avgTime.toFixed(2)}ms avg)`
             );
@@ -118,7 +115,6 @@ export class PerformanceTracker {
                 0
             );
             const avgFitnessTime = totalFitnessTime / totalFitnessCalls;
-            // eslint-disable-next-line no-console
             console.log(
                 `Fitness Evaluations: ${totalFitnessTime.toFixed(1)}ms (${totalFitnessCalls} calls, ${avgFitnessTime.toFixed(2)}ms avg)`
             );
@@ -132,7 +128,6 @@ export class PerformanceTracker {
             const totalStatsTime = statsTimers.reduce((sum, timer) => sum + timer.totalTime, 0);
             const totalStatsCalls = statsTimers.reduce((sum, timer) => sum + timer.callCount, 0);
             const avgStatsTime = totalStatsTime / totalStatsCalls;
-            // eslint-disable-next-line no-console
             console.log(
                 `Stats Calculations: ${totalStatsTime.toFixed(1)}ms (${totalStatsCalls} calls, ${avgStatsTime.toFixed(2)}ms avg)`
             );
@@ -142,9 +137,7 @@ export class PerformanceTracker {
         const actualTotalTime = this.overallStartTime
             ? performance.now() - this.overallStartTime
             : 0;
-        // eslint-disable-next-line no-console
         console.log(`\n⏱️  Total Time: ${actualTotalTime.toFixed(1)}ms`);
-        // eslint-disable-next-line no-console
         console.groupEnd();
     }
 
