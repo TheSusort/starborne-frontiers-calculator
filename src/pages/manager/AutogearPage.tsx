@@ -24,6 +24,7 @@ import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
+import { performanceTracker } from '../../utils/autogear/performanceTimer';
 
 interface UnmetPriority {
     stat: string;
@@ -46,7 +47,7 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, ships, equipMultipleGear, getShipFromGearId, lockEquipment } = useShips();
+    const { getShipById, equipMultipleGear, getShipFromGearId, lockEquipment } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -145,7 +146,14 @@ export const AutogearPage: React.FC = () => {
     const handleAutogear = async () => {
         if (!selectedShip) return;
 
+        // Uncomment the next line to disable performance tracking entirely
+        // performanceTracker.disable();
+
+        performanceTracker.reset();
+        performanceTracker.startTimer('TotalAutogear');
+
         // Save current configuration before running optimization
+        performanceTracker.startTimer('SaveConfig');
         const config = {
             shipId: selectedShip.id,
             shipRole: selectedShipRole,
@@ -158,6 +166,7 @@ export const AutogearPage: React.FC = () => {
             algorithm: selectedAlgorithm,
         };
         saveConfig(config);
+        performanceTracker.endTimer('SaveConfig');
 
         setOptimizationProgress(null);
         setSuggestions([]);
@@ -171,6 +180,7 @@ export const AutogearPage: React.FC = () => {
         strategy.setProgressCallback(setOptimizationProgress);
 
         // Filter inventory based on both locked ships and ignoreEquipped setting
+        performanceTracker.startTimer('FilterInventory');
         const availableInventory = inventory
             .filter((gear) => {
                 // Exclude gear with set bonuses that have count set to 0
@@ -202,10 +212,12 @@ export const AutogearPage: React.FC = () => {
                 );
             })
             .filter((gear) => !ignoreUnleveled || gear.level > 0);
+        performanceTracker.endTimer('FilterInventory');
 
         // eslint-disable-next-line no-console
         console.log(`Available inventory size: ${availableInventory.length}`);
 
+        performanceTracker.startTimer('FindOptimalGear');
         const newSuggestions = await Promise.resolve(
             strategy.findOptimalGear(
                 selectedShip,
@@ -218,6 +230,7 @@ export const AutogearPage: React.FC = () => {
                 statBonuses
             )
         );
+        performanceTracker.endTimer('FindOptimalGear');
 
         const endTime = performance.now();
         const duration = (endTime - startTime) / 1000; // Convert to seconds
@@ -225,6 +238,7 @@ export const AutogearPage: React.FC = () => {
         console.log(`Optimization completed in ${duration.toFixed(2)} seconds`);
 
         // Create new equipment objects
+        performanceTracker.startTimer('PostProcessing');
         const currentEquipment = selectedShip.equipment;
         const suggestedEquipment = getSuggestedEquipment(newSuggestions, selectedShip);
 
@@ -277,9 +291,13 @@ export const AutogearPage: React.FC = () => {
             setCurrentSimulation(currentSimulation);
             setSuggestedSimulation(suggestedSimulation);
         }
+        performanceTracker.endTimer('PostProcessing');
 
         setSuggestions(newSuggestions);
         setOptimizationProgress(null);
+
+        performanceTracker.endTimer('TotalAutogear');
+        performanceTracker.printSummary();
     };
 
     const calculateSuggestedStats = (newSuggestions: GearSuggestion[]) => {

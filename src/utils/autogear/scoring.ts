@@ -2,10 +2,19 @@ import { BaseStats } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
-import { calculateTotalStats } from '../ship/statsCalculator';
+import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
+import { performanceTracker } from './performanceTimer';
+
+// Simple cache for gear combinations
+const scoreCache = new Map<string, number>();
+const CACHE_SIZE_LIMIT = 50000; // Increased cache size for better hit rates
+
+// Pre-computed cache keys for common equipment combinations
+const equipmentKeyCache = new Map<string, string>();
+
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
     const a = 88.3505;
@@ -302,6 +311,41 @@ export function calculateTotalScore(
     setPriorities?: SetPriority[],
     statBonuses?: StatBonus[]
 ): number {
+    performanceTracker.startTimer('CalculateTotalScore');
+
+    // Create cache key from equipment configuration
+    performanceTracker.startTimer('CreateCacheKey');
+
+    // Use cached equipment key if available
+    let equipmentKey = equipmentKeyCache.get(JSON.stringify(equipment));
+    if (!equipmentKey) {
+        equipmentKey = Object.entries(equipment)
+            .filter(([_, gearId]) => gearId !== undefined)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([slot, gearId]) => `${slot}:${gearId}`)
+            .join('|');
+
+        // Cache the equipment key for reuse
+        if (equipmentKeyCache.size < 10000) {
+            // Limit equipment key cache size
+            equipmentKeyCache.set(JSON.stringify(equipment), equipmentKey);
+        }
+    }
+
+    // Simplified cache key - only include essential parameters
+    const cacheKey = `${ship.id}|${equipmentKey}|${shipRole || 'none'}`;
+    performanceTracker.endTimer('CreateCacheKey');
+
+    // Check cache first
+    performanceTracker.startTimer('CheckCache');
+    if (scoreCache.has(cacheKey)) {
+        performanceTracker.endTimer('CheckCache');
+        performanceTracker.endTimer('CalculateTotalScore');
+        return scoreCache.get(cacheKey)!;
+    }
+    performanceTracker.endTimer('CheckCache');
+
+    performanceTracker.startTimer('CalculateTotalStats');
     const totalStats = calculateTotalStats(
         ship.baseStats,
         equipment,
@@ -310,8 +354,10 @@ export function calculateTotalScore(
         ship.implants,
         getEngineeringStatsForShipType(ship.type)
     );
+    performanceTracker.endTimer('CalculateTotalStats');
 
     // Add set bonus consideration
+    performanceTracker.startTimer('CalculateSetCount');
     const setCount: Record<string, number> = {};
     Object.values(equipment).forEach((gearId) => {
         if (!gearId) return;
@@ -319,7 +365,9 @@ export function calculateTotalScore(
         if (!gear?.setBonus) return;
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
     });
+    performanceTracker.endTimer('CalculateSetCount');
 
+    performanceTracker.startTimer('CalculatePriorityScore');
     const score = calculatePriorityScore(
         totalStats.final,
         priorities,
@@ -328,6 +376,25 @@ export function calculateTotalScore(
         setPriorities,
         statBonuses
     );
+    performanceTracker.endTimer('CalculatePriorityScore');
 
+    // Cache the result
+    performanceTracker.startTimer('CacheResult');
+    if (scoreCache.size >= CACHE_SIZE_LIMIT) {
+        // Clear cache if it gets too large
+        scoreCache.clear();
+        equipmentKeyCache.clear(); // Also clear equipment key cache
+    }
+    scoreCache.set(cacheKey, score);
+    performanceTracker.endTimer('CacheResult');
+
+    performanceTracker.endTimer('CalculateTotalScore');
     return score;
+}
+
+// Function to clear the cache (useful for testing or when memory is a concern)
+export function clearScoreCache(): void {
+    scoreCache.clear();
+    equipmentKeyCache.clear();
+    clearGearStatsCache();
 }

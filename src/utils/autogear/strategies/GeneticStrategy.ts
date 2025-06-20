@@ -4,8 +4,9 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
-import { calculateTotalScore } from '../scoring';
+import { calculateTotalScore, clearScoreCache } from '../scoring';
 import { BaseStrategy } from '../BaseStrategy';
+import { performanceTracker } from '../performanceTimer';
 
 interface Individual {
     equipment: Partial<Record<GearSlotName, string>>;
@@ -54,6 +55,12 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[]
     ): Promise<GearSuggestion[]> {
+        performanceTracker.reset();
+        performanceTracker.startTimer('GeneticAlgorithm');
+
+        // Clear cache at the start of each run
+        clearScoreCache();
+
         // Initialize progress tracking (population size * generations)
         const totalOperations =
             this.getPopulationSize(availableInventory.length) *
@@ -64,7 +71,11 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const generations = this.getGenerations(populationSize);
         const eliteSize = this.getEliteSize(populationSize);
 
+        performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(availableInventory, getGearPiece, setPriorities);
+        performanceTracker.endTimer('InitializePopulation');
+
+        performanceTracker.startTimer('InitialEvaluation');
         population = this.evaluatePopulation(
             population,
             ship,
@@ -75,11 +86,18 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities,
             statBonuses
         );
+        performanceTracker.endTimer('InitialEvaluation');
+
+        performanceTracker.startTimer('GeneticGenerations');
+        let bestFitness = population[0]?.fitness || 0;
+        let generationsWithoutImprovement = 0;
+        const maxGenerationsWithoutImprovement = 50;
 
         for (let generation = 0; generation < generations; generation++) {
             const newPopulation: Individual[] = [];
             newPopulation.push(...population.slice(0, eliteSize));
 
+            performanceTracker.startTimer('Breeding');
             while (newPopulation.length < populationSize) {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
@@ -88,7 +106,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 newPopulation.push(child);
                 this.incrementProgress();
             }
+            performanceTracker.endTimer('Breeding');
 
+            performanceTracker.startTimer('Evaluation');
             population = this.evaluatePopulation(
                 newPopulation,
                 ship,
@@ -99,13 +119,30 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 setPriorities,
                 statBonuses
             );
+            performanceTracker.endTimer('Evaluation');
+
+            // Check for improvement
+            const currentBestFitness = population[0]?.fitness || 0;
+            if (currentBestFitness > bestFitness) {
+                bestFitness = currentBestFitness;
+                generationsWithoutImprovement = 0;
+            } else {
+                generationsWithoutImprovement++;
+                // Early termination if no improvement for several generations
+                if (generationsWithoutImprovement >= maxGenerationsWithoutImprovement) {
+                    break;
+                }
+            }
 
             // Allow UI to update
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
+        performanceTracker.endTimer('GeneticGenerations');
 
         // Ensure progress is complete
         this.completeProgress();
+
+        performanceTracker.endTimer('GeneticAlgorithm');
 
         const bestIndividual = population[0];
         return Object.entries(bestIndividual.equipment)
@@ -154,10 +191,11 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[]
     ): Individual[] {
-        return population
-            .map((individual) => ({
-                ...individual,
-                fitness: this.calculateFitness(
+        performanceTracker.startTimer('EvaluatePopulation');
+
+        const result = population
+            .map((individual) => {
+                const fitness = this.calculateFitness(
                     individual.equipment,
                     ship,
                     priorities,
@@ -166,9 +204,17 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     shipRole,
                     setPriorities,
                     statBonuses
-                ),
-            }))
+                );
+
+                return {
+                    ...individual,
+                    fitness,
+                };
+            })
             .sort((a, b) => b.fitness - a.fitness);
+
+        performanceTracker.endTimer('EvaluatePopulation');
+        return result;
     }
 
     private calculateFitness(
@@ -181,7 +227,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[]
     ): number {
-        return calculateTotalScore(
+        performanceTracker.startTimer('CalculateFitness');
+        const result = calculateTotalScore(
             ship,
             equipment,
             priorities,
@@ -191,6 +238,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities,
             statBonuses
         );
+        performanceTracker.endTimer('CalculateFitness');
+        return result;
     }
 
     private selectParent(population: Individual[]): Individual {
@@ -221,8 +270,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         individual: Individual,
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        setPriorities?: SetPriority[]
     ): void {
         Object.keys(GEAR_SLOTS).forEach((slotKey) => {
             const slot = slotKey as GearSlotName;

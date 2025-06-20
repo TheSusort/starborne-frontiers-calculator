@@ -5,6 +5,9 @@ import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
 import { PercentageOnlyStats } from '../../types/stats';
 
+// Cache for gear piece stats to avoid recalculating
+const gearStatsCache = new Map<string, { mainStat?: Stat; subStats?: Stat[] }>();
+
 export interface StatBreakdown {
     base: BaseStats;
     afterRefits: BaseStats;
@@ -45,18 +48,35 @@ export const calculateTotalStats = (
     }
     Object.assign(breakdown.afterGear, breakdown.afterEngineering);
 
-    // Process gear
+    // Process gear with caching
     Object.values(equipment || {}).forEach((gearId) => {
         if (!gearId) return;
-        const gear = getGearPiece(gearId);
-        if (!gear) return;
 
-        if (gear.mainStat) {
-            addStatModifier(gear.mainStat, breakdown.afterGear, breakdown.afterEngineering);
+        // Check cache first
+        let cachedStats = gearStatsCache.get(gearId);
+        if (!cachedStats) {
+            const gear = getGearPiece(gearId);
+            if (!gear) return;
+
+            cachedStats = {
+                mainStat: gear.mainStat || undefined,
+                subStats: gear.subStats,
+            };
+
+            // Cache the stats (limit cache size)
+            if (gearStatsCache.size < 10000) {
+                gearStatsCache.set(gearId, cachedStats);
+            }
         }
-        gear.subStats?.forEach((stat) =>
-            addStatModifier(stat, breakdown.afterGear, breakdown.afterEngineering)
-        );
+
+        if (cachedStats && cachedStats.mainStat) {
+            addStatModifier(cachedStats.mainStat, breakdown.afterGear, breakdown.afterEngineering);
+        }
+        if (cachedStats && cachedStats.subStats) {
+            cachedStats.subStats.forEach((stat) =>
+                addStatModifier(stat, breakdown.afterGear, breakdown.afterEngineering)
+            );
+        }
     });
     Object.assign(breakdown.afterSets, breakdown.afterGear);
 
@@ -137,3 +157,8 @@ export const calculateTotalStats = (
         }
     }
 };
+
+// Function to clear the gear stats cache
+export function clearGearStatsCache(): void {
+    gearStatsCache.clear();
+}
