@@ -1,8 +1,8 @@
 import { ExportedPlayData } from '../types/exportedPlayData';
 import { EngineeringStats } from '../types/stats';
 import { Ship, Refit } from '../types/ship';
-import { GearPiece, Implant } from '../types/gear';
-import { GEAR_SLOTS, GearSlotName, IMPLANT_SLOTS } from '../constants/gearTypes';
+import { GearPiece } from '../types/gear';
+import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import {
@@ -154,7 +154,12 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             }
         });
 
-        // TODO: Check if refits have stats, if not, add an empty attack stat to each empty refit
+        // Add crit to Asphodel or Tormenter if they have more than 2 refits
+        if ((unit.Name === 'Asphodel' || unit.Name === 'Tormenter') && refits.length > 2) {
+            refits[0].stats.push(createStat('crit', 100 - baseStats.crit, 'percentage'));
+        }
+
+        // Check if refits have stats, if not, add an empty attack stat to each empty refit
         refits.forEach((refit) => {
             if (refit.stats.length === 0) {
                 refit.stats.push(createStat('attack', 0, 'flat'));

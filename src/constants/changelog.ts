@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.13.1';
+export const CURRENT_VERSION = '1.14.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.14.0',
+        date: '2025-06-22',
+        changes: [
+            'Added crit 100% to Asphodel and Tormenter import',
+            'Added hard check to autogear stat priorities',
+            'Fixed a bug with offcanvas z-index',
+        ],
+    },
     {
         version: '1.13.1',
         date: '2025-06-21',

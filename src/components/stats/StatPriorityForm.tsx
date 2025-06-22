@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Input, Select } from '../ui';
+import { Button, Input, Select, Checkbox } from '../ui';
 import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
 import { STATS } from '../../constants/stats';
@@ -36,6 +36,7 @@ export const StatPriorityForm: React.FC<Props> = ({
     const [maxLimit, setMaxLimit] = useState<string>('');
     const [minLimit, setMinLimit] = useState<string>('');
     const [weight, setWeight] = useState<number>(1);
+    const [hardRequirement, setHardRequirement] = useState<boolean>(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -45,6 +46,7 @@ export const StatPriorityForm: React.FC<Props> = ({
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
             weight: hideWeight ? 1 : weight,
+            hardRequirement,
         });
 
         setMaxLimit('');
@@ -53,6 +55,7 @@ export const StatPriorityForm: React.FC<Props> = ({
             setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         }
         setSelectedStat(AVAILABLE_STATS[0]);
+        setHardRequirement(false);
     };
 
     return (
@@ -104,6 +107,16 @@ export const StatPriorityForm: React.FC<Props> = ({
                         helpLabel="Set a maximum value for the stat priority. The gear should have a value less than or equal to this."
                     />
                 )}
+            </div>
+
+            <div className="mt-4">
+                <Checkbox
+                    id="hardRequirement"
+                    label="Hard requirement"
+                    checked={hardRequirement}
+                    onChange={(checked) => setHardRequirement(checked)}
+                    helpLabel="When enabled, gear combinations that don't meet this requirement will be completely excluded from results. If results are not met, it means that the stat is not achievable."
+                />
             </div>
 
             <div className="grow mt-4">

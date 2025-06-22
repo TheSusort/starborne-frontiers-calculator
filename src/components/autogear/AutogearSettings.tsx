@@ -306,7 +306,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         {STATS[priority.stat].label}
                                         {priority.minLimit && ` (min: ${priority.minLimit})`}
                                         {priority.maxLimit && ` (max: ${priority.maxLimit})`}
-                                        {priority.weight && ` (weight: ${priority.weight})`}
+                                        {priority.hardRequirement && ' (HARD)'}
+                                        {priority.weight &&
+                                            priority.weight !== 1 &&
+                                            ` (weight: ${priority.weight})`}
                                     </span>
                                     <Button
                                         aria-label="Remove priority"

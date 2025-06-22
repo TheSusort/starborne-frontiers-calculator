@@ -7,6 +7,7 @@ export interface StatPriority {
     weight?: number;
     minLimit?: number;
     maxLimit?: number;
+    hardRequirement?: boolean;
 }
 
 export interface SetPriority {

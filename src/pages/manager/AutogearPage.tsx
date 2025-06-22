@@ -31,6 +31,7 @@ interface UnmetPriority {
     current: number;
     target: number;
     type: 'min' | 'max';
+    hardRequirement: boolean;
 }
 
 export const AutogearPage: React.FC = () => {
@@ -191,7 +192,7 @@ export const AutogearPage: React.FC = () => {
                     return false;
                 }
 
-                // If gear is equipped on a ship (either through shipId or getShipFromGearId)
+                // If gear is equipped on a ship
                 const equippedShip = getShipFromGearId(gear.id);
 
                 // If ignoreEquipped is true, only include:
@@ -408,6 +409,7 @@ export const AutogearPage: React.FC = () => {
                     current: currentValue,
                     target: priority.minLimit,
                     type: 'min',
+                    hardRequirement: priority.hardRequirement || false,
                 });
             }
 
@@ -417,6 +419,7 @@ export const AutogearPage: React.FC = () => {
                     current: currentValue,
                     target: priority.maxLimit,
                     type: 'max',
+                    hardRequirement: priority.hardRequirement || false,
                 });
             }
         });
@@ -426,6 +429,12 @@ export const AutogearPage: React.FC = () => {
 
     const currentStats = getCurrentStats();
     const suggestedStats = calculateSuggestedStats(suggestions);
+
+    // Compute whether to show suggestions based on hard requirements
+    const shouldShowSuggestions =
+        suggestions.length > 0 &&
+        suggestedStats &&
+        !getUnmetPriorities(suggestedStats.final).some((priority) => priority.hardRequirement);
 
     // Add reset config handler
     const handleResetConfig = () => {
@@ -480,7 +489,7 @@ export const AutogearPage: React.FC = () => {
                         onResetConfig={handleResetConfig}
                     />
 
-                    {suggestions.length > 0 && (
+                    {suggestions.length > 0 && shouldShowSuggestions && (
                         <GearSuggestions
                             suggestions={suggestions}
                             getGearPiece={getGearPiece}
@@ -510,12 +519,25 @@ export const AutogearPage: React.FC = () => {
                                 <h3 className="text-lg font-semibold text-yellow-200 mb-2">
                                     Unmet Stat Priorities
                                 </h3>
-                                <p className="text-yellow-100 mb-2">
-                                    The suggested gear doesn&apos;t meet all stat priorities, but
-                                    was chosen because hitting the priority had a higher negative
-                                    impact on the score. Try adjusting the minimum or maximum values
-                                    for the stat priorities.
-                                </p>
+                                {getUnmetPriorities(suggestedStats.final).some(
+                                    (priority) => priority.hardRequirement
+                                ) ? (
+                                    <p className="text-yellow-100 mb-2">
+                                        Some stat priorities are marked as hard requirements, which
+                                        means that the gear combinations that don&apos;t meet them
+                                        will be completely excluded from results. It wasn&apos;t
+                                        found this round, so it might be unachievable. Try running
+                                        it again, or adjust the stat limits.
+                                    </p>
+                                ) : (
+                                    <p className="text-yellow-100 mb-2">
+                                        The suggested gear doesn&apos;t meet all stat priorities,
+                                        but was chosen because hitting the priority had a higher
+                                        negative impact on the score. Try adjusting the minimum or
+                                        maximum values for the stat priorities.
+                                    </p>
+                                )}
+
                                 <ul className="list-disc pl-4 space-y-1">
                                     {getUnmetPriorities(suggestedStats.final).map(
                                         (priority, index) => (
@@ -523,6 +545,7 @@ export const AutogearPage: React.FC = () => {
                                                 {priority.stat}: {priority.current.toFixed(1)}{' '}
                                                 {priority.type === 'min' ? '<' : '>'}{' '}
                                                 {priority.target.toFixed(1)}
+                                                {priority.hardRequirement && ' (HARD)'}
                                             </li>
                                         )
                                     )}
@@ -532,29 +555,35 @@ export const AutogearPage: React.FC = () => {
                     </>
                 )}
 
-                {currentSimulation && suggestedSimulation && suggestions.length > 0 && (
-                    <SimulationResults
-                        currentSimulation={currentSimulation}
-                        suggestedSimulation={suggestedSimulation}
-                        role={selectedShipRole}
-                    />
-                )}
+                {currentSimulation &&
+                    suggestedSimulation &&
+                    suggestions.length > 0 &&
+                    shouldShowSuggestions && (
+                        <SimulationResults
+                            currentSimulation={currentSimulation}
+                            suggestedSimulation={suggestedSimulation}
+                            role={selectedShipRole}
+                        />
+                    )}
 
-                {currentStats && suggestedStats && suggestions.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
-                        <StatList
-                            stats={currentStats.final}
-                            title="Current Stats"
-                            className="p-4"
-                        />
-                        <StatList
-                            stats={suggestedStats.final}
-                            comparisonStats={currentStats.final}
-                            title="Stats with Suggested Gear"
-                            className="p-4"
-                        />
-                    </div>
-                )}
+                {currentStats &&
+                    suggestedStats &&
+                    suggestions.length > 0 &&
+                    shouldShowSuggestions && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
+                            <StatList
+                                stats={currentStats.final}
+                                title="Current Stats"
+                                className="p-4"
+                            />
+                            <StatList
+                                stats={suggestedStats.final}
+                                comparisonStats={currentStats.final}
+                                title="Stats with Suggested Gear"
+                                className="p-4"
+                            />
+                        </div>
+                    )}
 
                 <ConfirmModal
                     isOpen={showConfirmModal}

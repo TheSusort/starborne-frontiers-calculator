@@ -2,6 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, CloseIcon } from '../';
 
+// Create a single portal root for all offcanvases
+const getOrCreatePortalRoot = () => {
+    let portalRoot = document.getElementById('offcanvas-root');
+    if (!portalRoot) {
+        portalRoot = document.createElement('div');
+        portalRoot.setAttribute('id', 'offcanvas-root');
+        portalRoot.className = 'z-[70] relative';
+        document.body.appendChild(portalRoot);
+    }
+    return portalRoot;
+};
+
 interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -127,6 +139,6 @@ export const Offcanvas: React.FC<Props> = ({
                 </div>
             </div>
         </div>,
-        document.body
+        getOrCreatePortalRoot()
     );
 };
