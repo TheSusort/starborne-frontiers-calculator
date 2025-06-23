@@ -55,7 +55,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
     BURNER: {
         name: 'Burner',
-        stats: [{ name: 'attack', value: 15, type: 'percentage' }],
+        stats: [{ name: 'attack', value: 10, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034712268832808.webp',
         minPieces: 4,
         description: 'Applies Inferno 1 for 2 turns.',
