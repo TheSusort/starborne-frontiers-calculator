@@ -48,7 +48,8 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, getShipFromGearId, lockEquipment } = useShips();
+    const { getShipById, equipMultipleGear, getShipFromGearId, lockEquipment, gearToShipMap } =
+        useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -193,7 +194,8 @@ export const AutogearPage: React.FC = () => {
                 }
 
                 // If gear is equipped on a ship
-                const equippedShip = getShipFromGearId(gear.id);
+                const shipId = gearToShipMap.get(gear.id);
+                const equippedShip = shipId ? getShipById(shipId) : undefined;
 
                 // If ignoreEquipped is true, only include:
                 // 1. Not equipped on any ship, OR

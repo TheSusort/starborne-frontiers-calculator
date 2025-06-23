@@ -32,7 +32,19 @@ export const GearInventory: React.FC<Props> = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const { getShipName, getShipFromGearId } = useShips();
+    const { getShipFromGearId, gearToShipMap } = useShips();
+
+    // Memoize ship names for gear pieces to avoid repeated lookups during search
+    const gearToShipNames = useMemo(() => {
+        const shipNames = new Map<string, string>();
+        gearToShipMap.forEach((shipId, gearId) => {
+            const ship = getShipFromGearId(gearId);
+            if (ship?.name) {
+                shipNames.set(gearId, ship.name);
+            }
+        });
+        return shipNames;
+    }, [gearToShipMap, getShipFromGearId]);
 
     const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters');
 
@@ -56,9 +68,9 @@ export const GearInventory: React.FC<Props> = ({
                 (state.filters.rarities?.includes(piece.rarity) ?? false);
             const matchesEquipped =
                 state.filters.equipped === 'equipped'
-                    ? piece.shipId !== '' && piece.shipId !== undefined
+                    ? gearToShipMap.has(piece.id)
                     : state.filters.equipped === 'unequipped'
-                      ? piece.shipId === '' || piece.shipId === undefined
+                      ? !gearToShipMap.has(piece.id)
                       : true;
 
             const matchesSearch =
@@ -74,9 +86,12 @@ export const GearInventory: React.FC<Props> = ({
                         stat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         stat.value.toString().includes(searchQuery)
                 ) ||
-                (piece.shipId ? getShipName(piece.shipId) : getShipFromGearId(piece.id)?.name)
-                    ?.toLowerCase()
-                    .includes(searchQuery.toLowerCase()) ||
+                (gearToShipMap.has(piece.id) &&
+                    gearToShipNames.has(piece.id) &&
+                    gearToShipNames
+                        .get(piece.id)
+                        ?.toLowerCase()
+                        .includes(searchQuery.toLowerCase())) ||
                 IMPLANT_SLOTS[piece.slot || '']?.label
                     .toLowerCase()
                     .includes(searchQuery.toLowerCase()) ||
@@ -87,7 +102,7 @@ export const GearInventory: React.FC<Props> = ({
 
             return matchesSet && matchesType && matchesRarity && matchesEquipped && matchesSearch;
         });
-    }, [inventory, state.filters, searchQuery, getShipName, getShipFromGearId]);
+    }, [inventory, state.filters, searchQuery, gearToShipMap, gearToShipNames]);
 
     const sortedInventory = useMemo(() => {
         return [...filteredInventory].sort((a, b) => {

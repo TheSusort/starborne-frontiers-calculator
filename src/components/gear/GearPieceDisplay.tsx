@@ -33,10 +33,19 @@ export const GearPieceDisplay = memo(
         className = '',
         small = false,
     }: Props) => {
-        const { getShipFromGearId } = useShips();
+        const { getShipFromGearId, gearToShipMap } = useShips();
         const { getUpgrade } = useGearUpgrades();
 
-        const shipName = getShipFromGearId(gear.id)?.name;
+        // Use memoized map for O(1) lookup instead of searching through all ships
+        const shipName = useMemo(() => {
+            const shipId = gearToShipMap.get(gear.id);
+            if (shipId) {
+                const ship = getShipFromGearId(gear.id);
+                return ship?.name;
+            }
+            return undefined;
+        }, [gear.id, gearToShipMap, getShipFromGearId]);
+
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
         const upgrade = getUpgrade(gear.id);

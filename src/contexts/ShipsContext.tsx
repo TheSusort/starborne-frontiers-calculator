@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
 import { Ship, AffinityName } from '../types/ship';
 import { GearSlotName } from '../constants/gearTypes';
 import { supabase } from '../config/supabase';
@@ -34,6 +34,7 @@ interface ShipsContextType {
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
     getShipFromGearId: (gearId: string) => Ship | undefined;
+    gearToShipMap: Map<string, string>;
     setData: (data: Ship[] | ((prev: Ship[]) => Ship[])) => Promise<void>;
     loadShips: () => Promise<void>;
 }
@@ -255,6 +256,19 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         key: StorageKey.SHIPS,
         defaultValue: [],
     });
+
+    // Memoized gear-to-ship mapping for O(1) lookups
+    const gearToShipMap = useMemo(() => {
+        const map = new Map<string, string>();
+        localShips.forEach((ship) => {
+            Object.entries(ship.equipment).forEach(([slot, gearId]) => {
+                if (gearId) {
+                    map.set(gearId, ship.id);
+                }
+            });
+        });
+        return map;
+    }, [localShips]);
 
     // Synchronize local state with storage
     useEffect(() => {
@@ -894,10 +908,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const getShipFromGearId = useCallback(
         (gearId: string) => {
-            const ship = localShips.find((s) => Object.values(s.equipment).includes(gearId));
-            return ship;
+            const shipId = gearToShipMap.get(gearId);
+            return shipId ? localShips.find((s) => s.id === shipId) : undefined;
         },
-        [localShips]
+        [localShips, gearToShipMap]
     );
 
     return (
@@ -921,6 +935,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 validateGearAssignments,
                 unequipAllEquipment,
                 getShipFromGearId,
+                gearToShipMap,
                 setData: setStorageShips,
                 loadShips,
             }}
