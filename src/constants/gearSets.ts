@@ -57,7 +57,8 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Burner',
         stats: [{ name: 'attack', value: 15, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034712268832808.webp',
-        description: 'Applies Inferno',
+        minPieces: 4,
+        description: 'Applies Inferno 1 for 2 turns.',
     },
     DECIMATION: {
         name: 'Decimation',
@@ -148,6 +149,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
             { name: 'speed', value: 10, type: 'percentage' },
             { name: 'hp', value: 10, type: 'percentage' },
         ],
+        minPieces: 4,
         iconUrl: 'https://cdn.discordapp.com/emojis/1312034714919505920.webp',
     },
     SWIFTNESS: {

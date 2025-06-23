@@ -102,13 +102,12 @@ export const calculateTotalStats = (
         const setCounts = countSetPieces();
 
         Object.entries(setCounts).forEach(([setType, count]) => {
-            const bonusCount = Math.floor(count / 2);
+            const bonusCount = Math.floor(count / (GEAR_SETS[setType]?.minPieces || 2));
             if (bonusCount === 0) return;
 
             const gearWithBonus = Object.values(equipment)
                 .map((id) => id && getGearPiece(id))
-                .find((gear) => gear && gear.setBonus && GEAR_SETS[gear.setBonus].name === setType);
-
+                .find((gear) => gear && gear.setBonus && gear.setBonus === setType);
             if (
                 !gearWithBonus ||
                 !gearWithBonus.setBonus ||
@@ -131,10 +130,9 @@ export const calculateTotalStats = (
         Object.values(equipment || {}).forEach((gearId) => {
             if (!gearId) return;
             const gear = getGearPiece(gearId);
-            if (!gear?.setBonus || !GEAR_SETS[gear.setBonus]?.name) return;
+            if (!gear?.setBonus) return;
 
-            setCounts[GEAR_SETS[gear.setBonus].name] =
-                (setCounts[GEAR_SETS[gear.setBonus].name] || 0) + 1;
+            setCounts[gear.setBonus] = (setCounts[gear.setBonus] || 0) + 1;
         });
 
         return setCounts;

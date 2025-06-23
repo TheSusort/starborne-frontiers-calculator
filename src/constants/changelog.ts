@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.14.0';
+export const CURRENT_VERSION = '1.14.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.14.1',
+        date: '2025-06-23',
+        changes: ['Fixed a bug with set bonus calculation of 4 piece sets'],
+    },
     {
         version: '1.14.0',
         date: '2025-06-22',
