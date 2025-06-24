@@ -39,7 +39,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearSuggestion[]> {
         // Calculate total operations:
         // For each slot:
@@ -73,7 +74,8 @@ export class BeamSearchStrategy extends BaseStrategy {
                 getEngineeringStatsForShipType,
                 shipRole,
                 setPriorities,
-                statBonuses
+                statBonuses,
+                tryToCompleteSets
             );
         }
 
@@ -100,7 +102,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearConfiguration[]> {
         const newConfigurations: GearConfiguration[] = [];
 
@@ -140,7 +143,8 @@ export class BeamSearchStrategy extends BaseStrategy {
                     getGearPiece,
                     shipRole,
                     setPriorities,
-                    statBonuses
+                    statBonuses,
+                    tryToCompleteSets
                 );
 
                 newConfigurations.push({
@@ -169,7 +173,8 @@ export class BeamSearchStrategy extends BaseStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): number {
         const setCount: Record<string, number> = {};
         Object.values(equipment).forEach((gearId) => {
@@ -185,7 +190,8 @@ export class BeamSearchStrategy extends BaseStrategy {
             shipRole,
             setCount,
             setPriorities,
-            statBonuses
+            statBonuses,
+            tryToCompleteSets
         );
     }
 }

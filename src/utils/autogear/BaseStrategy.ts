@@ -1,7 +1,7 @@
 import { AutogearStrategy } from './AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { StatPriority, GearSuggestion } from '../../types/autogear';
+import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { EngineeringStat } from '../../types/stats';
 
@@ -24,7 +24,10 @@ export abstract class BaseStrategy implements AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName
+        shipRole?: ShipTypeName,
+        setPriorities?: SetPriority[],
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearSuggestion[]> | GearSuggestion[];
 
     public setProgressCallback(

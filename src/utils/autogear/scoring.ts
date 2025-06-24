@@ -1,6 +1,6 @@
 import { BaseStats } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import { GearSlotName, STAT_NORMALIZERS, ShipTypeName } from '../../constants';
+import { GearSlotName, STAT_NORMALIZERS, ShipTypeName, GEAR_SETS } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
@@ -78,7 +78,8 @@ export function calculatePriorityScore(
     shipRole?: ShipTypeName,
     setCount?: Record<string, number>,
     setPriorities?: SetPriority[],
-    statBonuses?: StatBonus[]
+    statBonuses?: StatBonus[],
+    tryToCompleteSets?: boolean
 ): number {
     let penalties = 0;
 
@@ -130,6 +131,20 @@ export function calculatePriorityScore(
                 // Multiply by 2 to make set requirements more important
                 const diff = (setPriority.count - currentCount) / setPriority.count;
                 penalties += diff * 200;
+            }
+        }
+    }
+
+    // Penalize incomplete sets when tryToCompleteSets is enabled
+    if (tryToCompleteSets && setCount) {
+        for (const [setName, count] of Object.entries(setCount)) {
+            if (count > 0) {
+                const minPieces = GEAR_SETS[setName]?.minPieces || 2;
+                if (count < minPieces) {
+                    // Calculate penalty as percentage below minimum pieces needed for set bonus
+                    const diff = (minPieces - count) / minPieces;
+                    penalties += diff * 150; // Moderate penalty for incomplete sets
+                }
             }
         }
     }
@@ -312,7 +327,7 @@ function calculateOffensiveSupporterScore(
 
     let boostScore = 0;
     if (boostCount === 4) {
-        boostScore = 30000; // Major bonus for complete set
+        boostScore = 45000; // Major bonus for complete set
     }
 
     return speed * 10 + attack + boostScore + bonusScore;
@@ -327,7 +342,8 @@ export function calculateTotalScore(
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
     shipRole?: ShipTypeName,
     setPriorities?: SetPriority[],
-    statBonuses?: StatBonus[]
+    statBonuses?: StatBonus[],
+    tryToCompleteSets?: boolean
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -392,7 +408,8 @@ export function calculateTotalScore(
         shipRole,
         setCount,
         setPriorities,
-        statBonuses
+        statBonuses,
+        tryToCompleteSets
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 

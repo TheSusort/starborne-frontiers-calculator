@@ -79,6 +79,7 @@ export const AutogearPage: React.FC = () => {
     const [ignoreUnleveled, setIgnoreUnleveled] = useState(true);
     const [statBonuses, setStatBonuses] = useState<StatBonus[]>([]);
     const [useUpgradedStats, setUseUpgradedStats] = useState(false);
+    const [tryToCompleteSets, setTryToCompleteSets] = useState(false);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -108,6 +109,7 @@ export const AutogearPage: React.FC = () => {
                 setIgnoreUnleveled(savedConfig.ignoreUnleveled);
                 setUseUpgradedStats(savedConfig.useUpgradedStats);
                 setSelectedAlgorithm(savedConfig.algorithm);
+                setTryToCompleteSets(savedConfig.tryToCompleteSets);
                 addNotification('success', 'Loaded saved configuration');
             }
         }
@@ -166,6 +168,7 @@ export const AutogearPage: React.FC = () => {
             ignoreUnleveled,
             useUpgradedStats,
             algorithm: selectedAlgorithm,
+            tryToCompleteSets,
         };
         saveConfig(config);
         performanceTracker.endTimer('SaveConfig');
@@ -230,7 +233,8 @@ export const AutogearPage: React.FC = () => {
                 getEngineeringStatsForShipType,
                 selectedShipRole || undefined,
                 setPriorities,
-                statBonuses
+                statBonuses,
+                tryToCompleteSets
             )
         );
         performanceTracker.endTimer('FindOptimalGear');
@@ -450,6 +454,7 @@ export const AutogearPage: React.FC = () => {
             setIgnoreUnleveled(true);
             setUseUpgradedStats(false);
             setSelectedAlgorithm(AutogearAlgorithm.Genetic);
+            setTryToCompleteSets(false);
             addNotification('success', 'Reset configuration to defaults');
         }
     };
@@ -474,6 +479,7 @@ export const AutogearPage: React.FC = () => {
                         setPriorities={setPriorities}
                         statBonuses={statBonuses}
                         useUpgradedStats={useUpgradedStats}
+                        tryToCompleteSets={tryToCompleteSets}
                         onShipSelect={(ship) => setSelectedShipId(ship.id)}
                         onRoleSelect={handleRoleChange}
                         onAlgorithmSelect={setSelectedAlgorithm}
@@ -488,6 +494,7 @@ export const AutogearPage: React.FC = () => {
                         onAddStatBonus={handleAddStatBonus}
                         onRemoveStatBonus={handleRemoveStatBonus}
                         onUseUpgradedStatsChange={setUseUpgradedStats}
+                        onTryToCompleteSetsChange={setTryToCompleteSets}
                         onResetConfig={handleResetConfig}
                     />
 

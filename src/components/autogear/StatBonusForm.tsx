@@ -44,8 +44,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                             label="Percentage"
                             type="number"
                             min="0"
-                            max="100"
-                            step="0.1"
+                            step="1"
                             value={percentage}
                             onChange={(e) => setPercentage(parseFloat(e.target.value))}
                             helpLabel="Set the percentage of the stat value to add to the role score."

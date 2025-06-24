@@ -35,5 +35,6 @@ export interface SavedAutogearConfig {
     ignoreEquipped: boolean;
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
+    tryToCompleteSets: boolean;
     algorithm: AutogearAlgorithm;
 }

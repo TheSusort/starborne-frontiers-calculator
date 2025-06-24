@@ -31,7 +31,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearSuggestion[]> {
         // Initialize progress tracking (slots * gear + potential set combinations)
         const totalOperations =
@@ -48,7 +49,8 @@ export class TwoPassStrategy extends BaseStrategy {
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
-            statBonuses
+            statBonuses,
+            tryToCompleteSets
         );
 
         // Second pass: Look for set bonus opportunities
@@ -61,7 +63,8 @@ export class TwoPassStrategy extends BaseStrategy {
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
-            statBonuses
+            statBonuses,
+            tryToCompleteSets
         );
 
         // Ensure progress is complete
@@ -85,7 +88,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
@@ -141,7 +145,8 @@ export class TwoPassStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(

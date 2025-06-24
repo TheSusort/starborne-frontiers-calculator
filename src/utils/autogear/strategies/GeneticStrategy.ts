@@ -53,7 +53,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearSuggestion[]> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
@@ -84,7 +85,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
-            statBonuses
+            statBonuses,
+            tryToCompleteSets
         );
         performanceTracker.endTimer('InitialEvaluation');
 
@@ -117,7 +119,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 getEngineeringStatsForShipType,
                 shipRole,
                 setPriorities,
-                statBonuses
+                statBonuses,
+                tryToCompleteSets
             );
             performanceTracker.endTimer('Evaluation');
 
@@ -189,7 +192,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
 
@@ -203,7 +207,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     getEngineeringStatsForShipType,
                     shipRole,
                     setPriorities,
-                    statBonuses
+                    statBonuses,
+                    tryToCompleteSets
                 );
 
                 return {
@@ -225,7 +230,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): number {
         performanceTracker.startTimer('CalculateFitness');
         const result = calculateTotalScore(
@@ -236,7 +242,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
-            statBonuses
+            statBonuses,
+            tryToCompleteSets
         );
         performanceTracker.endTimer('CalculateFitness');
         return result;

@@ -15,7 +15,8 @@ export interface AutogearStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        tryToCompleteSets?: boolean
     ): Promise<GearSuggestion[]> | GearSuggestion[];
     setProgressCallback(
         callback: (progress: { current: number; total: number; percentage: number }) => void

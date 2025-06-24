@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.14.1';
+export const CURRENT_VERSION = '1.15.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.15.0',
+        date: '2025-06-24',
+        changes: [
+            'Added tryToCompleteSets option to autogear. This option penalizes incomplete sets.',
+            'Adjusted defender scoring to be more accurate, by reducing the number of enemies to 2, and increasing the enemy attack to 40k.',
+        ],
+    },
     {
         version: '1.14.1',
         date: '2025-06-23',

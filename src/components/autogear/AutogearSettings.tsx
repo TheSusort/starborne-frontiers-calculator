@@ -31,6 +31,7 @@ interface AutogearSettingsProps {
     setPriorities: SetPriority[];
     statBonuses: StatBonus[];
     useUpgradedStats: boolean;
+    tryToCompleteSets: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -45,6 +46,7 @@ interface AutogearSettingsProps {
     onAddStatBonus: (bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
+    onTryToCompleteSetsChange: (value: boolean) => void;
     onResetConfig: () => void;
 }
 
@@ -108,6 +110,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     setPriorities,
     statBonuses,
     useUpgradedStats,
+    tryToCompleteSets,
     onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
@@ -122,6 +125,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddStatBonus,
     onRemoveStatBonus,
     onUseUpgradedStatsChange,
+    onTryToCompleteSetsChange,
     onResetConfig,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
@@ -238,12 +242,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         label="Ignore equipped gear on other ships"
                         checked={ignoreEquipped}
                         onChange={onIgnoreEquippedChange}
+                        helpLabel="When enabled, the autogear algorithm will ignore equipped gear on other ships. When disabled, it will include already equipped gear, except from ships with locked state, in the search."
                     />
                     <Checkbox
                         id="ignoreUnleveled"
                         label="Ignore unleveled gear"
                         checked={ignoreUnleveled}
                         onChange={onIgnoreUnleveledChange}
+                        helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable if you want to include unleveled gear in the search, this also applies to simulated upgraded gear."
                     />
                     <Checkbox
                         id="useUpgradedStats"
@@ -251,6 +257,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         checked={useUpgradedStats}
                         onChange={onUseUpgradedStatsChange}
                         helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
+                    />
+                    <Checkbox
+                        id="tryToCompleteSets"
+                        label="Try to complete gear sets"
+                        checked={tryToCompleteSets}
+                        onChange={onTryToCompleteSetsChange}
+                        helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
                     />
                 </div>
             </div>
