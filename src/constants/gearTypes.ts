@@ -38,16 +38,6 @@ export const GEAR_SLOTS: Record<string, GearSlot> = {
 } satisfies Record<string, GearSlot>;
 
 export const IMPLANT_SLOTS: Record<string, GearSlot> = {
-    implant_ultimate: {
-        label: 'Ultimate',
-        availableMainStats: [],
-        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
-    },
-    implant_major: {
-        label: 'Major',
-        availableMainStats: [],
-        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
-    },
     implant_minor_alpha: {
         label: 'Minor (Alpha)',
         availableMainStats: [],
@@ -60,6 +50,16 @@ export const IMPLANT_SLOTS: Record<string, GearSlot> = {
     },
     implant_minor_sigma: {
         label: 'Minor (Sigma)',
+        availableMainStats: [],
+        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
+    },
+    implant_major: {
+        label: 'Major',
+        availableMainStats: [],
+        expectedContribution: PERCENTAGE_SLOT_EXPECTED,
+    },
+    implant_ultimate: {
+        label: 'Ultimate',
         availableMainStats: [],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },

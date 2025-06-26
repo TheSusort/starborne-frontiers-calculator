@@ -59,6 +59,7 @@ interface RawShipRefit {
 interface RawShipImplant {
     id: string;
     slot: GearSlotName;
+    description?: string;
 }
 
 interface RawShipBaseStats {
@@ -226,7 +227,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
             })),
             implants: data.ship_implants.reduce(
                 (acc: Record<GearSlotName, string>, implant) => {
-                    acc[implant.slot] = implant.id;
+                    acc[implant.slot] = implant.description || implant.id;
                     return acc;
                 },
                 {} as Record<GearSlotName, string>
@@ -261,7 +262,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const gearToShipMap = useMemo(() => {
         const map = new Map<string, string>();
         localShips.forEach((ship) => {
-            Object.entries(ship.equipment).forEach(([slot, gearId]) => {
+            Object.entries({ ...ship.equipment, ...ship.implants }).forEach(([_, gearId]) => {
                 if (gearId) {
                     map.set(gearId, ship.id);
                 }
@@ -544,6 +545,35 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         .eq('ship_id', id);
 
                     if (statsError) throw statsError;
+                }
+
+                // Update implants if provided
+                if (updates.implants) {
+                    // Delete existing implants for this ship
+                    const { error: deleteImplantsError } = await supabase
+                        .from('ship_implants')
+                        .delete()
+                        .eq('ship_id', id);
+
+                    if (deleteImplantsError) throw deleteImplantsError;
+
+                    // Insert new implants
+                    const implantEntries = Object.entries(updates.implants).filter(
+                        ([_, gearId]) => gearId
+                    );
+                    if (implantEntries.length > 0) {
+                        const { error: insertImplantsError } = await supabase
+                            .from('ship_implants')
+                            .insert(
+                                implantEntries.map(([slot, gearId]) => ({
+                                    ship_id: id,
+                                    slot,
+                                    id: gearId,
+                                }))
+                            );
+
+                        if (insertImplantsError) throw insertImplantsError;
+                    }
                 }
 
                 if (updates.refits) {

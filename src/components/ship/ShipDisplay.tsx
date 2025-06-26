@@ -116,25 +116,13 @@ export const ShipDisplay: React.FC<Props> = memo(
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const navigate = useNavigate();
         const [isTooltipVisible, setIsTooltipVisible] = useState(false);
-        const statsBreakdown = useMemo(
-            () =>
-                calculateTotalStats(
-                    ship.baseStats,
-                    ship.equipment,
-                    getGearPiece,
-                    ship.refits,
-                    ship.implants,
-                    getEngineeringStatsForShipType(ship.type)
-                ),
-            [
-                ship.baseStats,
-                ship.equipment,
-                getGearPiece,
-                ship.refits,
-                getEngineeringStatsForShipType,
-                ship.type,
-                ship.implants,
-            ]
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment,
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            getEngineeringStatsForShipType(ship.type)
         );
 
         if (variant === 'compact') {

@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, GearSlotName } from '../../constants';
+import {
+    GEAR_SETS,
+    GEAR_SLOTS,
+    GearSlotName,
+    IMPLANT_SLOTS,
+    ImplantSlotName,
+} from '../../constants';
 import { ShipDisplay } from './ShipDisplay';
 import { ShipDisplayImage } from './ShipDisplayImage';
 import { GearSlot } from '../gear/GearSlot';
@@ -26,6 +32,8 @@ interface Props {
     onRemove?: (id: string) => void;
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onUnequipAll: (shipId: string) => void;
+    onEquipImplant?: (shipId: string, slot: ImplantSlotName, gearId: string) => void;
+    onRemoveImplant?: (shipId: string, slot: ImplantSlotName) => void;
     variant?: 'full' | 'compact' | 'extended';
     viewMode?: 'list' | 'image';
 }
@@ -43,10 +51,12 @@ export const ShipCard: React.FC<Props> = ({
     onRemoveGear,
     onHoverGear,
     onUnequipAll,
+    onEquipImplant,
+    onRemoveImplant,
     variant = 'full',
     viewMode = 'list',
 }) => {
-    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<(GearSlotName | ImplantSlotName) | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingGear, setPendingGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
@@ -80,18 +90,43 @@ export const ShipCard: React.FC<Props> = ({
             setPendingGear(gear);
             setShowConfirmModal(true);
         } else if (selectedSlot) {
-            onEquipGear(ship.id, selectedSlot, gear.id);
-            setSelectedSlot(null);
-            addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
+            // Check if this is an implant slot
+            if (selectedSlot.startsWith('implant_')) {
+                if (onEquipImplant) {
+                    onEquipImplant(ship.id, selectedSlot as ImplantSlotName, gear.id);
+                    setSelectedSlot(null);
+                    addNotification(
+                        'success',
+                        `Equipped ${IMPLANT_SLOTS[selectedSlot].label} on ${ship.name}`
+                    );
+                }
+            } else {
+                onEquipGear(ship.id, selectedSlot as GearSlotName, gear.id);
+                setSelectedSlot(null);
+                addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
+            }
         }
     };
 
     const handleConfirmEquip = () => {
         if (pendingGear && selectedSlot) {
-            onEquipGear(ship.id, selectedSlot, pendingGear.id);
-            setSelectedSlot(null);
-            addNotification('success', `Equipped ${pendingGear.slot} on ${ship.name}`);
-            setPendingGear(null);
+            // Check if this is an implant slot
+            if (selectedSlot.startsWith('implant_')) {
+                if (onEquipImplant) {
+                    onEquipImplant(ship.id, selectedSlot as ImplantSlotName, pendingGear.id);
+                    setSelectedSlot(null);
+                    addNotification(
+                        'success',
+                        `Equipped ${IMPLANT_SLOTS[selectedSlot].label} on ${ship.name}`
+                    );
+                    setPendingGear(null);
+                }
+            } else {
+                onEquipGear(ship.id, selectedSlot as GearSlotName, pendingGear.id);
+                setSelectedSlot(null);
+                addNotification('success', `Equipped ${pendingGear.slot} on ${ship.name}`);
+                setPendingGear(null);
+            }
         }
     };
 
@@ -107,18 +142,37 @@ export const ShipCard: React.FC<Props> = ({
                 variant={variant}
             >
                 <div className="p-4 bg-dark">
-                    <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
-                        {Object.entries(GEAR_SLOTS).map(([key, _]) => (
-                            <GearSlot
-                                key={key}
-                                slotKey={key as GearSlotName}
-                                gear={gearLookup[ship.equipment?.[key as GearSlotName] || '']}
-                                hoveredGear={hoveredGear}
-                                onSelect={setSelectedSlot}
-                                onRemove={(slot) => onRemoveGear(ship.id, slot)}
-                                onHover={onHoverGear}
-                            />
-                        ))}
+                    <div className="flex justify-between items-center gap-2">
+                        <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
+                            {Object.entries(GEAR_SLOTS).map(([key, _]) => (
+                                <GearSlot
+                                    key={key}
+                                    slotKey={key as GearSlotName}
+                                    gear={gearLookup[ship.equipment?.[key as GearSlotName] || '']}
+                                    hoveredGear={hoveredGear}
+                                    onSelect={setSelectedSlot}
+                                    onRemove={(slot) => onRemoveGear(ship.id, slot)}
+                                    onHover={onHoverGear}
+                                />
+                            ))}
+                        </div>
+                        {variant === 'extended' && onRemoveImplant && onEquipImplant && (
+                            <div className="flex flex-col flex-wrap gap-2 w-fit mx-auto justify-center items-center max-h-[200px]">
+                                {Object.entries(IMPLANT_SLOTS).map(([implant, _]) => (
+                                    <GearSlot
+                                        key={implant}
+                                        slotKey={implant as ImplantSlotName}
+                                        gear={getGearPiece(ship.implants?.[implant] || '')}
+                                        hoveredGear={hoveredGear}
+                                        onSelect={setSelectedSlot}
+                                        onRemove={(slot) =>
+                                            onRemoveImplant(ship.id, slot as ImplantSlotName)
+                                        }
+                                        onHover={onHoverGear}
+                                    />
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 pt-3 min-h-[36px]">

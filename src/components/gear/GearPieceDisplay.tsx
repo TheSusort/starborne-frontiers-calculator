@@ -45,7 +45,6 @@ export const GearPieceDisplay = memo(
             }
             return undefined;
         }, [gear.id, gearToShipMap, getShipFromGearId]);
-
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
         const upgrade = getUpgrade(gear.id);
@@ -87,7 +86,7 @@ export const GearPieceDisplay = memo(
                                 <Image
                                     src={implantInfo.imageKey}
                                     alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
-                                    className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6 translate-y-1'}`}
+                                    className={`h-auto translate-y-1 ${small ? 'min-w-4 w-4' : 'min-w-6 w-6'}`}
                                 />
                             )}
                             {!isImplant && slotInfo && (
@@ -141,7 +140,7 @@ export const GearPieceDisplay = memo(
                                 </>
                             )}
                             {isImplant && mode !== 'subcompact' && (
-                                <span className="ps-8 text-xs">
+                                <span className={`${small ? 'ps-6' : 'ps-8'} text-xs`}>
                                     {IMPLANT_SLOTS[gear.slot as keyof typeof IMPLANT_SLOTS]?.label}
                                 </span>
                             )}
@@ -257,7 +256,7 @@ export const GearPieceDisplay = memo(
                         )}
 
                         {shipName && mode !== 'subcompact' && (
-                            <span className="text-xs"> Equipped by: {shipName}</span>
+                            <span className="text-xs !mt-auto pt-2"> Equipped by: {shipName}</span>
                         )}
                     </div>
                 )}

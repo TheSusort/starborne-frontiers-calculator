@@ -142,6 +142,16 @@ export const ShipDetailsPage: React.FC = () => {
                                 setEditingShip(ship);
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
+                            onEquipImplant={(_, slot, gearId) => {
+                                const updatedShip = { ...ship };
+                                updatedShip.implants[slot] = gearId;
+                                updateShip(updatedShip.id, updatedShip);
+                            }}
+                            onRemoveImplant={(_, slot) => {
+                                const updatedShip = { ...ship };
+                                delete updatedShip.implants[slot];
+                                updateShip(updatedShip.id, updatedShip);
+                            }}
                         />
 
                         <section className="bg-dark p-4">
@@ -158,26 +168,6 @@ export const ShipDetailsPage: React.FC = () => {
                                 </div>
                             ) : (
                                 <p className="text-gray-400">No refits installed</p>
-                            )}
-                        </section>
-
-                        <section className="bg-dark p-4">
-                            <h3 className="mb-4">Implants ({Object.keys(ship.implants).length})</h3>
-                            {Object.keys(ship.implants).length > 0 ? (
-                                <div className="space-y-2">
-                                    {Object.keys(ship.implants).map((implant, index) => (
-                                        <StatDisplay
-                                            key={index}
-                                            stats={
-                                                getGearPiece(ship.implants[implant] || '')
-                                                    ?.subStats || []
-                                            }
-                                            className="p-2 bg-dark-lighter"
-                                        />
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-gray-400">No implants installed</p>
                             )}
                         </section>
                     </div>

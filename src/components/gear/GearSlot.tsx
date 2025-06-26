@@ -1,16 +1,24 @@
 import { memo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GearSetName, GearSlotName, RARITIES, STATS } from '../../constants';
+import {
+    GEAR_SETS,
+    GearSetName,
+    GearSlotName,
+    RARITIES,
+    STATS,
+    ImplantSlotName,
+} from '../../constants';
 import { Button, Tooltip, CloseIcon } from '../ui';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { ImplantName, IMPLANTS } from '../../constants/implants';
 import { Image } from '../ui/Image';
+
 interface GearSlotProps {
-    slotKey: GearSlotName;
+    slotKey: GearSlotName | ImplantSlotName;
     gear?: GearPiece;
     hoveredGear: GearPiece | null;
-    onSelect?: (slot: GearSlotName) => void;
-    onRemove?: (slot: GearSlotName) => void;
+    onSelect?: (slot: GearSlotName | ImplantSlotName) => void;
+    onRemove?: (slot: GearSlotName | ImplantSlotName) => void;
     onHover: (gear: GearPiece | null) => void;
 }
 
@@ -21,20 +29,13 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
             return (
                 <div className="relative">
                     <div
-                        className={`w-16 h-16 bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group/gear ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
+                        className={`${isImplant ? 'w-12 h-12' : 'w-16 h-16'} bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group/gear ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
                         onClick={() => onSelect && onSelect(slotKey)}
                         onMouseEnter={() => onHover(gear)}
                         onMouseLeave={() => onHover(null)}
                     >
                         {/* Gear display logic */}
                         <div className="absolute top-1 left-1">
-                            {isImplant && (
-                                <Image
-                                    src={IMPLANTS[gear.setBonus as ImplantName].imageKey as string}
-                                    alt={IMPLANTS[gear.setBonus as ImplantName].name}
-                                    className="w-5"
-                                />
-                            )}
                             {!isImplant && (
                                 <img
                                     src={GEAR_SETS[gear.setBonus as GearSetName]?.iconUrl as string}
@@ -44,6 +45,16 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                             )}
                         </div>
                         {/* main stat and stars */}
+
+                        {isImplant && (
+                            <div className="h-full w-full flex items-center justify-center">
+                                <Image
+                                    src={IMPLANTS[gear.setBonus as ImplantName].imageKey as string}
+                                    alt={IMPLANTS[gear.setBonus as ImplantName].name}
+                                    className="w-7"
+                                />
+                            </div>
+                        )}
 
                         {!isImplant && (
                             <>
@@ -85,7 +96,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                 variant="secondary"
                 aria-label="Equip gear piece"
                 onClick={() => onSelect && onSelect(slotKey)}
-                className="w-16 h-16 bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors"
+                className={`${slotKey.startsWith('implant_') ? 'w-12 h-12' : 'w-16 h-16'} bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors`}
             >
                 <span className="text-xs text-gray-400 capitalize">equip</span>
             </Button>
