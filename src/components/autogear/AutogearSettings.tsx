@@ -111,12 +111,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     statBonuses,
     useUpgradedStats,
     tryToCompleteSets,
-    onShipSelect,
     onRoleSelect,
     onAlgorithmSelect,
     onAddPriority,
     onRemovePriority,
-    onFindOptimalGear,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
     onToggleSecondaryRequirements,
@@ -133,9 +131,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-bold ">Settings</h3>
-            <ShipSelector onSelect={onShipSelect} selected={selectedShip} />
-
             <div className="p-4 bg-dark space-y-2">
                 <div className="flex justify-between items-center">
                     <span className="text-sm">Predefined Strategies</span>
@@ -161,6 +156,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     noDefaultSelection
                     defaultOption="Manual"
                 />
+            </div>
+
+            <div className="space-y-2 p-4 bg-dark">
+                <Select
+                    label="Algorithm"
+                    data-testid="algorithm-select"
+                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
+                        value: key,
+                        label: name,
+                    }))}
+                    value={selectedAlgorithm}
+                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
+                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
+                />
+                <p className="text-sm text-gray-400">
+                    {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
+                </p>
             </div>
 
             {selectedShipRole && (
@@ -268,23 +280,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             </div>
 
-            <div className="space-y-2 p-4 bg-dark">
-                <Select
-                    label="Algorithm"
-                    data-testid="algorithm-select"
-                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
-                        value: key,
-                        label: name,
-                    }))}
-                    value={selectedAlgorithm}
-                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
-                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
-                />
-                <p className="text-sm text-gray-400">
-                    {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
-                </p>
-            </div>
-
             {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
                 <div className="bg-dark p-4 space-y-2">
                     {statBonuses.length > 0 && (
@@ -362,17 +357,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     )}
                 </div>
             )}
-
-            <div className="flex justify-end">
-                <Button
-                    onClick={onFindOptimalGear}
-                    disabled={!selectedShip}
-                    variant="primary"
-                    className="w-full"
-                >
-                    Find Optimal Gear
-                </Button>
-            </div>
         </div>
     );
 };

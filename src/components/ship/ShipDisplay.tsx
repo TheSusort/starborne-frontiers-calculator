@@ -140,7 +140,7 @@ export const ShipDisplay: React.FC<Props> = memo(
         if (variant === 'compact') {
             return (
                 <div
-                    className={`flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
+                    className={`flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
                     onClick={onClick}

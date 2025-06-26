@@ -12,7 +12,8 @@ import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, GearSlotName, ShipTypeName } from '../../constants';
-import { AutogearSettings } from '../../components/autogear/AutogearSettings';
+import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
+import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
@@ -80,6 +81,7 @@ export const AutogearPage: React.FC = () => {
     const [statBonuses, setStatBonuses] = useState<StatBonus[]>([]);
     const [useUpgradedStats, setUseUpgradedStats] = useState(false);
     const [tryToCompleteSets, setTryToCompleteSets] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
 
     // Derived state
     const selectedShip = getShipById(selectedShipId);
@@ -468,34 +470,14 @@ export const AutogearPage: React.FC = () => {
                 helpLink="/documentation#autogear"
             >
                 <div className="md:grid md:grid-cols-2 gap-4">
-                    <AutogearSettings
+                    <AutogearQuickSettings
                         selectedShip={selectedShip || null}
-                        selectedShipRole={selectedShipRole}
-                        selectedAlgorithm={selectedAlgorithm}
-                        priorities={statPriorities}
-                        ignoreEquipped={ignoreEquipped}
-                        ignoreUnleveled={ignoreUnleveled}
-                        showSecondaryRequirements={showSecondaryRequirements}
-                        setPriorities={setPriorities}
-                        statBonuses={statBonuses}
-                        useUpgradedStats={useUpgradedStats}
-                        tryToCompleteSets={tryToCompleteSets}
                         onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                        onRoleSelect={handleRoleChange}
-                        onAlgorithmSelect={setSelectedAlgorithm}
-                        onAddPriority={handleAddStatPriority}
-                        onRemovePriority={handleRemoveStatPriority}
+                        onOpenSettings={(event?: React.MouseEvent<HTMLButtonElement>) => {
+                            event?.stopPropagation();
+                            setShowSettingsModal(true);
+                        }}
                         onFindOptimalGear={handleAutogear}
-                        onIgnoreEquippedChange={setIgnoreEquipped}
-                        onIgnoreUnleveledChange={setIgnoreUnleveled}
-                        onToggleSecondaryRequirements={setShowSecondaryRequirements}
-                        onAddSetPriority={handleAddSetPriority}
-                        onRemoveSetPriority={handleRemoveSetPriority}
-                        onAddStatBonus={handleAddStatBonus}
-                        onRemoveStatBonus={handleRemoveStatBonus}
-                        onUseUpgradedStatsChange={setUseUpgradedStats}
-                        onTryToCompleteSetsChange={setTryToCompleteSets}
-                        onResetConfig={handleResetConfig}
                     />
 
                     {suggestions.length > 0 && shouldShowSuggestions && (
@@ -510,16 +492,16 @@ export const AutogearPage: React.FC = () => {
                             useUpgradedStats={useUpgradedStats}
                         />
                     )}
-
-                    {/* Show progress bar for any strategy when optimizing */}
-                    {optimizationProgress && (
-                        <ProgressBar
-                            current={optimizationProgress.current}
-                            total={optimizationProgress.total}
-                            percentage={optimizationProgress.percentage}
-                        />
-                    )}
                 </div>
+
+                {/* Show progress bar for any strategy when optimizing */}
+                {optimizationProgress && (
+                    <ProgressBar
+                        current={optimizationProgress.current}
+                        total={optimizationProgress.total}
+                        percentage={optimizationProgress.percentage}
+                    />
+                )}
 
                 {suggestedStats && suggestions.length > 0 && (
                     <>
@@ -568,18 +550,20 @@ export const AutogearPage: React.FC = () => {
                     suggestedSimulation &&
                     suggestions.length > 0 &&
                     shouldShowSuggestions && (
-                        <SimulationResults
-                            currentSimulation={currentSimulation}
-                            suggestedSimulation={suggestedSimulation}
-                            role={selectedShipRole}
-                        />
+                        <div className="mt-8">
+                            <SimulationResults
+                                currentSimulation={currentSimulation}
+                                suggestedSimulation={suggestedSimulation}
+                                role={selectedShipRole}
+                            />
+                        </div>
                     )}
 
                 {currentStats &&
                     suggestedStats &&
                     suggestions.length > 0 &&
                     shouldShowSuggestions && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 ">
+                        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
                             <StatList
                                 stats={currentStats.final}
                                 title="Current Stats"
@@ -593,6 +577,38 @@ export const AutogearPage: React.FC = () => {
                             />
                         </div>
                     )}
+
+                <AutogearSettingsModal
+                    isOpen={showSettingsModal}
+                    onClose={() => setShowSettingsModal(false)}
+                    selectedShip={selectedShip || null}
+                    selectedShipRole={selectedShipRole}
+                    selectedAlgorithm={selectedAlgorithm}
+                    priorities={statPriorities}
+                    ignoreEquipped={ignoreEquipped}
+                    ignoreUnleveled={ignoreUnleveled}
+                    showSecondaryRequirements={showSecondaryRequirements}
+                    setPriorities={setPriorities}
+                    statBonuses={statBonuses}
+                    useUpgradedStats={useUpgradedStats}
+                    tryToCompleteSets={tryToCompleteSets}
+                    onShipSelect={(ship) => setSelectedShipId(ship.id)}
+                    onRoleSelect={handleRoleChange}
+                    onAlgorithmSelect={setSelectedAlgorithm}
+                    onAddPriority={handleAddStatPriority}
+                    onRemovePriority={handleRemoveStatPriority}
+                    onFindOptimalGear={handleAutogear}
+                    onIgnoreEquippedChange={setIgnoreEquipped}
+                    onIgnoreUnleveledChange={setIgnoreUnleveled}
+                    onToggleSecondaryRequirements={setShowSecondaryRequirements}
+                    onAddSetPriority={handleAddSetPriority}
+                    onRemoveSetPriority={handleRemoveSetPriority}
+                    onAddStatBonus={handleAddStatBonus}
+                    onRemoveStatBonus={handleRemoveStatBonus}
+                    onUseUpgradedStatsChange={setUseUpgradedStats}
+                    onTryToCompleteSetsChange={setTryToCompleteSets}
+                    onResetConfig={handleResetConfig}
+                />
 
                 <ConfirmModal
                     isOpen={showConfirmModal}

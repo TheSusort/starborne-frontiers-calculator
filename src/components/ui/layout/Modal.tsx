@@ -69,11 +69,11 @@ export const Modal: React.FC<Props> = ({
             />
             <div className="fixed inset-0 z-50">
                 <div
-                    className={`flex min-h-full ${fullHeight ? '' : 'items-center'} justify-center p-4`}
+                    className={`flex h-screen ${fullHeight ? '' : 'items-center'} justify-center p-4`}
                     onClick={onClose}
                 >
                     <div
-                        className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl max-h-[90vh] flex flex-col"
+                        className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                     >
@@ -86,7 +86,9 @@ export const Modal: React.FC<Props> = ({
                         </div>
 
                         {/* Content - Now scrollable */}
-                        <div className="px-6 py-4 overflow-y-auto">{children}</div>
+                        <div className="px-6 py-4 overflow-y-auto flex-1 max-h-[80vh]">
+                            {children}
+                        </div>
                     </div>
                 </div>
             </div>

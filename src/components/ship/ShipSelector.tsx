@@ -10,6 +10,7 @@ interface ShipSelectorProps {
     onSelect: (ship: Ship) => void;
     variant?: 'compact' | 'full' | 'extended';
     sortDirection?: 'asc' | 'desc';
+    children?: React.ReactNode;
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({
@@ -17,22 +18,32 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     onSelect,
     variant = 'compact',
     sortDirection = 'asc',
+    children,
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
     const [search, setSearch] = useState('');
     return (
         <div className="space-y-4">
-            <Button
-                aria-label={selected ? 'Select another Ship' : 'Select a Ship'}
-                variant="secondary"
-                onClick={() => setIsShipModalOpen(true)}
-                fullWidth
-            >
-                {selected ? 'Select another Ship' : 'Select a Ship'}
-            </Button>
-
-            {selected && <ShipDisplay ship={selected} variant={variant} />}
+            {selected ? (
+                <ShipDisplay
+                    ship={selected}
+                    variant={variant}
+                    onClick={() => setIsShipModalOpen(true)}
+                >
+                    {children}
+                </ShipDisplay>
+            ) : (
+                <Button
+                    aria-label="Select a Ship"
+                    variant="secondary"
+                    onClick={() => setIsShipModalOpen(true)}
+                    className="min-h-[70px]"
+                    fullWidth
+                >
+                    {selected ? 'Select another Ship' : 'Select a Ship'}
+                </Button>
+            )}
 
             <Modal
                 isOpen={isShipModalOpen}
