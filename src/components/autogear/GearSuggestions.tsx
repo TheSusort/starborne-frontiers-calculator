@@ -47,9 +47,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 
     return (
         <div className="pt-4 md:pt-0">
-            <div className="sticky top-16 lg:top-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold">Suggested Gear</h3>
+            <div className="">
+                <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
                 <div className="bg-dark">
                     {!expanded ? (

@@ -294,6 +294,7 @@ function calculateBufferScore(
     setCount?: Record<string, number>,
     statBonuses?: StatBonus[]
 ): number {
+    console.log('setCount', setCount);
     const speed = stats.speed || 0;
     const boostCount = setCount?.BOOST || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
@@ -305,7 +306,7 @@ function calculateBufferScore(
     // Heavily reward having the full set
     let boostScore = 0;
     if (boostCount === 4) {
-        boostScore = 30000; // Major bonus for complete set
+        boostScore = 45000; // Major bonus for complete set
     }
 
     // Add effective HP as a secondary consideration

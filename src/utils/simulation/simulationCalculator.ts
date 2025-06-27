@@ -35,6 +35,9 @@ export interface SimulationSummary {
     // Supporter(Buffer) specific
     speed?: number;
     activeSets?: string[];
+
+    // Supporter(Offensive) specific
+    attack?: number;
 }
 
 export const SIMULATION_ITERATIONS = 1000;
@@ -51,7 +54,7 @@ export function runSimulation(
                 ...runDefenderSimulation(stats),
                 activeSets: activeSets,
             };
-        case 'DEBUFFER_OFFENSIVE':
+        case 'DEBUFFER':
         case 'DEBUFFER_DEFENSIVE':
         case 'DEBUFFER_BOMBER':
             return runDebufferSimulation(stats);
@@ -62,6 +65,12 @@ export function runSimulation(
                 ...runDefenderSimulation(stats),
                 speed: stats.speed,
                 activeSets: activeSets,
+            };
+        case 'SUPPORTER_OFFENSIVE':
+            return {
+                speed: stats.speed,
+                activeSets: activeSets,
+                attack: stats.attack,
             };
         default:
             return runDamageSimulation(stats);
