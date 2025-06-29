@@ -4,14 +4,14 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { PageLayout, ProgressBar } from '../../components/ui';
+import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
+import { PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, ShipTypeName } from '../../constants';
+import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
@@ -49,108 +49,148 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, getShipFromGearId, lockEquipment, gearToShipMap } =
-        useShips();
+    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
 
     // useState hooks
-    const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [selectedShipRole, setSelectedShipRole] = useState<ShipTypeName | null>('ATTACKER');
-    const [statPriorities, setStatPriorities] = useState<StatPriority[]>([]);
-    const [suggestions, setSuggestions] = useState<GearSuggestion[]>([]);
+    const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
+    const [shipConfigs, setShipConfigs] = useState<
+        Record<
+            string,
+            {
+                shipRole: ShipTypeName | null;
+                statPriorities: StatPriority[];
+                setPriorities: SetPriority[];
+                statBonuses: StatBonus[];
+                ignoreEquipped: boolean;
+                ignoreUnleveled: boolean;
+                useUpgradedStats: boolean;
+                tryToCompleteSets: boolean;
+                selectedAlgorithm: AutogearAlgorithm;
+                showSecondaryRequirements: boolean;
+            }
+        >
+    >({});
+    const [shipResults, setShipResults] = useState<
+        Record<
+            string,
+            {
+                suggestions: GearSuggestion[];
+                currentSimulation: SimulationSummary | null;
+                suggestedSimulation: SimulationSummary | null;
+                currentStats: StatBreakdown;
+                suggestedStats: StatBreakdown;
+            }
+        >
+    >({});
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
-    const [setPriorities, setSetPriorities] = useState<SetPriority[]>([]);
-    const [selectedAlgorithm, setSelectedAlgorithm] = useState<AutogearAlgorithm>(
-        AutogearAlgorithm.Genetic
-    );
-    const [currentSimulation, setCurrentSimulation] = useState<SimulationSummary | null>(null);
-    const [suggestedSimulation, setSuggestedSimulation] = useState<SimulationSummary | null>(null);
     const [optimizationProgress, setOptimizationProgress] = useState<{
         current: number;
         total: number;
         percentage: number;
+        currentShip: {
+            name: string;
+            index: number;
+        };
     } | null>(null);
-    const [ignoreEquipped, setIgnoreEquipped] = useState(true);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
-    const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
-    const [ignoreUnleveled, setIgnoreUnleveled] = useState(true);
-    const [statBonuses, setStatBonuses] = useState<StatBonus[]>([]);
-    const [useUpgradedStats, setUseUpgradedStats] = useState(false);
-    const [tryToCompleteSets, setTryToCompleteSets] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [shipSettings, setShipSettings] = useState<Ship | null>(null);
+    const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<string | null>(null);
+    const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
 
-    // Derived state
-    const selectedShip = getShipById(selectedShipId);
+    // Helper function to get config for a specific ship
+    const getShipConfig = (shipId: string) => {
+        const ship = getShipById(shipId);
+        const defaultRole = ship?.type || ('ATTACKER' as ShipTypeName);
+
+        return (
+            shipConfigs[shipId] || {
+                shipRole: defaultRole,
+                statPriorities: [],
+                setPriorities: [],
+                statBonuses: [],
+                ignoreEquipped: true,
+                ignoreUnleveled: true,
+                useUpgradedStats: false,
+                tryToCompleteSets: false,
+                selectedAlgorithm: AutogearAlgorithm.Genetic,
+                showSecondaryRequirements: false,
+            }
+        );
+    };
+
+    // Helper function to update config for a specific ship
+    const updateShipConfig = (shipId: string, updates: Partial<(typeof shipConfigs)[string]>) => {
+        setShipConfigs((prev) => ({
+            ...prev,
+            [shipId]: {
+                ...getShipConfig(shipId),
+                ...updates,
+            },
+        }));
+    };
 
     // useEffect hooks
     useEffect(() => {
+        if (hasInitializedFromParams) return; // Don't run if already initialized
+
         const shipId = searchParams.get('shipId');
+
+        // Clear search params
+        window.history.replaceState({}, '', window.location.pathname);
+
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                setSelectedShipId(shipId);
-                setSelectedShipRole(ship.type);
+                setSelectedShips([ship]);
+                // Load saved config for this ship
+                const savedConfig = getConfig(shipId);
+                if (savedConfig) {
+                    updateShipConfig(shipId, savedConfig);
+                    addNotification('success', 'Loaded saved configuration');
+                }
             }
         }
-    }, [searchParams, getShipById]);
 
-    // Load saved config when ship is selected
+        setHasInitializedFromParams(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams, getShipById, getConfig, addNotification, hasInitializedFromParams]);
+
+    // Set initial active tab when results are available
     useEffect(() => {
-        if (selectedShipId) {
-            const savedConfig = getConfig(selectedShipId);
-            if (savedConfig) {
-                setSelectedShipRole(savedConfig.shipRole);
-                setStatPriorities(savedConfig.statPriorities);
-                setSetPriorities(savedConfig.setPriorities);
-                setStatBonuses(savedConfig.statBonuses);
-                setIgnoreEquipped(savedConfig.ignoreEquipped);
-                setIgnoreUnleveled(savedConfig.ignoreUnleveled);
-                setUseUpgradedStats(savedConfig.useUpgradedStats);
-                setSelectedAlgorithm(savedConfig.algorithm);
-                setTryToCompleteSets(savedConfig.tryToCompleteSets);
-                addNotification('success', 'Loaded saved configuration');
-            }
+        const shipIds = Object.keys(shipResults);
+        if (shipIds.length > 0 && !activeTab) {
+            setActiveTab(shipIds[0]);
         }
-    }, [selectedShipId, getConfig, addNotification]);
+    }, [shipResults, activeTab]);
 
-    // Helper functions
-    const handleAddStatPriority = (priority: StatPriority) => {
-        addNotification('success', 'Stat priority added');
-        setStatPriorities([...statPriorities, priority]);
-    };
-
-    const handleRemoveStatPriority = (index: number) => {
-        setStatPriorities(statPriorities.filter((_, i) => i !== index));
-    };
-
-    const handleAddSetPriority = (priority: SetPriority) => {
-        addNotification('success', 'Set priority added');
-        setSetPriorities([...setPriorities, priority]);
-    };
-
-    const handleRemoveSetPriority = (index: number) => {
-        setSetPriorities(setPriorities.filter((_, i) => i !== index));
-    };
+    // Refresh selectedShips when ships array changes (e.g., after lock state changes)
+    useEffect(() => {
+        setSelectedShips((prevSelectedShips) =>
+            prevSelectedShips.map((selectedShip) =>
+                selectedShip ? getShipById(selectedShip.id) || selectedShip : null
+            )
+        );
+    }, [ships, getShipById]);
 
     const handleLockEquipment = async (ship: Ship) => {
         await lockEquipment(ship.id, !ship.equipmentLocked);
-    };
-
-    const handleAddStatBonus = (bonus: StatBonus) => {
-        addNotification('success', 'Stat bonus added');
-        setStatBonuses([...statBonuses, bonus]);
-    };
-
-    const handleRemoveStatBonus = (index: number) => {
-        setStatBonuses(statBonuses.filter((_, i) => i !== index));
+        addNotification(
+            'success',
+            `Equipment ${ship.equipmentLocked ? 'unlocked' : 'locked'} for ${ship.name}`
+        );
     };
 
     const handleAutogear = async () => {
-        if (!selectedShip) return;
+        // Filter out null ships and get valid ships
+        const validShips = selectedShips.filter((ship): ship is Ship => ship !== null);
+        if (validShips.length === 0) return;
 
         // Uncomment the next line to disable performance tracking entirely
         // performanceTracker.disable();
@@ -158,189 +198,254 @@ export const AutogearPage: React.FC = () => {
         performanceTracker.reset();
         performanceTracker.startTimer('TotalAutogear');
 
-        // Save current configuration before running optimization
-        performanceTracker.startTimer('SaveConfig');
-        const config = {
-            shipId: selectedShip.id,
-            shipRole: selectedShipRole,
-            statPriorities,
-            setPriorities,
-            statBonuses,
-            ignoreEquipped,
-            ignoreUnleveled,
-            useUpgradedStats,
-            algorithm: selectedAlgorithm,
-            tryToCompleteSets,
-        };
-        saveConfig(config);
-        performanceTracker.endTimer('SaveConfig');
-
         setOptimizationProgress(null);
-        setSuggestions([]);
-        setShowSecondaryRequirements(false);
+        setShipResults({});
+        setActiveTab(null);
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
-        console.log('Starting optimization...');
+        console.log('Starting team optimization...');
 
-        const strategy = getAutogearStrategy(selectedAlgorithm);
-        strategy.setProgressCallback(setOptimizationProgress);
+        // Track used gear across all runs
+        const usedGearIds = new Set<string>();
+        const allResults: Record<
+            string,
+            {
+                suggestions: GearSuggestion[];
+                currentSimulation: SimulationSummary | null;
+                suggestedSimulation: SimulationSummary | null;
+                currentStats: StatBreakdown;
+                suggestedStats: StatBreakdown;
+            }
+        > = {};
 
-        // Filter inventory based on both locked ships and ignoreEquipped setting
-        performanceTracker.startTimer('FilterInventory');
-        const availableInventory = inventory
-            .filter((gear) => {
-                // Exclude gear with set bonuses that have count set to 0
-                const excludedBySetPriority = setPriorities.some(
-                    (priority) => priority.setName === gear.setBonus && priority.count === 0
+        // Custom progress callback for team autogear
+        const teamProgressCallback = (
+            progress: { current: number; total: number; percentage: number },
+            shipName: string,
+            index: number
+        ) => {
+            setOptimizationProgress({
+                ...progress,
+                currentShip: {
+                    name: shipName,
+                    index: index,
+                },
+            });
+        };
+
+        // Run autogear for each ship sequentially
+        for (let i = 0; i < validShips.length; i++) {
+            const ship = validShips[i];
+            const shipConfig = getShipConfig(ship.id);
+
+            // Save current configuration before running optimization
+            performanceTracker.startTimer('SaveConfig');
+            const config = {
+                shipId: ship.id,
+                shipRole: shipConfig.shipRole,
+                statPriorities: shipConfig.statPriorities,
+                setPriorities: shipConfig.setPriorities,
+                statBonuses: shipConfig.statBonuses,
+                ignoreEquipped: shipConfig.ignoreEquipped,
+                ignoreUnleveled: shipConfig.ignoreUnleveled,
+                useUpgradedStats: shipConfig.useUpgradedStats,
+                algorithm: shipConfig.selectedAlgorithm,
+                tryToCompleteSets: shipConfig.tryToCompleteSets,
+            };
+            saveConfig(config);
+            performanceTracker.endTimer('SaveConfig');
+
+            // eslint-disable-next-line no-console
+            console.log(
+                `Starting optimization for ship ${i + 1}/${validShips.length}: ${ship.name}`
+            );
+
+            const strategy = getAutogearStrategy(shipConfig.selectedAlgorithm);
+
+            // Set progress callback for this ship
+            strategy.setProgressCallback((progress) =>
+                teamProgressCallback(progress, ship.name, i)
+            );
+
+            // Filter inventory based on used gear and ship-specific settings
+            performanceTracker.startTimer('FilterInventory');
+            const availableInventory = inventory
+                .filter((gear) => {
+                    // Exclude already used gear
+                    if (usedGearIds.has(gear.id)) {
+                        return false;
+                    }
+
+                    // Exclude gear with set bonuses that have count set to 0
+                    const excludedBySetPriority = shipConfig.setPriorities.some(
+                        (priority) => priority.setName === gear.setBonus && priority.count === 0
+                    );
+                    if (excludedBySetPriority) {
+                        return false;
+                    }
+
+                    // If gear is equipped on a ship
+                    const shipId = gearToShipMap.get(gear.id);
+                    const equippedShip = shipId ? getShipById(shipId) : undefined;
+
+                    // If ignoreEquipped is true, only include:
+                    // 1. Not equipped on any ship, OR
+                    // 2. Equipped on selected ship
+                    if (shipConfig.ignoreEquipped) {
+                        return !equippedShip || equippedShip.id === ship.id;
+                    }
+
+                    // Otherwise, include:
+                    // 1. Not equipped on any ship, OR
+                    // 2. Equipped on selected ship, OR
+                    // 3. Equipped on an unlocked ship
+                    return (
+                        !equippedShip ||
+                        equippedShip.id === ship.id ||
+                        !equippedShip.equipmentLocked
+                    );
+                })
+                .filter((gear) => !shipConfig.ignoreUnleveled || gear.level > 0);
+            performanceTracker.endTimer('FilterInventory');
+
+            // eslint-disable-next-line no-console
+            console.log(`Available inventory size for ${ship.name}: ${availableInventory.length}`);
+
+            performanceTracker.startTimer('FindOptimalGear');
+            const newSuggestions = await Promise.resolve(
+                strategy.findOptimalGear(
+                    ship,
+                    shipConfig.statPriorities,
+                    availableInventory,
+                    shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                    getEngineeringStatsForShipType,
+                    shipConfig.shipRole || undefined,
+                    shipConfig.setPriorities,
+                    shipConfig.statBonuses,
+                    shipConfig.tryToCompleteSets
+                )
+            );
+            performanceTracker.endTimer('FindOptimalGear');
+
+            // Add used gear to the set
+            newSuggestions.forEach((suggestion) => {
+                usedGearIds.add(suggestion.gearId);
+            });
+
+            // Calculate stats and run simulations for this ship
+            performanceTracker.startTimer('PostProcessing');
+            const currentEquipment = ship.equipment;
+            const suggestedEquipment = getSuggestedEquipment(newSuggestions, ship);
+
+            // Get active sets
+            const currentSets = Object.values(currentEquipment).reduce(
+                (acc, gearId) => {
+                    if (!gearId) return acc;
+                    const gear = getGearPiece(gearId);
+                    if (!gear?.setBonus) return acc;
+                    acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
+                    return acc;
+                },
+                {} as Record<string, number>
+            );
+
+            const suggestedSets = Object.values(suggestedEquipment).reduce(
+                (acc, gearId) => {
+                    if (!gearId) return acc;
+                    const gear = getGearPiece(gearId);
+                    if (!gear?.setBonus) return acc;
+                    acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
+                    return acc;
+                },
+                {} as Record<string, number>
+            );
+
+            // Calculate stats and run simulations
+            const currentStats = calculateTotalStats(
+                ship.baseStats,
+                ship.equipment,
+                shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                ship.refits,
+                ship.implants,
+                getEngineeringStatsForShipType(ship.type)
+            );
+
+            const suggestedStats = calculateTotalStats(
+                ship.baseStats,
+                suggestedEquipment,
+                shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                ship.refits,
+                ship.implants,
+                getEngineeringStatsForShipType(ship.type)
+            );
+
+            if (currentStats && suggestedStats) {
+                const currentSimulation = runSimulation(
+                    currentStats.final,
+                    shipConfig.shipRole,
+                    Object.entries(currentSets).flatMap(([setName, count]) => {
+                        const completeSets = Math.floor(
+                            count / (GEAR_SETS[setName]?.minPieces || 2)
+                        );
+                        return Array(completeSets).fill(setName);
+                    })
                 );
-                if (excludedBySetPriority) {
-                    return false;
-                }
-
-                // If gear is equipped on a ship
-                const shipId = gearToShipMap.get(gear.id);
-                const equippedShip = shipId ? getShipById(shipId) : undefined;
-
-                // If ignoreEquipped is true, only include:
-                // 1. Not equipped on any ship, OR
-                // 2. Equipped on selected ship
-                if (ignoreEquipped) {
-                    return !equippedShip || equippedShip.id === selectedShip.id;
-                }
-
-                // Otherwise, include:
-                // 1. Not equipped on any ship, OR
-                // 2. Equipped on selected ship, OR
-                // 3. Equipped on an unlocked ship
-                return (
-                    !equippedShip ||
-                    equippedShip.id === selectedShip.id ||
-                    !equippedShip.equipmentLocked
+                const suggestedSimulation = runSimulation(
+                    suggestedStats.final,
+                    shipConfig.shipRole,
+                    Object.entries(suggestedSets).flatMap(([setName, count]) => {
+                        const completeSets = Math.floor(
+                            count / (GEAR_SETS[setName]?.minPieces || 2)
+                        );
+                        return Array(completeSets).fill(setName);
+                    })
                 );
-            })
-            .filter((gear) => !ignoreUnleveled || gear.level > 0);
-        performanceTracker.endTimer('FilterInventory');
 
-        // eslint-disable-next-line no-console
-        console.log(`Available inventory size: ${availableInventory.length}`);
+                allResults[ship.id] = {
+                    suggestions: newSuggestions,
+                    currentSimulation,
+                    suggestedSimulation,
+                    currentStats,
+                    suggestedStats,
+                };
+            }
+            performanceTracker.endTimer('PostProcessing');
 
-        performanceTracker.startTimer('FindOptimalGear');
-        const newSuggestions = await Promise.resolve(
-            strategy.findOptimalGear(
-                selectedShip,
-                statPriorities,
-                availableInventory,
-                useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
-                getEngineeringStatsForShipType,
-                selectedShipRole || undefined,
-                setPriorities,
-                statBonuses,
-                tryToCompleteSets
-            )
-        );
-        performanceTracker.endTimer('FindOptimalGear');
+            // eslint-disable-next-line no-console
+            console.log(`Completed optimization for ${ship.name}`);
+        }
 
         const endTime = performance.now();
         const duration = (endTime - startTime) / 1000; // Convert to seconds
         // eslint-disable-next-line no-console
-        console.log(`Optimization completed in ${duration.toFixed(2)} seconds`);
+        console.log(`Team optimization completed in ${duration.toFixed(2)} seconds`);
 
-        // Create new equipment objects
-        performanceTracker.startTimer('PostProcessing');
-        const currentEquipment = selectedShip.equipment;
-        const suggestedEquipment = getSuggestedEquipment(newSuggestions, selectedShip);
-
-        // Get active sets
-        const currentSets = Object.values(currentEquipment).reduce(
-            (acc, gearId) => {
-                if (!gearId) return acc;
-                const gear = getGearPiece(gearId);
-                if (!gear?.setBonus) return acc;
-                acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
-                return acc;
-            },
-            {} as Record<string, number>
-        );
-
-        const suggestedSets = Object.values(suggestedEquipment).reduce(
-            (acc, gearId) => {
-                if (!gearId) return acc;
-                const gear = getGearPiece(gearId);
-                if (!gear?.setBonus) return acc;
-                acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
-                return acc;
-            },
-            {} as Record<string, number>
-        );
-
-        // Calculate stats and run simulations
-        const currentStats = getCurrentStats();
-        const suggestedStats = calculateSuggestedStats(newSuggestions);
-
-        if (currentStats && suggestedStats) {
-            const currentSimulation = runSimulation(
-                currentStats.final,
-                selectedShipRole,
-                Object.entries(currentSets).flatMap(([setName, count]) => {
-                    const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
-                    return Array(completeSets).fill(setName);
-                })
-            );
-
-            const suggestedSimulation = runSimulation(
-                suggestedStats.final,
-                selectedShipRole,
-                Object.entries(suggestedSets).flatMap(([setName, count]) => {
-                    const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
-                    return Array(completeSets).fill(setName);
-                })
-            );
-
-            setCurrentSimulation(currentSimulation);
-            setSuggestedSimulation(suggestedSimulation);
-        }
-        performanceTracker.endTimer('PostProcessing');
-
-        setSuggestions(newSuggestions);
+        setShipResults(allResults);
         setOptimizationProgress(null);
 
         performanceTracker.endTimer('TotalAutogear');
         performanceTracker.printSummary();
     };
 
-    const calculateSuggestedStats = (newSuggestions: GearSuggestion[]) => {
-        if (!selectedShip) return null;
+    const handleEquipSuggestionsForShip = (shipId: string) => {
+        const ship = selectedShips.find((s) => s?.id === shipId);
+        if (!ship) return;
 
-        const suggestedEquipment = { ...selectedShip.equipment };
-        newSuggestions.forEach((suggestion) => {
-            suggestedEquipment[suggestion.slotName] = suggestion.gearId;
-        });
-
-        return calculateTotalStats(
-            selectedShip.baseStats,
-            suggestedEquipment,
-            useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
-            selectedShip.refits,
-            selectedShip.implants,
-            getEngineeringStatsForShipType(selectedShip.type)
-        );
-    };
-
-    const handleEquipSuggestions = () => {
-        if (!selectedShip) return;
+        const currentShipResults = shipResults[shipId];
+        if (!currentShipResults) return;
 
         // Create a list of gear movements
-        const gearMovements = suggestions
+        const gearMovements = currentShipResults.suggestions
             .map((suggestion) => {
                 const gear = getGearPiece(suggestion.gearId);
-                if (gear?.shipId && gear.shipId !== selectedShip.id) {
+                if (gear?.shipId && gear.shipId !== shipId) {
                     const previousShip = getShipById(gear.shipId);
                     if (previousShip) {
                         return {
                             fromShip: previousShip,
                             gear: gear,
-                            toShip: selectedShip,
+                            toShip: ship,
                         };
                     }
                 }
@@ -364,51 +469,38 @@ export const AutogearPage: React.FC = () => {
                     <p className="mt-4">Do you want to continue?</p>
                 </div>
             );
+            // Store the ship ID for the confirm action
+            setCurrentEquippingShipId(shipId);
         } else {
-            applyGearSuggestions();
+            applyGearSuggestionsForShip(shipId);
         }
     };
 
-    const applyGearSuggestions = () => {
-        if (!selectedShip) return;
+    const applyGearSuggestionsForShip = (shipId: string) => {
+        const ship = selectedShips.find((s) => s?.id === shipId);
+        if (!ship) return;
 
-        const gearAssignments = suggestions.map((suggestion) => ({
+        const currentShipResults = shipResults[shipId];
+        if (!currentShipResults) return;
+
+        const gearAssignments = currentShipResults.suggestions.map((suggestion) => ({
             slot: suggestion.slotName as GearSlotName,
             gearId: suggestion.gearId,
         }));
 
         // Update ships equipment
-        equipMultipleGear(selectedShip.id, gearAssignments);
+        equipMultipleGear(shipId, gearAssignments);
 
-        addNotification('success', 'Suggested gear equipped successfully');
-        setSuggestions([]);
-        setOptimizationProgress(null);
+        addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
         setShowConfirmModal(false);
+        setCurrentEquippingShipId(null);
     };
 
-    const getCurrentStats = () => {
-        if (!selectedShip) return null;
-        return calculateTotalStats(
-            selectedShip.baseStats,
-            selectedShip.equipment,
-            useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
-            selectedShip.refits,
-            selectedShip.implants,
-            getEngineeringStatsForShipType(selectedShip.type)
-        );
-    };
-
-    const handleRoleChange = (role: ShipTypeName) => {
-        setSelectedShipRole(role);
-        setShowSecondaryRequirements(false);
-        setCurrentSimulation(null);
-        setSuggestedSimulation(null);
-    };
-
-    const getUnmetPriorities = (stats: BaseStats): UnmetPriority[] => {
+    const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
         const unmet: UnmetPriority[] = [];
+        const targetShipId = shipId || selectedShips[0]?.id || '';
 
-        statPriorities.forEach((priority) => {
+        getShipConfig(targetShipId).statPriorities.forEach((priority) => {
             const currentValue = stats[priority.stat] || 0;
 
             if (priority.minLimit && currentValue < priority.minLimit) {
@@ -435,30 +527,27 @@ export const AutogearPage: React.FC = () => {
         return unmet;
     };
 
-    const currentStats = getCurrentStats();
-    const suggestedStats = calculateSuggestedStats(suggestions);
+    // Multiple ship handlers
+    const handleShipSelect = (ship: Ship, index: number) => {
+        const newShips = [...selectedShips];
+        newShips[index] = ship;
+        setSelectedShips(newShips);
 
-    // Compute whether to show suggestions based on hard requirements
-    const shouldShowSuggestions =
-        suggestions.length > 0 &&
-        suggestedStats &&
-        !getUnmetPriorities(suggestedStats.final).some((priority) => priority.hardRequirement);
-
-    // Add reset config handler
-    const handleResetConfig = () => {
-        if (selectedShipId) {
-            resetConfig(selectedShipId);
-            setSelectedShipRole('ATTACKER');
-            setStatPriorities([]);
-            setSetPriorities([]);
-            setStatBonuses([]);
-            setIgnoreEquipped(true);
-            setIgnoreUnleveled(true);
-            setUseUpgradedStats(false);
-            setSelectedAlgorithm(AutogearAlgorithm.Genetic);
-            setTryToCompleteSets(false);
-            addNotification('success', 'Reset configuration to defaults');
+        // Load saved config for this ship if it exists
+        const savedConfig = getConfig(ship.id);
+        if (savedConfig) {
+            updateShipConfig(ship.id, savedConfig);
         }
+    };
+
+    const handleAddShip = () => {
+        // Add a placeholder that will be replaced when user selects a ship
+        setSelectedShips([...selectedShips, null]); // Will be replaced when user selects a ship
+    };
+
+    const handleRemoveShip = (event: React.MouseEvent<HTMLButtonElement>, index: number) => {
+        event.stopPropagation();
+        setSelectedShips(selectedShips.filter((_, i) => i !== index));
     };
 
     return (
@@ -469,151 +558,368 @@ export const AutogearPage: React.FC = () => {
                 description="Find the best gear for your ship. Since the amount of combinations are so high, there's a lot of shortcuts taken to make it faster. The results are not always perfect, as it's based on about 30-40k comparisons, so run it a couple of times to make sure you're getting the best results."
                 helpLink="/documentation#autogear"
             >
-                <div className="md:grid md:grid-cols-2 gap-4">
-                    <AutogearQuickSettings
-                        selectedShip={selectedShip || null}
-                        onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                        onOpenSettings={(event?: React.MouseEvent<HTMLButtonElement>) => {
-                            event?.stopPropagation();
-                            setShowSettingsModal(true);
-                        }}
-                        onFindOptimalGear={handleAutogear}
-                    />
+                <div className="md:flex gap-4">
+                    <div className="flex-1">
+                        <AutogearQuickSettings
+                            selectedShips={selectedShips}
+                            onShipSelect={handleShipSelect}
+                            onAddShip={handleAddShip}
+                            onRemoveShip={handleRemoveShip}
+                            onOpenSettings={(
+                                event: React.MouseEvent<HTMLButtonElement>,
+                                index: number
+                            ) => {
+                                event.stopPropagation();
+                                setShipSettings(selectedShips[index]);
+                                setShowSettingsModal(true);
+                            }}
+                            onFindOptimalGear={handleAutogear}
+                        />
+                    </div>
 
-                    {suggestions.length > 0 && shouldShowSuggestions && (
-                        <GearSuggestions
-                            suggestions={suggestions}
-                            getGearPiece={getGearPiece}
-                            hoveredGear={hoveredGear}
-                            onHover={setHoveredGear}
-                            onEquip={handleEquipSuggestions}
-                            onLockEquipment={handleLockEquipment}
-                            ship={selectedShip}
-                            useUpgradedStats={useUpgradedStats}
+                    {/* Show progress bar for any strategy when optimizing */}
+                    {optimizationProgress && (
+                        <ProgressBar
+                            current={optimizationProgress.current}
+                            total={optimizationProgress.total}
+                            percentage={optimizationProgress.percentage}
+                            label={`Optimizing: ${optimizationProgress.currentShip.name} (${optimizationProgress.currentShip.index + 1}/${selectedShips.length})`}
                         />
                     )}
-                </div>
 
-                {/* Show progress bar for any strategy when optimizing */}
-                {optimizationProgress && (
-                    <ProgressBar
-                        current={optimizationProgress.current}
-                        total={optimizationProgress.total}
-                        percentage={optimizationProgress.percentage}
-                    />
-                )}
+                    <div className="flex-1">
+                        {/* Show gear suggestions for all ships */}
+                        {Object.keys(shipResults).length > 0 && (
+                            <div className="space-y-4">
+                                {Object.entries(shipResults).map(([shipId, results]) => {
+                                    const ship = selectedShips.find((s) => s?.id === shipId);
+                                    if (!ship || !results.suggestions.length) return null;
 
-                {suggestedStats && suggestions.length > 0 && (
-                    <>
-                        {getUnmetPriorities(suggestedStats.final).length > 0 && (
-                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
-                                <h3 className="text-lg font-semibold text-yellow-200 mb-2">
-                                    Unmet Stat Priorities
-                                </h3>
-                                {getUnmetPriorities(suggestedStats.final).some(
-                                    (priority) => priority.hardRequirement
-                                ) ? (
-                                    <p className="text-yellow-100 mb-2">
-                                        Some stat priorities are marked as hard requirements, which
-                                        means that the gear combinations that don&apos;t meet them
-                                        will be completely excluded from results. It wasn&apos;t
-                                        found this round, so it might be unachievable. Try running
-                                        it again, or adjust the stat limits.
-                                    </p>
-                                ) : (
-                                    <p className="text-yellow-100 mb-2">
-                                        The suggested gear doesn&apos;t meet all stat priorities,
-                                        but was chosen because hitting the priority had a higher
-                                        negative impact on the score. Try adjusting the minimum or
-                                        maximum values for the stat priorities.
-                                    </p>
-                                )}
+                                    const shipConfig = getShipConfig(shipId);
+                                    const shouldShowSuggestions = !getUnmetPriorities(
+                                        results.suggestedStats?.final || {},
+                                        shipId
+                                    ).some((priority) => priority.hardRequirement);
 
-                                <ul className="list-disc pl-4 space-y-1">
-                                    {getUnmetPriorities(suggestedStats.final).map(
-                                        (priority, index) => (
-                                            <li key={index} className="text-yellow-100">
-                                                {priority.stat}: {priority.current.toFixed(1)}{' '}
-                                                {priority.type === 'min' ? '<' : '>'}{' '}
-                                                {priority.target.toFixed(1)}
-                                                {priority.hardRequirement && ' (HARD)'}
-                                            </li>
-                                        )
-                                    )}
-                                </ul>
+                                    return (
+                                        <div key={shipId} className="space-y-4">
+                                            {shouldShowSuggestions && (
+                                                <GearSuggestions
+                                                    suggestions={results.suggestions}
+                                                    getGearPiece={getGearPiece}
+                                                    hoveredGear={hoveredGear}
+                                                    onHover={setHoveredGear}
+                                                    onEquip={() =>
+                                                        handleEquipSuggestionsForShip(shipId)
+                                                    }
+                                                    onLockEquipment={handleLockEquipment}
+                                                    ship={ship}
+                                                    useUpgradedStats={shipConfig.useUpgradedStats}
+                                                />
+                                            )}
+
+                                            {/* Show unmet priorities warning */}
+                                            {getUnmetPriorities(
+                                                results.suggestedStats?.final || {},
+                                                shipId
+                                            ).length > 0 && (
+                                                <div className="p-4 bg-yellow-900/50 border border-yellow-700">
+                                                    <h4 className="text-lg font-semibold text-yellow-200 mb-2">
+                                                        Unmet Stat Priorities
+                                                    </h4>
+                                                    {getUnmetPriorities(
+                                                        results.suggestedStats?.final || {},
+                                                        shipId
+                                                    ).some(
+                                                        (priority) => priority.hardRequirement
+                                                    ) ? (
+                                                        <p className="text-yellow-100 mb-2">
+                                                            Some stat priorities are marked as hard
+                                                            requirements, which means that the gear
+                                                            combinations that don&apos;t meet them
+                                                            will be completely excluded from
+                                                            results. It wasn&apos;t found this
+                                                            round, so it might be unachievable. Try
+                                                            running it again, or adjust the stat
+                                                            limits.
+                                                        </p>
+                                                    ) : (
+                                                        <p className="text-yellow-100 mb-2">
+                                                            The suggested gear doesn&apos;t meet all
+                                                            stat priorities, but was chosen because
+                                                            hitting the priority had a higher
+                                                            negative impact on the score. Try
+                                                            adjusting the minimum or maximum values
+                                                            for the stat priorities.
+                                                        </p>
+                                                    )}
+
+                                                    <ul className="list-disc pl-4 space-y-1">
+                                                        {getUnmetPriorities(
+                                                            results.suggestedStats?.final || {},
+                                                            shipId
+                                                        ).map((priority, index) => (
+                                                            <li
+                                                                key={index}
+                                                                className="text-yellow-100"
+                                                            >
+                                                                {priority.stat}:{' '}
+                                                                {priority.current.toFixed(1)}{' '}
+                                                                {priority.type === 'min'
+                                                                    ? '<'
+                                                                    : '>'}{' '}
+                                                                {priority.target.toFixed(1)}
+                                                                {priority.hardRequirement &&
+                                                                    ' (HARD)'}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
-                    </>
+                    </div>
+                </div>
+
+                {/* Detailed Results Tabs */}
+                {Object.keys(shipResults).length > 0 && (
+                    <div>
+                        <Tabs
+                            tabs={Object.keys(shipResults)
+                                .map((shipId) => {
+                                    const ship = selectedShips.find((s) => s?.id === shipId);
+                                    return ship ? { id: shipId, label: ship.name } : null;
+                                })
+                                .filter(
+                                    (tab): tab is { id: string; label: string } => tab !== null
+                                )}
+                            activeTab={activeTab || ''}
+                            onChange={(tabId: string) => setActiveTab(tabId)}
+                        />
+
+                        {/* Tab Content */}
+                        <div className="mt-4">
+                            {Object.entries(shipResults).map(([shipId, results]) => {
+                                const ship = selectedShips.find((s) => s?.id === shipId);
+                                if (!ship || !results.suggestions.length) return null;
+
+                                const shipConfig = getShipConfig(shipId);
+                                const shouldShowSuggestions = !getUnmetPriorities(
+                                    results.suggestedStats?.final || {},
+                                    shipId
+                                ).some((priority) => priority.hardRequirement);
+
+                                if (activeTab !== shipId) return null;
+
+                                return (
+                                    <div key={shipId} className="space-y-6">
+                                        {/* Simulation Results */}
+                                        {results.currentSimulation &&
+                                            results.suggestedSimulation &&
+                                            shouldShowSuggestions && (
+                                                <div>
+                                                    <h4 className="text-lg font-semibold mb-4">
+                                                        Simulation Results (
+                                                        {
+                                                            SHIP_TYPES[shipConfig.shipRole || '']
+                                                                ?.name
+                                                        }
+                                                        )
+                                                    </h4>
+                                                    <SimulationResults
+                                                        currentSimulation={
+                                                            results.currentSimulation
+                                                        }
+                                                        suggestedSimulation={
+                                                            results.suggestedSimulation
+                                                        }
+                                                        role={shipConfig.shipRole}
+                                                    />
+                                                </div>
+                                            )}
+
+                                        {/* Stat Lists */}
+                                        {results.currentStats &&
+                                            results.suggestedStats &&
+                                            shouldShowSuggestions && (
+                                                <div>
+                                                    <h4 className="text-lg font-semibold mb-4">
+                                                        Stat Comparison
+                                                    </h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <StatList
+                                                            stats={results.currentStats.final}
+                                                            title="Current Stats"
+                                                            className="p-4"
+                                                        />
+                                                        <StatList
+                                                            stats={results.suggestedStats.final}
+                                                            comparisonStats={
+                                                                results.currentStats.final
+                                                            }
+                                                            title="Stats with Suggested Gear"
+                                                            className="p-4"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 )}
-
-                {currentSimulation &&
-                    suggestedSimulation &&
-                    suggestions.length > 0 &&
-                    shouldShowSuggestions && (
-                        <div className="mt-8">
-                            <SimulationResults
-                                currentSimulation={currentSimulation}
-                                suggestedSimulation={suggestedSimulation}
-                                role={selectedShipRole}
-                            />
-                        </div>
-                    )}
-
-                {currentStats &&
-                    suggestedStats &&
-                    suggestions.length > 0 &&
-                    shouldShowSuggestions && (
-                        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatList
-                                stats={currentStats.final}
-                                title="Current Stats"
-                                className="p-4"
-                            />
-                            <StatList
-                                stats={suggestedStats.final}
-                                comparisonStats={currentStats.final}
-                                title="Stats with Suggested Gear"
-                                className="p-4"
-                            />
-                        </div>
-                    )}
 
                 <AutogearSettingsModal
                     isOpen={showSettingsModal}
                     onClose={() => setShowSettingsModal(false)}
-                    selectedShip={selectedShip || null}
-                    selectedShipRole={selectedShipRole}
-                    selectedAlgorithm={selectedAlgorithm}
-                    priorities={statPriorities}
-                    ignoreEquipped={ignoreEquipped}
-                    ignoreUnleveled={ignoreUnleveled}
-                    showSecondaryRequirements={showSecondaryRequirements}
-                    setPriorities={setPriorities}
-                    statBonuses={statBonuses}
-                    useUpgradedStats={useUpgradedStats}
-                    tryToCompleteSets={tryToCompleteSets}
-                    onShipSelect={(ship) => setSelectedShipId(ship.id)}
-                    onRoleSelect={handleRoleChange}
-                    onAlgorithmSelect={setSelectedAlgorithm}
-                    onAddPriority={handleAddStatPriority}
-                    onRemovePriority={handleRemoveStatPriority}
+                    selectedShip={shipSettings}
+                    selectedShipRole={shipSettings ? getShipConfig(shipSettings.id).shipRole : null}
+                    selectedAlgorithm={
+                        shipSettings
+                            ? getShipConfig(shipSettings.id).selectedAlgorithm
+                            : AutogearAlgorithm.Genetic
+                    }
+                    priorities={shipSettings ? getShipConfig(shipSettings.id).statPriorities : []}
+                    ignoreEquipped={
+                        shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : true
+                    }
+                    ignoreUnleveled={
+                        shipSettings ? getShipConfig(shipSettings.id).ignoreUnleveled : true
+                    }
+                    showSecondaryRequirements={
+                        shipSettings
+                            ? getShipConfig(shipSettings.id).showSecondaryRequirements
+                            : false
+                    }
+                    setPriorities={shipSettings ? getShipConfig(shipSettings.id).setPriorities : []}
+                    statBonuses={shipSettings ? getShipConfig(shipSettings.id).statBonuses : []}
+                    useUpgradedStats={
+                        shipSettings ? getShipConfig(shipSettings.id).useUpgradedStats : false
+                    }
+                    tryToCompleteSets={
+                        shipSettings ? getShipConfig(shipSettings.id).tryToCompleteSets : false
+                    }
+                    onShipSelect={(ship) => {
+                        if (selectedShips.length > 0) {
+                            handleShipSelect(ship, 0);
+                        }
+                    }}
+                    onRoleSelect={(role) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { shipRole: role });
+                        }
+                    }}
+                    onAlgorithmSelect={(algorithm) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { selectedAlgorithm: algorithm });
+                        }
+                    }}
+                    onAddPriority={(priority) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statPriorities: [...config.statPriorities, priority],
+                            });
+                        }
+                    }}
+                    onRemovePriority={(index) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statPriorities: config.statPriorities.filter((_, i) => i !== index),
+                            });
+                        }
+                    }}
                     onFindOptimalGear={handleAutogear}
-                    onIgnoreEquippedChange={setIgnoreEquipped}
-                    onIgnoreUnleveledChange={setIgnoreUnleveled}
-                    onToggleSecondaryRequirements={setShowSecondaryRequirements}
-                    onAddSetPriority={handleAddSetPriority}
-                    onRemoveSetPriority={handleRemoveSetPriority}
-                    onAddStatBonus={handleAddStatBonus}
-                    onRemoveStatBonus={handleRemoveStatBonus}
-                    onUseUpgradedStatsChange={setUseUpgradedStats}
-                    onTryToCompleteSetsChange={setTryToCompleteSets}
-                    onResetConfig={handleResetConfig}
+                    onIgnoreEquippedChange={(ignoreEquipped) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { ignoreEquipped });
+                        }
+                    }}
+                    onIgnoreUnleveledChange={(ignoreUnleveled) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { ignoreUnleveled });
+                        }
+                    }}
+                    onToggleSecondaryRequirements={(showSecondaryRequirements) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { showSecondaryRequirements });
+                        }
+                    }}
+                    onAddSetPriority={(priority) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                setPriorities: [...config.setPriorities, priority],
+                            });
+                        }
+                    }}
+                    onRemoveSetPriority={(index) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                setPriorities: config.setPriorities.filter((_, i) => i !== index),
+                            });
+                        }
+                    }}
+                    onAddStatBonus={(bonus) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statBonuses: [...config.statBonuses, bonus],
+                            });
+                        }
+                    }}
+                    onRemoveStatBonus={(index) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statBonuses: config.statBonuses.filter((_, i) => i !== index),
+                            });
+                        }
+                    }}
+                    onUseUpgradedStatsChange={(useUpgradedStats) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { useUpgradedStats });
+                        }
+                    }}
+                    onTryToCompleteSetsChange={(tryToCompleteSets) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { tryToCompleteSets });
+                        }
+                    }}
+                    onResetConfig={() => {
+                        if (shipSettings) {
+                            resetConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                shipRole: 'ATTACKER' as ShipTypeName,
+                                statPriorities: [],
+                                setPriorities: [],
+                                statBonuses: [],
+                                ignoreEquipped: true,
+                                ignoreUnleveled: true,
+                                useUpgradedStats: false,
+                                tryToCompleteSets: false,
+                                selectedAlgorithm: AutogearAlgorithm.Genetic,
+                                showSecondaryRequirements: false,
+                            });
+                            addNotification('success', 'Reset configuration to defaults');
+                        }
+                    }}
                 />
 
                 <ConfirmModal
                     isOpen={showConfirmModal}
                     onClose={() => setShowConfirmModal(false)}
-                    onConfirm={applyGearSuggestions}
+                    onConfirm={() => {
+                        if (currentEquippingShipId) {
+                            applyGearSuggestionsForShip(currentEquippingShipId);
+                        }
+                    }}
                     title="Move Gear"
                     message={modalMessage}
                     confirmLabel="Move"

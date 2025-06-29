@@ -46,10 +46,10 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     };
 
     return (
-        <div className="pt-4 md:pt-0">
-            <div className="sticky top-16 lg:top-4">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold">Suggested Gear</h3>
+        <div className={`pt-4 md:pt-0 ${expanded ? 'lg:min-w-[450px] xl:min-w-[650px]' : ''}`}>
+            <div className="">
+                <div className="flex justify-between items-center">
+                    <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
                 <div className="bg-dark">
                     {!expanded ? (
@@ -76,7 +76,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                             })}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 gap-4 p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4">
                             {GEAR_SLOT_ORDER.map((slotName) => {
                                 const suggestion = getSuggestionForSlot(slotName);
                                 const gear = suggestion

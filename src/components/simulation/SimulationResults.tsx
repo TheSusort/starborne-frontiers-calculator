@@ -363,12 +363,57 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
         </>
     );
 
+    const renderSupporterOffensiveStats = (simulation: SimulationSummary, isComparison = false) => (
+        <>
+            <div>
+                <span className="text-gray-400">Boost Set:</span>
+                <span
+                    className={`ml-2 ${
+                        simulation.activeSets?.includes('BOOST') ? 'text-green-500' : 'text-red-500'
+                    }`}
+                >
+                    {simulation.activeSets?.includes('BOOST') ? 'Active' : 'Inactive'}
+                </span>
+            </div>
+            <div>
+                <span className="text-gray-400">Speed:</span>
+                <span className="ml-2">{simulation.speed}</span>
+                {isComparison && suggestedSimulation && (
+                    <span
+                        className={`ml-2 ${suggestedSimulation.speed! > currentSimulation.speed! ? 'text-green-500' : 'text-red-500'}`}
+                    >
+                        ({(suggestedSimulation.speed! - currentSimulation.speed!).toFixed(1)}%)
+                    </span>
+                )}
+            </div>
+            <div>
+                <span className="text-gray-400">Attack:</span>
+                <span className="ml-2">
+                    {simulation.attack}
+                    {isComparison && suggestedSimulation && (
+                        <span
+                            className={`ml-2 ${suggestedSimulation.attack! > currentSimulation.attack! ? 'text-green-500' : 'text-red-500'}`}
+                        >
+                            (
+                            {(
+                                ((suggestedSimulation.attack! - currentSimulation.attack!) /
+                                    currentSimulation.attack!) *
+                                100
+                            ).toFixed(1)}
+                            %)
+                        </span>
+                    )}
+                </span>
+            </div>
+        </>
+    );
+
     const renderStats = (simulation: SimulationSummary, isComparison = false) => {
         switch (role) {
             case 'DEFENDER':
             case 'DEFENDER_SECURITY':
                 return renderDefenderStats(simulation, isComparison);
-            case 'DEBUFFER_OFFENSIVE':
+            case 'DEBUFFER':
             case 'DEBUFFER_DEFENSIVE':
             case 'DEBUFFER_BOMBER':
                 return renderDebufferStats(simulation, isComparison);
@@ -376,6 +421,8 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                 return renderSupporterStats(simulation, isComparison);
             case 'SUPPORTER_BUFFER':
                 return renderSupporterBufferStats(simulation, isComparison);
+            case 'SUPPORTER_OFFENSIVE':
+                return renderSupporterOffensiveStats(simulation, isComparison);
             default:
                 return renderAttackerStats(simulation, isComparison);
         }
