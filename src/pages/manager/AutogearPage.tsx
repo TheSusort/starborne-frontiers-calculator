@@ -106,9 +106,12 @@ export const AutogearPage: React.FC = () => {
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
+        const ship = getShipById(shipId);
+        const defaultRole = ship?.type || ('ATTACKER' as ShipTypeName);
+
         return (
             shipConfigs[shipId] || {
-                shipRole: 'ATTACKER' as ShipTypeName,
+                shipRole: defaultRole,
                 statPriorities: [],
                 setPriorities: [],
                 statBonuses: [],
