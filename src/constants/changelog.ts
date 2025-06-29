@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.16.0';
+export const CURRENT_VERSION = '1.17.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.17.0',
+        date: '2025-06-29',
+        changes: ['Added support for autogearing multiple ships at once.'],
+    },
     {
         version: '1.16.0',
         date: '2025-06-26',
