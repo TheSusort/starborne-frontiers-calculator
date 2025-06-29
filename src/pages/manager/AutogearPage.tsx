@@ -102,6 +102,7 @@ export const AutogearPage: React.FC = () => {
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
     const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
+    const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -134,6 +135,8 @@ export const AutogearPage: React.FC = () => {
 
     // useEffect hooks
     useEffect(() => {
+        if (hasInitializedFromParams) return; // Don't run if already initialized
+
         const shipId = searchParams.get('shipId');
 
         // Clear search params
@@ -151,8 +154,10 @@ export const AutogearPage: React.FC = () => {
                 }
             }
         }
+
+        setHasInitializedFromParams(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, getShipById, getConfig, addNotification]);
+    }, [searchParams, getShipById, getConfig, addNotification, hasInitializedFromParams]);
 
     // Set initial active tab when results are available
     useEffect(() => {
