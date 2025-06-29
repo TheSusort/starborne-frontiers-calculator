@@ -4,14 +4,14 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, ShipTypeName } from '../../constants';
+import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
@@ -49,8 +49,7 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, getShipFromGearId, lockEquipment, gearToShipMap } =
-        useShips();
+    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -82,8 +81,8 @@ export const AutogearPage: React.FC = () => {
                 suggestions: GearSuggestion[];
                 currentSimulation: SimulationSummary | null;
                 suggestedSimulation: SimulationSummary | null;
-                currentStats: any;
-                suggestedStats: any;
+                currentStats: StatBreakdown;
+                suggestedStats: StatBreakdown;
             }
         >
     >({});
@@ -99,14 +98,10 @@ export const AutogearPage: React.FC = () => {
     } | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
-    const [showSecondaryRequirements, setShowSecondaryRequirements] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
     const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
-
-    // Derived state
-    const selectedShip = selectedShips.length > 0 ? selectedShips[0] : null;
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -140,6 +135,10 @@ export const AutogearPage: React.FC = () => {
     // useEffect hooks
     useEffect(() => {
         const shipId = searchParams.get('shipId');
+
+        // Clear search params
+        window.history.replaceState({}, '', window.location.pathname);
+
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
@@ -152,6 +151,7 @@ export const AutogearPage: React.FC = () => {
                 }
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams, getShipById, getConfig, addNotification]);
 
     // Set initial active tab when results are available
@@ -162,54 +162,21 @@ export const AutogearPage: React.FC = () => {
         }
     }, [shipResults, activeTab]);
 
-    // Helper functions
-    const handleAddStatPriority = (priority: StatPriority) => {
-        addNotification('success', 'Stat priority added');
-        updateShipConfig(selectedShips[0]?.id || '', {
-            statPriorities: [...getShipConfig(selectedShips[0]?.id || '').statPriorities, priority],
-        });
-    };
-
-    const handleRemoveStatPriority = (index: number) => {
-        updateShipConfig(selectedShips[0]?.id || '', {
-            statPriorities: getShipConfig(selectedShips[0]?.id || '').statPriorities.filter(
-                (_, i) => i !== index
-            ),
-        });
-    };
-
-    const handleAddSetPriority = (priority: SetPriority) => {
-        addNotification('success', 'Set priority added');
-        updateShipConfig(selectedShips[0]?.id || '', {
-            setPriorities: [...getShipConfig(selectedShips[0]?.id || '').setPriorities, priority],
-        });
-    };
-
-    const handleRemoveSetPriority = (index: number) => {
-        updateShipConfig(selectedShips[0]?.id || '', {
-            setPriorities: getShipConfig(selectedShips[0]?.id || '').setPriorities.filter(
-                (_, i) => i !== index
-            ),
-        });
-    };
+    // Refresh selectedShips when ships array changes (e.g., after lock state changes)
+    useEffect(() => {
+        setSelectedShips((prevSelectedShips) =>
+            prevSelectedShips.map((selectedShip) =>
+                selectedShip ? getShipById(selectedShip.id) || selectedShip : null
+            )
+        );
+    }, [ships, getShipById]);
 
     const handleLockEquipment = async (ship: Ship) => {
         await lockEquipment(ship.id, !ship.equipmentLocked);
-    };
-
-    const handleAddStatBonus = (bonus: StatBonus) => {
-        addNotification('success', 'Stat bonus added');
-        updateShipConfig(selectedShips[0]?.id || '', {
-            statBonuses: [...getShipConfig(selectedShips[0]?.id || '').statBonuses, bonus],
-        });
-    };
-
-    const handleRemoveStatBonus = (index: number) => {
-        updateShipConfig(selectedShips[0]?.id || '', {
-            statBonuses: getShipConfig(selectedShips[0]?.id || '').statBonuses.filter(
-                (_, i) => i !== index
-            ),
-        });
+        addNotification(
+            'success',
+            `Equipment ${ship.equipmentLocked ? 'unlocked' : 'locked'} for ${ship.name}`
+        );
     };
 
     const handleAutogear = async () => {
@@ -225,7 +192,6 @@ export const AutogearPage: React.FC = () => {
 
         setOptimizationProgress(null);
         setShipResults({});
-        setShowSecondaryRequirements(false);
         setActiveTab(null);
 
         const startTime = performance.now();
@@ -233,8 +199,17 @@ export const AutogearPage: React.FC = () => {
         console.log('Starting team optimization...');
 
         // Track used gear across all runs
-        let usedGearIds = new Set<string>();
-        const allResults: Record<string, any> = {};
+        const usedGearIds = new Set<string>();
+        const allResults: Record<
+            string,
+            {
+                suggestions: GearSuggestion[];
+                currentSimulation: SimulationSummary | null;
+                suggestedSimulation: SimulationSummary | null;
+                currentStats: StatBreakdown;
+                suggestedStats: StatBreakdown;
+            }
+        > = {};
 
         // Custom progress callback for team autogear
         const teamProgressCallback = (
@@ -513,14 +488,6 @@ export const AutogearPage: React.FC = () => {
         setCurrentEquippingShipId(null);
     };
 
-    const handleRoleChange = (role: ShipTypeName) => {
-        updateShipConfig(selectedShips[0]?.id || '', {
-            shipRole: role,
-        });
-        setShowSecondaryRequirements(false);
-        setShipResults({});
-    };
-
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
         const unmet: UnmetPriority[] = [];
         const targetShipId = shipId || selectedShips[0]?.id || '';
@@ -567,7 +534,7 @@ export const AutogearPage: React.FC = () => {
 
     const handleAddShip = () => {
         // Add a placeholder that will be replaced when user selects a ship
-        setSelectedShips([...selectedShips, null as any]); // Will be replaced when user selects a ship
+        setSelectedShips([...selectedShips, null]); // Will be replaced when user selects a ship
     };
 
     const handleRemoveShip = (event: React.MouseEvent<HTMLButtonElement>, index: number) => {
@@ -583,22 +550,24 @@ export const AutogearPage: React.FC = () => {
                 description="Find the best gear for your ship. Since the amount of combinations are so high, there's a lot of shortcuts taken to make it faster. The results are not always perfect, as it's based on about 30-40k comparisons, so run it a couple of times to make sure you're getting the best results."
                 helpLink="/documentation#autogear"
             >
-                <div className="md:grid md:grid-cols-2 gap-4">
-                    <AutogearQuickSettings
-                        selectedShips={selectedShips}
-                        onShipSelect={handleShipSelect}
-                        onAddShip={handleAddShip}
-                        onRemoveShip={handleRemoveShip}
-                        onOpenSettings={(
-                            event: React.MouseEvent<HTMLButtonElement>,
-                            index: number
-                        ) => {
-                            event.stopPropagation();
-                            setShipSettings(selectedShips[index]);
-                            setShowSettingsModal(true);
-                        }}
-                        onFindOptimalGear={handleAutogear}
-                    />
+                <div className="md:flex gap-4">
+                    <div className="flex-1">
+                        <AutogearQuickSettings
+                            selectedShips={selectedShips}
+                            onShipSelect={handleShipSelect}
+                            onAddShip={handleAddShip}
+                            onRemoveShip={handleRemoveShip}
+                            onOpenSettings={(
+                                event: React.MouseEvent<HTMLButtonElement>,
+                                index: number
+                            ) => {
+                                event.stopPropagation();
+                                setShipSettings(selectedShips[index]);
+                                setShowSettingsModal(true);
+                            }}
+                            onFindOptimalGear={handleAutogear}
+                        />
+                    </div>
 
                     {/* Show progress bar for any strategy when optimizing */}
                     {optimizationProgress && (
@@ -610,7 +579,7 @@ export const AutogearPage: React.FC = () => {
                         />
                     )}
 
-                    <div>
+                    <div className="flex-1">
                         {/* Show gear suggestions for all ships */}
                         {Object.keys(shipResults).length > 0 && (
                             <div className="space-y-4">
@@ -745,7 +714,12 @@ export const AutogearPage: React.FC = () => {
                                             shouldShowSuggestions && (
                                                 <div>
                                                     <h4 className="text-lg font-semibold mb-4">
-                                                        Simulation Results
+                                                        Simulation Results (
+                                                        {
+                                                            SHIP_TYPES[shipConfig.shipRole || '']
+                                                                ?.name
+                                                        }
+                                                        )
                                                     </h4>
                                                     <SimulationResults
                                                         currentSimulation={

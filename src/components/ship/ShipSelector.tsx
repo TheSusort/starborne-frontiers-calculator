@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
@@ -11,6 +11,7 @@ interface ShipSelectorProps {
     variant?: 'compact' | 'full' | 'extended';
     sortDirection?: 'asc' | 'desc';
     children?: React.ReactNode;
+    autoOpen?: boolean;
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({
@@ -19,10 +20,18 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     variant = 'compact',
     sortDirection = 'asc',
     children,
+    autoOpen,
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
     const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        if (autoOpen) {
+            setIsShipModalOpen(true);
+        }
+    }, [autoOpen]);
+
     return (
         <div className="space-y-4">
             {selected ? (
