@@ -228,6 +228,8 @@ export const syncMigratedDataToSupabase = async (
     const { ships, inventory, encounters, loadouts, teamLoadouts, engineeringStats } =
         migrationResult;
 
+    const BATCH_SIZE = 500;
+
     try {
         // First, ensure we have a user record
         const { data: existingUser } = await supabase
@@ -273,14 +275,19 @@ export const syncMigratedDataToSupabase = async (
                     (item) => !validInventory.some((s) => s.id === item.id)
                 );
 
-                // delete any deleted inventory items
-                const { error: deleteInventoryError } = await supabase
-                    .from('inventory_items')
-                    .delete()
-                    .in('id', deletedInventory?.map((item) => item.id) || []);
-                if (deleteInventoryError) throw deleteInventoryError;
+                // delete any deleted inventory items in batches
+                if (deletedInventory && deletedInventory.length > 0) {
+                    const deletedIds = deletedInventory.map((item) => item.id);
+                    for (let i = 0; i < deletedIds.length; i += BATCH_SIZE) {
+                        const batchIds = deletedIds.slice(i, i + BATCH_SIZE);
+                        const { error: deleteInventoryError } = await supabase
+                            .from('inventory_items')
+                            .delete()
+                            .in('id', batchIds);
+                        if (deleteInventoryError) throw deleteInventoryError;
+                    }
+                }
 
-                const BATCH_SIZE = 500;
                 for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
                     const batch = validInventory.slice(i, i + BATCH_SIZE);
 
@@ -380,12 +387,18 @@ export const syncMigratedDataToSupabase = async (
                     (ship) => !validShips.some((s) => s.id === ship.id)
                 );
 
-                // delete any deleted ships
-                const { error: deleteShipsError } = await supabase
-                    .from('ships')
-                    .delete()
-                    .in('id', deletedShips?.map((ship) => ship.id) || []);
-                if (deleteShipsError) throw deleteShipsError;
+                // delete any deleted ships in batches
+                if (deletedShips && deletedShips.length > 0) {
+                    const deletedShipIds = deletedShips.map((ship) => ship.id);
+                    for (let i = 0; i < deletedShipIds.length; i += BATCH_SIZE) {
+                        const batchIds = deletedShipIds.slice(i, i + BATCH_SIZE);
+                        const { error: deleteShipsError } = await supabase
+                            .from('ships')
+                            .delete()
+                            .in('id', batchIds);
+                        if (deleteShipsError) throw deleteShipsError;
+                    }
+                }
 
                 // Prepare batch of ship records with preserved equipment_locked state
                 const shipRecords = validShips.map((ship) => ({
@@ -438,7 +451,6 @@ export const syncMigratedDataToSupabase = async (
                 // Delete existing refits and their stats before inserting new ones
                 const shipIds = validShips.map((ship) => ship.id);
                 // Delete in batches to avoid issues with large arrays
-                const BATCH_SIZE = 100;
                 for (let i = 0; i < shipIds.length; i += BATCH_SIZE) {
                     const batchIds = shipIds.slice(i, i + BATCH_SIZE);
                     const { error: deleteRefitsError } = await supabase

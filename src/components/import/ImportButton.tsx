@@ -37,7 +37,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
 
                     // sync to supabase if user is logged in
                     if (user) {
-                        await syncMigratedDataToSupabase(user.id, {
+                        const syncResult = await syncMigratedDataToSupabase(user.id, {
                             ships: result.data.ships,
                             inventory: result.data.inventory,
                             encounters: [],
@@ -45,9 +45,33 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                             teamLoadouts: [],
                             engineeringStats: result.data.engineeringStats,
                         });
-                    }
 
-                    addNotification('success', 'Data imported successfully, refreshing...');
+                        if (syncResult.success) {
+                            addNotification(
+                                'success',
+                                'Data synced successfully, refreshing in 3 seconds...'
+                            );
+
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                        } else {
+                            addNotification(
+                                'error',
+                                'Failed to sync data with supabase: ' +
+                                    (syncResult.error as Error).message || 'Unknown error'
+                            );
+                        }
+                    } else {
+                        addNotification(
+                            'success',
+                            'Data imported successfully, refreshing in 3 seconds...'
+                        );
+
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 3000);
+                    }
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
                 }
@@ -60,9 +84,6 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                 );
             } finally {
                 setLoading(false);
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
             }
 
             // Reset the file input
