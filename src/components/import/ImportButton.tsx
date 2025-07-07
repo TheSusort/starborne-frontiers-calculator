@@ -60,6 +60,9 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                 );
             } finally {
                 setLoading(false);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
             }
 
             // Reset the file input

@@ -5,7 +5,7 @@ import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
-import { calculateTotalStats } from '../ship/statsCalculator';
+import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 
@@ -72,6 +72,9 @@ export function simulateUpgrade(
     piece: GearPiece,
     targetLevel: number = 16
 ): { piece: GearPiece; cost: number } {
+    // Clear the gear stats cache to ensure fresh calculations for this simulation
+    clearGearStatsCache();
+
     if (piece.level >= targetLevel) return { piece, cost: 0 };
 
     const config = UPGRADE_LEVELS[piece.rarity as keyof typeof UPGRADE_LEVELS];
@@ -207,6 +210,9 @@ export function analyzePotentialUpgrades(
     count: number = 6,
     slot?: GearSlotName
 ): PotentialResult[] {
+    // Clear the gear stats cache to ensure we get fresh calculations for each simulation
+    clearGearStatsCache();
+
     const eligiblePieces = inventory.filter(
         (piece) =>
             piece.level < 16 &&
@@ -223,6 +229,7 @@ export function analyzePotentialUpgrades(
             const { piece: upgradedPiece } = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
+
             return { piece: upgradedPiece, score: potentialScore };
         });
 

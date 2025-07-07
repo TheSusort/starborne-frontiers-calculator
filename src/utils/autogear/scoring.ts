@@ -294,7 +294,6 @@ function calculateBufferScore(
     setCount?: Record<string, number>,
     statBonuses?: StatBonus[]
 ): number {
-    console.log('setCount', setCount);
     const speed = stats.speed || 0;
     const boostCount = setCount?.BOOST || 0;
     const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);

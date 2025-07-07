@@ -14,7 +14,7 @@ export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
         percentage: {
             rare: { min: 3, max: 5 },
             epic: { min: 4, max: 6 },
-            legendary: { min: 6, max: 8 },
+            legendary: { min: 5, max: 7 },
         },
     },
     attack: {
@@ -26,7 +26,7 @@ export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
         percentage: {
             rare: { min: 3, max: 5 },
             epic: { min: 4, max: 6 },
-            legendary: { min: 6, max: 8 },
+            legendary: { min: 5, max: 7 },
         },
     },
     defence: {
@@ -38,7 +38,7 @@ export const SUBSTAT_RANGES: Record<string, Record<string, StatValueRange>> = {
         percentage: {
             rare: { min: 3, max: 5 },
             epic: { min: 4, max: 6 },
-            legendary: { min: 6, max: 8 },
+            legendary: { min: 5, max: 7 },
         },
     },
     hacking: {
