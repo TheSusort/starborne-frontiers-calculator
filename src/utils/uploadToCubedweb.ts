@@ -12,7 +12,7 @@ export const uploadToCubedweb = async (
     hangarName: string
 ): Promise<{ success: boolean; hangarUrl?: string; error?: string }> => {
     const PUBLIC_KEY = import.meta.env.CUBEDWEB_PUBLIC_KEY || '';
-    const BASE_URL = 'https://frontiers.cubedweb.net';
+    const BASE_URL = 'http://frontiers.cubedweb.net';
 
     try {
         // Step 1: Authenticate to get token
