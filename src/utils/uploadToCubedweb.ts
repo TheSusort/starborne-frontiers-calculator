@@ -11,7 +11,7 @@ export const uploadToCubedweb = async (
     file: File,
     hangarName: string
 ): Promise<{ success: boolean; hangarUrl?: string; error?: string }> => {
-    const PUBLIC_KEY = import.meta.env.CUBEDWEB_PUBLIC_KEY || '';
+    const PUBLIC_KEY = import.meta.env.VITE_CUBEDWEB_PUBLIC_KEY || '';
     const BASE_URL = 'https://frontiers.cubedweb.net';
 
     try {
