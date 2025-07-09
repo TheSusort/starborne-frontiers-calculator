@@ -23,6 +23,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
     const [showHangarModal, setShowHangarModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
+    let skipRefresh = false;
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,6 +116,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                         `Hangar uploaded successfully! View it at: ${uploadResult.hangarUrl}`
                     );
                 } else {
+                    skipRefresh = true;
                     addNotification(
                         'error',
                         `Failed to upload to cubedweb: ${uploadResult.error || 'Unknown error'}`
@@ -141,9 +143,11 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
 
     const refreshPage = useCallback((message: string) => {
         addNotification('success', message);
-        setTimeout(() => {
-            window.location.reload();
-        }, 3000);
+        if (!skipRefresh) {
+            setTimeout(() => {
+                window.location.reload();
+            }, 3000);
+        }
     }, []);
 
     return (
