@@ -8,6 +8,9 @@ import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
+import { Checkbox } from '../ui';
+import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
+import { HangarNameModal } from './HangarNameModal';
 
 export const ImportButton: React.FC<{ className?: string }> = ({ className = '' }) => {
     const { setData: setShips } = useShips();
@@ -16,12 +19,31 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [shareData, setShareData] = useState(false);
+    const [showHangarModal, setShowHangarModal] = useState(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
             const file = event.target.files?.[0];
             if (!file) return;
 
+            // If sharing is enabled, show the hangar name modal
+            if (shareData) {
+                setSelectedFile(file);
+                setShowHangarModal(true);
+                return;
+            }
+
+            // Otherwise, proceed with normal import
+            await processFileImport(file);
+        },
+        [setShips, setInventory, setEngineeringStats, addNotification, user, shareData]
+    );
+
+    const processFileImport = useCallback(
+        async (file: File) => {
             try {
                 setLoading(true);
                 const text = await file.text();
@@ -47,14 +69,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                         });
 
                         if (syncResult.success) {
-                            addNotification(
-                                'success',
-                                'Data synced successfully, refreshing in 3 seconds...'
-                            );
-
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 3000);
+                            refreshPage('Data synced successfully, refreshing in 3 seconds...');
                         } else {
                             addNotification(
                                 'error',
@@ -63,14 +78,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                             );
                         }
                     } else {
-                        addNotification(
-                            'success',
-                            'Data imported successfully, refreshing in 3 seconds...'
-                        );
-
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 3000);
+                        refreshPage('Data imported successfully, refreshing in 3 seconds...');
                     }
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
@@ -84,34 +92,104 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                 );
             } finally {
                 setLoading(false);
+                // Reset the file input
+                const fileInput = document.getElementById('import-file-input') as HTMLInputElement;
+                if (fileInput) fileInput.value = '';
             }
-
-            // Reset the file input
-            event.target.value = '';
         },
         [setShips, setInventory, setEngineeringStats, addNotification, user]
     );
 
+    const handleHangarNameSubmit = useCallback(
+        async (hangarName: string) => {
+            if (!selectedFile) return;
+
+            setUploadingToCubedweb(true);
+            try {
+                // Upload to cubedweb first
+                const uploadResult = await uploadToCubedweb(selectedFile, hangarName);
+
+                if (uploadResult.success && uploadResult.hangarUrl) {
+                    addNotification(
+                        'success',
+                        `Hangar uploaded successfully! View it at: ${uploadResult.hangarUrl}`
+                    );
+                } else {
+                    addNotification(
+                        'error',
+                        `Failed to upload to cubedweb: ${uploadResult.error || 'Unknown error'}`
+                    );
+                }
+
+                // Close modal and proceed with normal import
+                setShowHangarModal(false);
+                setSelectedFile(null);
+                await processFileImport(selectedFile);
+            } catch (error) {
+                console.error('Error uploading to cubedweb:', error);
+                addNotification(
+                    'error',
+                    'Failed to upload to cubedweb: ' +
+                        (error instanceof Error ? error.message : 'Unknown error')
+                );
+            } finally {
+                setUploadingToCubedweb(false);
+            }
+        },
+        [selectedFile, addNotification, processFileImport]
+    );
+
+    const refreshPage = useCallback((message: string) => {
+        addNotification('success', message);
+        setTimeout(() => {
+            window.location.reload();
+        }, 3000);
+    }, []);
+
     return (
-        <div className={`d-flex align-items-center`}>
-            <input
-                type="file"
-                accept=".json"
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
-                id="import-file-input"
+        <div>
+            <Checkbox
+                id="share-data"
+                label="Upload to cubedweb"
+                helpLabel="Check this if you want to upload your data to frontiers.cubedweb.net aswell, a tool to create shareable hangars."
+                checked={shareData}
+                onChange={() => setShareData(!shareData)}
             />
-            <Button
-                variant="primary"
-                onClick={() => document.getElementById('import-file-input')?.click()}
-                className={className}
-            >
-                {loading ? (
-                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-dark absolute top-2 left-1/2"></div>
-                ) : (
-                    'Import Game Data'
-                )}
-            </Button>
+            <div className={`flex align-items-center gap-2`}>
+                <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileUpload}
+                    style={{ display: 'none' }}
+                    id="import-file-input"
+                />
+                <Button
+                    variant="primary"
+                    onClick={() => document.getElementById('import-file-input')?.click()}
+                    className={className}
+                >
+                    {loading ? (
+                        <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-dark absolute top-2 left-1/2"></div>
+                    ) : (
+                        'Import Game Data'
+                    )}
+                </Button>
+            </div>
+
+            <HangarNameModal
+                isOpen={showHangarModal}
+                onClose={() => {
+                    setShowHangarModal(false);
+                    setSelectedFile(null);
+                    // Reset the file input
+                    const fileInput = document.getElementById(
+                        'import-file-input'
+                    ) as HTMLInputElement;
+                    if (fileInput) fileInput.value = '';
+                }}
+                onSubmit={handleHangarNameSubmit}
+                loading={uploadingToCubedweb}
+            />
         </div>
     );
 };

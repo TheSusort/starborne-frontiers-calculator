@@ -73,7 +73,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                     </div>
                 </div>
                 <span className=" select-none flex items-center justify-between gap-2 w-full">
-                    {label}
+                    {label.length > 0 && <>{label}</>}
                     {helpLabel && (
                         <>
                             <InfoIcon
