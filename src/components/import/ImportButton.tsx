@@ -145,7 +145,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
         addNotification('success', message);
         if (!skipRefresh) {
             setTimeout(() => {
-                window.location.reload();
+                //window.location.reload();
             }, 3000);
         }
     }, []);
