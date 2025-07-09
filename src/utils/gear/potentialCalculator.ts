@@ -75,7 +75,7 @@ export function simulateUpgrade(
     // Clear the gear stats cache to ensure fresh calculations for this simulation
     clearGearStatsCache();
 
-    if (piece.level >= targetLevel) return { piece, cost: 0 };
+    if (piece.level >= targetLevel || piece.stars < 3) return { piece, cost: 0 };
 
     const config = UPGRADE_LEVELS[piece.rarity as keyof typeof UPGRADE_LEVELS];
     if (!config) return { piece, cost: 0 };
