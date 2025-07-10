@@ -10,6 +10,26 @@ import {
 // Type for the lookup maps
 type ItemWithIndex = { item: StarborneItem; index: number };
 
+// Helper function to format engineering items
+const formatEngineeringItem = (item: Engineering): string => {
+    const { Type, Attribute, Level, ModifierType } = item;
+    // Add percentage indicator for percentage-based modifiers
+    const percentageSuffix = ModifierType === 'Percentage' ? ' (×100%)' : '';
+    return `${Type || 'Unknown'} - ${Attribute || 'Unknown'} - ${Level || 0}${percentageSuffix}`;
+};
+
+// Helper function to get display name for any Starborne item
+const getItemDisplayName = (item: StarborneItem, sectionName: string): string => {
+    if (sectionName === 'Units') {
+        return (item as Unit).Name;
+    } else if (sectionName === 'Equipment') {
+        return (item as Equipment).Name;
+    } else if (sectionName === 'Engineering') {
+        return formatEngineeringItem(item as Engineering);
+    }
+    return 'Unknown Item';
+};
+
 export const generateLargeFileDiff = (
     obj1: ExportedPlayData,
     obj2: ExportedPlayData
@@ -92,12 +112,12 @@ const compareArrays = (
     // Find added items
     for (const [id, { item }] of map2) {
         if (!map1.has(id)) {
-            const itemName = (item as Unit | Equipment).Name || id;
+            const itemName = getItemDisplayName(item, sectionName);
             results.push({
                 type: 'added',
                 path: `${sectionName}[${id}]`,
                 newValue: item,
-                description: `Added ${sectionName.slice(0, -1)}: ${itemName}`,
+                description: `Added ${sectionName}: ${itemName}`,
                 groupKey: `${sectionName}-${id}`,
                 groupName: itemName,
             });
@@ -107,12 +127,12 @@ const compareArrays = (
     // Find removed items
     for (const [id, { item }] of map1) {
         if (!map2.has(id)) {
-            const itemName = (item as Unit | Equipment).Name || id;
+            const itemName = getItemDisplayName(item, sectionName);
             results.push({
                 type: 'removed',
                 path: `${sectionName}[${id}]`,
                 oldValue: item,
-                description: `Removed ${sectionName.slice(0, -1)}: ${itemName}`,
+                description: `Removed ${sectionName}: ${itemName}`,
                 groupKey: `${sectionName}-${id}`,
                 groupName: itemName,
             });
@@ -128,7 +148,7 @@ const compareArrays = (
                 item2,
                 `${sectionName}[${id}]`,
                 id,
-                (item1 as Unit | Equipment).Name || id,
+                getItemDisplayName(item1, sectionName),
                 sectionName,
                 unitNameMap1,
                 unitNameMap2
