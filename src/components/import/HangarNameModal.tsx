@@ -8,6 +8,7 @@ interface Props {
     onClose: () => void;
     onSubmit: (hangarName: string) => void;
     loading?: boolean;
+    fileSize?: number;
 }
 
 export const HangarNameModal: React.FC<Props> = ({
@@ -15,6 +16,7 @@ export const HangarNameModal: React.FC<Props> = ({
     onClose,
     onSubmit,
     loading = false,
+    fileSize,
 }) => {
     const [hangarName, setHangarName] = useState('');
     const [error, setError] = useState('');
@@ -49,6 +51,19 @@ export const HangarNameModal: React.FC<Props> = ({
                     Please enter a name for your hangar that will be displayed on
                     frontiers.cubedweb.net
                 </p>
+
+                {fileSize && (
+                    <div className="bg-blue-900/20 border border-blue-500/30 rounded p-3">
+                        <p className="text-blue-300 text-sm">
+                            <strong>File size:</strong> {(fileSize / 1024 / 1024).toFixed(1)}MB
+                            {fileSize > 10 * 1024 * 1024 && (
+                                <span className="block mt-1 text-yellow-300">
+                                    ⚠️ Large file detected. Upload may take a few moments...
+                                </span>
+                            )}
+                        </p>
+                    </div>
+                )}
 
                 <Input
                     label="Hangar Name"

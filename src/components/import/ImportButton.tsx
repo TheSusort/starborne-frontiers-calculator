@@ -23,7 +23,6 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
     const [showHangarModal, setShowHangarModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
-    let skipRefresh = false;
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +115,6 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                         `Hangar uploaded successfully! View it at: ${uploadResult.hangarUrl}`
                     );
                 } else {
-                    skipRefresh = true;
                     addNotification(
                         'error',
                         `Failed to upload to cubedweb: ${uploadResult.error || 'Unknown error'}`
@@ -143,9 +141,9 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
 
     const refreshPage = useCallback((message: string) => {
         addNotification('success', message);
-        if (!skipRefresh) {
+        if (!shareData) {
             setTimeout(() => {
-                //window.location.reload();
+                window.location.reload();
             }, 3000);
         }
     }, []);
@@ -154,7 +152,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
         <div>
             <Checkbox
                 id="share-data"
-                className="hidden"
+                className=""
                 label="Upload to cubedweb"
                 helpLabel="Check this if you want to upload your data to frontiers.cubedweb.net aswell, a tool to create shareable hangars."
                 checked={shareData}
@@ -194,6 +192,7 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
                 }}
                 onSubmit={handleHangarNameSubmit}
                 loading={uploadingToCubedweb}
+                fileSize={selectedFile?.size}
             />
         </div>
     );

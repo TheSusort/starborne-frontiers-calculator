@@ -37,6 +37,7 @@ const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalc
 const DPSCalculatorPage = lazy(() => import('./pages/calculators/DPSCalculatorPage'));
 const HealingCalculatorPage = lazy(() => import('./pages/calculators/HealingCalculatorPage'));
 const DamageDeconstructionPage = lazy(() => import('./pages/calculators/DamageDeconstructionPage'));
+const JsonDiffCalculatorPage = lazy(() => import('./pages/calculators/JsonDiffCalculatorPage'));
 
 // init hotjar
 const siteId = 5241833;
@@ -157,6 +158,12 @@ const App: React.FC = () => {
                                                                     path="/damage-deconstruction"
                                                                     element={
                                                                         <DamageDeconstructionPage />
+                                                                    }
+                                                                />
+                                                                <Route
+                                                                    path="/json-diff"
+                                                                    element={
+                                                                        <JsonDiffCalculatorPage />
                                                                     }
                                                                 />
                                                                 <Route

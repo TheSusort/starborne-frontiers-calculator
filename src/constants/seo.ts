@@ -91,4 +91,11 @@ export const SEO_CONFIG = {
         keywords:
             'starborne, frontiers, documentation, guide, tutorial, ship management, gear optimization, battle simulation',
     },
+    jsonDiff: {
+        title: 'JSON Diff Calculator',
+        description:
+            'Compare two Starborne Frontiers JSON export files to see differences in ships, equipment, and engineering configurations.',
+        keywords:
+            'json diff, file comparison, starborne frontiers, ship comparison, equipment comparison',
+    },
 } as const;

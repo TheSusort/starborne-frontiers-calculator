@@ -7,12 +7,39 @@ interface CubedwebHangarResponse {
     hangarUrl: string;
 }
 
+// Efficient base64 conversion for large files
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === 'string') {
+                // Remove the data URL prefix (e.g., "data:application/json;base64,")
+                const base64 = reader.result.split(',')[1];
+                resolve(base64);
+            } else {
+                reject(new Error('Failed to convert file to base64'));
+            }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+};
+
 export const uploadToCubedweb = async (
     file: File,
     hangarName: string
 ): Promise<{ success: boolean; hangarUrl?: string; error?: string }> => {
     const PUBLIC_KEY = import.meta.env.VITE_CUBEDWEB_PUBLIC_KEY || '';
     const BASE_URL = 'https://frontiers.cubedweb.net';
+
+    // Validate file size (50MB limit to be safe)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB in bytes
+    if (file.size > MAX_FILE_SIZE) {
+        return {
+            success: false,
+            error: `File size (${(file.size / 1024 / 1024).toFixed(1)}MB) exceeds the maximum allowed size of 50MB`,
+        };
+    }
 
     try {
         // Step 1: Authenticate to get token
@@ -31,9 +58,15 @@ export const uploadToCubedweb = async (
         const authData: CubedwebAuthResponse = await authResponse.json();
         const token = authData.token;
 
-        // Step 2: Convert file to base64
-        const fileBuffer = await file.arrayBuffer();
-        const base64Data = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+        // Step 2: Convert file to base64 using a more efficient method for large files
+        let base64Data: string;
+        try {
+            base64Data = await fileToBase64(file);
+        } catch (error) {
+            throw new Error(
+                `Failed to convert file to base64: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+        }
 
         // Step 3: Upload hangar data
         const timestamp = Date.now();

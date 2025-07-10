@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.17.2';
+export const CURRENT_VERSION = '1.18.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.18.0',
+        date: '2025-07-10',
+        changes: ['Added JSON diff calculator'],
+    },
     {
         version: '1.17.2',
         date: '2025-07-07',
