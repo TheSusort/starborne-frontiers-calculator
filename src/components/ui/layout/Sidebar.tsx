@@ -197,6 +197,7 @@ NavigationItem.displayName = 'NavigationItem';
 export const Sidebar: React.FC = () => {
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [shareData, setShareData] = useState(false);
     const { user } = useAuth();
 
     // Memoize the isActive function to maintain stable reference
@@ -255,33 +256,45 @@ export const Sidebar: React.FC = () => {
         return [...publicNavigationLinks];
     }, [publicNavigationLinks]);
 
-    const SidebarContent = memo(() => (
-        <div className="space-y-2 flex flex-col h-full">
-            <span className="text-xs text-gray-400 hidden lg:block">v{CURRENT_VERSION}</span>
-            <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
-                <img src={logo} alt="logo" className="w-8 h-8" />
-                {APP_NAME}
-            </h1>
+    const SidebarContent = memo(
+        ({
+            shareData,
+            setShareData,
+        }: {
+            shareData: boolean;
+            setShareData: (value: boolean) => void;
+        }) => (
+            <div className="space-y-2 flex flex-col h-full">
+                <span className="text-xs text-gray-400 hidden lg:block">v{CURRENT_VERSION}</span>
+                <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
+                    <img src={logo} alt="logo" className="w-8 h-8" />
+                    {APP_NAME}
+                </h1>
 
-            <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
-                {navigationLinks.map((item) => (
-                    <NavigationItem
-                        key={item.path}
-                        item={item}
-                        isActive={isActive}
-                        initialExpanded={item.children && isActiveOrHasActiveChild(item)}
-                        setIsMobileMenuOpen={setIsMobileMenuOpen}
-                        isAuthenticated={!!user}
+                <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
+                    {navigationLinks.map((item) => (
+                        <NavigationItem
+                            key={item.path}
+                            item={item}
+                            isActive={isActive}
+                            initialExpanded={item.children && isActiveOrHasActiveChild(item)}
+                            setIsMobileMenuOpen={setIsMobileMenuOpen}
+                            isAuthenticated={!!user}
+                        />
+                    ))}
+                </nav>
+
+                <div className="!mt-auto flex flex-col gap-2 pt-2">
+                    <ImportButton
+                        className="w-full text-right"
+                        shareData={shareData}
+                        setShareData={setShareData}
                     />
-                ))}
-            </nav>
-
-            <div className="!mt-auto flex flex-col gap-2 pt-2">
-                <ImportButton className="w-full text-right" />
-                <LoginButton />
+                    <LoginButton />
+                </div>
             </div>
-        </div>
-    ));
+        )
+    );
     SidebarContent.displayName = 'SidebarContent';
 
     return (
@@ -313,7 +326,7 @@ export const Sidebar: React.FC = () => {
                 className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20 bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"
             >
                 <div className="p-4 h-full">
-                    <SidebarContent />
+                    <SidebarContent shareData={shareData} setShareData={setShareData} />
                 </div>
             </div>
 
@@ -322,11 +335,11 @@ export const Sidebar: React.FC = () => {
                 isOpen={isMobileMenuOpen}
                 onClose={() => setIsMobileMenuOpen(false)}
                 position="left"
-                width="w-64"
+                width="w-72"
                 hideCloseButton
                 scrollable={false}
             >
-                <SidebarContent />
+                <SidebarContent shareData={shareData} setShareData={setShareData} />
             </Offcanvas>
         </>
     );

@@ -6,7 +6,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.18.0',
         date: '2025-07-10',
-        changes: ['Added JSON diff calculator'],
+        changes: ['Added JSON diff calculator', 'Added optional import to cubedweb'],
     },
     {
         version: '1.17.2',

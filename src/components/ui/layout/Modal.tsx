@@ -3,12 +3,13 @@ import { createPortal } from 'react-dom';
 import { Button, CloseIcon } from '../';
 
 // Create a single portal root for all modals
-const getOrCreatePortalRoot = () => {
-    let portalRoot = document.getElementById('modal-root');
+const getOrCreatePortalRoot = (highZIndex = false) => {
+    const rootId = highZIndex ? 'modal-root-high' : 'modal-root';
+    let portalRoot = document.getElementById(rootId);
     if (!portalRoot) {
         portalRoot = document.createElement('div');
-        portalRoot.setAttribute('id', 'modal-root');
-        portalRoot.className = 'z-[60] relative';
+        portalRoot.setAttribute('id', rootId);
+        portalRoot.className = highZIndex ? 'z-[80] relative' : 'z-[60] relative';
         document.body.appendChild(portalRoot);
     }
     return portalRoot;
@@ -20,6 +21,7 @@ interface Props {
     title: string;
     children: React.ReactNode;
     fullHeight?: boolean;
+    highZIndex?: boolean;
 }
 
 export const Modal: React.FC<Props> = ({
@@ -28,6 +30,7 @@ export const Modal: React.FC<Props> = ({
     title,
     children,
     fullHeight = false,
+    highZIndex = false,
 }) => {
     useEffect(() => {
         if (isOpen) {
@@ -59,7 +62,7 @@ export const Modal: React.FC<Props> = ({
 
     if (!isOpen) return null;
 
-    const portalRoot = getOrCreatePortalRoot();
+    const portalRoot = getOrCreatePortalRoot(highZIndex);
 
     return createPortal(
         <>
@@ -67,7 +70,7 @@ export const Modal: React.FC<Props> = ({
                 className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
                 role="presentation"
             />
-            <div className="fixed inset-0 z-50">
+            <div className={`fixed inset-0 ${highZIndex ? 'z-[70]' : 'z-50'}`}>
                 <div
                     className={`flex h-screen ${fullHeight ? '' : 'items-center'} justify-center p-4`}
                     onClick={onClose}

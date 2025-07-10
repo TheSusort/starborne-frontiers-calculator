@@ -12,17 +12,25 @@ import { Checkbox } from '../ui';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { HangarNameModal } from './HangarNameModal';
 
-export const ImportButton: React.FC<{ className?: string }> = ({ className = '' }) => {
+export const ImportButton: React.FC<{
+    className?: string;
+    shareData?: boolean;
+    setShareData?: (value: boolean) => void;
+}> = ({ className = '', shareData: externalShareData, setShareData: externalSetShareData }) => {
     const { setData: setShips } = useShips();
     const { setData: setInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
-    const [shareData, setShareData] = useState(false);
+    const [internalShareData, setInternalShareData] = useState(false);
     const [showHangarModal, setShowHangarModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
+
+    // Use external state if provided, otherwise use internal state
+    const shareData = externalShareData !== undefined ? externalShareData : internalShareData;
+    const setShareData = externalSetShareData || setInternalShareData;
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +160,6 @@ export const ImportButton: React.FC<{ className?: string }> = ({ className = '' 
         <div>
             <Checkbox
                 id="share-data"
-                className="hidden"
                 label="Upload to cubedweb"
                 helpLabel="Check this if you want to upload your data to frontiers.cubedweb.net aswell, a tool to create shareable hangars."
                 checked={shareData}
