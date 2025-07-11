@@ -4,7 +4,7 @@ import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '..
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
-import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
 import { Button } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
 import { useShips } from '../../contexts/ShipsContext';
@@ -53,6 +53,9 @@ export const GearInventory: React.FC<Props> = ({
         (state.filters.types?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
         (state.filters.equipped ?? '') !== '' ||
+        (state.filters.levelRange &&
+            (state.filters.levelRange.min > 0 || state.filters.levelRange.max > 0)) ||
+        (state.filters.statFilters && state.filters.statFilters.length > 0) ||
         searchQuery.length > 0;
 
     const filteredInventory = useMemo(() => {
@@ -72,6 +75,30 @@ export const GearInventory: React.FC<Props> = ({
                     : state.filters.equipped === 'unequipped'
                       ? !gearToShipMap.has(piece.id)
                       : true;
+
+            // Level range filtering
+            const matchesLevelRange =
+                !state.filters.levelRange ||
+                (state.filters.levelRange.min === 0 && state.filters.levelRange.max === 0) ||
+                (piece.level >= (state.filters.levelRange.min || 0) &&
+                    piece.level <= (state.filters.levelRange.max || 999));
+
+            // Stat filtering
+            const matchesStatFilters =
+                !state.filters.statFilters ||
+                state.filters.statFilters.length === 0 ||
+                state.filters.statFilters.every((statFilter) => {
+                    const allStats = [
+                        ...(piece.mainStat ? [piece.mainStat] : []),
+                        ...piece.subStats,
+                    ];
+
+                    // Check if gear has the specified stat with the specified type
+                    return allStats.some(
+                        (stat) =>
+                            stat.name === statFilter.statName && stat.type === statFilter.statType
+                    );
+                });
 
             const matchesSearch =
                 searchQuery === '' ||
@@ -100,7 +127,15 @@ export const GearInventory: React.FC<Props> = ({
                     .replace(/_/g, ' ')
                     .includes(searchQuery.toLowerCase());
 
-            return matchesSet && matchesType && matchesRarity && matchesEquipped && matchesSearch;
+            return (
+                matchesSet &&
+                matchesType &&
+                matchesRarity &&
+                matchesEquipped &&
+                matchesLevelRange &&
+                matchesStatFilters &&
+                matchesSearch
+            );
         });
     }, [inventory, state.filters, searchQuery, gearToShipMap, gearToShipNames]);
 
@@ -159,6 +194,36 @@ export const GearInventory: React.FC<Props> = ({
 
     const setSort = (sort: SortConfig) => {
         setState((prev: FilterState) => ({ ...prev, sort }));
+    };
+
+    const setLevelRange = (min: number, max: number) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: {
+                ...prev.filters,
+                levelRange: { min, max },
+            },
+        }));
+    };
+
+    const clearLevelRange = () => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: {
+                ...prev.filters,
+                levelRange: undefined,
+            },
+        }));
+    };
+
+    const setStatFilters = (statFilters: StatFilter[]) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: {
+                ...prev.filters,
+                statFilters,
+            },
+        }));
     };
 
     const filters: FilterConfig[] = [
@@ -235,6 +300,29 @@ export const GearInventory: React.FC<Props> = ({
         setSearchQuery('');
     };
 
+    const rangeFilters = [
+        {
+            id: 'level',
+            label: 'Level Range',
+            minValue: state.filters.levelRange?.min || 0,
+            maxValue: state.filters.levelRange?.max || 0,
+            onMinChange: (min: number) => setLevelRange(min, state.filters.levelRange?.max || 0),
+            onMaxChange: (max: number) => setLevelRange(state.filters.levelRange?.min || 0, max),
+            onClear: clearLevelRange,
+            minPlaceholder: 'Min',
+            maxPlaceholder: 'Max',
+        },
+    ];
+
+    const statFilters = [
+        {
+            id: 'stats',
+            label: 'Stat Filters',
+            statFilters: state.filters.statFilters || [],
+            onStatFiltersChange: setStatFilters,
+        },
+    ];
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col">
@@ -246,6 +334,8 @@ export const GearInventory: React.FC<Props> = ({
                 )}
                 <FilterPanel
                     filters={filters}
+                    rangeFilters={rangeFilters}
+                    statFilters={statFilters}
                     isOpen={isFilterOpen}
                     onToggle={() => setIsFilterOpen(!isFilterOpen)}
                     onClear={handleClearFilters}

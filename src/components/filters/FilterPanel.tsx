@@ -5,6 +5,11 @@ import { SearchIcon } from '../ui/icons/SearchIcon';
 import { ListIcon } from '../ui/icons/ListIcon';
 import { ImageIcon } from '../ui/icons/ImageIcon';
 import { useAuth } from '../../contexts/AuthProvider';
+import { RangeFilter } from './RangeFilter';
+import { StatFilter } from './StatFilter';
+import { StatFilter as StatFilterType } from '../../hooks/usePersistedFilters';
+import { STATS } from '../../constants/stats';
+import { StatName } from '../../types/stats';
 
 export interface FilterOption {
     label: string;
@@ -19,8 +24,29 @@ export interface FilterConfig {
     onChange: (values: string[]) => void;
 }
 
+export interface RangeFilterConfig {
+    id: string;
+    label: string;
+    minValue: number;
+    maxValue: number;
+    onMinChange: (value: number) => void;
+    onMaxChange: (value: number) => void;
+    onClear?: () => void;
+    minPlaceholder?: string;
+    maxPlaceholder?: string;
+}
+
+export interface StatFilterConfig {
+    id: string;
+    label: string;
+    statFilters: StatFilterType[];
+    onStatFiltersChange: (filters: StatFilterType[]) => void;
+}
+
 interface Props {
     filters: FilterConfig[];
+    rangeFilters?: RangeFilterConfig[];
+    statFilters?: StatFilterConfig[];
     isOpen: boolean;
     onToggle: () => void;
     onClear: () => void;
@@ -37,6 +63,8 @@ interface Props {
 
 export const FilterPanel: React.FC<Props> = ({
     filters,
+    rangeFilters = [],
+    statFilters = [],
     isOpen,
     onToggle,
     onClear,
@@ -99,6 +127,81 @@ export const FilterPanel: React.FC<Props> = ({
                                                             (option) => option.value === value
                                                         )?.label
                                                     }
+                                                </span>
+                                            </div>
+                                            <CloseIcon />
+                                        </div>
+                                    </Button>
+                                </div>
+                            ))
+                        )}
+                        {rangeFilters.map((filter) => {
+                            if (filter.minValue > 0 || filter.maxValue > 0) {
+                                return (
+                                    <div
+                                        key={filter.id}
+                                        className="flex justify-between items-center"
+                                    >
+                                        <Button
+                                            aria-label={`Remove ${filter.label} filter`}
+                                            className="relative flex items-center"
+                                            variant="secondary"
+                                            onClick={() => {
+                                                if (filter.onClear) {
+                                                    filter.onClear();
+                                                } else {
+                                                    filter.onMinChange(0);
+                                                    filter.onMaxChange(0);
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-center">
+                                                <div className="flex flex-col items-start mr-3">
+                                                    <span className="text-xxs">{filter.label}</span>
+                                                    <span className="text-xs">
+                                                        {filter.minValue > 0 && filter.maxValue > 0
+                                                            ? `${filter.minValue}-${filter.maxValue}`
+                                                            : filter.minValue > 0
+                                                              ? `≥${filter.minValue}`
+                                                              : `≤${filter.maxValue}`}
+                                                    </span>
+                                                </div>
+                                                <CloseIcon />
+                                            </div>
+                                        </Button>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })}
+                        {statFilters.map((filter) =>
+                            filter.statFilters.map((statFilter, index) => (
+                                <div
+                                    key={`${filter.id}-${index}`}
+                                    className="flex justify-between items-center"
+                                >
+                                    <Button
+                                        aria-label={`Remove ${statFilter.statName} filter`}
+                                        className="relative flex items-center"
+                                        variant="secondary"
+                                        onClick={() => {
+                                            const newFilters = filter.statFilters.filter(
+                                                (_, i) => i !== index
+                                            );
+                                            filter.onStatFiltersChange(newFilters);
+                                        }}
+                                    >
+                                        <div className="flex items-center">
+                                            <div className="flex flex-col items-start mr-3">
+                                                <span className="text-xxs">Stat</span>
+                                                <span className="text-xs">
+                                                    {
+                                                        STATS[statFilter.statName as StatName]
+                                                            .shortLabel
+                                                    }
+                                                    {statFilter.statType === 'percentage'
+                                                        ? '%'
+                                                        : ''}
                                                 </span>
                                             </div>
                                             <CloseIcon />
@@ -190,6 +293,27 @@ export const FilterPanel: React.FC<Props> = ({
                             values={filter.values}
                             onChange={filter.onChange}
                             options={filter.options}
+                        />
+                    ))}
+
+                    {rangeFilters.map((filter) => (
+                        <RangeFilter
+                            key={filter.id}
+                            label={filter.label}
+                            minValue={filter.minValue}
+                            maxValue={filter.maxValue}
+                            onMinChange={filter.onMinChange}
+                            onMaxChange={filter.onMaxChange}
+                            minPlaceholder={filter.minPlaceholder}
+                            maxPlaceholder={filter.maxPlaceholder}
+                        />
+                    ))}
+
+                    {statFilters.map((filter) => (
+                        <StatFilter
+                            key={filter.id}
+                            statFilters={filter.statFilters}
+                            onStatFiltersChange={filter.onStatFiltersChange}
                         />
                     ))}
 

@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react';
 
+export interface StatFilter {
+    statName: string;
+    statType: 'flat' | 'percentage';
+}
+
 export interface FilterState {
     sort: {
         field: string;
@@ -14,6 +19,12 @@ export interface FilterState {
         equipped?: string;
         equipmentLocked?: boolean;
         affinities?: string[];
+        // New advanced filters
+        levelRange?: {
+            min: number;
+            max: number;
+        };
+        statFilters?: StatFilter[];
     };
 }
 
@@ -28,6 +39,8 @@ const DEFAULT_STATE: FilterState = {
         equipped: '',
         equipmentLocked: false,
         affinities: [],
+        levelRange: undefined,
+        statFilters: [],
     },
 };
 
