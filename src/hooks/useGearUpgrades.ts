@@ -110,7 +110,7 @@ export const useGearUpgrades = () => {
             const upgrade = getUpgrade(id);
             const piece = getGearPiece(id);
             if (!piece) return undefined;
-            return upgrade ? ({ ...piece, ...upgrade } as GearPiece) : piece;
+            return upgrade ? ({ ...piece, mainStat: upgrade.mainStat } as GearPiece) : piece;
         },
         [getUpgrade, getGearPiece]
     );

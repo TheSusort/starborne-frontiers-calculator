@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.18.0';
+export const CURRENT_VERSION = '1.18.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.18.1',
+        date: '2025-07-11',
+        changes: [
+            'Autogear with simulated upgrades, now only takes into consideration the main stat upgrade, not the substats.',
+        ],
+    },
     {
         version: '1.18.0',
         date: '2025-07-10',
