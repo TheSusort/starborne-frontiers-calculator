@@ -26,6 +26,28 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'This unit grants Defense Up 2 for 1 turn and cleanses all debuffs when an ally within the active pattern has their shield destroyed.',
     },
+    AKULA: {
+        name: 'Akula',
+        affinity: 'electric',
+        rarity: 'legendary',
+        faction: 'XAOC',
+        role: 'ATTACKER',
+        hp: 12171,
+        attack: 4638,
+        defense: 1865,
+        hacking: 74,
+        security: 3,
+        critRate: 22,
+        critDamage: 72,
+        speed: 76,
+        imageKey: 'XAOC_8',
+        activeSkillText: "This unit's attack ignores Taunt and Provoke and deals 160% damage.",
+        chargeSkillText: "This unit's attack ignores Taunt and Provoke and deals 220% damage.",
+        firstPassiveSkillText:
+            "This unit's attacks don't break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage;  The higher the percentage, the more damage.",
+        secondPassiveSkillText:
+            "This unit's attacks don't break Stasis. Starts combat fully charged. Increases outgoing direct damage by up to 30% based on the target's current HP percentage;  The higher the percentage, the more damage.",
+    },
     APEX: {
         name: 'Apex',
         affinity: 'chemical',
