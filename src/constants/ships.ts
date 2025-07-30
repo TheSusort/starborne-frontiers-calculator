@@ -454,7 +454,7 @@ export const SHIPS: Record<string, ShipData> = {
         rarity: 'common',
         faction: 'MARAUDERS',
         role: 'ATTACKER',
-        imageKey: 'Marauder_1',
+        imageKey: 'Marauder_10',
     },
     CULTIVATOR: {
         name: 'Cultivator',
@@ -1711,6 +1711,29 @@ export const SHIPS: Record<string, ShipData> = {
             'Upon being killed by direct damage, this unit deals damage equal to 50% of its max HP.',
         secondPassiveSkillText:
             'Upon being killed by direct damage, this unit deals damage equal to 50% of its max HP and grants allies Everliving regeneration 2 for 4 turns.',
+    },
+    PESTILENCE: {
+        name: 'Pestilence',
+        affinity: 'thermal',
+        rarity: 'legendary',
+        faction: 'BINDERBURG',
+        role: 'DEBUFFER',
+        hp: 16764,
+        attack: 3546,
+        defense: 2063,
+        hacking: 114,
+        security: 20,
+        critRate: 2,
+        critDamage: 22,
+        speed: 81,
+        imageKey: 'Binderburg_10',
+        activeSkillText: 'This Unit deals 130% damage, inflicts Corrosion 2 for 2 turns.',
+        chargeSkillText:
+            'This Unit grants Binderburg Resilience 3 for 2 turns to all allies, deals 190% damage and inflicts Corrosion 2 for 2 turns.',
+        firstPassiveSkillText:
+            'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn.',
+        secondPassiveSkillText:
+            'On debuff infliction this Unit reduces the duration of active Debuffs on all allies by 1 turn. When an enemy cleanses a debuff, this Unit inflicts Corrosion 2 for 2 turns, on all cleansed enemies.',
     },
     PROSPECT: {
         name: 'Prospect',

@@ -574,6 +574,7 @@ export const AutogearPage: React.FC = () => {
                                 setShowSettingsModal(true);
                             }}
                             onFindOptimalGear={handleAutogear}
+                            getShipConfig={getShipConfig}
                         />
                     </div>
 

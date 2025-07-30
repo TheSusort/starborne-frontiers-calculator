@@ -3,6 +3,10 @@ import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon } from '../ui/icons';
+import { AutogearConfigList } from './AutogearConfigList';
+import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import { ShipTypeName } from '../../constants';
+import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 
 interface AutogearQuickSettingsProps {
     selectedShips: (Ship | null)[];
@@ -11,6 +15,18 @@ interface AutogearQuickSettingsProps {
     onRemoveShip: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onOpenSettings: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onFindOptimalGear: () => void;
+    getShipConfig: (shipId: string) => {
+        shipRole: ShipTypeName | null;
+        statPriorities: StatPriority[];
+        setPriorities: SetPriority[];
+        statBonuses: StatBonus[];
+        ignoreEquipped: boolean;
+        ignoreUnleveled: boolean;
+        useUpgradedStats: boolean;
+        tryToCompleteSets: boolean;
+        selectedAlgorithm: AutogearAlgorithm;
+        showSecondaryRequirements: boolean;
+    };
 }
 
 export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
@@ -20,6 +36,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onRemoveShip,
     onOpenSettings,
     onFindOptimalGear,
+    getShipConfig,
 }) => {
     const [autoOpenIndex, setAutoOpenIndex] = useState<number | null>(null);
 
@@ -55,6 +72,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                 onSelect={(selectedShip) => handleShipSelect(selectedShip, index)}
                                 autoOpen={autoOpenIndex === index}
                             >
+                                {ship && <AutogearConfigList {...getShipConfig(ship.id)} />}
                                 <div className="flex gap-2 items-center">
                                     <Button
                                         variant="secondary"
