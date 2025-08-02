@@ -80,7 +80,7 @@ const DPSCalculatorPage: React.FC = () => {
             speed: 0,
             healModifier: 0,
         };
-        const dps = calculateDPS(stats);
+        const dps = Math.round(newConfig.attack * calculateCritMultiplier(stats));
 
         setConfigs([
             ...configs,
@@ -120,7 +120,7 @@ const DPSCalculatorPage: React.FC = () => {
                         speed: 0,
                         healModifier: 0,
                     };
-                    const dps = calculateDPS(stats);
+                    const dps = Math.round(updatedConfig.attack * calculateCritMultiplier(stats));
                     return {
                         ...updatedConfig,
                         dps,
