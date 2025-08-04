@@ -1,13 +1,43 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CloseIcon, PageLayout } from '../../components/ui';
-import { calculateDPS, calculateCritMultiplier } from '../../utils/autogear/scoring';
+import { calculateCritMultiplier, calculateDamageReduction } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
 import { DPSChart } from '../../components/calculator/DPSChart';
-import { BaseStats } from '../../types/stats';
+import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+
+// Calculate DPS with variable enemy defense
+const calculateDPSWithDefense = (
+    attack: number,
+    crit: number,
+    critDamage: number,
+    enemyDefense: number,
+    defensePenetration: number
+): number => {
+    const critMultiplier = calculateCritMultiplier({
+        attack,
+        crit,
+        critDamage,
+        defence: 0,
+        hp: 0,
+        hacking: 0,
+        security: 0,
+        speed: 0,
+        healModifier: 0,
+    });
+
+    // Apply defense penetration to enemy defense
+    const effectiveDefense = enemyDefense * (1 - defensePenetration / 100);
+
+    // Calculate damage reduction based on effective defense
+    const damageReduction = calculateDamageReduction(effectiveDefense);
+
+    // Calculate final DPS with damage reduction
+    return attack * critMultiplier * (1 - damageReduction / 100);
+};
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -16,47 +46,65 @@ interface ShipConfig {
     attack: number;
     crit: number;
     critDamage: number;
+    defensePenetration: number;
     dps?: number;
 }
 
 const DPSCalculatorPage: React.FC = () => {
     const [configs, setConfigs] = useState<ShipConfig[]>([
-        { id: '1', name: 'Ship 1', attack: 15000, crit: 100, critDamage: 125 },
+        {
+            id: '1',
+            name: 'Ship 1',
+            attack: 15000,
+            crit: 100,
+            critDamage: 125,
+            defensePenetration: 0,
+        },
     ]);
     const [nextId, setNextId] = useState(2);
-    const initialRender = useRef(true);
+    const [enemyDefense, setEnemyDefense] = useState(10000);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
 
-    // Calculate DPS for all configs
+    // Calculate DPS for all configs on initial render
     useEffect(() => {
         // Skip the first render to avoid infinite loop
-        if (initialRender.current) {
-            initialRender.current = false;
+        // Calculate initial values
+        const initialConfigs = configs.map((config) => {
+            const dps = calculateDPSWithDefense(
+                config.attack,
+                config.crit,
+                config.critDamage,
+                enemyDefense,
+                config.defensePenetration
+            );
+            return {
+                ...config,
+                dps,
+            };
+        });
+        setConfigs(initialConfigs);
+        return;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Empty dependency array - we only want this to run once
 
-            // Calculate initial values
-            const initialConfigs = configs.map((config) => {
-                const stats: BaseStats = {
-                    attack: config.attack,
-                    crit: config.crit,
-                    critDamage: config.critDamage,
-                    hp: 0,
-                    defence: 0,
-                    hacking: 0,
-                    security: 0,
-                    speed: 0,
-                    healModifier: 0,
-                };
-                const dps = Math.round(config.attack * calculateCritMultiplier(stats));
+    // Recalculate DPS when enemy defense changes
+    useEffect(() => {
+        setConfigs((prevConfigs) =>
+            prevConfigs.map((config) => {
+                const dps = calculateDPSWithDefense(
+                    config.attack,
+                    config.crit,
+                    config.critDamage,
+                    enemyDefense,
+                    config.defensePenetration
+                );
                 return {
                     ...config,
                     dps,
                 };
-            });
-            setConfigs(initialConfigs);
-            return;
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Empty dependency array - we only want this to run once
+            })
+        );
+    }, [enemyDefense]);
 
     // Add a new ship configuration
     const addConfig = () => {
@@ -66,21 +114,17 @@ const DPSCalculatorPage: React.FC = () => {
             attack: 15000,
             crit: 100,
             critDamage: 150,
+            defensePenetration: 0,
         };
 
         // Calculate DPS for the new config
-        const stats: BaseStats = {
-            attack: newConfig.attack,
-            crit: newConfig.crit,
-            critDamage: newConfig.critDamage,
-            hp: 0,
-            defence: 0,
-            hacking: 0,
-            security: 0,
-            speed: 0,
-            healModifier: 0,
-        };
-        const dps = Math.round(newConfig.attack * calculateCritMultiplier(stats));
+        const dps = calculateDPSWithDefense(
+            newConfig.attack,
+            newConfig.crit,
+            newConfig.critDamage,
+            enemyDefense,
+            newConfig.defensePenetration
+        );
 
         setConfigs([
             ...configs,
@@ -100,7 +144,7 @@ const DPSCalculatorPage: React.FC = () => {
     // Update a ship configuration
     const updateConfig = (
         id: string,
-        field: 'name' | 'attack' | 'crit' | 'critDamage',
+        field: 'name' | 'attack' | 'crit' | 'critDamage' | 'defensePenetration',
         value: string | number
     ) => {
         const updatedConfigs = configs.map((config) => {
@@ -108,19 +152,19 @@ const DPSCalculatorPage: React.FC = () => {
                 const updatedConfig = { ...config, [field]: value };
 
                 // Recalculate DPS if any relevant stat changed
-                if (field === 'attack' || field === 'crit' || field === 'critDamage') {
-                    const stats: BaseStats = {
-                        attack: updatedConfig.attack,
-                        crit: updatedConfig.crit,
-                        critDamage: updatedConfig.critDamage,
-                        hp: 0,
-                        defence: 0,
-                        hacking: 0,
-                        security: 0,
-                        speed: 0,
-                        healModifier: 0,
-                    };
-                    const dps = Math.round(updatedConfig.attack * calculateCritMultiplier(stats));
+                if (
+                    field === 'attack' ||
+                    field === 'crit' ||
+                    field === 'critDamage' ||
+                    field === 'defensePenetration'
+                ) {
+                    const dps = calculateDPSWithDefense(
+                        updatedConfig.attack,
+                        updatedConfig.crit,
+                        updatedConfig.critDamage,
+                        enemyDefense,
+                        updatedConfig.defensePenetration
+                    );
                     return {
                         ...updatedConfig,
                         dps,
@@ -163,6 +207,19 @@ const DPSCalculatorPage: React.FC = () => {
                 }}
             >
                 <div className="space-y-6">
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h3 className="text-lg font-bold mb-4">Enemy Defense</h3>
+                        <Input
+                            label="Enemy Defense"
+                            type="number"
+                            value={enemyDefense}
+                            onChange={(e) => setEnemyDefense(parseInt(e.target.value) || 0)}
+                        />
+                        <p className="text-sm text-gray-400 mt-2">
+                            Common defense value that all ships will be calculated against
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {configs.map((config) => (
                             <div
@@ -233,6 +290,22 @@ const DPSCalculatorPage: React.FC = () => {
                                             }
                                         />
                                     </div>
+                                    <div className="flex gap-4">
+                                        <Input
+                                            label="Defense Penetration (%)"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={config.defensePenetration}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'defensePenetration',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
+                                    </div>
 
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between mb-2">
@@ -294,6 +367,19 @@ const DPSCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
+                    {/* Defense Penetration Visualization */}
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h3 className="text-lg font-bold mb-4">
+                            Defense Penetration vs Damage Reduction
+                        </h3>
+                        <p className="text-sm text-gray-400 mb-4">
+                            Shows how defense penetration affects damage reduction for different
+                            enemy defense values. Hover over the lines to see exact values.
+                        </p>
+
+                        <DefensePenetrationChart height={400} />
+                    </div>
+
                     <div className="bg-dark p-4 border border-dark-border">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">DPS Comparison</h3>
@@ -326,19 +412,26 @@ const DPSCalculatorPage: React.FC = () => {
                     <div className="bg-dark p-4 border border-dark-border">
                         <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
                         <p className="mb-2">
-                            DPS (Damage Per Second) is calculated based on your attack value and
-                            crit stats using the formula:
+                            DPS (Damage Per Second) is calculated based on your attack value, crit
+                            stats, and damage reduction using the formula:
                         </p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100))
+                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100)) × (1 -
+                            DamageReduction/100)
                         </p>
                         <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + CritDamage/100)
+                            DPS = Attack × (1 + CritDamage/100) × (1 - DamageReduction/100)
                         </p>
                         <p className="mb-2">
-                            For example, with 5,000 attack, 100% crit rate, and 150% crit damage,
-                            your DPS would be 5,000 × (1 + 1.5) = 12,500.
+                            Damage reduction is calculated based on the enemy defense value and your
+                            defense penetration. Higher defense penetration reduces the effective
+                            enemy defense, resulting in less damage reduction.
+                        </p>
+                        <p className="mb-2">
+                            For example, with 5,000 attack, 100% crit rate, 150% crit damage, and
+                            20% damage reduction, your DPS would be 5,000 × (1 + 1.5) × (1 - 0.2) =
+                            10,000.
                         </p>
                         <p>
                             The visualization shows that while both attack and crit damage increase

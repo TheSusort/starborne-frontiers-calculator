@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.18.2';
+export const CURRENT_VERSION = '1.19.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.19.0',
+        date: '2025-08-04',
+        changes: ['Added defense penetration to DPS calculator'],
+    },
     {
         version: '1.18.2',
         date: '2025-07-11',
