@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.19.0';
+export const CURRENT_VERSION = '1.19.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.19.1',
+        date: '2025-08-05',
+        changes: [
+            'Fixed a bug with upgrade analysis, where percentage only set bonus stats where not taken into consideration.',
+        ],
+    },
     {
         version: '1.19.0',
         date: '2025-08-04',

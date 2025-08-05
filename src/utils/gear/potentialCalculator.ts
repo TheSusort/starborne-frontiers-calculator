@@ -1,5 +1,12 @@
 import { GearPiece } from '../../types/gear';
-import { FlexibleStats, Stat, StatName, StatType } from '../../types/stats';
+import {
+    FlexibleStats,
+    PERCENTAGE_ONLY_STATS,
+    PercentageOnlyStats,
+    Stat,
+    StatName,
+    StatType,
+} from '../../types/stats';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
@@ -173,8 +180,9 @@ function calculateGearStats(piece: GearPiece): BaseStats {
             security: 50,
             speed: 80,
             crit: 50,
-            critDamage: 0,
+            critDamage: 70,
             healModifier: 0,
+            defensePenetration: 0,
         },
         // Single piece of gear
         { [piece.slot]: piece.id },
@@ -192,7 +200,10 @@ function calculateGearStats(piece: GearPiece): BaseStats {
         if (setBonus.stats) {
             setBonus.stats.forEach((stat) => {
                 const currentValue = breakdown.final[stat.name] || 0;
-                if (stat.type === 'percentage') {
+                if (
+                    stat.type === 'percentage' &&
+                    !PERCENTAGE_ONLY_STATS.includes(stat.name as PercentageOnlyStats)
+                ) {
                     breakdown.final[stat.name] = currentValue * (1 + stat.value / 100);
                 } else {
                     breakdown.final[stat.name] = currentValue + stat.value;
@@ -229,7 +240,6 @@ export function analyzePotentialUpgrades(
             const { piece: upgradedPiece } = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
-
             return { piece: upgradedPiece, score: potentialScore };
         });
 
