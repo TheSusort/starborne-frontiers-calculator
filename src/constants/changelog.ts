@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.19.1';
+export const CURRENT_VERSION = '1.19.2';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.19.2',
+        date: '2025-08-05',
+        changes: ['Added rarity filter to upgrade analysis'],
+    },
     {
         version: '1.19.1',
         date: '2025-08-05',

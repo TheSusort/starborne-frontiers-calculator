@@ -15,6 +15,12 @@ interface Props {
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
 
+const RARITY_OPTIONS = [
+    { value: 'rare', label: 'Rare', description: 'Rare and above' },
+    { value: 'epic', label: 'Epic', description: 'Epic and above' },
+    { value: 'legendary', label: 'Legendary', description: 'Legendary only' },
+] as const;
+
 export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) => {
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
@@ -24,6 +30,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         total: number;
         percentage: number;
     } | null>(null);
+    const [selectedRarity, setSelectedRarity] = useState<'rare' | 'epic' | 'legendary'>('rare');
     const [results, setResults] = useState<
         Record<
             ShipTypeName,
@@ -49,7 +56,13 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
             // Use setTimeout to allow UI updates
             setTimeout(() => {
                 // Get overall results
-                const roleResults = analyzePotentialUpgrades(inventory, role);
+                const roleResults = analyzePotentialUpgrades(
+                    inventory,
+                    role,
+                    6,
+                    undefined,
+                    selectedRarity
+                );
 
                 // Get slot-specific results
                 const slotResults = Object.entries(GEAR_SLOTS)
@@ -60,7 +73,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                                 inventory,
                                 role,
                                 6,
-                                slotName as GearSlotName
+                                slotName as GearSlotName,
+                                selectedRarity
                             );
                             return acc;
                         },
@@ -135,11 +149,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         setOptimizationProgress(null);
     };
 
-    // Initial analysis when component mounts
+    // Initial analysis when component mounts or when rarity changes
     React.useEffect(() => {
         handleAnalyze();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory]);
+    }, [inventory, selectedRarity]);
 
     const handleSlotChange = (role: ShipTypeName, slot: GearSlotName | 'all') => {
         setSelectedSlots((prev) => ({
@@ -163,11 +177,12 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
             </div>
             <span className="text-sm text-gray-400">
                 This analysis tries to find the 6 best gear upgrades for each ship role, by
-                simulating upgrading each piece to 16, 10 different times, and averaging the
-                results. The improvement percentages are the average improvement to the role score
-                over the current level of the piece. Sorted by the total improvement to the role
-                score. Simulating gear upgrades will also update the gear cards with the upgraded
-                stats, but ranking is still sorted based on average improvement to the role score.
+                simulating upgrading each piece to 16, 20 different times, and averaging the
+                results. Use the rarity filter to focus on specific gear tiers. The improvement
+                percentages are the average improvement to the role score over the current level of
+                the piece. Sorted by the total improvement to the role score. Simulating gear
+                upgrades will also update the gear cards with the upgraded stats, but ranking is
+                still sorted based on average improvement to the role score.
             </span>
             <br />
             <br />
@@ -176,6 +191,26 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                 game. The upgraded stats will now be displayed in the gear cards. Original stats is
                 displayed in green color. Clear upgrades button is used to reset the gear.
             </span>
+
+            {/* Rarity Filter */}
+            <div>
+                <h4 className="text-sm font-medium mb-3">Rarity Filter</h4>
+                <div className="flex flex-wrap gap-2">
+                    {RARITY_OPTIONS.map((option) => (
+                        <Button
+                            key={option.value}
+                            onClick={() => setSelectedRarity(option.value)}
+                            className={`text-sm font-medium transition-colors h-auto text-left`}
+                            variant={selectedRarity === option.value ? 'primary' : 'secondary'}
+                        >
+                            <div>
+                                <div>{option.label}</div>
+                                <div className="text-xs opacity-75">{option.description}</div>
+                            </div>
+                        </Button>
+                    ))}
+                </div>
+            </div>
 
             {optimizationProgress && (
                 <ProgressBar
