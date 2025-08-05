@@ -24,7 +24,8 @@ const ErrorFallback = () => (
 );
 
 export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = ({
-    defenseValues = [2500, 5000, 10000, 15000, 20000, 25000],
+    height = 400,
+    defenseValues = [2500, 5000, 10000, 12000, 15000, 20000],
     penetrationValues = [0, 7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98],
 }) => {
     // Generate data for each defense value
@@ -131,7 +132,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
     return (
         <div className="defense-penetration-chart">
             <h2 className="text-xl font-bold mb-4">Damage Reduction by Defense Penetration</h2>
-            <div style={{ width: '100%' }}>
+            <div style={{ width: '100%', height }}>
                 <ResponsiveContainer>
                     <ComposedChart
                         data={chartData}
