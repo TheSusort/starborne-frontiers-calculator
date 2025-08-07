@@ -5,7 +5,7 @@ import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
-import { PageLayout, ProgressBar, Tabs } from '../../components/ui';
+import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
@@ -26,6 +26,7 @@ import { SEO_CONFIG } from '../../constants/seo';
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
+import '../../styles/print.css';
 
 interface UnmetPriority {
     stat: string;
@@ -103,6 +104,7 @@ export const AutogearPage: React.FC = () => {
     const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
     const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -550,6 +552,16 @@ export const AutogearPage: React.FC = () => {
         setSelectedShips(selectedShips.filter((_, i) => i !== index));
     };
 
+    const handlePrint = () => {
+        setIsPrinting(true);
+        // Use setTimeout to ensure state update before print
+        setTimeout(() => {
+            window.print();
+            // Reset printing state after print dialog closes
+            setTimeout(() => setIsPrinting(false), 1000);
+        }, 100);
+    };
+
     return (
         <>
             <Seo {...SEO_CONFIG.autogear} />
@@ -559,7 +571,7 @@ export const AutogearPage: React.FC = () => {
                 helpLink="/documentation#autogear"
             >
                 <div className="md:flex gap-4">
-                    <div className="flex-1">
+                    <div className="flex-1 print:hidden">
                         <AutogearQuickSettings
                             selectedShips={selectedShips}
                             onShipSelect={handleShipSelect}
@@ -605,18 +617,23 @@ export const AutogearPage: React.FC = () => {
                                     return (
                                         <div key={shipId} className="space-y-4">
                                             {shouldShowSuggestions && (
-                                                <GearSuggestions
-                                                    suggestions={results.suggestions}
-                                                    getGearPiece={getGearPiece}
-                                                    hoveredGear={hoveredGear}
-                                                    onHover={setHoveredGear}
-                                                    onEquip={() =>
-                                                        handleEquipSuggestionsForShip(shipId)
-                                                    }
-                                                    onLockEquipment={handleLockEquipment}
-                                                    ship={ship}
-                                                    useUpgradedStats={shipConfig.useUpgradedStats}
-                                                />
+                                                <div className="gear-suggestions">
+                                                    <GearSuggestions
+                                                        suggestions={results.suggestions}
+                                                        getGearPiece={getGearPiece}
+                                                        hoveredGear={hoveredGear}
+                                                        onHover={setHoveredGear}
+                                                        onEquip={() =>
+                                                            handleEquipSuggestionsForShip(shipId)
+                                                        }
+                                                        onLockEquipment={handleLockEquipment}
+                                                        ship={ship}
+                                                        useUpgradedStats={
+                                                            shipConfig.useUpgradedStats
+                                                        }
+                                                        isPrinting={isPrinting}
+                                                    />
+                                                </div>
                                             )}
 
                                             {/* Show unmet priorities warning */}
@@ -688,18 +705,21 @@ export const AutogearPage: React.FC = () => {
                 {/* Detailed Results Tabs */}
                 {Object.keys(shipResults).length > 0 && (
                     <div>
-                        <Tabs
-                            tabs={Object.keys(shipResults)
-                                .map((shipId) => {
-                                    const ship = selectedShips.find((s) => s?.id === shipId);
-                                    return ship ? { id: shipId, label: ship.name } : null;
-                                })
-                                .filter(
-                                    (tab): tab is { id: string; label: string } => tab !== null
-                                )}
-                            activeTab={activeTab || ''}
-                            onChange={(tabId: string) => setActiveTab(tabId)}
-                        />
+                        {/* Show tabs only when not printing */}
+                        {!isPrinting && (
+                            <Tabs
+                                tabs={Object.keys(shipResults)
+                                    .map((shipId) => {
+                                        const ship = selectedShips.find((s) => s?.id === shipId);
+                                        return ship ? { id: shipId, label: ship.name } : null;
+                                    })
+                                    .filter(
+                                        (tab): tab is { id: string; label: string } => tab !== null
+                                    )}
+                                activeTab={activeTab || ''}
+                                onChange={(tabId: string) => setActiveTab(tabId)}
+                            />
+                        )}
 
                         {/* Tab Content */}
                         <div className="mt-4">
@@ -713,10 +733,23 @@ export const AutogearPage: React.FC = () => {
                                     shipId
                                 ).some((priority) => priority.hardRequirement);
 
-                                if (activeTab !== shipId) return null;
+                                // When printing, show all ships; otherwise only show active tab
+                                if (!isPrinting && activeTab !== shipId) return null;
 
                                 return (
-                                    <div key={shipId} className="space-y-6">
+                                    <div
+                                        key={shipId}
+                                        className={`space-y-6 ship-results ${isPrinting ? 'mb-8 print:mb-8' : ''}`}
+                                    >
+                                        {/* Ship Header for Print */}
+                                        {isPrinting && (
+                                            <div className="print:block hidden">
+                                                <h3 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">
+                                                    {ship.name} - Detailed Results
+                                                </h3>
+                                            </div>
+                                        )}
+
                                         {/* Simulation Results */}
                                         {results.currentSimulation &&
                                             results.suggestedSimulation &&
@@ -754,7 +787,7 @@ export const AutogearPage: React.FC = () => {
                                                         <StatList
                                                             stats={results.currentStats.final}
                                                             title="Current Stats"
-                                                            className="p-4"
+                                                            className="p-4 stat-list"
                                                         />
                                                         <StatList
                                                             stats={results.suggestedStats.final}
@@ -762,7 +795,7 @@ export const AutogearPage: React.FC = () => {
                                                                 results.currentStats.final
                                                             }
                                                             title="Stats with Suggested Gear"
-                                                            className="p-4"
+                                                            className="p-4 stat-list"
                                                         />
                                                     </div>
                                                 </div>
@@ -771,6 +804,15 @@ export const AutogearPage: React.FC = () => {
                                 );
                             })}
                         </div>
+                    </div>
+                )}
+
+                {/* Print Button */}
+                {Object.keys(shipResults).length > 0 && (
+                    <div className="mt-6 print:hidden">
+                        <Button onClick={handlePrint} variant="secondary">
+                            Print Results
+                        </Button>
                     </div>
                 )}
 

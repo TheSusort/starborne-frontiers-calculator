@@ -17,6 +17,7 @@ interface GearSuggestionsProps {
     onLockEquipment: (ship: Ship) => Promise<void>;
     ship?: Ship;
     useUpgradedStats: boolean;
+    isPrinting?: boolean;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -28,6 +29,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onLockEquipment,
     ship,
     useUpgradedStats,
+    isPrinting = false,
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(false);
@@ -52,7 +54,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
                 <div className="bg-dark">
-                    {!expanded ? (
+                    {!expanded && !isPrinting ? (
                         <div className="grid grid-cols-3 gap-2 bg-dark p-4 w-fit mx-auto">
                             {GEAR_SLOT_ORDER.map((slotName) => {
                                 const suggestion = getSuggestionForSlot(slotName);

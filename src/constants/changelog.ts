@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.19.2';
+export const CURRENT_VERSION = '1.19.3';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.19.3',
+        date: '2025-08-07',
+        changes: ['Added print button to autogear page'],
+    },
     {
         version: '1.19.2',
         date: '2025-08-05',
