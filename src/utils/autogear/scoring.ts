@@ -171,6 +171,9 @@ export function calculatePriorityScore(
             case 'DEBUFFER_BOMBER':
                 baseScore = calculateBomberDebufferScore(stats, statBonuses);
                 break;
+            case 'DEBUFFER_CORROSION':
+                baseScore = calculateCorrosionDebufferScore(stats, setCount, statBonuses);
+                break;
             case 'SUPPORTER':
                 baseScore = calculateHealerScore(stats, statBonuses);
                 break;
@@ -274,6 +277,24 @@ function calculateBomberDebufferScore(stats: BaseStats, statBonuses?: StatBonus[
     const bonusScore = applystatBonuses(stats, statBonuses);
 
     return hacking * attack + bonusScore;
+}
+
+function calculateCorrosionDebufferScore(
+    stats: BaseStats,
+    setCount?: Record<string, number>,
+    statBonuses?: StatBonus[]
+): number {
+    const hacking = stats.hacking || 0;
+    const decimation = setCount?.DECIMATION || 0;
+    const bonusScore = applystatBonuses(stats, statBonuses);
+
+    // Hacking is the primary stat (0-500 range) that inflicts the DoT
+    // Decimation sets provide 10% damage increase each (max 3 sets = 30% total)
+    // Formula: base_hacking * (1 + decimation_multiplier) + bonus_score
+    const decimationMultiplier = decimation * 0.1; // 10% per piece
+    const totalDamage = hacking * (1 + decimationMultiplier);
+
+    return totalDamage + bonusScore;
 }
 
 function calculateHealerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {

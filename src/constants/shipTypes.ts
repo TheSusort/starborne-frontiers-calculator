@@ -31,6 +31,11 @@ export const SHIP_TYPES: Record<string, ShipType> = {
         description: 'Maximize hacking, then attack',
         iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
     },
+    DEBUFFER_CORROSION: {
+        name: 'Debuffer(Corrosion)',
+        description: 'Maximize hacking, then decimation',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1082314199100829787.webp',
+    },
     SUPPORTER: {
         name: 'Supporter',
         description: 'Maximize healing output',

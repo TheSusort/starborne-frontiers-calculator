@@ -6,7 +6,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.19.3',
         date: '2025-08-07',
-        changes: ['Added print button to autogear page'],
+        changes: ['Added print button to autogear page', 'Added corrosion debuffer role'],
     },
     {
         version: '1.19.2',
