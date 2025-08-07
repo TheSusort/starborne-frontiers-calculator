@@ -26,7 +26,6 @@ import { SEO_CONFIG } from '../../constants/seo';
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
-import '../../styles/print.css';
 
 interface UnmetPriority {
     stat: string;
