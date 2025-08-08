@@ -369,11 +369,9 @@ const DPSCalculatorPage: React.FC = () => {
 
                     {/* Defense Penetration Visualization */}
                     <div className="bg-dark p-4 border border-dark-border">
-                        <h3 className="text-lg font-bold mb-4">
-                            Defense Penetration vs Damage Reduction
-                        </h3>
+                        <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
                         <p className="text-sm text-gray-400 mb-4">
-                            Shows how defense penetration affects damage reduction for different
+                            Shows how defense penetration affects damage increase for different
                             enemy defense values. Hover over the lines to see exact values.
                         </p>
 
