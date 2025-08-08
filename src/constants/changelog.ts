@@ -6,7 +6,11 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.19.3',
         date: '2025-08-07',
-        changes: ['Added print button to autogear page', 'Added corrosion debuffer role'],
+        changes: [
+            'Added print button to autogear page',
+            'Added corrosion debuffer role',
+            'Changed def pen chart to show damage increase.',
+        ],
     },
     {
         version: '1.19.2',

@@ -39,11 +39,20 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                     penetration,
                 };
 
-                // Calculate damage reduction for each defense value
+                // Calculate damage increase for each defense value
                 defenseValues.forEach((defense) => {
+                    const originalDefense = defense;
+                    const originalReduction = calculateDamageReduction(originalDefense);
+                    const originalDamage = 100 - originalReduction; // Damage dealt at 0% penetration
+
                     const effectiveDefense = defense * (1 - penetration / 100);
-                    const damageReduction = calculateDamageReduction(effectiveDefense);
-                    dataPoint[`defense_${defense}`] = damageReduction;
+                    const currentReduction = calculateDamageReduction(effectiveDefense);
+                    const currentDamage = 100 - currentReduction; // Damage dealt at current penetration
+
+                    // Calculate damage increase as percentage
+                    const damageIncrease =
+                        ((currentDamage - originalDamage) / originalDamage) * 100;
+                    dataPoint[`defense_${defense}`] = damageIncrease;
                 });
 
                 data.push(dataPoint);
@@ -86,17 +95,15 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                         if (entry.dataKey === 'penetration') return null;
 
                         const defenseValue = entry.dataKey.replace('defense_', '');
-                        const currentReduction = entry.value;
+                        const damageIncrease = entry.value;
 
                         // Calculate the original damage reduction (0% penetration)
                         const originalDefense = parseInt(defenseValue);
                         const originalReduction = calculateDamageReduction(originalDefense);
+                        const originalDamage = 100 - originalReduction;
 
-                        // Calculate the change
-                        const reductionChange = originalReduction - currentReduction;
-
-                        // Calculate damage increase (inverse of damage reduction change)
-                        const damageIncrease = (reductionChange / (100 - originalReduction)) * 100;
+                        // Calculate current damage at this penetration
+                        const currentDamage = originalDamage * (1 + damageIncrease / 100);
 
                         return (
                             <div key={index} className="flex items-center gap-2 mb-1">
@@ -106,15 +113,12 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                                 />
                                 <div className="text-sm">
                                     <div>
-                                        {(parseInt(defenseValue) / 1000).toFixed(0)}k Def:{' '}
-                                        {currentReduction.toFixed(1)}%
+                                        {(parseInt(defenseValue) / 1000).toFixed(0)}k Def: +
+                                        {damageIncrease.toFixed(1)}% damage
                                     </div>
                                     <div className="text-xs text-gray-400">
-                                        {originalReduction.toFixed(1)}% →{' '}
-                                        {currentReduction.toFixed(1)}% (
-                                        {reductionChange > 0 ? '-' : '+'}
-                                        {Math.abs(reductionChange).toFixed(1)}% DR, +
-                                        {damageIncrease.toFixed(1)}% damage)
+                                        {originalDamage.toFixed(1)}% → {currentDamage.toFixed(1)}%
+                                        damage dealt
                                     </div>
                                 </div>
                             </div>
@@ -131,7 +135,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
 
     return (
         <div className="defense-penetration-chart">
-            <h2 className="text-xl font-bold mb-4">Damage Reduction by Defense Penetration</h2>
+            <h2 className="text-xl font-bold mb-4">Damage Increase by Defense Penetration</h2>
             <div style={{ width: '100%', height }}>
                 <ResponsiveContainer>
                     <ComposedChart
@@ -153,10 +157,10 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                             type="number"
                         />
                         <YAxis
-                            domain={[0, 90]}
+                            domain={[0, 200]}
                             tick={{ fill: '#fff' }}
                             label={{
-                                value: 'Damage Reduction (%)',
+                                value: 'Damage Increase (%)',
                                 angle: -90,
                                 position: 'insideLeft',
                                 fill: '#fff',
