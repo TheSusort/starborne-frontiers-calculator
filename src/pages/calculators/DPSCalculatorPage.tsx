@@ -367,17 +367,6 @@ const DPSCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* Defense Penetration Visualization */}
-                    <div className="bg-dark p-4 border border-dark-border">
-                        <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
-                        <p className="text-sm text-gray-400 mb-4">
-                            Shows how defense penetration affects damage increase for different
-                            enemy defense values. Hover over the lines to see exact values.
-                        </p>
-
-                        <DefensePenetrationChart height={400} />
-                    </div>
-
                     <div className="bg-dark p-4 border border-dark-border">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">DPS Comparison</h3>
@@ -407,35 +396,15 @@ const DPSCalculatorPage: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Defense Penetration Visualization */}
                     <div className="bg-dark p-4 border border-dark-border">
-                        <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
-                        <p className="mb-2">
-                            DPS (Damage Per Second) is calculated based on your attack value, crit
-                            stats, and damage reduction using the formula:
+                        <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
+                        <p className="text-sm text-gray-400 mb-4">
+                            Shows how defense penetration affects damage increase for different
+                            enemy defense values. Hover over the lines to see exact values.
                         </p>
-                        <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100)) × (1 -
-                            DamageReduction/100)
-                        </p>
-                        <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
-                        <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + CritDamage/100) × (1 - DamageReduction/100)
-                        </p>
-                        <p className="mb-2">
-                            Damage reduction is calculated based on the enemy defense value and your
-                            defense penetration. Higher defense penetration reduces the effective
-                            enemy defense, resulting in less damage reduction.
-                        </p>
-                        <p className="mb-2">
-                            For example, with 5,000 attack, 100% crit rate, 150% crit damage, and
-                            20% damage reduction, your DPS would be 5,000 × (1 + 1.5) × (1 - 0.2) =
-                            10,000.
-                        </p>
-                        <p>
-                            The visualization shows that while both attack and crit damage increase
-                            your DPS linearly, the ideal balance depends on your current stats and
-                            available gear options.
-                        </p>
+
+                        <DefensePenetrationChart height={400} />
                     </div>
                 </div>
             </PageLayout>

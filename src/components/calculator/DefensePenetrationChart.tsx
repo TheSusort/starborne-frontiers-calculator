@@ -26,7 +26,7 @@ const ErrorFallback = () => (
 export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = ({
     height = 400,
     defenseValues = [2500, 5000, 10000, 12000, 15000, 20000],
-    penetrationValues = [0, 7, 14, 21, 28, 35, 42, 49, 56, 63, 70, 77, 84, 91, 98],
+    penetrationValues = [0, 7, 14, 21, 28, 35, 42, 45, 49, 52, 56, 59, 63, 66],
 }) => {
     // Generate data for each defense value
     const chartData = useMemo(() => {
@@ -146,7 +146,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                         <XAxis
                             dataKey="penetration"
                             name="Defense Penetration"
-                            domain={[0, 100]}
+                            domain={[0, 66]}
                             tick={{ fill: '#fff' }}
                             label={{
                                 value: 'Defense Penetration (%)',
