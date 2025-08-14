@@ -31,6 +31,7 @@ const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 const ImplantIndexPage = lazy(() => import('./pages/ImplantIndexPage'));
 const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
+const LeaderboardPage = lazy(() => import('./pages/ships/LeaderboardPage'));
 
 // Calculator pages
 const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
@@ -137,6 +138,10 @@ const App: React.FC = () => {
                                                                 <Route
                                                                     path="/ships/index"
                                                                     element={<ShipIndexPage />}
+                                                                />
+                                                                <Route
+                                                                    path="/ships/leaderboard/:shipName"
+                                                                    element={<LeaderboardPage />}
                                                                 />
                                                                 <Route
                                                                     path="/defense"

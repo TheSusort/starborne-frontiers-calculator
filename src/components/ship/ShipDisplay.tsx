@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
 import { SHIP_TYPES, FACTIONS, RARITIES, IMPLANT_SLOT_ORDER } from '../../constants';
 import {
@@ -24,6 +24,7 @@ import { ChartIcon } from '../ui/icons/ChartIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
+import { TrophyIcon } from '../ui/icons/TrophyIcon';
 
 interface Props {
     ship: Ship;
@@ -124,6 +125,10 @@ export const ShipDisplay: React.FC<Props> = memo(
             ship.implants,
             getEngineeringStatsForShipType(ship.type)
         );
+
+        const handleLeaderboardClick = (shipName: string) => {
+            navigate(`/ships/leaderboard/${encodeURIComponent(shipName)}`);
+        };
 
         if (variant === 'compact') {
             return (
@@ -248,15 +253,24 @@ export const ShipDisplay: React.FC<Props> = memo(
                                 </Dropdown>
                             )}
                             {onQuickAdd && (
-                                <Button
-                                    onClick={() => !isAdded && onQuickAdd(ship)}
-                                    disabled={isAdded}
-                                    variant="secondary"
-                                    size="sm"
-                                    title={isAdded ? 'Remove from fleet' : 'Add to fleet'}
-                                >
-                                    {isAdded ? <CheckIcon /> : <div className="w-4 h-4">+</div>}
-                                </Button>
+                                <>
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={() => handleLeaderboardClick(ship.name)}
+                                    >
+                                        <TrophyIcon />
+                                    </Button>
+                                    <Button
+                                        onClick={() => !isAdded && onQuickAdd(ship)}
+                                        disabled={isAdded}
+                                        variant="secondary"
+                                        size="sm"
+                                        title={isAdded ? 'Remove from fleet' : 'Add to fleet'}
+                                    >
+                                        {isAdded ? <CheckIcon /> : <div className="w-4 h-4">+</div>}
+                                    </Button>
+                                </>
                             )}
                         </div>
                     )}

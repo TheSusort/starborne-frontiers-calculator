@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.19.3';
+export const CURRENT_VERSION = '1.20.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.20.0',
+        date: '2025-08-14',
+        changes: ['Added leaderboard pages for ships, in the ship index page.'],
+    },
     {
         version: '1.19.3',
         date: '2025-08-07',

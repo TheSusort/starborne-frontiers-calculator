@@ -406,6 +406,27 @@ const DPSCalculatorPage: React.FC = () => {
 
                         <DefensePenetrationChart height={400} />
                     </div>
+
+                    <div className="bg-dark p-4 border border-dark-border">
+                        <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
+                        <p className="mb-2">
+                            DPS (Damage Per Second) is calculated based on your attack value, crit
+                            stats, and damage reduction using the formula:
+                        </p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100)) × (1 -
+                            DamageReduction/100)
+                        </p>
+                        <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
+                        <p className="mb-2 font-mono bg-dark-lighter p-2">
+                            DPS = Attack × (1 + CritDamage/100) × (1 - DamageReduction/100)
+                        </p>
+                        <p>
+                            The visualization shows that while both attack and crit damage increase
+                            your DPS linearly, the ideal balance depends on your current stats and
+                            available gear options.
+                        </p>
+                    </div>
                 </div>
             </PageLayout>
         </>
