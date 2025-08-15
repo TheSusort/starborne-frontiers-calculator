@@ -8,14 +8,15 @@ import { Loader } from '../../components/ui/Loader';
 import { supabase } from '../../config/supabase';
 import { Ship } from '../../types/ship';
 import { calculateTotalScore } from '../../utils/autogear/scoring';
-import { GearSlotName } from '../../constants/gearTypes';
+import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants/gearTypes';
 import { ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
 import { TrophyIcon, UserIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
 import { Select } from '../../components/ui/Select';
+import { GEAR_SETS } from '../../constants/gearSets';
 
 interface LeaderboardEntry {
-    ship: Ship;
+    ship: Ship & { _gearMap?: Map<string, any>; _implantMap?: Map<string, any> };
     score: number;
     rank: number;
     isCurrentUser: boolean;
@@ -368,7 +369,7 @@ export const LeaderboardPage: React.FC = () => {
                             {leaderboardData.map((entry) => (
                                 <div
                                     key={entry.ship.id}
-                                    className={`flex items-center justify-between p-4 border-2 ${
+                                    className={`flex items-center justify-between p-4 border-2 gap-4 relative ${
                                         entry.isCurrentUser
                                             ? 'border-primary bg-primary/10'
                                             : 'border-gray-700 bg-dark'
@@ -392,18 +393,48 @@ export const LeaderboardPage: React.FC = () => {
                                                 <h3 className="text-lg font-semibold text-white">
                                                     {entry.ship.name}
                                                 </h3>
-                                                {entry.isCurrentUser && (
-                                                    <div className="flex items-center space-x-1 text-primary text-sm">
-                                                        <UserIcon className="w-4 h-4" />
-                                                        <span>You</span>
-                                                    </div>
-                                                )}
                                             </div>
-                                            <div className="text-sm text-gray-400">
-                                                Level {entry.ship.level || 1} •{' '}
-                                                {entry.ship.refits.length} Refits
+
+                                            <div className="flex items-center gap-1">
+                                                {Array.from({ length: 6 }, (_, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className={`text-xs tracking-tightest ${index < entry.ship.refits?.length ? 'text-yellow-400' : entry.ship.rank && index < entry.ship.rank ? 'text-gray-300' : 'text-gray-500'}`}
+                                                    >
+                                                        ★
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Set Bonus Icons */}
+                                    <div className="grid grid-cols-3 gap-1 mt-1 me-auto">
+                                        {GEAR_SLOT_ORDER.map((slot) => {
+                                            const gearId = entry.ship.equipment[slot];
+                                            const gear = entry.ship._gearMap?.get(gearId as string);
+                                            if (
+                                                !gear ||
+                                                !gear.setBonus ||
+                                                !GEAR_SETS[gear.setBonus]
+                                            )
+                                                return (
+                                                    <div
+                                                        key={`${slot}-empty`}
+                                                        className="w-6 bg-dark-lighter"
+                                                    />
+                                                );
+                                            const gearSet = GEAR_SETS[gear.setBonus];
+                                            return (
+                                                <img
+                                                    key={`${gearSet.name}-${slot}`}
+                                                    src={gearSet.iconUrl}
+                                                    alt={gearSet.name}
+                                                    className="w-6"
+                                                    title={`${gearSet.name} Set`}
+                                                />
+                                            );
+                                        })}
                                     </div>
                                     <div className="text-right">
                                         <div className="text-md lg:text-2xl font-bold text-white">
