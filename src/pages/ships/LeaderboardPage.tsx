@@ -331,12 +331,12 @@ export const LeaderboardPage: React.FC = () => {
             >
                 <div className="space-y-6">
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
+                        <div className="flex items-center flex-col md:flex-row gap-2">
                             <Button onClick={handleBackClick} variant="secondary">
                                 Back to Ship Database
                             </Button>
 
-                            <div className="flex items-center space-x-2">
+                            <div className="flex md:items-center md:space-x-2 flex-col md:flex-row">
                                 <label
                                     htmlFor="role-selector"
                                     className="text-sm font-medium text-gray-300"
@@ -406,8 +406,11 @@ export const LeaderboardPage: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-2xl font-bold text-white">
-                                            {Math.round(entry.score).toLocaleString()}
+                                        <div className="text-md lg:text-2xl font-bold text-white">
+                                            {Intl.NumberFormat('en', {
+                                                notation: 'compact',
+                                                maximumFractionDigits: 2,
+                                            }).format(entry.score)}
                                         </div>
                                         <div className="text-sm text-gray-400">Score</div>
                                     </div>

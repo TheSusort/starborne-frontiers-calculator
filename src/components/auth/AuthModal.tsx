@@ -53,6 +53,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             isOpen={isOpen}
             onClose={onClose}
             title={showEmailForm ? (isSignUp ? 'Sign Up' : 'Sign In') : 'Sign In'}
+            highZIndex
         >
             <div className="space-y-6">
                 {error && <div className="text-red-500 text-sm">{error}</div>}
