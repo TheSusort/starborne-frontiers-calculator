@@ -221,6 +221,28 @@ export const SHIPS: Record<string, ShipData> = {
         role: 'DEFENDER',
         imageKey: 'MPL_1',
     },
+    BELLADONNA: {
+        name: 'Belladonna',
+        affinity: 'antimatter',
+        rarity: 'legendary',
+        faction: 'GELECEK',
+        role: 'DEBUFFER',
+        hp: 14238,
+        attack: 2728,
+        defense: 2163,
+        hacking: 119,
+        security: 16,
+        critRate: 6,
+        critDamage: 34,
+        speed: 85,
+        activeSkillText: 'This Unit deals 140% damage and inflicts Corrosion 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 180% damage and inflicts Corrosion 2 for 2 turns. If the enemy has 3 or more Acidic Decay, inflict Stasis for 1 turn.',
+        firstPassiveSkillText:
+            'When an ally inflicts Corrosion, this unit has a chance to convert the Corrosion into Acidic Decay of the same level, with the chance scaling at % per 10 Hacking.',
+        secondPassiveSkillText:
+            'When an ally inflicts Corrosion, this unit has a chance to convert the Corrosion into Acidic Decay of the same level, with the chance scaling at % per 10 Hacking. Upon converting Corrosino, this unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its Crit Power.',
+    },
     BERSERKER: {
         name: 'Berserker',
         affinity: 'electric',
@@ -500,7 +522,7 @@ export const SHIPS: Record<string, ShipData> = {
         chargeSkillText: 'This Unit deals 205% damage and inflicts Out. Damage Down 3 for 2 turns.',
         firstPassiveSkillText: 'This unit deals 60% damage when an enemy uses their charged skill.',
         secondPassiveSkillText:
-            'This unit deals 90% damage and inflicts Crit Rate Down 2 for 2 turns when an enemy uses their charged skill.',
+            'This unit deals 60% damage and inflicts Crit Rate Down 3 for 2 turns when an enemy uses their charged skill.',
     },
     CUSTODIAN: {
         name: 'Custodian',

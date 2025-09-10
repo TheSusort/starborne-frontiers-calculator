@@ -183,6 +183,9 @@ export function calculatePriorityScore(
             case 'SUPPORTER_OFFENSIVE':
                 baseScore = calculateOffensiveSupporterScore(stats, setCount, statBonuses);
                 break;
+            case 'SUPPORTER_SHIELD':
+                baseScore = calculateShieldSupporterScore(stats, setCount, statBonuses);
+                break;
         }
     } else {
         // Default scoring logic for manual mode
@@ -352,6 +355,17 @@ function calculateOffensiveSupporterScore(
     }
 
     return speed * 10 + attack + boostScore + bonusScore;
+}
+
+function calculateShieldSupporterScore(
+    stats: BaseStats,
+    setCount?: Record<string, number>,
+    statBonuses?: StatBonus[]
+): number {
+    const hp = stats.hp || 0;
+    const bonusScore = applystatBonuses(stats, statBonuses);
+
+    return hp + bonusScore;
 }
 
 // Update calculateTotalScore to include shipRole and setPriorities

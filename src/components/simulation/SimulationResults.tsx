@@ -408,6 +408,30 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
         </>
     );
 
+    const renderSupporterShieldStats = (simulation: SimulationSummary, isComparison = false) => (
+        <>
+            <div>
+                <span className="text-gray-400">HP:</span>
+                <span className="ml-2">
+                    {Math.round(simulation.hp || 0).toLocaleString()}
+                    {isComparison && suggestedSimulation && (
+                        <span
+                            className={`ml-2 ${suggestedSimulation.hp! > currentSimulation.hp! ? 'text-green-500' : 'text-red-500'}`}
+                        >
+                            (
+                            {(
+                                ((suggestedSimulation.hp! - currentSimulation.hp!) /
+                                    currentSimulation.hp!) *
+                                100
+                            ).toFixed(1)}
+                            %)
+                        </span>
+                    )}
+                </span>
+            </div>
+        </>
+    );
+
     const renderStats = (simulation: SimulationSummary, isComparison = false) => {
         switch (role) {
             case 'DEFENDER':
@@ -423,6 +447,8 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                 return renderSupporterBufferStats(simulation, isComparison);
             case 'SUPPORTER_OFFENSIVE':
                 return renderSupporterOffensiveStats(simulation, isComparison);
+            case 'SUPPORTER_SHIELD':
+                return renderSupporterShieldStats(simulation, isComparison);
             default:
                 return renderAttackerStats(simulation, isComparison);
         }

@@ -72,6 +72,10 @@ export function runSimulation(
                 activeSets: activeSets,
                 attack: stats.attack,
             };
+        case 'SUPPORTER_SHIELD':
+            return {
+                hp: stats.hp,
+            };
         default:
             return runDamageSimulation(stats);
     }
