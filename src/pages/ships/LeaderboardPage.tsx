@@ -10,7 +10,7 @@ import { Ship } from '../../types/ship';
 import { calculateTotalScore } from '../../utils/autogear/scoring';
 import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants/gearTypes';
 import { ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
-import { TrophyIcon, UserIcon } from '../../components/ui/icons';
+import { TrophyIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
 import { Select } from '../../components/ui/Select';
 import { GEAR_SETS } from '../../constants/gearSets';
@@ -165,18 +165,18 @@ export const LeaderboardPage: React.FC = () => {
                         rank: data.rank,
                         level: data.level,
                         baseStats: {
-                            hp: data.ship_base_stats.hp,
-                            attack: data.ship_base_stats.attack,
-                            defence: data.ship_base_stats.defence,
-                            hacking: data.ship_base_stats.hacking,
-                            security: data.ship_base_stats.security,
-                            crit: data.ship_base_stats.crit,
-                            critDamage: data.ship_base_stats.crit_damage,
-                            speed: data.ship_base_stats.speed,
-                            healModifier: data.ship_base_stats.heal_modifier,
-                            hpRegen: data.ship_base_stats.hp_regen,
-                            shield: data.ship_base_stats.shield,
-                            defensePenetration: data.ship_base_stats.defense_penetration,
+                            hp: data.ship_base_stats?.hp || 0,
+                            attack: data.ship_base_stats?.attack || 0,
+                            defence: data.ship_base_stats?.defence || 0,
+                            hacking: data.ship_base_stats?.hacking || 0,
+                            security: data.ship_base_stats?.security || 0,
+                            crit: data.ship_base_stats?.crit || 0,
+                            critDamage: data.ship_base_stats?.crit_damage || 0,
+                            speed: data.ship_base_stats?.speed || 0,
+                            healModifier: data.ship_base_stats?.heal_modifier || 0,
+                            hpRegen: data.ship_base_stats?.hp_regen || 0,
+                            shield: data.ship_base_stats?.shield || 0,
+                            defensePenetration: data.ship_base_stats?.defense_penetration || 0,
                         },
                         equipment: data.ship_equipment.reduce(
                             (acc: Record<GearSlotName, string>, eq: any) => {
