@@ -159,6 +159,7 @@ export const ImportButton: React.FC<{
     return (
         <div>
             <Checkbox
+                className="hidden"
                 id="share-data"
                 label="Upload to cubedweb"
                 helpLabel="Check this if you want to upload your data to frontiers.cubedweb.net aswell, a tool to create shareable hangars."

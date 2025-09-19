@@ -284,7 +284,7 @@ export const ShipIndexPage: React.FC = () => {
                                                         }
                                                         onMouseLeave={() => setPassive1Hover('')}
                                                     >
-                                                        Passive 1
+                                                        Passive
                                                     </Button>
                                                     <Tooltip
                                                         isVisible={passive1Hover === ship.name}
@@ -306,14 +306,14 @@ export const ShipIndexPage: React.FC = () => {
                                                         }
                                                         onMouseLeave={() => setPassive2Hover('')}
                                                     >
-                                                        Passive 2
+                                                        Passive R2
                                                     </Button>
                                                     <Tooltip
                                                         isVisible={passive2Hover === ship.name}
                                                     >
                                                         <SkillTooltip
                                                             skillText={ship.secondPassiveSkillText}
-                                                            skillType="Passive Skill Upgraded"
+                                                            skillType="Passive Skill R2"
                                                         />
                                                     </Tooltip>
                                                 </div>
