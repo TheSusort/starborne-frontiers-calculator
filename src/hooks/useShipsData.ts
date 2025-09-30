@@ -91,5 +91,24 @@ export const useShipsData = () => {
         fetchShips();
     }, []);
 
-    return { ships, loading, error };
+    const fetchSingleShip = async (shipName: string): Promise<Ship | null> => {
+        try {
+            const { data, error: fetchError } = await supabase
+                .from('ship_templates')
+                .select('*')
+                .eq('name', shipName)
+                .single();
+
+            if (fetchError) {
+                throw fetchError;
+            }
+
+            return transformShipTemplate(data);
+        } catch (err) {
+            console.error('Failed to fetch single ship:', err);
+            return null;
+        }
+    };
+
+    return { ships, loading, error, fetchSingleShip };
 };

@@ -565,6 +565,14 @@ export const BUFFS: Buff[] = [
     {
         name: 'Overclock 3',
         description:
-            '+30% Attack, +60% Crit Power. <br> On removal or expiration, apply Speed Down 1 and Attack Down 1 to self for 2 turns.',
+            '+30% Attack, +60% Crit Power. On removal or expiration, apply Speed Down 1 and Attack Down 1 to self for 2 turns.',
+    },
+    {
+        name: 'Barrier',
+        description: 'Is invulnerable to damage.',
+    },
+    {
+        name: 'Barrier Recharging',
+        description: 'Cannot be granted Barrier. Cannot be reduced. Unremovable.',
     },
 ];

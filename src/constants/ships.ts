@@ -484,15 +484,15 @@ export const SHIPS: Record<string, ShipData> = {
         rarity: 'legendary',
         faction: 'BINDERBURG',
         role: 'SUPPORTER',
-        hp: 18371,
+        hp: 16304,
         attack: 1686,
         defense: 2698,
         hacking: 95,
-        security: 41,
+        security: 45,
         critRate: 4,
         critDamage: 20,
         speed: 88,
-        hpRegen: 6,
+        hpRegen: 8,
         imageKey: 'Binderburg_9',
         activeSkillText: 'This Unit grants Defense Up 3 for 2 turns and Cleanses 1 debuff.',
         chargeSkillText:
@@ -500,7 +500,7 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText:
             "When this unit cleanses a debuff it also repairs 4% of this unit's max HP.",
         secondPassiveSkillText:
-            "When this unit cleanses a debuff it also repairs 4% of this unit's max HP. Additionally, when an ally is directly damaged, this unit repairs 6% of this unit's max HP.",
+            "When this unit cleanses a debuff it also repairs 4% of this unit's max HP. Additionally, when an ally is directly damaged within the active pattern, this unit repairs 8% of this unit's max HP.",
     },
     CURATOR: {
         name: 'Curator',
@@ -1218,9 +1218,9 @@ export const SHIPS: Record<string, ShipData> = {
         chargeSkillText:
             'This Unit grants XAOC Swfitness 3 to all allies for 2 turns and deals 255% damage.',
         firstPassiveSkillText:
-            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Block Damage for 1 turn.',
+            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Barrier for 1 turn.',
         secondPassiveSkillText:
-            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Block Damage for 1 turn. Additionally, this unit starts combat with a fully charged charged skill.',
+            'This unit deals 30% more direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants Barrier for 1 turn. Additionally, this unit starts combat with a fully charged charged skill.',
     },
     LUXX: {
         name: 'Luxx',
@@ -1330,7 +1330,7 @@ export const SHIPS: Record<string, ShipData> = {
         activeSkillText:
             'This Unit deals 100% damage with additional damage equal to 5% of its current shield. If the target has a shield this unit gains a shield equal to 15% of its max HP.',
         chargeSkillText:
-            'This Unit deals 220% damage with additional damage equal to 12% of its current shield and removes 30% of the enemy shield. If the target has a shield this unit gains grants itself Block Attacks for 1 hit.',
+            'This Unit deals 220% damage with additional damage equal to 12% of its current shield and removes 30% of the enemy shield. If the target has a shield this unit gains grants itself Barrier for 1 hit.',
         firstPassiveSkillText: 'This unit takes 10% less damage when shielded.',
         secondPassiveSkillText:
             'This unit takes 10% less damage when shielded. This unit gains a shield equal to 15% of the damage dealt when directly damaged as a primary target.',
@@ -1705,11 +1705,11 @@ export const SHIPS: Record<string, ShipData> = {
         activeSkillText:
             'This Unit grants all Allies Terran Guard 2 for 2 turns and deals 80% damage with additional Damage equal to 70% of its Defense. If this Unit is Provoked or Taunted, it instead grants all allies Terran Guard 2 for 2 turns and deals 120% damage with additional Damage equal to 90% of its Defense.',
         chargeSkillText:
-            'This Unit deals 140% damage plus an additional 100% of its Defense. If this Unit is Provoked or Taunted, this Unit instead gains Block Attacks (1 hit) and deals 170% damage with an additional Damage equal to 130% of its Defense.',
+            'This Unit deals 140% damage plus an additional 100% of its Defense. If this Unit is Provoked or Taunted, this Unit instead gains Barrier (1 hit) and deals 170% damage with an additional Damage equal to 130% of its Defense.',
         firstPassiveSkillText:
-            'If this unit is directly damaged while not affected by Barrier Recharging, it gains Block Attacks for 1 hit and applies Barrier Recharging on itself for 3 turns.',
+            'If directly damaged and not under barrier recharging, this unit gains Barrier for 1 turn and applies Barrier Recharging to itself for 3 turns.',
         secondPassiveSkillText:
-            'When affected by Barrier Recharging, this unit reduces incoming damage by 20%. If this unit is directly damaged while not affected by Barrier Recharging, it gains Block Attacks for 1 hit and applies Barrier Recharging on itself for 3 turns.',
+            'If directly damaged and not under barrier recharging, this unit gains Barrier for 1 turn and applies Barrier Recharging to itself for 3 turns. This unit reduces all incoming damage by 20% when affected by Barrier Recharging. ',
     },
     PARACELSUS: {
         name: 'Paracelsus',
@@ -1843,13 +1843,13 @@ export const SHIPS: Record<string, ShipData> = {
         speed: 69,
         imageKey: 'Atlas_17',
         activeSkillText:
-            'This unit deals 80% damage plus an additional damage equal to 10% of its current shield, and if it has any shield, gains Taunt for 1 turn.',
+            'This unit deals 100% damage plus an additional damage equal to 14% of its current shield, and gains Shield equal to 20% of the damage dealt.',
         chargeSkillText:
-            'This unit deals 120% damage with additional damage equal to 12% of its current shield and grants Shield Converter.',
+            'This Unit deals 130% damage with additional damage equal to 16% of its current shield and gains Shield Converter.',
         firstPassiveSkillText:
             'This unit gains shield equal to 25% of the damage taken when taking HP damage and still having shield.',
         secondPassiveSkillText:
-            'This unit gains shield equal to 50% of the damage taken when taking HP damage and still having shield.',
+            "This unit gains shield equal to 25% of the damage taken when taking HP damage and still having shield. At the end of this Unit's turn if it has a shield equal to 100% of it's max HP, this Unit grants all allies Barrier for 1 hit and applies Barrier Recharging for 3 turns.",
     },
     RAVAGER: {
         name: 'Ravager',
@@ -2094,7 +2094,7 @@ export const SHIPS: Record<string, ShipData> = {
         imageKey: 'Tianchao_11',
         activeSkillText: 'This unit Deals 170% damage and applies Provoke for 1 turn.',
         chargeSkillText:
-            'This Unit deals 230% damage and grants Taunt for 1 turn and Block Attacks for 1 hit.',
+            'This Unit deals 230% damage and grants Taunt for 1 turn and Barrier for 1 hit.',
         firstPassiveSkillText:
             'When directly damaged, this unit inflicts Block Repair for 1 turn on that enemy.',
         secondPassiveSkillText:
@@ -2235,9 +2235,9 @@ export const SHIPS: Record<string, ShipData> = {
             'This Unit repairs 17.5% of its max HP and grants Hacking Up 1 for 1 turn.',
         chargeSkillText: 'This Unit repairs 20% of its Max HP and grants Hacking Up 2 for 2 turns.',
         firstPassiveSkillText:
-            'This unit gains Block Damage for 1 turn when HP drops below 20%, once per battle.',
+            'This unit gains Barrier for 1 turn when HP drops below 20%, once per battle.',
         secondPassiveSkillText:
-            'This unit gains Block Damage for 1 turn and Incoming Damage Down 2 for 3 turns when HP drops below 20%, once per battle.',
+            'This unit gains Barrier for 1 turn and Incoming Damage Down 2 for 3 turns when HP drops below 20%, once per battle.',
     },
     SHEPHERD: {
         name: 'Shepherd',
@@ -2480,7 +2480,7 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText:
             'At the start of combat, this unit gains Cheat Death and Everliving Regeneration 1 for 6 turns.',
         secondPassiveSkillText:
-            'At the start of combat, this unit gains Cheat Death and Everliving Regeneration 1 for 9 turns. Once per battle, when HP drops below 40% it gains Block Damage for 1 turn.',
+            'At the start of combat, this unit gains Cheat Death and Everliving Regeneration 1 for 9 turns. Once per battle, when HP drops below 40% it gains Barrier for 1 turn.',
     },
     TYGR: {
         name: 'Tygr',
@@ -2729,7 +2729,7 @@ export const SHIPS: Record<string, ShipData> = {
         imageKey: 'Tianchao_12',
         activeSkillText: 'This unit gains Crit Power Up 2 for 1 turn, then deals 200% damage.',
         chargeSkillText:
-            'This unit grants Tianchao Precision 2 for 3 turns to all allies with stealth and deals 220% damage with affinity advantage.',
+            'This unit deals 220% damage with the affinity advantage and inflicts Stasis for 2 turns.',
         firstPassiveSkillText:
             'This unit gains Stealth for 1 turn after critically damaging an enemy. If directly damaged while stealthed, this unit reduces that damage by 25% but loses stealth.',
         secondPassiveSkillText:
@@ -2741,7 +2741,7 @@ export const SHIPS: Record<string, ShipData> = {
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
         role: 'ATTACKER',
-        hp: 10793,
+        hp: 12860,
         attack: 4811,
         defense: 1924,
         hacking: 93,
@@ -2749,14 +2749,15 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 12,
         critDamage: 34,
         speed: 82,
-        shield: 5.5,
+        shield: 20,
         shieldPenetration: 20,
         imageKey: 'Atlas_6',
-        activeSkillText: 'This Unit Deals 150% damage and inflicts Speed Down 2 for 2 turns.',
+        activeSkillText:
+            'This Unit Deals 150% damage and inflicts Speed Down 2 for 2 turns and Stasis for 1 turn.',
         chargeSkillText: 'This Unit deals 280% damage and inflicts Disable for 1 turn.',
-        firstPassiveSkillText: 'This unit gains a shield equal to 5.5% of its max HP every turn.',
+        firstPassiveSkillText: 'This unit gains a shield equal to 10% of its max HP every turn.',
         secondPassiveSkillText:
-            'This unit gains a shield equal to 5.5% of its max HP every turn. When an enemy resists a debuff application, this unit deals 75% damage.',
+            "This unit has 20% Shield Penetration. This unit gains a shield equal to 20% of its max HP every turn. When an enemy resists a debuff infliction, this unit deals damage equal to 115% of this Unit's current shield.",
     },
     XIAODAO: {
         name: 'Xiaodao',
@@ -2809,7 +2810,7 @@ export const SHIPS: Record<string, ShipData> = {
         firstPassiveSkillText:
             'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death.',
         secondPassiveSkillText:
-            'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death. Once per battle, when Cheat Death activates, this unit repairs itself for 60% of its max HP and gains Block Damage for 1 turn.',
+            'At the start of combat, this unit gains Everliving Regeneration 2 for 9 turns and Cheat Death. Once per battle, when Cheat Death activates, this unit repairs itself for 60% of its max HP and gains Barrier for 1 turn.',
     },
     YIN_JIAN: {
         name: 'Yin Jian',

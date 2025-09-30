@@ -4,6 +4,7 @@ import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon } from '../ui/icons';
 import { AutogearConfigList } from './AutogearConfigList';
+import { LLMSuggestions } from './LLMSuggestions';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
@@ -65,33 +66,39 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
 
             <div className="space-y-3">
                 {selectedShips.map((ship, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                        <div className="flex-1">
-                            <ShipSelector
-                                selected={ship || null}
-                                onSelect={(selectedShip) => handleShipSelect(selectedShip, index)}
-                                autoOpen={autoOpenIndex === index}
-                            >
-                                {ship && <AutogearConfigList {...getShipConfig(ship.id)} />}
-                                <div className="flex gap-2 items-center">
-                                    <Button
-                                        variant="secondary"
-                                        onClick={(event) => onOpenSettings(event, index)}
-                                        size="sm"
-                                        className="flex gap-2 items-center"
-                                    >
-                                        <GearIcon />
-                                    </Button>
-                                    <Button
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={(event) => onRemoveShip(event, index)}
-                                    >
-                                        <CloseIcon className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                            </ShipSelector>
+                    <div key={index} className="space-y-2">
+                        <div className="flex gap-2 items-start">
+                            <div className="flex-1">
+                                <ShipSelector
+                                    selected={ship || null}
+                                    onSelect={(selectedShip) =>
+                                        handleShipSelect(selectedShip, index)
+                                    }
+                                    autoOpen={autoOpenIndex === index}
+                                >
+                                    {ship && <AutogearConfigList {...getShipConfig(ship.id)} />}
+                                    <div className="flex gap-2 items-center">
+                                        <Button
+                                            variant="secondary"
+                                            onClick={(event) => onOpenSettings(event, index)}
+                                            size="sm"
+                                            className="flex gap-2 items-center"
+                                        >
+                                            <GearIcon />
+                                        </Button>
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={(event) => onRemoveShip(event, index)}
+                                        >
+                                            <CloseIcon className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </ShipSelector>
+                            </div>
                         </div>
+                        {/* LLM Suggestions - show for every selected ship */}
+                        {ship && <LLMSuggestions selectedShip={ship} />}
                     </div>
                 ))}
             </div>
