@@ -1,66 +1,110 @@
 export const COMBAT_SYSTEM_CONTEXT = `
 # STARBORNE FRONTIERS COMBAT SYSTEM GUIDE
 
+STARBORNE FRONTIERS is a gacha game with ships that have different roles and skills. Ships can be leveled up, refitted, and equipped with gear and implants.
+
 ## CORE COMBAT MECHANICS
 
 ### Turn-Based Combat
-- Gacha game, with tons of ships, and randomized stats on gear and implants.
-- Combat is turn-based with speed determining turn order, and fully automatic, meaning no user input. Positioning and which ships on the grid determines the outcome.
-- Ships act in order of their Speed stat (higher speed = earlier turns)
-- Each turn, ships can use Active Skills, which adds a charge, or Charge Skills (when charged). There are also plenty of passive skills, that can triggered on various events. Skills can be straight forward damage based on attack stat, or based on attack and have another damage bonus based on another stat.
-- All damage is classified as either direct damage (e.g. normal attacks), damage-over-time ("DoT damage" debuffs corrosion and inferno), or detonation damage (bomb and echoing burst debuffs, and "detonation" skills).
-- Detonation skills/effects are affected by the hacking check (like inflicted debuffs), and if successful (not resisted) then detonation removes all the damaging debuffs/effects of the specified type and deals all the damage which those effects would have dealt over their remaining durations all at once in a single hit, frequently at a boosted/increased multiple.
-- Both Inferno and Bomb deal their damage based on the attack value at the time of inflicting, not at the time of detonation.
-- Shield(s) is/are extra hit points which are used up first and do not affect "Current HP" or "Max HP". The maximum amount of shield which a unit can have is equal to its Max HP. The damage reduction/mitigation effect of Defense is applied before incoming damage is applied to/hits shields.
+- Combat is turn-based and fully automatic (no user input)
+- Ships act in Speed stat order (higher speed = earlier turns)
+- Positioning and ship placement on the grid determines the outcome
+- Each turn, ships can use Active Skills (which add a charge) or Charge Skills (when charged)
+- Passive skills can trigger on various events
 - Combat continues until one side is eliminated
-- Debuffs can either be "Apply" or "Inflict". Debuffs which are inflicted are subject to the hacking stat vs. security stat check (HACK - SEC = %chance). Debuffs which are applied are guaranteed to take effect without a hacking check, except that they are also guaranteed to not affect enemies with affinity advantage.
-- Buffs are always relative to the unit that is getting buffed, except Font of Power implant, which is relative to the unit that is casting the skill. So for example a hacking buff gives as much hacking if the buffer has 0 hacking or 1000 hacking.
 
-### Stat types
-- **base stats**: these are the different stats that are available for the ship. in parenthesis are the normal value range, can be used to gauge stat bonuses.
-- **attack**: base damage (in the thousands up to 30k)
-- **hp**: base hit points (in the tens of thousands up to 150k)
-- **defense**: damage reduction (in the thousands up to 20k)
-- **hacking**: debuff inflictionsuccess rate (in the hundreds up to 600)
-- **security**: debuff resistance (in the hundreds up to 500)
-- **crit rate**: critical hit chance (0-100%)
-- **crit power**: critical hit damage (0-300%)
-- **speed**: turn order (50-200)
-- **heal modifier**: healing bonus (0-60% (exclusively from gear))
-- **shield**: shield regeneration (0-12% (exclusively from gear))
-- **defensePenetration**: attacks ignore a portion of the defense (0-66%)
+### Damage Types
+- **Direct Damage**: Normal attacks and instant damage skills
+- **Damage-over-Time (DoT)**: Corrosion and Inferno debuffs
+- **Detonation Damage**: Bomb and Echoing Burst debuffs, plus "detonation" skills
+
+### Detonation Mechanics
+- Detonation effects are subject to hacking vs security checks (like inflicted debuffs)
+- If successful, detonation removes all damaging debuffs of the specified type
+- Deals all remaining DoT damage instantly in a single hit, often at increased multiplier
+- Inferno and Bomb damage is based on attack value at time of inflicting, not detonation
+
+### Shield System
+- Shields are extra hit points consumed before HP damage
+- Maximum shield capacity equals Max HP
+- Defense damage reduction applies before shield damage
+- Shields don't affect Current HP or Max HP values
+
+### Buff/Debuff Mechanics
+- **Applied Debuffs**: Guaranteed effect, no resistance check (except vs affinity advantage)
+- **Inflicted Debuffs**: Subject to hacking vs security check (HACK - SEC = success %)
+- **Buff Scaling**: Relative to the buffed unit, except Font of Power implant (scales with caster)
+- **Buff Stacking**: Buffs with same name overwrite if equal/higher rank (Attack 3 overwrites Attack 1, but not vice versa)
+
+### Grid & Positioning
+- **Combat Grid**: 4×4 battlefield with maximum 5 ships per team
+- **Positioning**: Ship placement and grid location affects combat outcomes
+- **Strategic Placement**: Affects targeting priorities and ability ranges
+
+### Stats
+Base stats available for ships (parentheses show typical value ranges for gauging stat bonuses):
+
+- **Attack**: Base damage (1,000-30,000)
+- **HP**: Hit points (10,000-150,000)
+- **Defense**: Damage reduction (1,000-20,000)
+- **Hacking**: Debuff infliction success rate (100-600)
+- **Security**: Debuff resistance (100-500)
+- **Crit Rate**: Critical hit chance (0-100%)
+- **Crit Power**: Critical hit damage multiplier (0-300%)
+- **Speed**: Turn order priority (50-200)
+- **Heal Modifier**: Healing effectiveness bonus (0-60%, gear only)
+- **Shield**: Shield regeneration per turn (0-12%, gear only)
+- **Defense Penetration**: Ignores portion of enemy defense (0-66%)
 
 ### Damage Calculation
 - **Base Damage** = Attack stat × skill multiplier
 - **Critical Hits** = Base damage × (1 + Crit Power %)
 - **Critical Chance** = Crit Rate % (capped at 100%)
 
-### Defense Reduction
-- **Damage Reduction** = 88.3505 * Math.exp(-Math.pow((4.5552 - Math.log10(defense)) / 1.3292, 2))
-- **Effective HP** = hp * (100 / (100 - damageReduction));
+### Defense & Survivability
+- **Damage Reduction** = 88.3505 × exp(-((4.5552 - log₁₀(defense)) / 1.3292)²)
+- **Effective HP** = HP × (100 / (100 - damage reduction %))
+- **Defense Scaling**: Only stat with diminishing returns (see Effective HP formula)
+- **Defense Penetration**: Reduces enemy defense before damage reduction calculation
+  - Formula: Effective Defense = Enemy Defense × (1 - Defense Penetration %)
+  - Common values: 0% = 74.21% damage reduction, 7% = 72.71%, 21% = 69.17%, 41% = 62.37%
+  - Higher penetration significantly increases damage against armored targets
 
 ### Affinities (Rock-Paper-Scissors System)
 - **Electric** < **Thermal** < **Chemical** < **Electric**
 - **Antimatter** is neutral (no advantage/disadvantage)
-- Affinity advantage provides +25% damage and 25% higher hacking (debuff success rates)
+- Affinity advantage provides +25% damage and +25% hacking effectiveness
 
-### Gear and Implants
-- Ships have 6 gear slots, and 5 implant slots, where specific gear and implants types can be equipped.
-- Gear slots can be grouped into upper(weapon, hull, generator) and lower slots (sensor, software, thrusters).
-- Gear has a gear set bonus, which is a set of bonus stats that are applied to the ship when the set is completed.
-- Gear has a main stat and up to 4 substats.
-- Upper slots have a flat main stat, so substats are the main importance.
-- Lower slots can have different types of main stat, both flat and percentage.
-- Implants are grouped into minor, major and ultimate.
-- Minor implants are simple stat sticks.
-- Major implants have bigger stats, and a passive skill.
-- Ultimate implants have no stats, but a impactful passive skill. These skills are not factored in by the autogear system, so it's very helpful to inform users about this.
+### Equipment System
 
-### Implant skill conciderations
-- ultimates Code Guard improves security, based on hacking, so tank with this implant should add a stat bonus to hacking, and have a reduced security threshold, relative to the amount Code Guard adds.
-- ultimates Cipher Link improves hacking, based on security, so ships with this implant should add a stat bonus to security, and have a reduced hacking threshold, relative to the amount Cipher Link adds.
+#### Gear Slots (6 total)
+- **Upper Slots** (Weapon, Hull, Generator): Flat main stats, substats are primary importance
+- **Lower Slots** (Sensor, Software, Thrusters): Variable main stat types (flat or percentage)
+- Each gear piece has a main stat and up to 4 substats
+
+#### Gear Set System
+- **Set Activation**: Based only on piece count, not specific slots
+- **Multiple Sets**: Can run up to 3 different 2-piece sets (6 slots total)
+- **No Mixing Penalty**: No downsides to combining different sets
+- **Stacking Exception**: CLOAKING set effects don't stack with multiple pieces
+
+#### Implant Slots (5 total)
+- **Minor Implants**: Basic stat bonuses only
+- **Major Implants**: Higher stats plus a passive skill
+- **Ultimate Implants**: No stats, but powerful passive skills
+  - *Important: Ultimate implant skills are NOT factored into autogear optimization*
+
+#### Key Ultimate Implants
+- **Code Guard**: Improves security based on hacking stat
+  - Ships with Code Guard should prioritize hacking stat bonuses
+  - Can use lower security thresholds due to Code Guard's boost
+- **Cipher Link**: Improves hacking based on security stat
+  - Ships with Cipher Link should prioritize security stat bonuses
+  - Can use lower hacking thresholds due to Cipher Link's boost
 
 ## SHIP ROLES & OPTIMIZATION
+
+The following roles are available in the Autogear system, each with specific optimization priorities:
 
 ### ATTACKER
 - **Goal**: Maximize raw damage output
@@ -77,10 +121,10 @@ export const COMBAT_SYSTEM_CONTEXT = `
 - **Meta**: High effective HP, damage mitigation, protection for team
 
 ### DEFENDER (Security)
-- **Goal**: Counter debuff-heavy teams through Security
+- **Goal**: Counter debuff-heavy teams through high security
 - **Primary Stats**: Security, HP, Defense
 - **Key Sets**: PROTECTION (+10% DEF, +20 SEC), ABYSSAL_SAFEGUARD (+15% HP, +10 SEC), FORTITUDE (+15% HP), DEFENSE (+15% DEF), SHIELD (+4% SHIELD GEN)
-- **Meta**: Anti-debuffer specialist, high security threshold
+- **Meta**: Anti-debuffer specialist with maximum security limit of 270
 
 ### SUPPORTER
 - **Goal**: Maximize healing and team sustain
@@ -96,14 +140,15 @@ export const COMBAT_SYSTEM_CONTEXT = `
 - **Meta**: First turn advantages, extended buff duration, damage output enhancement
 
 ### SUPPORTER (Offensive)
-- **Goal**: Attack based healing units. Specifically for units with Font of Power implant, that grants buffs to allies, based on own attack stat.
+- **Goal**: Attack-based healing and buff units (especially with Font of Power implant)
 - **Primary Stats**: Speed, Attack
 - **Key Sets**: BOOST (buff extension), AMBUSH (+10% ATK, +5% SPD), ATTACK (+15% ATK)
-- **Meta**: Fast healing and offensive buffs, main focus is to trigger Font of Power implant.
+- **Meta**: Fast healing and offensive buffs scaled from attack stat
+- **Notable Ships**: Howler, Sentinel
 
 ### SUPPORTER (Shield)
 - **Goal**: Shield generation and protection
-- **Primary Stats**: HP (shield scales with caster HP), Speed
+- **Primary Stats**: HP (shield scales with caster HP, this is specified in the ship's skills), Speed
 - **Key Sets**: SHIELD (+4% shield per turn), FORTITUDE
 - **Meta**: Shield spam, damage mitigation through shields
 
@@ -172,61 +217,87 @@ export const COMBAT_SYSTEM_CONTEXT = `
 - **SHIELD**: +4% shield generation per turn - Shield spam
 - **CLOAKING**: 2 turns stealth at combat start - Positioning
 
-## BUFF/DEBUFF SYSTEM
-
-- Debuffs can either be "Apply" or "Inflict". Debuffs which are inflicted are subject to the hacking stat vs. security stat check (HACK - SEC = %chance). Debuffs which are applied are guaranteed to take effect without a hacking check, except that they are also guaranteed to not affect enemies with affinity advantage.
-- Buffs and Debuffs duration can last in Turns or Rounds. A buff which lasts for 1 turn will take effect on the turn of the targeted unit. A buff which lasts for 1 round disappears at the end of the current round.
-
 ## COMBAT META ANALYSIS
 
-### Common META
-1. Regular Attackers aim for 100% crit rate, then push as much attack as possible.
-2. Regular Defenders aim for as much Effective HP, and security as possible.
-3. Regular healing Supporters aim for as much healing output as possible.
-4. Debuffers aim for as much hacking as possible, and as much attack/damage as possible.
-5. Debuffers that apply bombs and inferno, want higher attack, as bombs are based on attack.
-6. Debuffers that apply corrosion, want decimation set bonus, as corrosion is based on a % of the enemy health, so the gain is worth it.
+### General Optimization Principles
+- **Attackers**: Prioritize 100% crit rate, then maximize attack
+- **Defenders**: Maximize effective HP and security
+- **Healing Supporters**: Maximize healing output potential
+- **Debuffers**: Balance hacking and attack/damage output
+- **Bomb/Inferno Debuffers**: Prioritize attack (DoT damage scales with attack at infliction)
+- **Corrosion Debuffers**: Use DECIMATION set (percentage-based damage benefits)
+- **Defending Debuffers**: Boost hacking via stat bonuses rather than stat priorities
 
-### PvP Meta (Player vs Player)
-1. **Speed Control**: Generally higher speeds for everyone. Damage Buffers wants to be faster than attackers, Fast tanks and supporters are also beneficial, but not crucial.
-2. **Stealth** is very beneficial for all roles, except for defenders.
+### PvE vs PvP Optimization
+- **PvP Focus**: Speed and stealth are highly recommended for all roles
+- **PvE Focus**: Standard role priorities without speed/stealth emphasis
 
+### Common Optimization Mistakes
+- **Debuffing Tanks**: NEVER prioritize hacking over survivability stats
+  - Hacking should be secondary priority only
+  - NEVER set minimum hacking limits for tank debuffers
+  - Use stat bonuses to boost hacking instead of stat priorities
 
-### Special Ship Metas
-- Xcellence can be geared with low hacking, to force inflict resist, and trigger it's second passive skill more often.
-- Corrosion ships often have passive skills that trigger on critical hits, so they should aim for crit cap (100%), and/or crit power (100%) if they're passive specifies it.
-- Heliodor is a supporter, but due to his skills, is better as a crit capped defender.
-- Voron turns all damage into DoTs on himself, so he values shield generation, hp, defense, and security, over hacking.
-- Mei have passive stealth, so she doesn't need cloak set bonus.
-- Howler is a supporter, but due to her skills, is better geared as a crit capped ATTACKER.
-- Vindicator is a defender, that gets extra defense from the security stat, so she should aim for the DEFENDER(SECURITY) role.
+### Ship-Specific Optimizations
+- **Xcellence**: Low hacking builds to trigger resist-based passive skills
+- **Corrosion Ships**: Aim for 100% crit rate/power if passives trigger on crits
+- **Heliodor**: Supporter role but optimize as crit-capped defender
+- **Voron**: Self-DoT mechanics favor shield generation, HP, defense, security over hacking
+- **Mei**: Has passive stealth, doesn't need CLOAKING set
+- **Howler**: Supporter classification but gear as crit-capped ATTACKER
+- **Vindicator**: Defender with security-scaling defense, use DEFENDER (Security) role
 
 ## OPTIMIZATION GUIDELINES
 
 ### Stat Thresholds
-- **Crit Rate**: capped at 100%
-- **Hacking**: 350+ for reliable debuff application, debuffing tanks usually can't reach this threshold with sacrificing other more important stats, so be wary about suggesting min limits for them. Stat bonuses can be used to boost the score relatively instead.
+- **Crit Rate**: Hard cap at 100%
+- **Hacking**: 350+ recommended for reliable debuff application
 
-### Set Priority Guidelines
+### Gear Set Priority Guidelines
 1. **Role-appropriate 4-piece sets** (BOOST, OMNICORE, BURNER)
-2. **Core 2-piece sets** matching primary stats
-3. **Synergy sets** that complement ship skills
-4. **Avoid mixed sets** unless specifically beneficial
+2. **Core 2-piece sets** matching primary role stats
+3. **Synergy sets** that complement ship-specific skills
+4. **Multiple 2-piece sets** are beneficial (can run up to 3 different sets)
+5. **No penalty for mixing sets** - combine freely for optimal bonuses
 
-### Ship Skill Integration
+### Skill Analysis Guidelines
 - Analyze active/passive skills for stat synergies
-- Analyse Implant skills for stat synergies
-- Consider skill cooldowns and charge requirements
+- Analyze implant skills for stat interactions
 - Look for skill-specific gear set combinations
 - Factor in skill-based buffs/debuffs when optimizing
 
-### Autogear configuration
-- Autogear is a system to find the optimal gear for a ship. It works by selecting a role that the user wants the ship to play, and then it will select the optimal gear for that role.
-- **shipRoles**: the different roles have different priorities, which are listed in the SHIP ROLES & OPTIMIZATION section. There are only 4 roles in the game (ATTACKER, DEFENDER, SUPPORTER, DEBUFFER). The autogear system have added the others, because there are meta sub roles for each of them. For example some attackers are inflicting bombs, and should aim for the BOMBER role. Some attackers are corrosion inflicting, and should aim for the CORROSION role. Some defenders are security focused, and should aim for the SECURITY role. Some supporters are shield focused, and should aim for the SHIELD role. Some debuffers are defensive focused, and should aim for the DEFENSIVE role. Some debuffers are bomber focused, and should aim for the BOMBER role. Some debuffers are corrosion focused, and should aim for the CORROSION role. Some tanks inflicts debuffs, but should always aim for one of the DEFENDER roles, and rather add stat bonuses to hacking. This is up to you to analyse and pick one that suits the ship.
-- **statPriorities**: stat limits are used to reach specific stat targets, such as speed, hacking, security, etc. For example 350 hacking for debuffers, or a specific spped, or security for defenders. Role primary/secondary stats from the SHIP ROLES & OPTIMIZATION section should NEVER be suggested here, as the autogear system will handle that. Not every ship needs a stat priority. ATTACKERS, SUPPORTERS don't need crit cap specified, as the autogear system will handle that. For Example: Some ships have skills that trigger on critical hits and have effects based on crit power, so they should aim for crit cap (100%), and/or crit power (100%).
-- **setPriorities**: gear set can be prioritized, and users can set desired gear set count. This should be considered if there's a specific synergy found in skills, that the regular role wouldn't encompass, such as shield generation, stealth, etc. Gear Set Priorities are an extra config for gear sets outside of the role, so you can exclude the ones that are already included in the role.
-- **statBonuses**: stat bonuses can be applied to the config, to boost the role score by a relative amount to a specific stat. useful when ships have skills that scale based on other stats than attack. Tweaks to the general role due to synergies found in skills, should be added here. This is specifically a field to use when there's mentions of tertiary stats in the skills, the primary/secondary stats from the SHIP ROLES & OPTIMIZATION section should NEVER be suggested here. Not every ship needs a stat bonus.
-- The user can also select to ignore equipped gear, and ignore unleveled gear. Recommended to uncheck ignore equipped gear, and check ignore unleveled gear.
+## AUTOGEAR CONFIGURATION SYSTEM
 
-This system rewards strategic thinking, set completion, and role specialization while maintaining tactical depth through the affinity system and buff/debuff interactions.
+The autogear system optimizes gear selection based on role selection and custom parameters:
+
+### Ship Roles
+Choose from base roles (ATTACKER, DEFENDER, SUPPORTER, DEBUFFER) and specialized sub-roles:
+- **Base Roles**: Cover general optimization priorities
+- **Sub-Roles**: Address specific mechanics (e.g., BOMBER for bomb-inflicting ships, SECURITY for security-focused defenders)
+- **Hybrid Tanks**: Ships with debuff abilities should use DEFENDER roles with hacking stat bonuses
+
+### Configuration Parameters
+
+#### statPriorities
+- Set specific stat targets (e.g., 350 hacking, specific speed thresholds)
+- **Do NOT use for role primary/secondary stats** (autogear handles these automatically)
+- **Do NOT specify crit cap for ATTACKERS/SUPPORTERS** (handled automatically)
+- Use for ships with special skill requirements (e.g., crit-dependent passives)
+
+#### setPriorities
+- Prioritize gear sets outside of role defaults
+- Use for ship-specific synergies (shield generation, stealth, etc.)
+- Excludes sets already included in the selected role
+
+#### statBonuses
+- Boost role scoring for specific stats
+- Use when skills scale with non-attack stats
+- Apply for tertiary stat synergies found in ship skills
+- **Do NOT use for role primary/secondary stats**
+
+### Recommended Settings
+- **Ignore Equipped Gear**: Unchecked (consider current equipment)
+- **Ignore Unleveled Gear**: Checked (focus on usable gear)
+
+*This system rewards strategic thinking, set completion, and role specialization while maintaining tactical depth through affinity and buff/debuff interactions.*
 `;

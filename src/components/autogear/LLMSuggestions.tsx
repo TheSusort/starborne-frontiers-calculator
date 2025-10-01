@@ -36,13 +36,6 @@ export const LLMSuggestions: React.FC<LLMSuggestionsProps> = ({ selectedShip, on
         setError,
     } = useLLMRecommendations({ selectedShip });
 
-    // Auto-expand accordion when new content is loaded or when loading starts
-    useEffect(() => {
-        if ((suggestion && source) || error) {
-            setIsExpanded(true);
-        }
-    }, [suggestion, source, error]);
-
     const handleRetry = () => {
         setError(null);
         fetchAISuggestion();
