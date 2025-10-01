@@ -4,6 +4,7 @@ export const COMBAT_SYSTEM_CONTEXT = `
 ## CORE COMBAT MECHANICS
 
 ### Turn-Based Combat
+- Gacha game, with tons of ships, and randomized stats on gear and implants.
 - Combat is turn-based with speed determining turn order, and fully automatic, meaning no user input. Positioning and which ships on the grid determines the outcome.
 - Ships act in order of their Speed stat (higher speed = earlier turns)
 - Each turn, ships can use Active Skills, which adds a charge, or Charge Skills (when charged). There are also plenty of passive skills, that can triggered on various events. Skills can be straight forward damage based on attack stat, or based on attack and have another damage bonus based on another stat.

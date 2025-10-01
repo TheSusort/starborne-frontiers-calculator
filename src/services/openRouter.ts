@@ -1,5 +1,6 @@
 import { IMPLANTS } from '../constants/implants';
 import { AutogearSuggestion } from '../types/autogearSuggestion';
+import { findBuffsInText, getBuffDescription } from '../utils/buffUtils';
 
 interface OpenRouterResponse {
     choices: Array<{
@@ -81,13 +82,31 @@ export class OpenRouterService {
         }
     }
 
+    private enhanceSkillWithBuffs(skillText: string): string {
+        if (!skillText || skillText === 'None') return skillText;
+
+        const buffs = findBuffsInText(skillText);
+        if (buffs.length === 0) return skillText;
+
+        const buffDescriptions = buffs
+            .map((buffName) => {
+                const description = getBuffDescription(buffName);
+                return description ? `${buffName}: ${description}` : null;
+            })
+            .filter(Boolean)
+            .join(', ');
+
+        return buffDescriptions ? `${skillText} [Buffs: ${buffDescriptions}]` : skillText;
+    }
+
     private buildPrompt(shipName: string, shipData: ShipData, combatSystemContext: string): string {
         // Determine which passive skill to use based on refit level
         const refitLevel = shipData.refits ? shipData.refits.length : 0;
         const useR2Passive = refitLevel >= 2;
-        const passiveSkill = useR2Passive
+        const passiveSkillRaw = useR2Passive
             ? shipData.secondPassiveSkillText || 'None'
             : shipData.firstPassiveSkillText || 'None';
+        const passiveSkill = this.enhanceSkillWithBuffs(passiveSkillRaw);
         const passiveSkillLabel = useR2Passive ? 'Passive Skill (R2)' : 'Passive Skill';
 
         // Process implant information
@@ -102,6 +121,10 @@ export class OpenRouterService {
                       .join('\n')
                 : 'None';
 
+        // Enhance active and charge skills with buff information
+        const activeSkill = this.enhanceSkillWithBuffs(shipData.activeSkillText || 'None');
+        const chargeSkill = this.enhanceSkillWithBuffs(shipData.chargeSkillText || 'None');
+
         return `${combatSystemContext}
 
 SHIP ANALYSIS REQUEST:
@@ -111,8 +134,8 @@ Ship Details:
 - Role: ${shipData.type}
 - Refit Level: ${refitLevel}
 
-Active Skill: ${shipData.activeSkillText || 'None'}
-Charge Skill: ${shipData.chargeSkillText || 'None'}
+Active Skill: ${activeSkill}
+Charge Skill: ${chargeSkill}
 ${passiveSkillLabel}: ${passiveSkill}
 
 Implants:
