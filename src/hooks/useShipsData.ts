@@ -48,6 +48,8 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
         crit: template.base_stats.crit_rate,
         critDamage: template.base_stats.crit_damage,
         speed: template.base_stats.speed,
+        healModifier: 0,
+        hpRegen: 0,
         shield: template.base_stats.shield,
         shieldPenetration: template.base_stats.shield_penetration,
         defensePenetration: template.base_stats.defense_penetration,

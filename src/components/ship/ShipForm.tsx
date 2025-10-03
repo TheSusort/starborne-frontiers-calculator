@@ -11,10 +11,10 @@ import {
     ShipTypeName,
     FactionName,
 } from '../../constants';
-import { fetchShipData } from '../../utils/dataUpdate/shipDataFetcher';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { useNotification } from '../../hooks/useNotification';
 import { AffinityName } from '../../types/ship';
+import { useShipsData } from '../../hooks/useShipsData';
 
 interface Props {
     onSubmit: (ship: Ship) => void;
@@ -56,6 +56,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     const [error, setError] = useState<string | null>(null);
     const { addNotification } = useNotification();
     const [affinity, setAffinity] = useState<AffinityName | undefined>(editingShip?.affinity);
+    const { fetchSingleShip } = useShipsData();
 
     useEffect(() => {
         if (editingShip) {
@@ -106,7 +107,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         setError(null);
 
         try {
-            const data = await fetchShipData(name);
+            const data = await fetchSingleShip(name);
             if (!data) {
                 setError(
                     "Could not find ship data. If it's a newer ship, I may not have it in the database yet."

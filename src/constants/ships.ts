@@ -2261,6 +2261,30 @@ export const SHIPS: Record<string, ShipData> = {
         secondPassiveSkillText:
             'When directly damaged, this unit inflicts corrosion 1 and Attack Down 1 on its attacker for 2 turns.',
     },
+    SNAKEROOT: {
+        name: 'Snakeroot',
+        affinity: 'thermal',
+        rarity: 'legendary',
+        faction: 'GELECEK',
+        role: 'ATTACKER',
+        hp: 11138,
+        attack: 4216,
+        defense: 1984,
+        hacking: 102,
+        security: 8,
+        critRate: 6,
+        critDamage: 46,
+        speed: 84,
+        imageKey: 'Gelecek_19',
+        activeSkillText:
+            'This Unit deals 170% damage and inflicts 2 stacks of Corrosion 1 for 2 turns.',
+        chargeSkillText:
+            'This Unit deals 210% damage and inflicts 2 stacks of Corrosion 2 for 3 turns.',
+        firstPassiveSkillText:
+            'This Unit deals 120% damage for every 7 stacks of Damage Over Time inflicted onto a single enemy.',
+        secondPassiveSkillText:
+            'This Unit deals 120% damage for every 4 stacks of Damage Over Time inflicted onto a single enemy.',
+    },
     SNAPDRAGON: {
         name: 'Snapdragon',
         affinity: 'electric',
