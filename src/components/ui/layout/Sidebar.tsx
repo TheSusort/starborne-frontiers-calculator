@@ -9,6 +9,7 @@ import { ChevronDownIcon } from '../icons/ChevronIcons';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
+import { isAdmin } from '../../../services/adminService';
 
 // Define the type for navigation items
 type NavigationItem = {
@@ -199,6 +200,20 @@ export const Sidebar: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [shareData, setShareData] = useState(false);
     const { user } = useAuth();
+    const [isUserAdmin, setIsUserAdmin] = useState(false);
+
+    // Check if user is admin
+    useEffect(() => {
+        const checkAdmin = async () => {
+            if (user?.id) {
+                const adminStatus = await isAdmin(user.id);
+                setIsUserAdmin(adminStatus);
+            } else {
+                setIsUserAdmin(false);
+            }
+        };
+        checkAdmin();
+    }, [user?.id]);
 
     // Memoize the isActive function to maintain stable reference
     const isActive = useCallback((path: string) => location.pathname === path, [location.pathname]);
@@ -216,8 +231,8 @@ export const Sidebar: React.FC = () => {
     );
 
     // Public navigation items
-    const publicNavigationLinks = useMemo<NavigationItem[]>(
-        () => [
+    const publicNavigationLinks = useMemo<NavigationItem[]>(() => {
+        const links = [
             { path: '/', label: 'Home' },
             {
                 path: '/manager',
@@ -247,9 +262,15 @@ export const Sidebar: React.FC = () => {
             { path: '/implants', label: 'Implants' },
             { path: '/shared-encounters', label: 'Shared Encounters' },
             { path: '/documentation', label: 'Help' },
-        ],
-        []
-    );
+        ];
+
+        // Add admin link only if user is admin
+        if (isUserAdmin) {
+            links.push({ path: '/admin', label: 'Admin Panel' });
+        }
+
+        return links;
+    }, [isUserAdmin]);
 
     // Combine navigation links
     const navigationLinks = useMemo(() => {

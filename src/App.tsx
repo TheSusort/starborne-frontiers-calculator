@@ -39,6 +39,7 @@ const DPSCalculatorPage = lazy(() => import('./pages/calculators/DPSCalculatorPa
 const HealingCalculatorPage = lazy(() => import('./pages/calculators/HealingCalculatorPage'));
 const DamageDeconstructionPage = lazy(() => import('./pages/calculators/DamageDeconstructionPage'));
 const JsonDiffCalculatorPage = lazy(() => import('./pages/calculators/JsonDiffCalculatorPage'));
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 
 // init hotjar
 const siteId = 5241833;
@@ -184,6 +185,10 @@ const App: React.FC = () => {
                                                                 <Route
                                                                     path="/documentation"
                                                                     element={<DocumentationPage />}
+                                                                />
+                                                                <Route
+                                                                    path="/admin"
+                                                                    element={<AdminPanel />}
                                                                 />
                                                             </Routes>
                                                         </Suspense>
