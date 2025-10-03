@@ -26,6 +26,8 @@ import { SEO_CONFIG } from '../../constants/seo';
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
+import { useAuth } from '../../contexts/AuthProvider';
+import { trackAutogearRun } from '../../services/usageTracking';
 
 interface UnmetPriority {
     stat: string;
@@ -54,6 +56,7 @@ export const AutogearPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
+    const { user } = useAuth();
 
     // useState hooks
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
@@ -427,6 +430,11 @@ export const AutogearPage: React.FC = () => {
 
         performanceTracker.endTimer('TotalAutogear');
         performanceTracker.printSummary();
+
+        // Track autogear run if user is logged in
+        if (user?.id) {
+            trackAutogearRun(user.id);
+        }
     };
 
     const handleEquipSuggestionsForShip = (shipId: string) => {

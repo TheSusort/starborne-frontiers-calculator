@@ -11,6 +11,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { Checkbox } from '../ui';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { HangarNameModal } from './HangarNameModal';
+import { trackDataImport } from '../../services/usageTracking';
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -77,6 +78,8 @@ export const ImportButton: React.FC<{
                         });
 
                         if (syncResult.success) {
+                            // Track data import
+                            await trackDataImport(user.id);
                             refreshPage('Data synced successfully, refreshing in 3 seconds...');
                         } else {
                             addNotification(
