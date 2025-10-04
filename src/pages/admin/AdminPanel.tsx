@@ -107,25 +107,18 @@ export const AdminPanel: React.FC = () => {
 
                 {/* Summary Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <StatCard
-                        title="Total Users"
-                        value={totalUsers.toLocaleString()}
-                        color="purple"
-                    />
+                    <StatCard title="Total Users" value={totalUsers.toLocaleString()} />
                     <StatCard
                         title={`Autogear Runs (${daysBack}d)`}
                         value={totalAutogearRuns.toLocaleString()}
-                        color="blue"
                     />
                     <StatCard
                         title={`Data Imports (${daysBack}d)`}
                         value={totalDataImports.toLocaleString()}
-                        color="green"
                     />
                     <StatCard
                         title="Avg Daily Active Users"
                         value={avgDailyActiveUsers.toLocaleString()}
-                        color="yellow"
                     />
                 </div>
 
