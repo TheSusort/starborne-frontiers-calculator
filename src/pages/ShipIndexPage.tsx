@@ -8,8 +8,7 @@ import { Loader } from '../components/ui/Loader';
 import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
-import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES } from '../constants';
-import { SearchInput } from '../components/ui/SearchInput';
+import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES, ALL_STAT_NAMES } from '../constants';
 import { Ship } from '../types/ship';
 import { useNotification } from '../hooks/useNotification';
 import { Button } from '../components/ui/Button';
@@ -17,6 +16,9 @@ import { Tooltip } from '../components/ui/layout/Tooltip';
 import { SkillTooltip } from '../components/ship/SkillTooltip';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { STATS } from '../constants/stats';
+import { StatName } from '../types/stats';
+import { calculateTotalStats } from '../utils/ship/statsCalculator';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -28,7 +30,8 @@ export const ShipIndexPage: React.FC = () => {
     const hasActiveFilters =
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||
-        (state.filters.rarities?.length ?? 0) > 0;
+        (state.filters.rarities?.length ?? 0) > 0 ||
+        searchQuery.length > 0;
     const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
     const [activeHover, setActiveHover] = useState('');
     const [chargeHover, setChargeHover] = useState('');
@@ -65,6 +68,11 @@ export const ShipIndexPage: React.FC = () => {
         { value: 'type', label: 'Type' },
         { value: 'faction', label: 'Faction' },
         { value: 'rarity', label: 'Rarity' },
+        // Add stat-based sort options
+        ...ALL_STAT_NAMES.map((stat) => ({
+            value: stat,
+            label: STATS[stat].label,
+        })),
     ];
 
     const filters: FilterConfig[] = [
@@ -142,6 +150,31 @@ export const ShipIndexPage: React.FC = () => {
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
                 default:
+                    // Handle stat-based sorting
+                    if (ALL_STAT_NAMES.includes(state.sort.field as StatName)) {
+                        const statName = state.sort.field as StatName;
+
+                        const aStats = calculateTotalStats(
+                            a.baseStats,
+                            {},
+                            () => undefined,
+                            undefined,
+                            undefined,
+                            undefined
+                        );
+                        const bStats = calculateTotalStats(
+                            b.baseStats,
+                            {},
+                            () => undefined,
+                            undefined,
+                            undefined,
+                            undefined
+                        );
+
+                        const aValue = aStats.final[statName] || 0;
+                        const bValue = bStats.final[statName] || 0;
+                        return state.sort.direction === 'asc' ? aValue - bValue : bValue - aValue;
+                    }
                     return state.sort.direction === 'asc'
                         ? a.name.localeCompare(b.name)
                         : b.name.localeCompare(a.name);
@@ -186,18 +219,10 @@ export const ShipIndexPage: React.FC = () => {
             <Seo {...SEO_CONFIG.shipDatabase} />
             <PageLayout
                 title="Ship Database"
-                description="Browse all ships I've bothered to add and their base statistics at level 60, no refits. If you have entered engineering stats, they will be included in the stats displayed."
+                description="Browse all ships I've bothered to add and their base statistics at level 60, no refits."
             >
                 <div className="space-y-6">
                     <div className="flex flex-col">
-                        <div className="flex-grow max-w-md mb-2">
-                            <SearchInput
-                                value={searchQuery}
-                                onChange={setSearchQuery}
-                                placeholder="Search ships by name or skills..."
-                                className="w-full mb-2"
-                            />
-                        </div>
                         {filteredAndSortedShips.length > 0 && (
                             <span className="text-sm text-gray-400">
                                 Showing {filteredAndSortedShips.length} ships
@@ -208,11 +233,17 @@ export const ShipIndexPage: React.FC = () => {
                             filters={filters}
                             isOpen={isFilterOpen}
                             onToggle={() => setIsFilterOpen(!isFilterOpen)}
-                            onClear={clearFilters}
+                            onClear={() => {
+                                clearFilters();
+                                setSearchQuery('');
+                            }}
                             hasActiveFilters={hasActiveFilters}
                             sortOptions={sortOptions}
                             sort={state.sort}
                             setSort={setSort}
+                            searchValue={searchQuery}
+                            onSearchChange={setSearchQuery}
+                            searchPlaceholder="Search ships by name or skills..."
                         />
                     </div>
 
