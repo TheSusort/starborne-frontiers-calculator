@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
-import { PageLayout } from '../../components/ui';
+import { PageLayout, Select, Tabs } from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
 import { TopUsersTable } from '../../components/admin/TopUsersTable';
 import { StatCard } from '../../components/admin/StatCard';
+import { GrowthChart } from '../../components/admin/GrowthChart';
+import { TableSizesTable } from '../../components/admin/TableSizesTable';
+import { UserDistributionChart } from '../../components/admin/UserDistributionChart';
 import {
     isAdmin,
     getDailyUsageStats,
@@ -13,6 +16,16 @@ import {
     DailyUsageStat,
     TopUser,
 } from '../../services/adminService';
+import {
+    getSystemStats,
+    getGrowthStats,
+    getTableSizes,
+    getUserDistribution,
+    SystemStats,
+    GrowthMetric,
+    TableInfo,
+    UserDistribution,
+} from '../../services/systemHealthService';
 import { Loader } from '../../components/ui/Loader';
 
 export const AdminPanel: React.FC = () => {
@@ -23,7 +36,35 @@ export const AdminPanel: React.FC = () => {
     const [dailyStats, setDailyStats] = useState<DailyUsageStat[]>([]);
     const [topUsers, setTopUsers] = useState<TopUser[]>([]);
     const [totalUsers, setTotalUsers] = useState(0);
-    const [daysBack, setDaysBack] = useState(30);
+    const [daysBack, setDaysBack] = useState(7);
+    const [activeTab, setActiveTab] = useState('analytics');
+
+    // System health states
+    const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+    const [growthMetrics, setGrowthMetrics] = useState<GrowthMetric[]>([]);
+    const [tableSizes, setTableSizes] = useState<TableInfo[]>([]);
+    const [userDistribution, setUserDistribution] = useState<UserDistribution[]>([]);
+
+    const loadData = React.useCallback(async () => {
+        const [statsData, usersData, userCount, sysStats, growth, tables, distribution] =
+            await Promise.all([
+                getDailyUsageStats(daysBack),
+                getTopActiveUsers(5),
+                getTotalUserCount(),
+                getSystemStats(),
+                getGrowthStats(daysBack),
+                getTableSizes(),
+                getUserDistribution(),
+            ]);
+
+        if (statsData) setDailyStats(statsData);
+        if (usersData) setTopUsers(usersData);
+        setTotalUsers(userCount);
+        if (sysStats) setSystemStats(sysStats);
+        if (growth) setGrowthMetrics(growth);
+        if (tables) setTableSizes(tables);
+        if (distribution) setUserDistribution(distribution);
+    }, [daysBack]);
 
     useEffect(() => {
         const checkAdminAndLoadData = async () => {
@@ -47,19 +88,7 @@ export const AdminPanel: React.FC = () => {
         };
 
         checkAdminAndLoadData();
-    }, [user, navigate, daysBack]);
-
-    const loadData = async () => {
-        const [statsData, usersData, userCount] = await Promise.all([
-            getDailyUsageStats(daysBack),
-            getTopActiveUsers(5),
-            getTotalUserCount(),
-        ]);
-
-        if (statsData) setDailyStats(statsData);
-        if (usersData) setTopUsers(usersData);
-        setTotalUsers(userCount);
-    };
+    }, [user, navigate, loadData]);
 
     if (loading) {
         return (
@@ -92,41 +121,125 @@ export const AdminPanel: React.FC = () => {
             <div className="space-y-6">
                 {/* Time Range Selector */}
                 <div className="flex justify-end">
-                    <select
-                        value={daysBack}
-                        onChange={(e) => setDaysBack(Number(e.target.value))}
-                        className="px-4 py-2 bg-dark-lighter border border-gray-700  text-white focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                        <option value={7}>Last 7 days</option>
-                        <option value={14}>Last 14 days</option>
-                        <option value={30}>Last 30 days</option>
-                        <option value={60}>Last 60 days</option>
-                        <option value={90}>Last 90 days</option>
-                    </select>
+                    <div className="ms-auto">
+                        <Select
+                            value={daysBack.toString()}
+                            onChange={(value) => setDaysBack(Number(value))}
+                            className=""
+                            options={[
+                                { value: '7', label: 'Last 7 days' },
+                                { value: '14', label: 'Last 14 days' },
+                                { value: '30', label: 'Last 30 days' },
+                                { value: '60', label: 'Last 60 days' },
+                                { value: '90', label: 'Last 90 days' },
+                            ]}
+                        />
+                    </div>
                 </div>
 
-                {/* Summary Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <StatCard title="Total Users" value={totalUsers.toLocaleString()} />
-                    <StatCard
-                        title={`Autogear Runs (${daysBack}d)`}
-                        value={totalAutogearRuns.toLocaleString()}
-                    />
-                    <StatCard
-                        title={`Data Imports (${daysBack}d)`}
-                        value={totalDataImports.toLocaleString()}
-                    />
-                    <StatCard
-                        title="Avg Daily Active Users"
-                        value={avgDailyActiveUsers.toLocaleString()}
-                    />
-                </div>
+                {/* Tabs */}
+                <Tabs
+                    tabs={[
+                        { id: 'analytics', label: 'Analytics' },
+                        { id: 'system-health', label: 'System Health' },
+                    ]}
+                    activeTab={activeTab}
+                    onChange={setActiveTab}
+                />
 
-                {/* Usage Chart */}
-                <UsageChart data={dailyStats} title={`Daily Usage (Last ${daysBack} Days)`} />
+                {/* Analytics Tab */}
+                {activeTab === 'analytics' && (
+                    <div className="space-y-6">
+                        {/* Summary Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <StatCard title="Total Users" value={totalUsers.toLocaleString()} />
+                            <StatCard
+                                title={`Autogear Runs (${daysBack}d)`}
+                                value={totalAutogearRuns.toLocaleString()}
+                            />
+                            <StatCard
+                                title={`Data Imports (${daysBack}d)`}
+                                value={totalDataImports.toLocaleString()}
+                            />
+                            <StatCard
+                                title="Avg Daily Active Users"
+                                value={avgDailyActiveUsers.toLocaleString()}
+                            />
+                        </div>
 
-                {/* Top Users Table */}
-                <TopUsersTable users={topUsers} />
+                        {/* Usage Chart */}
+                        <UsageChart
+                            data={dailyStats}
+                            title={`Daily Usage (Last ${daysBack} Days)`}
+                        />
+
+                        {/* Top Users Table */}
+                        <TopUsersTable users={topUsers} />
+                    </div>
+                )}
+
+                {/* System Health Tab */}
+                {activeTab === 'system-health' && (
+                    <div className="space-y-6">
+                        {/* System Stats */}
+                        {systemStats && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <StatCard
+                                    title="Total Ships"
+                                    value={systemStats.total_ships.toLocaleString()}
+                                    color="blue"
+                                />
+                                <StatCard
+                                    title="Total Gear"
+                                    value={systemStats.total_inventory.toLocaleString()}
+                                    color="green"
+                                />
+                                <StatCard
+                                    title="Total Loadouts"
+                                    value={systemStats.total_loadouts.toLocaleString()}
+                                    color="yellow"
+                                />
+                                <StatCard
+                                    title="Active Users"
+                                    value={systemStats.total_active_users.toLocaleString()}
+                                    color="purple"
+                                />
+                            </div>
+                        )}
+
+                        {/* Average Stats */}
+                        {systemStats && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <StatCard
+                                    title="Avg Ships per User"
+                                    value={systemStats.avg_ships_per_user.toFixed(1)}
+                                    color="blue"
+                                />
+                                <StatCard
+                                    title="Avg Gear per User"
+                                    value={systemStats.avg_gear_per_user.toFixed(1)}
+                                    color="green"
+                                />
+                            </div>
+                        )}
+
+                        {/* Growth Chart */}
+                        {growthMetrics.length > 0 && (
+                            <GrowthChart
+                                data={growthMetrics}
+                                title={`Content Growth (Last ${daysBack} Days)`}
+                            />
+                        )}
+
+                        {/* User Distribution */}
+                        {userDistribution.length > 0 && (
+                            <UserDistributionChart data={userDistribution} />
+                        )}
+
+                        {/* Table Sizes */}
+                        {tableSizes.length > 0 && <TableSizesTable tables={tableSizes} />}
+                    </div>
+                )}
             </div>
         </PageLayout>
     );
