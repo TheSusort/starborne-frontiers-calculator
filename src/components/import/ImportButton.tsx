@@ -12,6 +12,17 @@ import { Checkbox } from '../ui';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { HangarNameModal } from './HangarNameModal';
 import { trackDataImport } from '../../services/usageTracking';
+import {
+    extractLevel60Ships,
+    compareShipsAgainstTemplates,
+} from '../../utils/shipTemplateComparison';
+import { submitTemplateProposal } from '../../services/shipTemplateProposalService';
+import { supabase } from '../../config/supabase';
+import { Ship } from '../../types/ship';
+import { RarityName } from '../../constants/rarities';
+import { FactionName } from '../../constants/factions';
+import { ShipTypeName } from '../../constants/shipTypes';
+import { AffinityName } from '../../types/ship';
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -32,6 +43,52 @@ export const ImportButton: React.FC<{
     // Use external state if provided, otherwise use internal state
     const shareData = externalShareData !== undefined ? externalShareData : internalShareData;
     const setShareData = externalSetShareData || setInternalShareData;
+
+    // Helper to fetch templates fresh from Supabase
+    const fetchTemplateShips = async (): Promise<Ship[]> => {
+        try {
+            const { data, error } = await supabase.from('ship_templates').select('*');
+
+            if (error) throw error;
+
+            return (
+                data?.map((template) => ({
+                    id: template.id,
+                    name: template.name,
+                    rarity: template.rarity.toLowerCase() as RarityName,
+                    faction: template.faction as FactionName,
+                    type: template.type as ShipTypeName,
+                    baseStats: {
+                        hp: template.base_stats.hp,
+                        attack: template.base_stats.attack,
+                        defence: template.base_stats.defence,
+                        hacking: template.base_stats.hacking,
+                        security: template.base_stats.security,
+                        crit: template.base_stats.crit_rate,
+                        critDamage: template.base_stats.crit_damage,
+                        speed: template.base_stats.speed,
+                        healModifier: 0,
+                        hpRegen: 0,
+                        shield: template.base_stats.shield || 0,
+                        shieldPenetration: template.base_stats.shield_penetration || 0,
+                        defensePenetration: template.base_stats.defense_penetration || 0,
+                    },
+                    equipment: {},
+                    refits: [],
+                    implants: {},
+                    affinity: template.affinity.toLowerCase() as AffinityName,
+                    imageKey: template.image_key,
+                    activeSkillText: template.active_skill_text,
+                    chargeSkillText: template.charge_skill_text,
+                    firstPassiveSkillText: template.first_passive_skill_text,
+                    secondPassiveSkillText: template.second_passive_skill_text,
+                })) || []
+            );
+        } catch (error) {
+            console.error('[Import] Error fetching template ships:', error);
+            return [];
+        }
+    };
 
     const handleFileUpload = useCallback(
         async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,6 +122,34 @@ export const ImportButton: React.FC<{
                     await setShips(result.data.ships);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
+
+                    // Check for template updates BEFORE syncing (so it completes before refresh)
+                    if (user) {
+                        try {
+                            // Fetch templates fresh from Supabase
+                            const templateShips = await fetchTemplateShips();
+
+                            if (templateShips.length > 0) {
+                                const level60Ships = extractLevel60Ships(data);
+                                const proposals = compareShipsAgainstTemplates(
+                                    level60Ships,
+                                    templateShips
+                                );
+                                // Submit proposals if any differences found
+                                if (proposals.length > 0) {
+                                    // Run submissions in parallel for speed
+                                    await Promise.all(
+                                        proposals.map((proposal) =>
+                                            submitTemplateProposal(proposal, user.id)
+                                        )
+                                    );
+                                }
+                            }
+                        } catch (error) {
+                            // Silently fail - don't interrupt user experience
+                            console.error('Error checking template updates:', error);
+                        }
+                    }
 
                     // sync to supabase if user is logged in
                     if (user) {

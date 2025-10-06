@@ -6,9 +6,52 @@ interface TableSizesTableProps {
 }
 
 export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
+    // Calculate total size in MB
+    const totalSizeMB = React.useMemo(() => {
+        return tables.reduce((sum, table) => {
+            // Parse size string (e.g., "123 MB" or "1234 kB")
+            const match = table.total_size.match(/(\d+(?:\.\d+)?)\s*(\w+)/);
+            if (match) {
+                const value = parseFloat(match[1]);
+                const unit = match[2].toLowerCase();
+                if (unit === 'mb') return sum + value;
+                if (unit === 'gb') return sum + value * 1024;
+                if (unit === 'kb') return sum + value / 1024;
+                if (unit === 'bytes') return sum + value / (1024 * 1024);
+            }
+            return sum;
+        }, 0);
+    }, [tables]);
+
+    // Determine color based on size thresholds
+    // Note: Actual Supabase usage includes ~15% overhead (WAL, temp files, etc.)
+    // So we use lower thresholds to account for the real usage
+    const getTotalSizeColor = () => {
+        if (totalSizeMB >= 400) return 'text-red-500'; // ~460 MB real (92%)
+        if (totalSizeMB >= 340) return 'text-orange-500'; // ~390 MB real (78%)
+        if (totalSizeMB >= 290) return 'text-yellow-500'; // ~335 MB real (67%)
+        return 'text-green-500';
+    };
+
+    const getTotalSizeBgColor = () => {
+        if (totalSizeMB >= 400) return 'bg-red-500/10 border-red-500/50';
+        if (totalSizeMB >= 340) return 'bg-orange-500/10 border-orange-500/50';
+        if (totalSizeMB >= 290) return 'bg-yellow-500/10 border-yellow-500/50';
+        return 'bg-green-500/10 border-green-500/50';
+    };
+
     return (
         <div className="bg-dark-lighter p-6 border border-gray-700">
-            <h3 className="text-xl font-semibold mb-4">Database Tables</h3>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold">Database Tables</h3>
+                <div className={`px-4 py-2 border rounded ${getTotalSizeBgColor()}`}>
+                    <span className="text-sm text-gray-400 mr-2">Total Size:</span>
+                    <span className={`text-lg font-bold ${getTotalSizeColor()}`}>
+                        {totalSizeMB.toFixed(2)} MB
+                    </span>
+                    <span className="text-xs text-gray-500 ml-2">/ 500 MB</span>
+                </div>
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead>

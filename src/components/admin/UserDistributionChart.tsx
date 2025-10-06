@@ -105,7 +105,7 @@ export const UserDistributionChart: React.FC<UserDistributionChartProps> = ({ da
                     {data.map((item) => (
                         <div
                             key={item.activity_level}
-                            className="flex items-center justify-between p-2 bg-dark rounded"
+                            className="flex items-center justify-between p-2 bg-dark"
                         >
                             <div className="flex items-center gap-2">
                                 <div

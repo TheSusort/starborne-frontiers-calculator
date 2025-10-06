@@ -8,6 +8,7 @@ import { StatCard } from '../../components/admin/StatCard';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { UserDistributionChart } from '../../components/admin/UserDistributionChart';
+import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';
 import {
     isAdmin,
     getDailyUsageStats,
@@ -26,11 +27,19 @@ import {
     TableInfo,
     UserDistribution,
 } from '../../services/systemHealthService';
+import {
+    getPendingProposals,
+    approveProposal,
+    rejectProposal,
+    TemplateProposalRecord,
+} from '../../services/shipTemplateProposalService';
 import { Loader } from '../../components/ui/Loader';
+import { useNotification } from '../../hooks/useNotification';
 
 export const AdminPanel: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const { addNotification } = useNotification();
     const [loading, setLoading] = useState(true);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
     const [dailyStats, setDailyStats] = useState<DailyUsageStat[]>([]);
@@ -45,8 +54,11 @@ export const AdminPanel: React.FC = () => {
     const [tableSizes, setTableSizes] = useState<TableInfo[]>([]);
     const [userDistribution, setUserDistribution] = useState<UserDistribution[]>([]);
 
+    // Template proposals state
+    const [templateProposals, setTemplateProposals] = useState<TemplateProposalRecord[]>([]);
+
     const loadData = React.useCallback(async () => {
-        const [statsData, usersData, userCount, sysStats, growth, tables, distribution] =
+        const [statsData, usersData, userCount, sysStats, growth, tables, distribution, proposals] =
             await Promise.all([
                 getDailyUsageStats(daysBack),
                 getTopActiveUsers(5),
@@ -55,6 +67,7 @@ export const AdminPanel: React.FC = () => {
                 getGrowthStats(daysBack),
                 getTableSizes(),
                 getUserDistribution(),
+                getPendingProposals(),
             ]);
 
         if (statsData) setDailyStats(statsData);
@@ -64,7 +77,36 @@ export const AdminPanel: React.FC = () => {
         if (growth) setGrowthMetrics(growth);
         if (tables) setTableSizes(tables);
         if (distribution) setUserDistribution(distribution);
+        if (proposals) setTemplateProposals(proposals);
     }, [daysBack]);
+
+    const handleApproveProposal = async (proposalId: string) => {
+        if (!user) return;
+
+        const result = await approveProposal(proposalId, user.id);
+        if (result.success) {
+            addNotification('success', 'Proposal approved successfully');
+            // Reload proposals
+            const proposals = await getPendingProposals();
+            setTemplateProposals(proposals);
+        } else {
+            addNotification('error', `Failed to approve proposal: ${result.error}`);
+        }
+    };
+
+    const handleRejectProposal = async (proposalId: string) => {
+        if (!user) return;
+
+        const result = await rejectProposal(proposalId, user.id);
+        if (result.success) {
+            addNotification('success', 'Proposal rejected');
+            // Reload proposals
+            const proposals = await getPendingProposals();
+            setTemplateProposals(proposals);
+        } else {
+            addNotification('error', `Failed to reject proposal: ${result.error}`);
+        }
+    };
 
     useEffect(() => {
         const checkAdminAndLoadData = async () => {
@@ -142,6 +184,10 @@ export const AdminPanel: React.FC = () => {
                     tabs={[
                         { id: 'analytics', label: 'Analytics' },
                         { id: 'system-health', label: 'System Health' },
+                        {
+                            id: 'template-proposals',
+                            label: `Templates ${templateProposals.length > 0 ? `(${templateProposals.length})` : ''}`,
+                        },
                     ]}
                     activeTab={activeTab}
                     onChange={setActiveTab}
@@ -238,6 +284,17 @@ export const AdminPanel: React.FC = () => {
 
                         {/* Table Sizes */}
                         {tableSizes.length > 0 && <TableSizesTable tables={tableSizes} />}
+                    </div>
+                )}
+
+                {/* Template Proposals Tab */}
+                {activeTab === 'template-proposals' && (
+                    <div className="space-y-6">
+                        <TemplateProposalsTable
+                            proposals={templateProposals}
+                            onApprove={handleApproveProposal}
+                            onReject={handleRejectProposal}
+                        />
                     </div>
                 )}
             </div>
