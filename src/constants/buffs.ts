@@ -60,7 +60,11 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Speed Up II',
-        description: '+20% Speed',
+        description: '+30% Speed',
+    },
+    {
+        name: 'Speed Up III',
+        description: '+45% Speed',
     },
     {
         name: 'Crit Power Down II',
@@ -166,6 +170,10 @@ export const BUFFS: Buff[] = [
     {
         name: 'Marauder Rage II',
         description: '+20% Attack, +10% Crit Power',
+    },
+    {
+        name: 'Marauder Rage III',
+        description: '+30% Attack, +20% Crit Power',
     },
     {
         name: 'Debuff Duration Extension',
@@ -384,6 +392,10 @@ export const BUFFS: Buff[] = [
         description: '+10% Defense',
     },
     {
+        name: 'Terran Bolster III',
+        description: '+15% Defense',
+    },
+    {
         name: 'Inferno I',
         description: '15% Damage',
     },
@@ -578,5 +590,14 @@ export const BUFFS: Buff[] = [
     {
         name: 'Barrier Recharging',
         description: 'Cannot be granted Barrier. Cannot be reduced. Unremovable.',
+    },
+    {
+        name: 'Core Charge I',
+        description:
+            'Increase Out. direct damage by 4% and defense penetration by 1%. This effect is stackable up to 10 times.',
+    },
+    {
+        name: 'Hacking Module Overdrive',
+        description: 'Hacking +9999',
     },
 ];
