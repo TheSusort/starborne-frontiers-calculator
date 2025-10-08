@@ -189,6 +189,10 @@ export const BUFFS: Buff[] = [
         description: '-15% Defense',
     },
     {
+        name: 'XAOC Swiftness I',
+        description: '+10% Speed',
+    },
+    {
         name: 'XAOC Swiftness II',
         description: '+20% Speed, +10% Attack',
     },
@@ -612,5 +616,9 @@ export const BUFFS: Buff[] = [
         name: 'Acidic Decay',
         description:
             "Deals Damage equal to 3/6/9% of target's max HP, ignores defense and shield. Unremovable.",
+    },
+    {
+        name: 'Charged Overdrive II',
+        description: 'Grants the next Charged Skill activation 20% Defense Penetration',
     },
 ];
