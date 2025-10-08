@@ -79,8 +79,12 @@ export const BUFFS: Buff[] = [
         description: '-15% Outgoing Direct Damage',
     },
     {
+        name: 'Corrosion',
+        description: "Deals Damage equal to 3/6/9% of target's max HP, ignores defense and shield",
+    },
+    {
         name: 'Corrosion I',
-        description: "Deals Damage equal to 3% of target's max HP",
+        description: "Deals Damage equal to 3% of target's max HP, ignores defense and shield",
     },
     {
         name: 'Out. DoT Damage Down I',
@@ -96,11 +100,11 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Corrosion II',
-        description: "Deals Damage equal to 6% of target's max HP",
+        description: "Deals Damage equal to 6% of target's max HP, ignores defense and shield",
     },
     {
         name: 'Corrosion III',
-        description: "Deals Damage equal to 9% of target's max HP",
+        description: "Deals Damage equal to 9% of target's max HP, ignores defense and shield",
     },
     {
         name: 'Speed Down I',
@@ -521,6 +525,10 @@ export const BUFFS: Buff[] = [
         description: '+10% DoT Damage',
     },
     {
+        name: 'Out. DoT Damage Up II',
+        description: '+20% DoT Damage',
+    },
+    {
         name: 'Out. Damage Up I',
         description: '+15% Outgoing Direct Damage',
     },
@@ -599,5 +607,10 @@ export const BUFFS: Buff[] = [
     {
         name: 'Hacking Module Overdrive',
         description: 'Hacking +9999',
+    },
+    {
+        name: 'Acidic Decay',
+        description:
+            "Deals Damage equal to 3/6/9% of target's max HP, ignores defense and shield. Unremovable.",
     },
 ];

@@ -124,6 +124,8 @@ export const ShipIndexPage: React.FC = () => {
             const matchesSearch =
                 searchQuery === '' ||
                 ship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                FACTIONS[ship.faction].name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                SHIP_TYPES[ship.type].name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (ship.activeSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false) ||
                 (ship.chargeSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
