@@ -6,19 +6,19 @@ export interface Buff {
 
 export const BUFFS: Buff[] = [
     {
-        name: 'Hacking Up 2',
+        name: 'Hacking Up II',
         description: '+40 Hacking',
     },
     {
-        name: 'Hacking Up 3',
+        name: 'Hacking Up III',
         description: '+60 Hacking',
     },
     {
-        name: 'Atlas Coordination 2',
+        name: 'Atlas Coordination II',
         description: '+20% Attack',
     },
     {
-        name: 'Atlas Coordination 3',
+        name: 'Atlas Coordination III',
         description: '+30% Attack',
     },
     {
@@ -26,23 +26,23 @@ export const BUFFS: Buff[] = [
         description: 'Remove specified number of debuffs',
     },
     {
-        name: 'Defense Up 2',
+        name: 'Defense Up II',
         description: '+30% Defense',
     },
     {
-        name: 'Speed Down 2',
+        name: 'Speed Down II',
         description: '-30% Speed',
     },
     {
-        name: 'Crit Power Down 3',
+        name: 'Crit Power Down III',
         description: '-45% Outgoing Crit Power',
     },
     {
-        name: 'Attack Down 2',
+        name: 'Attack Down II',
         description: '-30% Attack',
     },
     {
-        name: 'Out. Damage Down 2',
+        name: 'Out. Damage Down II',
         description: '-30% Outgoing Direct Damage',
     },
     {
@@ -55,31 +55,35 @@ export const BUFFS: Buff[] = [
         description: 'Unit unable to gain shield for specified number of turns',
     },
     {
-        name: 'Speed Up 1',
+        name: 'Speed Up I',
         description: '+10% Speed',
     },
     {
-        name: 'Crit Power Down 2',
+        name: 'Speed Up II',
+        description: '+20% Speed',
+    },
+    {
+        name: 'Crit Power Down II',
         description: '-30% Outgoing Crit Power',
     },
     {
-        name: 'Attack Down 1',
+        name: 'Attack Down I',
         description: '-15% Attack',
     },
     {
-        name: 'Out. Damage Down 1',
+        name: 'Out. Damage Down I',
         description: '-15% Outgoing Direct Damage',
     },
     {
-        name: 'Corrosion 1',
+        name: 'Corrosion I',
         description: "Deals Damage equal to 3% of target's max HP",
     },
     {
-        name: 'Out. DoT Damage Down 1',
+        name: 'Out. DoT Damage Down I',
         description: '-10% DoT Damage',
     },
     {
-        name: 'Out. DoT Damage Down 2',
+        name: 'Out. DoT Damage Down II',
         description: '-20% DoT Damage',
     },
     {
@@ -87,15 +91,15 @@ export const BUFFS: Buff[] = [
         description: 'Forces Unit to attack the applying unit for specified number of turns',
     },
     {
-        name: 'Corrosion 2',
+        name: 'Corrosion II',
         description: "Deals Damage equal to 6% of target's max HP",
     },
     {
-        name: 'Corrosion 3',
+        name: 'Corrosion III',
         description: "Deals Damage equal to 9% of target's max HP",
     },
     {
-        name: 'Speed Down 1',
+        name: 'Speed Down I',
         description: '-15% Speed',
     },
     {
@@ -103,39 +107,39 @@ export const BUFFS: Buff[] = [
         description: 'Remains untargetable unless no targets without stealth are available',
     },
     {
-        name: 'Tianchao Precision 2',
+        name: 'Tianchao Precision II',
         description: '+30% Crit Power, +20 Hacking',
     },
     {
-        name: 'Attack Down 3',
+        name: 'Attack Down III',
         description: '-45% Attack',
     },
     {
-        name: 'Crit Rate Down 2',
+        name: 'Crit Rate Down II',
         description: '-20% Crit Rate',
     },
     {
-        name: 'Crit Rate Down 3',
+        name: 'Crit Rate Down III',
         description: '-30% Crit Rate',
     },
     {
-        name: 'Gelecek Contagion 2',
+        name: 'Gelecek Contagion II',
         description: '+30 Hacking, +5% Speed',
     },
     {
-        name: 'Defense Down 2',
+        name: 'Defense Down II',
         description: '-30% Defense',
     },
     {
-        name: 'Defense Down 3',
+        name: 'Defense Down III',
         description: '-45% Defense',
     },
     {
-        name: 'Inferno 2',
+        name: 'Inferno II',
         description: '30% Damage',
     },
     {
-        name: 'Inferno 3',
+        name: 'Inferno III',
         description: '45% Damage',
     },
     {
@@ -144,11 +148,11 @@ export const BUFFS: Buff[] = [
             'Prevents activation of passive and active skills. Charge skill charges do not generate. Effect removed upon taking damage',
     },
     {
-        name: 'Inc. DoT Damage Up 2',
+        name: 'Inc. DoT Damage Up II',
         description: '+20% DoT Damage',
     },
     {
-        name: 'Inc. DoT Damage Up 3',
+        name: 'Inc. DoT Damage Up III',
         description: '+30% DoT Damage',
     },
     {
@@ -156,11 +160,11 @@ export const BUFFS: Buff[] = [
         description: '+10% Outgoing Direct Damage, -10% Defense, Stackable up to 10 times',
     },
     {
-        name: 'Marauder Rage 1',
+        name: 'Marauder Rage I',
         description: '+10% Attack',
     },
     {
-        name: 'Marauder Rage 2',
+        name: 'Marauder Rage II',
         description: '+20% Attack, +10% Crit Power',
     },
     {
@@ -169,11 +173,11 @@ export const BUFFS: Buff[] = [
             'Increase Duration of a Specified number of debuffs. Does not require Hacking. Affinity Adv units are immune',
     },
     {
-        name: 'Defense Down 1',
+        name: 'Defense Down I',
         description: '-15% Defense',
     },
     {
-        name: 'XAOC Swiftness 2',
+        name: 'XAOC Swiftness II',
         description: '+20% Speed, +10% Attack',
     },
     {
@@ -185,7 +189,7 @@ export const BUFFS: Buff[] = [
         description: 'Remove specified number of buffs',
     },
     {
-        name: 'Out. Damage Up 2',
+        name: 'Out. Damage Up II',
         description: '+30% Outgoing Direct Damage',
     },
     {
@@ -199,99 +203,99 @@ export const BUFFS: Buff[] = [
             'Removes all damaging effects of specified type, and deals the cumulative damage in a single Direct Damage attack.',
     },
     {
-        name: 'Atlas Coordination 1',
+        name: 'Atlas Coordination I',
         description: '+10% Attack',
     },
     {
-        name: 'Defense Up 3',
+        name: 'Defense Up III',
         description: '+45% Defense',
     },
     {
-        name: 'Inc. Damage Down 2',
+        name: 'Inc. Damage Down II',
         description: '-30% Incoming Direct Damage',
     },
     {
-        name: 'Binderburg Resilience 2',
+        name: 'Binderburg Resilience II',
         description: '+20 Security',
     },
     {
-        name: 'Inc. Damage Down 3',
+        name: 'Inc. Damage Down III',
         description: '-45% Incoming Direct Damage',
     },
     {
-        name: 'Binderburg Resilience 3',
+        name: 'Binderburg Resilience III',
         description: '+30 Security, +15% Defense',
     },
     {
-        name: 'Out. Damage Down 3',
+        name: 'Out. Damage Down III',
         description: '-45% Outgoing Direct Damage',
     },
     {
-        name: 'Security Up 2',
+        name: 'Security Up II',
         description: '+40Security',
     },
     {
-        name: 'Everliving Regeneration 2',
+        name: 'Everliving Regeneration II',
         description: '+20% Incoming Repair, +20 Security',
     },
     {
-        name: 'Repair Over Time 1',
+        name: 'Repair Over Time I',
         description: '10% Applying Unit HP%',
     },
     {
-        name: 'Repair Over Time 2',
+        name: 'Repair Over Time II',
         description: '15% Applying Unit HP%',
     },
     {
-        name: 'Attack Up 3',
+        name: 'Attack Up III',
         description: '+45% Attack',
     },
     {
-        name: 'Legion Discipline 2',
+        name: 'Legion Discipline II',
         description: '+15% Attack, +15 Security, +10% Speed',
     },
     {
-        name: 'XAOC Swiftness 3',
+        name: 'XAOC Swiftness III',
         description: '+30% Speed, +20% Attack',
     },
     {
-        name: 'Out. Damage Up 3',
+        name: 'Out. Damage Up III',
         description: '+45% Outgoing Direct Damage',
     },
     {
-        name: 'Crit Power Up 2',
+        name: 'Crit Power Up II',
         description: '+30% Outgoing Crit Power',
     },
     {
-        name: 'Attack Up 2',
+        name: 'Attack Up II',
         description: '+30% Attack',
     },
     {
-        name: 'Crit Power Up 3',
+        name: 'Crit Power Up III',
         description: '+45% Outgoing Crit Power',
     },
     {
-        name: 'Crit Power Down 1',
+        name: 'Crit Power Down I',
         description: '-15% Outgoing Crit Power',
     },
     {
-        name: 'Crit Rate Down 1',
+        name: 'Crit Rate Down I',
         description: '-10% Outgoing Crit Rate',
     },
     {
-        name: 'Binderburg Resilience 1',
+        name: 'Binderburg Resilience I',
         description: '+10 Security',
     },
     {
-        name: 'Crit Rate Up 1',
+        name: 'Crit Rate Up I',
         description: '+10% Outgoing Crit Rate',
     },
     {
-        name: 'Attack Up 1',
+        name: 'Attack Up I',
         description: '+15% Attack',
     },
     {
-        name: 'Crit Rate Up 2',
+        name: 'Crit Rate Up II',
         description: '+20% Outgoing Crit Rate',
     },
     {
@@ -299,11 +303,11 @@ export const BUFFS: Buff[] = [
         description: 'Survive the next fatal blow with 1HP, removing all buffs and debuffs.',
     },
     {
-        name: 'Inc. Damage Down 1',
+        name: 'Inc. Damage Down I',
         description: '-15% Incoming Direct Damage',
     },
     {
-        name: 'Security Up 3',
+        name: 'Security Up III',
         description: '+60 Security',
     },
     {
@@ -315,15 +319,15 @@ export const BUFFS: Buff[] = [
         description: 'Decrease Duration of a Specified number of debuffs',
     },
     {
-        name: 'Everliving Regeneration 3',
+        name: 'Everliving Regeneration III',
         description: '+30% Incoming Repair, +20 Security',
     },
     {
-        name: 'Bomb 1',
+        name: 'Bomb I',
         description: '100% Attack',
     },
     {
-        name: 'Bomb 2',
+        name: 'Bomb II',
         description: '200% Attack',
     },
     {
@@ -336,35 +340,35 @@ export const BUFFS: Buff[] = [
         description: 'Forces enemies to target this unit',
     },
     {
-        name: 'Terran Tenacity 1',
+        name: 'Terran Tenacity I',
         description: '-10% Incoming Direct Damage',
     },
     {
-        name: 'Terran Tenacity 2',
+        name: 'Terran Tenacity II',
         description: '-20% Incoming Direct Damage',
     },
     {
-        name: 'Inc. Repair Down 1',
+        name: 'Inc. Repair Down I',
         description: '-25% Incoming Repair',
     },
     {
-        name: 'Inc. Repair Down 2',
+        name: 'Inc. Repair Down II',
         description: '-50% Incoming Repair',
     },
     {
-        name: 'Inc. Repair Down 3',
+        name: 'Inc. Repair Down III',
         description: '-75% Incoming Repair',
     },
     {
-        name: 'Inc. Damage Up 1',
+        name: 'Inc. Damage Up I',
         description: '+15% Incoming Direct Damage',
     },
     {
-        name: 'Inc. Damage Up 2',
+        name: 'Inc. Damage Up II',
         description: '+30% Incoming Direct Damage',
     },
     {
-        name: 'Legion Discipline 3',
+        name: 'Legion Discipline III',
         description: '+20% Attack, +20 Security, +20% Speed',
     },
     {
@@ -376,15 +380,15 @@ export const BUFFS: Buff[] = [
         description: '+15% Outgoing Direct Damage, Stackable up to 4 times',
     },
     {
-        name: 'Terran Bolster 2',
+        name: 'Terran Bolster II',
         description: '+10% Defense',
     },
     {
-        name: 'Inferno 1',
+        name: 'Inferno I',
         description: '15% Damage',
     },
     {
-        name: 'Security Down 2',
+        name: 'Security Down II',
         description: '-40 Security',
     },
     {
@@ -403,7 +407,7 @@ export const BUFFS: Buff[] = [
             'Grants affinity advantage when attacking or being attacked, but is removed after being attacked',
     },
     {
-        name: 'Atlas Readiness 2',
+        name: 'Atlas Readiness II',
         description: '+20% Defense',
     },
     {
@@ -425,19 +429,19 @@ export const BUFFS: Buff[] = [
         description: 'Converts taken damage into a DoT effect that ignore DEF and is unremovable.',
     },
     {
-        name: 'Bomb 3',
+        name: 'Bomb III',
         description: '300% Damage',
     },
     {
-        name: 'Terran Guard 1',
+        name: 'Terran Guard I',
         description: '+5% Defense (Applying Unit)',
     },
     {
-        name: 'Terran Guard 2',
+        name: 'Terran Guard II',
         description: '+10% Defense (Applying Unit)',
     },
     {
-        name: 'Terran Guard 3',
+        name: 'Terran Guard III',
         description: '+15% Defense (Applying Unit)',
     },
     {
@@ -449,35 +453,35 @@ export const BUFFS: Buff[] = [
         description: 'Prevent the activation of Passive Ability for specified number of turns',
     },
     {
-        name: 'Crit Power Up 1',
+        name: 'Crit Power Up I',
         description: '+15% Outgoing Crit Power',
     },
     {
-        name: 'Hacking Down 1',
+        name: 'Hacking Down I',
         description: '-20 Hacking',
     },
     {
-        name: 'Hacking Down 2',
+        name: 'Hacking Down II',
         description: '-40 Hacking',
     },
     {
-        name: 'Security Down 1',
+        name: 'Security Down I',
         description: '-20 Security',
     },
     {
-        name: 'Hacking Up 1',
+        name: 'Hacking Up I',
         description: '+20 Hacking',
     },
     {
-        name: 'Supercharged 1',
+        name: 'Supercharged I',
         description: '+15% Attack, +10% Crit Rate, + 10% Crit Power, -20% Defense',
     },
     {
-        name: 'Supercharged 3',
+        name: 'Supercharged III',
         description: '+45% Attack, +30% Crit Rate, +30% Crit Power, -60% Defense',
     },
     {
-        name: 'Defense Up 1',
+        name: 'Defense Up I',
         description: '+15% Defense',
     },
     {
@@ -485,7 +489,7 @@ export const BUFFS: Buff[] = [
         description: 'Increases the Duration of buffs by specified amount of turns',
     },
     {
-        name: 'Out. Repair Down 2',
+        name: 'Out. Repair Down II',
         description: '-50% Outgoing Repair',
     },
     {
@@ -493,23 +497,23 @@ export const BUFFS: Buff[] = [
         description: 'Unit unable to be repaired',
     },
     {
-        name: 'Charge Overdrive 1',
+        name: 'Charge Overdrive I',
         description: '+10% Defense Penetration',
     },
     {
-        name: 'Charge Overdrive 2',
+        name: 'Charge Overdrive II',
         description: '+20% Defense Penetration',
     },
     {
-        name: 'Inc. DoT Damage Up 1',
+        name: 'Inc. DoT Damage Up I',
         description: '+10% DoT Damage',
     },
     {
-        name: 'Out. Damage Up 1',
+        name: 'Out. Damage Up I',
         description: '+15% Outgoing Direct Damage',
     },
     {
-        name: 'Everliving Regeneration 1',
+        name: 'Everliving Regeneration I',
         description: '+10% Incoming Repair',
     },
     {
@@ -517,11 +521,11 @@ export const BUFFS: Buff[] = [
         description: 'Increase DEF by 10x Unit Security',
     },
     {
-        name: 'Crit Rate Up 3',
+        name: 'Crit Rate Up III',
         description: '+30% Outgoing Crit Rate',
     },
     {
-        name: 'Inc. Damage Up 3',
+        name: 'Inc. Damage Up III',
         description: '+45% Incoming Direct Damage',
     },
     {
@@ -537,7 +541,7 @@ export const BUFFS: Buff[] = [
         description: 'Does not require hacking.',
     },
     {
-        name: 'Out. Detonation Damage Up 3',
+        name: 'Out. Detonation Damage Up III',
         description: '+45% Outgoing Detonation Damage',
     },
     {
@@ -545,7 +549,7 @@ export const BUFFS: Buff[] = [
         description: 'Ignores Taunt and Provoke.',
     },
     {
-        name: 'Leech 2',
+        name: 'Leech II',
         description: 'Repair for 30% of damage dealt.',
     },
     {
@@ -563,9 +567,9 @@ export const BUFFS: Buff[] = [
         description: '+5% Defense, Stackable up to 5 times. Remove 1 stack per hit.',
     },
     {
-        name: 'Overclock 3',
+        name: 'Overclock III',
         description:
-            '+30% Attack, +60% Crit Power. On removal or expiration, apply Speed Down 1 and Attack Down 1 to self for 2 turns.',
+            '+30% Attack, +60% Crit Power. On removal or expiration, apply Speed Down I and Attack Down I to self for 2 turns.',
     },
     {
         name: 'Barrier',

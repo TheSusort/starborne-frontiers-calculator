@@ -122,4 +122,45 @@
                xl:max-h-[calc(min((100vw-48px-2rem-9px-16rem)/4*518/389,518px)+160px)]
                2xl:max-h-[calc(min(308px*518/389,518px)+160px)];
     }
+
+    /* Skill text styling */
+    .skill-name {
+        @apply text-yellow-400 font-semibold cursor-help border-b border-dotted border-yellow-400;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .skill-name:hover {
+        @apply text-yellow-300 border-yellow-300;
+    }
+
+    .skill-damage {
+        @apply text-orange-400 font-semibold;
+    }
+
+    .skill-aid {
+        @apply text-green-400 font-semibold;
+    }
+
+    /* Buff tooltip on hover */
+    .skill-tooltip {
+        @apply absolute z-50 invisible group-hover:visible;
+        @apply bg-dark-lighter p-2 shadow-lg max-w-xs border border-gray-600;
+        @apply transition-opacity duration-200 opacity-0 group-hover:opacity-100;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-bottom: 0.5rem;
+    }
+
+    /* Arrow for tooltip */
+    .skill-tooltip::after {
+        content: '';
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: theme('colors.gray.600') transparent transparent transparent;
+    }
 }
