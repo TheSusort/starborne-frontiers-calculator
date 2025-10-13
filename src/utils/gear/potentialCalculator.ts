@@ -170,17 +170,32 @@ function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
     return Math.round(cost);
 }
 function calculateGearStats(piece: GearPiece): BaseStats {
+    // Calculate total crit from this gear piece for crit-capping
+    let totalGearCrit = 0;
+    if (piece.mainStat?.name === 'crit') {
+        totalGearCrit += piece.mainStat.value;
+    }
+    piece.subStats?.forEach((stat) => {
+        if (stat.name === 'crit') {
+            totalGearCrit += stat.value;
+        }
+    });
+
+    // Adjust base crit so that final crit = 100% (crit-capped)
+    // Base crit = 100 - gear crit, ensuring the piece is evaluated as if it brings you to 100% crit
+    const baseCrit = Math.max(0, 100 - totalGearCrit);
+
     const breakdown = calculateTotalStats(
-        // Empty base stats
+        // Empty base stats with adjusted crit for crit-capping
         {
-            hp: 20000,
-            attack: 5000,
-            defence: 4000,
-            hacking: 150,
-            security: 50,
-            speed: 80,
-            crit: 50,
-            critDamage: 70,
+            hp: 22000,
+            attack: 6000,
+            defence: 5000,
+            hacking: 100,
+            security: 100,
+            speed: 100,
+            crit: baseCrit,
+            critDamage: 100,
             healModifier: 0,
             defensePenetration: 0,
         },
