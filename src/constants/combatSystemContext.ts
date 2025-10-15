@@ -295,6 +295,24 @@ Choose from base roles (ATTACKER, DEFENDER, SUPPORTER, DEBUFFER) and specialized
 - Apply for tertiary stat synergies found in ship skills
 - **Do NOT use for role primary/secondary stats**
 
+**Formula**: bonusScore = Σ (statValue × percentage / 100)
+
+**Scaling Considerations**:
+- Stat bonuses are **additive** to the base role score, not multiplicative
+- Different stats have vastly different value scales, requiring careful percentage tuning
+- Example: HP @ 1% contributes 500 points (from 50,000 HP), while Speed @ 100% contributes 200 points (from 200 speed)
+
+**Typical Percentage Ranges**:
+- **High-value stats** (HP: 10k-150k, Attack: 1k-30k, Defense: 1k-20k): 1-10%
+- **Medium-value stats** (Hacking: 100-600, Security: 100-500): 20-100%
+- **Low-value stats** (Speed: 50-200, Crit: 0-100%, Crit Power: 0-300%): 50-200%
+
+**Impact on Optimization**:
+- Stat bonuses typically represent a minor adjustment (usually <5% of total score)
+- Guides gear choices without overriding core role optimization
+- Useful for hybrid roles (e.g., Defender with hacking @ 80% for debuff capability)
+- Allows fine-tuning priorities not captured by base role formulas
+
 ### Recommended Settings
 - **Ignore Equipped Gear**: Unchecked (consider current equipment)
 - **Ignore Unleveled Gear**: Checked (focus on usable gear)

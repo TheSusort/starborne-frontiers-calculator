@@ -234,8 +234,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="bg-dark p-4 space-y-2">
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-gray-400">
-                            Add stat bonuses that contribute to the role score. For example, an
-                            attacker that gains extra damage equal to 10% of HP.
+                            Add stat bonuses that contribute to the role score. These are additive
+                            adjustments (typically &lt;5% of total score) for hybrid builds or
+                            skill-specific scaling. Example: Defender with hacking @ 80% for debuff
+                            capability, or attacker with HP @ 5% for HP-scaling skills.
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}

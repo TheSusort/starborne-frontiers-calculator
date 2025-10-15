@@ -37,7 +37,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                         value={selectedStat}
                         onChange={(value) => setSelectedStat(value as StatName)}
                         noDefaultSelection
-                        helpLabel="Select a stat to contribute to the role score."
+                        helpLabel="Select a stat to contribute to the role score. Formula: bonusScore = statValue × (percentage / 100)"
                     />
                     <div className="w-32">
                         <Input
@@ -47,7 +47,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                             step="1"
                             value={percentage}
                             onChange={(e) => setPercentage(parseFloat(e.target.value))}
-                            helpLabel="Set the percentage of the stat value to add to the role score."
+                            helpLabel="Percentage of stat value added to role score. Typical ranges: High-value stats (HP/ATK/DEF) 1-10%, Medium-value (Hack/Sec) 20-100%, Low-value (Speed/Crit) 50-200%. Impact is usually <5% of total score."
                         />
                     </div>
                     <Button type="submit" disabled={!selectedStat} variant="secondary">
