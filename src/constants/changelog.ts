@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.21.0';
+export const CURRENT_VERSION = '1.21.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.21.1',
+        date: '2025-10-16',
+        changes: ['Added max level filter to gear upgrade analysis'],
+    },
     {
         version: '1.21.0',
         date: '2025-10-03',
