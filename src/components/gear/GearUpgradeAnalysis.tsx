@@ -3,7 +3,7 @@ import { GearPiece } from '../../types/gear';
 import { SHIP_TYPES, ShipTypeName, GEAR_SLOTS, GearSlotName } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button, ProgressBar } from '../ui';
+import { Button, Input, ProgressBar } from '../ui';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { useNotification } from '../../hooks/useNotification';
 import { Tabs } from '../ui/layout/Tabs';
@@ -31,6 +31,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         percentage: number;
     } | null>(null);
     const [selectedRarity, setSelectedRarity] = useState<'rare' | 'epic' | 'legendary'>('rare');
+    const [maxLevel, setMaxLevel] = useState<number>(16);
     const [results, setResults] = useState<
         Record<
             ShipTypeName,
@@ -61,7 +62,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                     role,
                     6,
                     undefined,
-                    selectedRarity
+                    selectedRarity,
+                    maxLevel
                 );
 
                 // Get slot-specific results
@@ -74,7 +76,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                                 role,
                                 6,
                                 slotName as GearSlotName,
-                                selectedRarity
+                                selectedRarity,
+                                maxLevel
                             );
                             return acc;
                         },
@@ -149,11 +152,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         setOptimizationProgress(null);
     };
 
-    // Initial analysis when component mounts or when rarity changes
+    // Initial analysis when component mounts or when rarity/maxLevel changes
     React.useEffect(() => {
         handleAnalyze();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory, selectedRarity]);
+    }, [inventory, selectedRarity, maxLevel]);
 
     const handleSlotChange = (role: ShipTypeName, slot: GearSlotName | 'all') => {
         setSelectedSlots((prev) => ({
@@ -192,23 +195,42 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                 displayed in green color. Clear upgrades button is used to reset the gear.
             </span>
 
-            {/* Rarity Filter */}
-            <div>
-                <h4 className="text-sm font-medium mb-3">Rarity Filter</h4>
-                <div className="flex flex-wrap gap-2">
-                    {RARITY_OPTIONS.map((option) => (
-                        <Button
-                            key={option.value}
-                            onClick={() => setSelectedRarity(option.value)}
-                            className={`text-sm font-medium transition-colors h-auto text-left`}
-                            variant={selectedRarity === option.value ? 'primary' : 'secondary'}
-                        >
-                            <div>
-                                <div>{option.label}</div>
-                                <div className="text-xs opacity-75">{option.description}</div>
-                            </div>
-                        </Button>
-                    ))}
+            {/* Filters */}
+            <div className="space-x-4 flex">
+                {/* Rarity Filter */}
+                <div className="space-y-1">
+                    <p className="text-sm font-medium py-[6px]">Rarity Filter</p>
+                    <div className="flex flex-wrap gap-2">
+                        {RARITY_OPTIONS.map((option) => (
+                            <Button
+                                key={option.value}
+                                onClick={() => setSelectedRarity(option.value)}
+                                className={`text-sm font-medium transition-colors h-auto text-left`}
+                                variant={selectedRarity === option.value ? 'primary' : 'secondary'}
+                            >
+                                <div>
+                                    <div>{option.label}</div>
+                                    <div className="text-xs opacity-75">{option.description}</div>
+                                </div>
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Level Filter */}
+                <div>
+                    <div className="flex items-center gap-3">
+                        <Input
+                            label="Max Level Filter"
+                            type="number"
+                            value={maxLevel}
+                            onChange={(e) => setMaxLevel(parseInt(e.target.value))}
+                            min={0}
+                            max={16}
+                            helpLabel="Gear with level above this will be excluded"
+                            className="py-[26px]"
+                        />
+                    </div>
                 </div>
             </div>
 

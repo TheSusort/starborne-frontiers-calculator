@@ -235,7 +235,8 @@ export function analyzePotentialUpgrades(
     shipRole: ShipTypeName,
     count: number = 6,
     slot?: GearSlotName,
-    minRarity: 'rare' | 'epic' | 'legendary' = 'rare'
+    minRarity: 'rare' | 'epic' | 'legendary' = 'rare',
+    maxLevel: number = 16
 ): PotentialResult[] {
     // Clear the gear stats cache to ensure we get fresh calculations for each simulation
     clearGearStatsCache();
@@ -246,7 +247,7 @@ export function analyzePotentialUpgrades(
 
     const eligiblePieces = inventory.filter(
         (piece) =>
-            piece.level < 16 &&
+            piece.level < maxLevel &&
             eligibleRarities.includes(piece.rarity) &&
             !piece.slot.includes('implant') &&
             (!slot || piece.slot === slot)
