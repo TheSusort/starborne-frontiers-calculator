@@ -29,6 +29,7 @@ export const useGearUpgrades = () => {
     const { data: storageUpgrades, setData: setStorageUpgrades } = useStorage<Upgrades>({
         key: StorageKey.GEAR_UPGRADES,
         defaultValue: {},
+        useIndexedDB: true,
     });
 
     const simulateUpgrades = useCallback(
