@@ -1,14 +1,7 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { IMPLANTS } from '../constants/implants';
 import { AutogearSuggestion } from '../types/autogearSuggestion';
 import { findBuffsInText, getBuffDescription } from '../utils/buffUtils';
-
-interface OpenRouterResponse {
-    choices: Array<{
-        message: {
-            content: string;
-        };
-    }>;
-}
 
 interface ImplantInfo {
     name: string;
@@ -29,12 +22,11 @@ interface ShipData {
     getGearPiece?: (id: string) => unknown;
 }
 
-export class OpenRouterService {
-    private apiKey: string;
-    private baseUrl = 'https://openrouter.ai/api/v1';
+export class GeminiService {
+    private genAI: GoogleGenerativeAI;
 
     constructor(apiKey: string) {
-        this.apiKey = apiKey;
+        this.genAI = new GoogleGenerativeAI(apiKey);
     }
 
     async getAutogearSuggestion(
@@ -45,38 +37,26 @@ export class OpenRouterService {
         try {
             const prompt = this.buildPrompt(shipName, shipData, combatSystemContext);
 
-            const response = await fetch(`${this.baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    model: 'google/gemini-2.0-flash-exp:free',
-                    messages: [
-                        {
-                            role: 'user',
-                            content: prompt,
-                        },
-                    ],
+            // Use gemini-2.0-flash-exp model
+            const model = this.genAI.getGenerativeModel({
+                model: 'gemini-2.0-flash-exp',
+                generationConfig: {
                     temperature: 0.1,
-                }),
+                    responseMimeType: 'application/json',
+                },
             });
 
-            if (!response.ok) {
-                throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}`);
-            }
-
-            const data: OpenRouterResponse = await response.json();
-            const content = data.choices[0]?.message?.content;
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const content = response.text();
 
             if (!content) {
-                throw new Error('No content received from OpenRouter');
+                throw new Error('No content received from Gemini');
             }
 
             return this.parseResponse(content);
         } catch (error) {
-            console.error('OpenRouter service error:', error);
+            console.error('Gemini service error:', error);
             return null;
         }
     }
@@ -141,11 +121,12 @@ Implants:
 ${implantText}
 
 CRITICAL INSTRUCTIONS:
-1. statPriorities should ONLY include stats mentioned in the ship's skills that require specific thresholds
-2. DO NOT add primary/secondary stats for the role (e.g., attack for ATTACKER, HP for DEFENDER)
-3. DO NOT add crit cap for ATTACKERS/SUPPORTERS - this is handled automatically
-4. statBonuses should boost tertiary stats that scale with skills but aren't the role's main focus
-5. setPriorities should only suggest sets with special synergies beyond the role defaults
+1. check section ### Ship-Specific Optimizations for any special considerations for the ship.
+2. statPriorities should ONLY include stats mentioned in the ship's skills that require specific thresholds
+3. DO NOT add primary/secondary stats for the role (e.g., attack for ATTACKER, HP for DEFENDER)
+4. DO NOT add crit cap for ATTACKERS/SUPPORTERS - this is handled automatically
+5. statBonuses should boost tertiary stats that scale with skills but aren't the role's main focus
+6. setPriorities should only suggest sets with special synergies beyond the role defaults
 
 Provide autogear configuration in JSON format. Return ONLY valid JSON with no markdown formatting:
 
@@ -243,19 +224,19 @@ Example correct outputs:
 
             return parsed as AutogearSuggestion;
         } catch (error) {
-            console.error('Failed to parse OpenRouter response:', error);
+            console.error('Failed to parse Gemini response:', error);
             return null;
         }
     }
 }
 
 // Environment variable check for API key
-export const getOpenRouterService = (): OpenRouterService | null => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+export const getGeminiService = (): GeminiService | null => {
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
     if (!apiKey) {
         // eslint-disable-next-line no-console
-        console.warn('OpenRouter API key not found in environment variables');
+        console.warn('Google API key not found in environment variables');
         return null;
     }
-    return new OpenRouterService(apiKey);
+    return new GeminiService(apiKey);
 };

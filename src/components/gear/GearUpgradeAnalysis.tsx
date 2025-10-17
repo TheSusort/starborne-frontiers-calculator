@@ -62,8 +62,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                     role,
                     6,
                     undefined,
-                    selectedRarity,
-                    maxLevel
+                    selectedRarity
                 );
 
                 // Get slot-specific results
@@ -76,8 +75,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                                 role,
                                 6,
                                 slotName as GearSlotName,
-                                selectedRarity,
-                                maxLevel
+                                selectedRarity
                             );
                             return acc;
                         },

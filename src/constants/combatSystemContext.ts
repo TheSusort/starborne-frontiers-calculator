@@ -246,6 +246,7 @@ The following roles are available in the Autogear system, each with specific opt
 - **Mei**: Has passive stealth, doesn't need CLOAKING set
 - **Howler**: Supporter classification but gear as crit-capped ATTACKER
 - **Vindicator**: Defender with security-scaling defense, use DEFENDER (Security) role
+- **Heliodor|Isha**: Defenders with self healing, this is handled automatically by autogear, so no need to add any priority for crit stats.
 
 ## OPTIMIZATION GUIDELINES
 
