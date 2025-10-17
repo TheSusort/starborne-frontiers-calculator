@@ -24,6 +24,7 @@ export const GearPage: React.FC = () => {
     const tabs = [
         { id: 'inventory', label: 'Inventory' },
         { id: 'analysis', label: 'Upgrade Analysis' },
+        { id: 'simulation', label: 'Simulate Upgrades' },
     ];
 
     const handleRemovePiece = async (id: string) => {
@@ -95,17 +96,26 @@ export const GearPage: React.FC = () => {
                 </CollapsibleForm>
 
                 <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-                {activeTab === 'inventory' ? (
+                {activeTab === 'inventory' && (
                     <GearInventory
                         inventory={inventory}
                         onRemove={handleRemovePiece}
                         onEdit={handleEditPiece}
                         maxItems={inventory.length}
                     />
-                ) : (
+                )}
+                {activeTab === 'analysis' && (
                     <GearUpgradeAnalysis
                         inventory={inventory}
                         shipRoles={Object.keys(SHIP_TYPES)}
+                        mode="analysis"
+                    />
+                )}
+                {activeTab === 'simulation' && (
+                    <GearUpgradeAnalysis
+                        inventory={inventory}
+                        shipRoles={Object.keys(SHIP_TYPES)}
+                        mode="simulation"
                     />
                 )}
 

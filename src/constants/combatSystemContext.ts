@@ -241,12 +241,11 @@ The following roles are available in the Autogear system, each with specific opt
 ### Ship-Specific Optimizations
 - **Xcellence**: Low hacking builds to trigger resist-based passive skills
 - **Corrosion Ships**: Aim for 100% crit rate/power if passives trigger on crits
-- **Heliodor**: Supporter role but optimize as crit-capped defender
+- **Heliodor**: Supporter role but optimize as defender
 - **Voron**: Self-DoT mechanics favor shield generation, HP, defense, security over hacking
 - **Mei**: Has passive stealth, doesn't need CLOAKING set
 - **Howler**: Supporter classification but gear as crit-capped ATTACKER
 - **Vindicator**: Defender with security-scaling defense, use DEFENDER (Security) role
-- **Heliodor|Isha**: Defenders with self healing, this is handled automatically by autogear, so no need to add any priority for crit stats.
 
 ## OPTIMIZATION GUIDELINES
 

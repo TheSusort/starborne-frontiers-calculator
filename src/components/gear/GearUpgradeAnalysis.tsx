@@ -11,6 +11,7 @@ import { Tabs } from '../ui/layout/Tabs';
 interface Props {
     inventory: GearPiece[];
     shipRoles: ShipTypeName[];
+    mode: 'analysis' | 'simulation';
 }
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -21,7 +22,7 @@ const RARITY_OPTIONS = [
     { value: 'legendary', label: 'Legendary', description: 'Legendary only' },
 ] as const;
 
-export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) => {
+export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode }) => {
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
     const [isLoading, setIsLoading] = useState(false);
@@ -56,26 +57,42 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         return new Promise((resolve) => {
             // Use setTimeout to allow UI updates
             setTimeout(() => {
+                // Determine simulation count based on filters
+                // Increase runs for higher rarity filters (fewer pieces = more accuracy per piece)
+                let simulationCount = 20; // Default for rare+
+                if (selectedRarity === 'legendary') {
+                    simulationCount = 80; // High accuracy for legendary pieces
+                } else if (selectedRarity === 'epic') {
+                    simulationCount = 40; // Medium accuracy for epic pieces
+                } else if (maxLevel !== 16) {
+                    simulationCount = 40; // Increased accuracy when level filter is applied
+                }
+
+                // Filter inventory by maxLevel
+                const filteredInventory = inventory.filter((piece) => piece.level <= maxLevel);
+
                 // Get overall results
                 const roleResults = analyzePotentialUpgrades(
-                    inventory,
+                    filteredInventory,
                     role,
                     6,
                     undefined,
-                    selectedRarity
+                    selectedRarity,
+                    simulationCount
                 );
 
                 // Get slot-specific results
                 const slotResults = Object.entries(GEAR_SLOTS)
                     .filter(([_, slot]) => !slot.label.includes('Implant'))
                     .reduce(
-                        (acc, [slotName, slot]) => {
+                        (acc, [slotName, _]) => {
                             acc[slotName] = analyzePotentialUpgrades(
-                                inventory,
+                                filteredInventory,
                                 role,
                                 6,
                                 slotName as GearSlotName,
-                                selectedRarity
+                                selectedRarity,
+                                simulationCount
                             );
                             return acc;
                         },
@@ -150,11 +167,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
         setOptimizationProgress(null);
     };
 
-    // Initial analysis when component mounts or when rarity/maxLevel changes
-    React.useEffect(() => {
-        handleAnalyze();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inventory, selectedRarity, maxLevel]);
+    // Removed automatic analysis - now requires manual button click
 
     const handleSlotChange = (role: ShipTypeName, slot: GearSlotName | 'all') => {
         setSelectedSlots((prev) => ({
@@ -165,74 +178,105 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
 
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Gear Upgrade Analysis</h2>
-                <div className="space-x-4">
-                    <Button variant="primary" onClick={handleSimulateUpgrades} disabled={isLoading}>
-                        Simulate Upgrades
-                    </Button>
-                    <Button variant="secondary" onClick={handleClearUpgrades} disabled={isLoading}>
-                        Clear Simulations
-                    </Button>
-                </div>
-            </div>
-            <span className="text-sm text-gray-400">
-                This analysis tries to find the 6 best gear upgrades for each ship role, by
-                simulating upgrading each piece to 16, 20 different times, and averaging the
-                results. Use the rarity filter to focus on specific gear tiers. The improvement
-                percentages are the average improvement to the role score over the current level of
-                the piece. Sorted by the total improvement to the role score. Simulating gear
-                upgrades will also update the gear cards with the upgraded stats, but ranking is
-                still sorted based on average improvement to the role score.
-            </span>
-            <br />
-            <br />
-            <span className="text-sm text-gray-400">
-                Simulate Upgrades will run through all gear and upgrade it randomly, like in the
-                game. The upgraded stats will now be displayed in the gear cards. Original stats is
-                displayed in green color. Clear upgrades button is used to reset the gear.
-            </span>
+            {mode === 'analysis' && (
+                <>
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-400">
+                            Find the best gear pieces to upgrade for maximum stat improvements.
+                        </span>
+                        <Button variant="primary" onClick={handleAnalyze} disabled={isLoading}>
+                            {isLoading ? 'Analyzing...' : 'Analyze Gear'}
+                        </Button>
+                    </div>
+                    <span className="text-sm text-gray-400">
+                        Click &quot;Analyze Gear&quot; to find the 6 best gear upgrades for each
+                        ship role. The analysis simulates upgrading each piece to level 16 multiple
+                        times and averages the results (20 runs for rare+, 40 runs for epic+, 80
+                        runs for legendary). Use the rarity and level filters to narrow your search.
+                        The improvement percentages show the average improvement to the role score.
+                        Results are sorted by total improvement to the role score.
+                    </span>
+                </>
+            )}
 
-            {/* Filters */}
-            <div className="space-x-4 flex">
-                {/* Rarity Filter */}
-                <div className="space-y-1">
-                    <p className="text-sm font-medium py-[6px]">Rarity Filter</p>
-                    <div className="flex flex-wrap gap-2">
-                        {RARITY_OPTIONS.map((option) => (
+            {mode === 'simulation' && (
+                <>
+                    <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-400">
+                            Simulate random upgrades on your gear to preview potential stats.
+                        </span>
+                        <div className="space-x-4">
                             <Button
-                                key={option.value}
-                                onClick={() => setSelectedRarity(option.value)}
-                                className={`text-sm font-medium transition-colors h-auto text-left`}
-                                variant={selectedRarity === option.value ? 'primary' : 'secondary'}
+                                variant="primary"
+                                onClick={handleSimulateUpgrades}
+                                disabled={isLoading}
                             >
-                                <div>
-                                    <div>{option.label}</div>
-                                    <div className="text-xs opacity-75">{option.description}</div>
-                                </div>
+                                Simulate Upgrades
                             </Button>
-                        ))}
+                            <Button
+                                variant="secondary"
+                                onClick={handleClearUpgrades}
+                                disabled={isLoading}
+                            >
+                                Clear Simulations
+                            </Button>
+                        </div>
+                    </div>
+                    <span className="text-sm text-gray-400">
+                        &quot;Simulate Upgrades&quot; will randomly upgrade all your gear pieces,
+                        just like in the game. The upgraded stats will be displayed on gear cards
+                        throughout the app, with original stats shown in green. Use &quot;Clear
+                        Simulations&quot; to reset all gear back to their actual stats.
+                    </span>
+                </>
+            )}
+
+            {/* Filters - only show for analysis mode */}
+            {mode === 'analysis' && (
+                <div className="space-x-4 flex">
+                    {/* Rarity Filter */}
+                    <div className="space-y-1">
+                        <p className="text-sm font-medium py-[6px]">Rarity Filter</p>
+                        <div className="flex flex-wrap gap-2">
+                            {RARITY_OPTIONS.map((option) => (
+                                <Button
+                                    key={option.value}
+                                    onClick={() => setSelectedRarity(option.value)}
+                                    className={`text-sm font-medium transition-colors h-auto text-left`}
+                                    variant={
+                                        selectedRarity === option.value ? 'primary' : 'secondary'
+                                    }
+                                >
+                                    <div>
+                                        <div>{option.label}</div>
+                                        <div className="text-xs opacity-75">
+                                            {option.description}
+                                        </div>
+                                    </div>
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Level Filter */}
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <Input
+                                label="Max Level Filter"
+                                type="number"
+                                value={maxLevel}
+                                onChange={(e) => setMaxLevel(parseInt(e.target.value))}
+                                min={0}
+                                max={16}
+                                helpLabel="Gear with level above this will be excluded"
+                                className="py-[26px]"
+                            />
+                        </div>
                     </div>
                 </div>
+            )}
 
-                {/* Level Filter */}
-                <div>
-                    <div className="flex items-center gap-3">
-                        <Input
-                            label="Max Level Filter"
-                            type="number"
-                            value={maxLevel}
-                            onChange={(e) => setMaxLevel(parseInt(e.target.value))}
-                            min={0}
-                            max={16}
-                            helpLabel="Gear with level above this will be excluded"
-                            className="py-[26px]"
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {optimizationProgress && (
+            {mode === 'analysis' && optimizationProgress && (
                 <ProgressBar
                     current={optimizationProgress.current}
                     total={optimizationProgress.total}
@@ -240,58 +284,71 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles }) =
                 />
             )}
 
-            {shipRoles.map((role) => {
-                const roleResults = results[role] || {};
-                const selectedSlot = selectedSlots[role] || 'all';
-                const currentResults = roleResults[selectedSlot] || [];
+            {mode === 'analysis' && Object.keys(results).length === 0 && !isLoading && (
+                <div className="text-center py-12 text-gray-400">
+                    <p className="text-lg">No analysis results yet.</p>
+                    <p className="text-sm mt-2">
+                        Click &quot;Analyze Gear&quot; to find the best upgrade candidates.
+                    </p>
+                </div>
+            )}
 
-                if (currentResults.length === 0) return null;
+            {mode === 'analysis' &&
+                shipRoles.map((role) => {
+                    const roleResults = results[role] || {};
+                    const selectedSlot = selectedSlots[role] || 'all';
+                    const currentResults = roleResults[selectedSlot] || [];
 
-                const slotTabs = [
-                    { id: 'all', label: 'All Slots' },
-                    ...Object.entries(GEAR_SLOTS)
-                        .filter(([_, slot]) => !slot.label.includes('Implant'))
-                        .map(([slotName, slot]) => ({
-                            id: slotName,
-                            label: slot.label,
-                        })),
-                ];
+                    if (currentResults.length === 0) return null;
 
-                return (
-                    <div key={role} className="space-y-4 bg-dark p-4">
-                        <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
-                        <span className="text-sm text-gray-400">
-                            {SHIP_TYPES[role].description}
-                        </span>
-                        <Tabs
-                            tabs={slotTabs}
-                            activeTab={selectedSlot}
-                            onChange={(tab) => handleSlotChange(role, tab as GearSlotName | 'all')}
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {currentResults.map((result, index) => (
-                                <div key={result.piece.id} className="space-y-2">
-                                    <GearPieceDisplay gear={result.piece} />
-                                    <div className="text-sm px-4 pb-4">
-                                        <div
-                                            className={`flex justify-between ${winnerColors[index]}`}
-                                        >
-                                            <span>Avg. gear improvement:</span>
-                                            <span>
-                                                {' +'}
-                                                {Math.round(
-                                                    (result.improvement / result.currentScore) * 100
-                                                )}
-                                                %
-                                            </span>
+                    const slotTabs = [
+                        { id: 'all', label: 'All Slots' },
+                        ...Object.entries(GEAR_SLOTS)
+                            .filter(([_, slot]) => !slot.label.includes('Implant'))
+                            .map(([slotName, slot]) => ({
+                                id: slotName,
+                                label: slot.label,
+                            })),
+                    ];
+
+                    return (
+                        <div key={role} className="space-y-4 bg-dark p-4">
+                            <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
+                            <span className="text-sm text-gray-400">
+                                {SHIP_TYPES[role].description}
+                            </span>
+                            <Tabs
+                                tabs={slotTabs}
+                                activeTab={selectedSlot}
+                                onChange={(tab) =>
+                                    handleSlotChange(role, tab as GearSlotName | 'all')
+                                }
+                            />
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {currentResults.map((result, index) => (
+                                    <div key={result.piece.id} className="space-y-2">
+                                        <GearPieceDisplay gear={result.piece} />
+                                        <div className="text-sm px-4 pb-4">
+                                            <div
+                                                className={`flex justify-between ${winnerColors[index]}`}
+                                            >
+                                                <span>Avg. gear improvement:</span>
+                                                <span>
+                                                    {' +'}
+                                                    {Math.round(
+                                                        (result.improvement / result.currentScore) *
+                                                            100
+                                                    )}
+                                                    %
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
         </div>
     );
 };

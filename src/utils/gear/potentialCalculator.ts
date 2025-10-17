@@ -235,7 +235,8 @@ export function analyzePotentialUpgrades(
     shipRole: ShipTypeName,
     count: number = 6,
     slot?: GearSlotName,
-    minRarity: 'rare' | 'epic' | 'legendary' = 'rare'
+    minRarity: 'rare' | 'epic' | 'legendary' = 'rare',
+    simulationCount: number = 20
 ): PotentialResult[] {
     // Clear the gear stats cache to ensure we get fresh calculations for each simulation
     clearGearStatsCache();
@@ -256,7 +257,7 @@ export function analyzePotentialUpgrades(
         const currentStats = calculateGearStats(piece);
         const currentScore = calculatePriorityScore(currentStats, [], shipRole);
 
-        const simulations = Array.from({ length: 20 }, () => {
+        const simulations = Array.from({ length: simulationCount }, () => {
             const { piece: upgradedPiece } = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
             const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
