@@ -46,7 +46,7 @@ export const StatDisplay: React.FC<Props> = ({
                                         stats.find(
                                             (s) => s.name === stat.name && s.type === stat.type
                                         ) && (
-                                            <span className="text-green-400">
+                                            <span className="text-gray-500">
                                                 {' ('}
                                                 {
                                                     stats.find(

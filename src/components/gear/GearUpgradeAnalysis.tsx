@@ -225,7 +225,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     <span className="text-sm text-gray-400">
                         &quot;Simulate Upgrades&quot; will randomly upgrade all your gear pieces,
                         just like in the game. The upgraded stats will be displayed on gear cards
-                        throughout the app, with original stats shown in green. Use &quot;Clear
+                        throughout the app, with original stats shown in gray. Use &quot;Clear
                         Simulations&quot; to reset all gear back to their actual stats.
                     </span>
                 </>
