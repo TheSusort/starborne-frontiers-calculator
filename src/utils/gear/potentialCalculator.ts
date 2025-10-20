@@ -188,14 +188,14 @@ function calculateGearStats(piece: GearPiece): BaseStats {
     const breakdown = calculateTotalStats(
         // Empty base stats with adjusted crit for crit-capping
         {
-            hp: 22000,
-            attack: 6000,
-            defence: 5000,
-            hacking: 100,
-            security: 100,
-            speed: 100,
+            hp: 30000,
+            attack: 8000,
+            defence: 8000,
+            hacking: 200,
+            security: 200,
+            speed: 150,
             crit: baseCrit,
-            critDamage: 100,
+            critDamage: 150,
             healModifier: 0,
             defensePenetration: 0,
         },

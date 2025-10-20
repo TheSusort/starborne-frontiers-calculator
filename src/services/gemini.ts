@@ -39,9 +39,9 @@ export class GeminiService {
 
             // Use gemini-2.0-flash-exp model
             const model = this.genAI.getGenerativeModel({
-                model: 'gemini-2.0-flash-exp',
+                model: 'gemini-2.0-flash',
                 generationConfig: {
-                    temperature: 0.1,
+                    temperature: 0.3,
                     responseMimeType: 'application/json',
                 },
             });
