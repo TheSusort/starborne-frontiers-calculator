@@ -48,8 +48,14 @@ const HomePage: React.FC = () => {
                                 </h3>
                             </div>
                             <p className="text-gray-300 mb-4">
-                                Export your game data from Starborne Frontiers and import it here.
-                                This will populate your ships, gear, and engineering stats.
+                                <Link
+                                    to="/documentation#getting-started"
+                                    className="text-primary hover:text-primary-hover"
+                                >
+                                    Export your game data
+                                </Link>{' '}
+                                from Starborne Frontiers and import it here. This will populate your
+                                ships, gear, and engineering stats.
                             </p>
                             <ImportButton className="w-full" />
                         </div>

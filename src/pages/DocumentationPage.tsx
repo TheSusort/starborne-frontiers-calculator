@@ -165,6 +165,27 @@ const DocumentationPage: React.FC = () => {
                                                 data
                                             </li>
                                         </ol>
+
+                                        <div className="mt-4">
+                                            <h4 className="font-semibold text-primary mb-2">
+                                                Video Guide:
+                                            </h4>
+                                            <div className="relative w-full max-w-2xl border border-dark-border">
+                                                <video
+                                                    className="w-full h-auto"
+                                                    autoPlay
+                                                    loop
+                                                    muted
+                                                    playsInline
+                                                >
+                                                    <source
+                                                        src="/videos/export.mov"
+                                                        type="video/mp4"
+                                                    />
+                                                    Your browser does not support the video tag.
+                                                </video>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div className="p-4 bg-dark-lighter">
