@@ -50,6 +50,32 @@
         clip-path: polygon(0 10px, 10px 0, 100% 0, 100% 0%, 100% 100%, 0% 100%);
     }
 
+    /* Hero carousel animations */
+    .animate-fadeIn {
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+    .animation-delay-200 {
+        animation-delay: 0.2s;
+        animation-fill-mode: both;
+    }
+
+    .animation-delay-400 {
+        animation-delay: 0.4s;
+        animation-fill-mode: both;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
     .shine-effect {
         &::after {
             background: #fff;

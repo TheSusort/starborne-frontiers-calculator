@@ -266,6 +266,7 @@ export const ImportButton: React.FC<{
                     variant="primary"
                     onClick={() => document.getElementById('import-file-input')?.click()}
                     className={className}
+                    data-import-button
                 >
                     {loading ? (
                         <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-dark absolute top-2 left-1/2"></div>
