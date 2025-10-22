@@ -320,6 +320,9 @@ export const LeaderboardPage: React.FC = () => {
 
     const decodedShipName = shipName ? decodeURIComponent(shipName) : '';
 
+    // Get the top score for relative comparison
+    const topScore = leaderboardData.length > 0 ? leaderboardData[0].score : 0;
+
     return (
         <>
             <Seo
@@ -436,14 +439,33 @@ export const LeaderboardPage: React.FC = () => {
                                             );
                                         })}
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-md lg:text-2xl font-bold text-white">
-                                            {Intl.NumberFormat('en', {
-                                                notation: 'compact',
-                                                maximumFractionDigits: 2,
-                                            }).format(entry.score)}
+                                    <div className="flex flex-col items-end gap-2 min-w-48">
+                                        <div className="text-right">
+                                            <div className="text-md lg:text-2xl font-bold text-white">
+                                                {topScore > 0
+                                                    ? `${((entry.score / topScore) * 100).toFixed(1)}%`
+                                                    : '0%'}
+                                            </div>
+                                            <div className="text-sm text-gray-400">
+                                                {entry.rank === 1 ? 'Top Score' : 'vs Top'}
+                                            </div>
                                         </div>
-                                        <div className="text-sm text-gray-400">Score</div>
+                                        <div className="w-full bg-gray-700 h-2 relative overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-300 ${
+                                                    entry.rank === 1
+                                                        ? 'bg-yellow-400'
+                                                        : entry.rank === 2
+                                                          ? 'bg-gray-300'
+                                                          : entry.rank === 3
+                                                            ? 'bg-amber-600'
+                                                            : 'bg-primary'
+                                                }`}
+                                                style={{
+                                                    width: `${topScore > 0 ? (entry.score / topScore) * 100 : 0}%`,
+                                                }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             ))}
