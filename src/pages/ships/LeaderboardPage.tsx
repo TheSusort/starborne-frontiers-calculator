@@ -349,7 +349,13 @@ export const LeaderboardPage: React.FC = () => {
                                 </label>
                                 <Select
                                     options={[
-                                        { value: '', label: "Default (Ship's Role)" },
+                                        {
+                                            value: '',
+                                            label:
+                                                leaderboardData.length > 0
+                                                    ? `Default (${SHIP_TYPES[leaderboardData[0].ship.type]?.name || 'Ship Role'})`
+                                                    : "Default (Ship's Role)",
+                                        },
                                         ...Object.entries(SHIP_TYPES).map(([key, type]) => ({
                                             value: key,
                                             label: `${type.name}`,
