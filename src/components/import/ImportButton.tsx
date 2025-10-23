@@ -151,6 +151,9 @@ export const ImportButton: React.FC<{
                         }
                     }
 
+                    // Track data import (for both logged-in and anonymous users)
+                    await trackDataImport(user?.id);
+
                     // sync to supabase if user is logged in
                     if (user) {
                         const syncResult = await syncMigratedDataToSupabase(user.id, {
@@ -163,8 +166,6 @@ export const ImportButton: React.FC<{
                         });
 
                         if (syncResult.success) {
-                            // Track data import
-                            await trackDataImport(user.id);
                             refreshPage('Data synced successfully, refreshing in 3 seconds...');
                         } else {
                             addNotification(

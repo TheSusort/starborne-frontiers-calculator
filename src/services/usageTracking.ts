@@ -1,11 +1,16 @@
 import { supabase } from '../config/supabase';
 
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000'; // Special UUID for anonymous users
+
 /**
- * Increments the autogear run count for a user
+ * Increments the autogear run count for a user (logged in or anonymous)
  */
-export async function trackAutogearRun(userId: string): Promise<void> {
+export async function trackAutogearRun(userId?: string | null): Promise<void> {
     try {
-        const { error } = await supabase.rpc('increment_autogear_count', { user_id: userId });
+        const trackingUserId = userId || ANONYMOUS_USER_ID;
+        const { error } = await supabase.rpc('increment_autogear_count', {
+            user_id: trackingUserId,
+        });
 
         if (error) {
             console.error('Error tracking autogear run:', error);
@@ -16,11 +21,14 @@ export async function trackAutogearRun(userId: string): Promise<void> {
 }
 
 /**
- * Increments the data import count for a user
+ * Increments the data import count for a user (logged in or anonymous)
  */
-export async function trackDataImport(userId: string): Promise<void> {
+export async function trackDataImport(userId?: string | null): Promise<void> {
     try {
-        const { error } = await supabase.rpc('increment_import_count', { user_id: userId });
+        const trackingUserId = userId || ANONYMOUS_USER_ID;
+        const { error } = await supabase.rpc('increment_import_count', {
+            user_id: trackingUserId,
+        });
 
         if (error) {
             console.error('Error tracking data import:', error);

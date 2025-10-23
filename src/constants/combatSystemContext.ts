@@ -94,13 +94,15 @@ Base stats available for ships (parentheses show typical value ranges for gaugin
 - **Ultimate Implants**: No stats, but powerful passive skills
   - *Important: Ultimate implant skills are NOT factored into autogear optimization*
 
-#### Key Ultimate Implants
+#### Key Implants
 - **Code Guard**: Improves security based on hacking stat
   - Ships with Code Guard should prioritize hacking stat bonuses
   - Can use lower security thresholds due to Code Guard's boost
 - **Cipher Link**: Improves hacking based on security stat
   - Ships with Cipher Link should prioritize security stat bonuses
   - Can use lower hacking thresholds due to Cipher Link's boost
+- **Resonating Fury / Arcane Siege**: Buffs on shield grants
+  - Ships with these, AND do not have shield grants in their skills, should prioritize shield gear set
 
 ## SHIP ROLES & OPTIMIZATION
 

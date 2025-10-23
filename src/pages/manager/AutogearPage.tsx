@@ -431,10 +431,8 @@ export const AutogearPage: React.FC = () => {
         performanceTracker.endTimer('TotalAutogear');
         performanceTracker.printSummary();
 
-        // Track autogear run if user is logged in
-        if (user?.id) {
-            trackAutogearRun(user.id);
-        }
+        // Track autogear run (for both logged-in and anonymous users)
+        trackAutogearRun(user?.id);
     };
 
     const handleEquipSuggestionsForShip = (shipId: string) => {
