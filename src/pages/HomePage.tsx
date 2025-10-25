@@ -24,6 +24,14 @@ import { HeroCarousel } from '../components/home/HeroCarousel';
 import { Button } from '../components/ui/Button';
 
 const HomePage: React.FC = () => {
+    const exportVideoRef = React.useRef<HTMLVideoElement>(null);
+    const shipsVideoRef = React.useRef<HTMLVideoElement>(null);
+    const autogearVideoRef = React.useRef<HTMLVideoElement>(null);
+
+    const [isExportPlaying, setIsExportPlaying] = React.useState(false);
+    const [isShipsPlaying, setIsShipsPlaying] = React.useState(false);
+    const [isAutogearPlaying, setIsAutogearPlaying] = React.useState(false);
+
     return (
         <>
             <Seo {...SEO_CONFIG.home} />
@@ -38,7 +46,17 @@ const HomePage: React.FC = () => {
                         <p className="text-gray-400">Get started in three simple steps</p>
                     </div>
                     <div className="grid gap-6 md:grid-cols-3">
-                        <div className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors group">
+                        <div
+                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors group"
+                            onMouseEnter={() => {
+                                exportVideoRef.current?.play();
+                                setIsExportPlaying(true);
+                            }}
+                            onMouseLeave={() => {
+                                exportVideoRef.current?.pause();
+                                setIsExportPlaying(false);
+                            }}
+                        >
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center">
                                     <Upload className="text-white" size={24} />
@@ -46,6 +64,19 @@ const HomePage: React.FC = () => {
                                 <h3 className="text-xl font-semibold text-gray-100">
                                     1. Import Data
                                 </h3>
+                            </div>
+                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                                <video
+                                    ref={exportVideoRef}
+                                    src="/videos/export.mov"
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                {!isExportPlaying && (
+                                    <div className="absolute inset-0 bg-black/50 transition-opacity duration-300" />
+                                )}
                             </div>
                             <p className="text-gray-300 mb-4">
                                 <Link
@@ -59,7 +90,17 @@ const HomePage: React.FC = () => {
                             </p>
                             <ImportButton className="w-full" />
                         </div>
-                        <div className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors">
+                        <div
+                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors"
+                            onMouseEnter={() => {
+                                shipsVideoRef.current?.play();
+                                setIsShipsPlaying(true);
+                            }}
+                            onMouseLeave={() => {
+                                shipsVideoRef.current?.pause();
+                                setIsShipsPlaying(false);
+                            }}
+                        >
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center">
                                     <Eye className="text-white" size={24} />
@@ -67,6 +108,19 @@ const HomePage: React.FC = () => {
                                 <h3 className="text-xl font-semibold text-gray-100">
                                     2. View Your Fleet
                                 </h3>
+                            </div>
+                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                                <video
+                                    ref={shipsVideoRef}
+                                    src="/videos/ships.mov"
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                {!isShipsPlaying && (
+                                    <div className="absolute inset-0 bg-black/50 transition-opacity duration-300" />
+                                )}
                             </div>
                             <p className="text-gray-300 mb-4">
                                 Browse your fleet in{' '}
@@ -80,7 +134,17 @@ const HomePage: React.FC = () => {
                                 . Analyze gear, find upgrade suggestions and more.
                             </p>
                         </div>
-                        <div className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors">
+                        <div
+                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors"
+                            onMouseEnter={() => {
+                                autogearVideoRef.current?.play();
+                                setIsAutogearPlaying(true);
+                            }}
+                            onMouseLeave={() => {
+                                autogearVideoRef.current?.pause();
+                                setIsAutogearPlaying(false);
+                            }}
+                        >
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-orange-800 flex items-center justify-center">
                                     <Zap className="text-white" size={24} />
@@ -88,6 +152,19 @@ const HomePage: React.FC = () => {
                                 <h3 className="text-xl font-semibold text-gray-100">
                                     3. Optimize Gear
                                 </h3>
+                            </div>
+                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                                <video
+                                    ref={autogearVideoRef}
+                                    src="/videos/autogear.mov"
+                                    loop
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                />
+                                {!isAutogearPlaying && (
+                                    <div className="absolute inset-0 bg-black/50 transition-opacity duration-300" />
+                                )}
                             </div>
                             <p className="text-gray-300 mb-4">
                                 Use the{' '}
