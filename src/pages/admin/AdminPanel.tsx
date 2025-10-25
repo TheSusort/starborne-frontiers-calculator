@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
-import { PageLayout, Select, Tabs } from '../../components/ui';
+import { PageLayout, Select, Tabs, CollapsibleForm, Button } from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
 import { TopUsersTable } from '../../components/admin/TopUsersTable';
 import { StatCard } from '../../components/admin/StatCard';
@@ -9,6 +9,7 @@ import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { UserDistributionChart } from '../../components/admin/UserDistributionChart';
 import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';
+import { AddShipTemplateForm } from '../../components/admin/AddShipTemplateForm';
 import {
     isAdmin,
     getDailyUsageStats,
@@ -31,7 +32,9 @@ import {
     getPendingProposals,
     approveProposal,
     rejectProposal,
+    addShipTemplate,
     TemplateProposalRecord,
+    NewShipTemplateData,
 } from '../../services/shipTemplateProposalService';
 import { Loader } from '../../components/ui/Loader';
 import { useNotification } from '../../hooks/useNotification';
@@ -56,6 +59,8 @@ export const AdminPanel: React.FC = () => {
 
     // Template proposals state
     const [templateProposals, setTemplateProposals] = useState<TemplateProposalRecord[]>([]);
+    const [addingTemplate, setAddingTemplate] = useState(false);
+    const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
 
     const loadData = React.useCallback(async () => {
         const [statsData, usersData, userCount, sysStats, growth, tables, distribution, proposals] =
@@ -105,6 +110,26 @@ export const AdminPanel: React.FC = () => {
             setTemplateProposals(proposals);
         } else {
             addNotification('error', `Failed to reject proposal: ${result.error}`);
+        }
+    };
+
+    const handleAddTemplate = async (data: NewShipTemplateData) => {
+        setAddingTemplate(true);
+        try {
+            const result = await addShipTemplate(data);
+            if (result.success) {
+                addNotification('success', `Ship template "${data.name}" added successfully!`);
+                setShowAddTemplateForm(false); // Close the form on success
+            } else {
+                addNotification('error', `Failed to add ship template: ${result.error}`);
+            }
+        } catch (error) {
+            addNotification(
+                'error',
+                `Error adding ship template: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+        } finally {
+            setAddingTemplate(false);
         }
     };
 
@@ -290,6 +315,24 @@ export const AdminPanel: React.FC = () => {
                 {/* Template Proposals Tab */}
                 {activeTab === 'template-proposals' && (
                     <div className="space-y-6">
+                        {/* Toggle Button */}
+                        <div className="flex justify-end">
+                            <Button
+                                onClick={() => setShowAddTemplateForm(!showAddTemplateForm)}
+                                variant={showAddTemplateForm ? 'secondary' : 'primary'}
+                            >
+                                {showAddTemplateForm ? 'Hide Form' : 'Add New Ship Template'}
+                            </Button>
+                        </div>
+
+                        {/* Collapsible Form */}
+                        <CollapsibleForm isVisible={showAddTemplateForm}>
+                            <AddShipTemplateForm
+                                onSubmit={handleAddTemplate}
+                                loading={addingTemplate}
+                            />
+                        </CollapsibleForm>
+
                         <TemplateProposalsTable
                             proposals={templateProposals}
                             onApprove={handleApproveProposal}

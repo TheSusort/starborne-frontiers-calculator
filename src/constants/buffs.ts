@@ -621,4 +621,9 @@ export const BUFFS: Buff[] = [
         name: 'Charged Overdrive II',
         description: 'Grants the next Charged Skill activation 20% Defense Penetration',
     },
+    {
+        name: 'Toxic Overflow',
+        description:
+            'At the end of the round if a unit has Toxic Overflow and at last 1 stack of Corrosion, inflict Corrosion I for 3 turns to all adjacent allies and remove Toxic Overflow.',
+    },
 ];
