@@ -166,12 +166,22 @@ export function useStorage<T>(config: StorageConfig<T>) {
     );
 
     const setData = useCallback(
-        (newData: T | ((prev: T) => T)) => {
-            const updatedData =
-                typeof newData === 'function' ? (newData as (prev: T) => T)(localData) : newData;
-            return saveData(updatedData);
+        async (newData: T | ((prev: T) => T)) => {
+            return new Promise<void>((resolve) => {
+                // Use setLocalData's callback to get the latest state
+                setLocalData((currentData) => {
+                    const updatedData =
+                        typeof newData === 'function'
+                            ? (newData as (prev: T) => T)(currentData)
+                            : newData;
+
+                    // Save to storage asynchronously
+                    saveData(updatedData).then(resolve).catch(resolve);
+
+                    return updatedData;
+                });
+            });
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [saveData]
     );
 
