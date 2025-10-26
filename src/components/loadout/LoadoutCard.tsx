@@ -69,7 +69,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                 </div>
             )}
 
-            <ShipDisplay ship={ship} variant="compact">
+            <ShipDisplay ship={ship} variant="compact" contentClassName="flex-col">
                 {showControls && (
                     <div className="flex gap-2 -mt-10">
                         {onEquip && (

@@ -380,10 +380,10 @@ export const useLoadouts = () => {
                 if (shipError) throw shipError;
 
                 // Create equipment records
-                const equipmentRecords = teamLoadout.shipLoadouts.flatMap((loadout, position) =>
+                const equipmentRecords = teamLoadout.shipLoadouts.flatMap((loadout) =>
                     Object.entries(loadout.equipment).map(([slot, gearId]) => ({
                         team_loadout_id: teamLoadoutData.id,
-                        position,
+                        ship_id: loadout.shipId,
                         slot,
                         gear_id: gearId,
                     }))
@@ -395,15 +395,26 @@ export const useLoadouts = () => {
 
                 if (equipmentError) throw equipmentError;
 
-                // Update local state with the server-generated ID
+                // Fetch the complete team loadout with all relations
+                const { data: completeTeamLoadout, error: fetchError } = await supabase
+                    .from('team_loadouts')
+                    .select(
+                        `
+                        *,
+                        team_loadout_ships (*),
+                        team_loadout_equipment (*)
+                    `
+                    )
+                    .eq('id', teamLoadoutData.id)
+                    .single();
+
+                if (fetchError) throw fetchError;
+
+                // Update local state with the complete data from Supabase
                 setTeamLoadouts((prev) =>
                     prev.map((item) =>
                         item.id === newTeamLoadout.id
-                            ? {
-                                  ...item,
-                                  id: teamLoadoutData.id,
-                                  createdAt: new Date(teamLoadoutData.created_at).getTime(),
-                              }
+                            ? transformTeamLoadout(completeTeamLoadout)
                             : item
                     )
                 );
@@ -476,10 +487,10 @@ export const useLoadouts = () => {
                 if (shipError) throw shipError;
 
                 // Create new equipment records
-                const equipmentRecords = shipLoadouts.flatMap((loadout, position) =>
+                const equipmentRecords = shipLoadouts.flatMap((loadout) =>
                     Object.entries(loadout.equipment).map(([slot, gearId]) => ({
                         team_loadout_id: id,
-                        position,
+                        ship_id: loadout.shipId,
                         slot,
                         gear_id: gearId,
                     }))
@@ -490,6 +501,28 @@ export const useLoadouts = () => {
                     .insert(equipmentRecords);
 
                 if (equipmentError) throw equipmentError;
+
+                // Fetch the complete team loadout with all relations
+                const { data: completeTeamLoadout, error: fetchError } = await supabase
+                    .from('team_loadouts')
+                    .select(
+                        `
+                        *,
+                        team_loadout_ships (*),
+                        team_loadout_equipment (*)
+                    `
+                    )
+                    .eq('id', id)
+                    .single();
+
+                if (fetchError) throw fetchError;
+
+                // Update local state with the complete data from Supabase
+                setTeamLoadouts((prev) =>
+                    prev.map((item) =>
+                        item.id === id ? transformTeamLoadout(completeTeamLoadout) : item
+                    )
+                );
 
                 addNotification('success', 'Team loadout updated');
             } catch (error) {

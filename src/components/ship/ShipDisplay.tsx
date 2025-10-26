@@ -37,6 +37,7 @@ interface Props {
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onQuickAdd?: (ship: Ship) => Promise<void>;
     isAdded?: boolean;
+    contentClassName?: string;
 }
 
 const ShipImage = memo(
@@ -112,6 +113,7 @@ export const ShipDisplay: React.FC<Props> = memo(
         onLockEquipment,
         onQuickAdd,
         isAdded,
+        contentClassName,
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -135,7 +137,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                 <div
                     className={`flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
-                    } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
+                    } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
                     onClick={onClick}
                 >
                     <Header ship={ship} variant="compact" />
@@ -148,7 +150,7 @@ export const ShipDisplay: React.FC<Props> = memo(
             <div
                 className={`flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
-                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
+                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
                 onClick={onClick}
             >
                 <div
