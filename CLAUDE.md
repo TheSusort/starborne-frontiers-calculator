@@ -214,6 +214,16 @@ src/
 - Custom colors in `tailwind.config.js`
 - Avoid inline styles unless dynamic
 
+### Documentation Updates
+
+**IMPORTANT:** Whenever building a new feature or making changes to an existing feature, you MUST:
+
+1. Review `src/pages/DocumentationPage.tsx`
+2. Add or update relevant documentation for the feature
+3. Ensure examples, explanations, and usage instructions are current
+
+This keeps the in-app documentation synchronized with the actual codebase functionality.
+
 ## Testing Strategy
 
 **Framework:** Vitest + React Testing Library

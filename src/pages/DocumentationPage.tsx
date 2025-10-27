@@ -97,6 +97,66 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#engineering-stats"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Engineering Stats
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#loadouts"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Loadouts
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#ship-database"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Ship Database
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#leaderboards"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Leaderboards
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#calculators"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Calculators
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#encounters"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Encounter Notes
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#simulation"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -1098,6 +1158,331 @@ const DocumentationPage: React.FC = () => {
                                 <br />
                                 <br />
                             </p>
+                        </div>
+                    </section>
+
+                    {/* Engineering Stats Section */}
+                    <section
+                        id="engineering-stats"
+                        className="space-y-4 [counter-increment:section]"
+                    >
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Engineering Stats
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Ship Type Bonuses</h3>
+                            <p className="text-gray-300">
+                                The Engineering Stats page allows you to manage per-ship-type
+                                engineering bonuses that apply to all ships of that type in your
+                                fleet.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Set engineering bonuses for each ship type</li>
+                                    <li>Bonuses automatically apply to all ships of that type</li>
+                                    <li>Import engineering data from game exports</li>
+                                    <li>Edit bonuses for Attack, Defense, HP, and other stats</li>
+                                    <li>
+                                        Engineering bonuses are factored into autogear calculations
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">Pro Tip</h4>
+                                <p className="text-yellow-100">
+                                    Keep your engineering stats up to date by importing fresh game
+                                    data regularly. These bonuses significantly impact your ship
+                                    performance and autogear suggestions.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Loadouts Section */}
+                    <section id="loadouts" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Loadouts
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Save and Manage Ship Configurations
+                            </h3>
+                            <p className="text-gray-300">
+                                Loadouts allow you to save ship configurations for easy switching
+                                between different gear setups and team compositions.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Individual Loadouts
+                                </h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Save current gear configuration for a ship</li>
+                                    <li>Create multiple loadouts per ship</li>
+                                    <li>
+                                        Name loadouts for different purposes (Arena, Vault, etc.)
+                                    </li>
+                                    <li>Quick restore to saved configuration</li>
+                                    <li>Compare loadout stats side-by-side</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Team Loadouts</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Save entire team compositions</li>
+                                    <li>Store gear configuration for all ships in a team</li>
+                                    <li>Perfect for Arena, Vault, or Faction Ops setups</li>
+                                    <li>Restore entire team with one click</li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">Pro Tips</h4>
+                                <ul className="text-yellow-100 space-y-2">
+                                    <li>
+                                        Create separate loadouts for different content types (Arena,
+                                        Vault, Faction Ops)
+                                    </li>
+                                    <li>
+                                        Use descriptive names to easily identify loadout purposes
+                                    </li>
+                                    <li>
+                                        Update loadouts after major gear upgrades or acquisitions
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Ship Database Section */}
+                    <section id="ship-database" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Ship Database
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Browse All Ships</h3>
+                            <p className="text-gray-300">
+                                The Ship Database provides a comprehensive reference for all ships
+                                available in Starborne Frontiers.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>View base stats for all ships at level 60</li>
+                                    <li>Filter by faction, ship type, rarity, and affinity</li>
+                                    <li>Search ships by name</li>
+                                    <li>Sort by various stats</li>
+                                    <li>View detailed ship information including abilities</li>
+                                    <li>
+                                        Access ship leaderboards to see top-performing
+                                        configurations
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Implant Database
+                                </h4>
+                                <p className="text-gray-300 mb-2">
+                                    Similar to the Ship Database, the Implant Database lets you
+                                    browse all available implants:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>View all Minor, Major, and Ultimate implants</li>
+                                    <li>Filter by implant type and slot</li>
+                                    <li>See detailed implant effects and descriptions</li>
+                                    <li>Compare implant stats and bonuses</li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Use Cases</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>Research ships before acquisition</li>
+                                    <li>Compare stats across factions and types</li>
+                                    <li>Plan future team compositions</li>
+                                    <li>Learn about ship abilities and synergies</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Leaderboards Section */}
+                    <section id="leaderboards" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Leaderboards
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Ship Performance Rankings
+                            </h3>
+                            <p className="text-gray-300">
+                                Leaderboards showcase the highest-scoring ship configurations for
+                                each ship type across all users.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>View top configurations for any ship</li>
+                                    <li>See role-specific scores (Attacker, Defender, etc.)</li>
+                                    <li>Compare your ship performance against community leaders</li>
+                                    <li>
+                                        <strong>Relative scores:</strong> Visual bars show how each
+                                        entry compares to the top score
+                                    </li>
+                                    <li>View gear, implants, and stats of top performers</li>
+                                    <li>Filter by specific ship roles</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    How to Access Leaderboards
+                                </h4>
+                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                    <li>Go to Ship Database</li>
+                                    <li>Click on any ship card</li>
+                                    <li>Click the &quot;View Leaderboard&quot; button</li>
+                                </ol>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">Pro Tip</h4>
+                                <p className="text-yellow-100">
+                                    Study top leaderboard entries to discover optimal gear
+                                    combinations, set bonuses, and stat distributions for your
+                                    ships. The relative score bars help you quickly identify how
+                                    competitive your build is.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Calculators Section */}
+                    <section id="calculators" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Calculators
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Advanced Combat Calculators
+                            </h3>
+                            <p className="text-gray-300">
+                                Various specialized calculators to analyze and optimize combat
+                                performance.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        DPS Calculator
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Calculate damage per second for ships, factoring in attack,
+                                        crit rate, crit damage, and defense penetration.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Defense Calculator
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Analyze defensive capabilities including effective HP,
+                                        damage reduction, and survivability metrics.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Healing Calculator
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Calculate healing output for supporter ships, including
+                                        critical heal multipliers and heal modifiers.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Damage Deconstruction
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Reverse-engineer combat results to understand damage
+                                        calculations and identify enemy stats.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        JSON Diff Calculator
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Compare two game data exports to identify changes in your
+                                        account, ships, gear, or engineering stats between different
+                                        time periods.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Use Cases</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>
+                                        Test theoretical builds without changing your actual ship
+                                        configurations
+                                    </li>
+                                    <li>
+                                        Compare stat trade-offs (e.g., more defense vs. more HP)
+                                    </li>
+                                    <li>Analyze combat logs to understand battle outcomes</li>
+                                    <li>Track account progression over time with JSON Diff</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Encounter Notes Section */}
+                    <section id="encounters" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Encounter Notes
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Track and Share Battle Encounters
+                            </h3>
+                            <p className="text-gray-300">
+                                Document enemy compositions, strategies, and notes for various game
+                                encounters.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Create notes for Faction Ops, Story missions, etc.</li>
+                                    <li>Record enemy ship compositions and stats</li>
+                                    <li>Document successful strategies</li>
+                                    <li>Add custom notes and observations</li>
+                                    <li>Share encounters with alliance members or the community</li>
+                                    <li>Browse shared encounters from other players</li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">Pro Tip</h4>
+                                <p className="text-yellow-100">
+                                    Use Encounter Notes to build a personal knowledge base of
+                                    challenging content. This is especially valuable for weekly
+                                    rotating Faction Ops or event encounters.
+                                </p>
+                            </div>
                         </div>
                     </section>
 
