@@ -72,7 +72,7 @@ export const Modal: React.FC<Props> = ({
             />
             <div className={`fixed inset-0 ${highZIndex ? 'z-[70]' : 'z-50'}`}>
                 <div
-                    className={`flex h-screen ${fullHeight ? '' : 'items-center'} justify-center p-4`}
+                    className={`flex max-h-[calc(100vh-2rem)] ${fullHeight ? '' : 'items-center'} justify-center p-4`}
                     onClick={onClose}
                 >
                     <div
