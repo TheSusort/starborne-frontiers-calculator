@@ -1032,18 +1032,28 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold">Equipment Constraints</h4>
                                     <ul className="text-gray-300 list-disc pl-4 space-y-1">
                                         <li>
-                                            Ignore currently equipped gear: When enabled, the
-                                            algorithm will only consider gear that isn&apos;t
-                                            equipped on other ships.
+                                            <strong>Ignore currently equipped gear:</strong> When
+                                            enabled, the algorithm will only consider gear that
+                                            isn&apos;t equipped on other ships.
                                         </li>
                                         <li>
-                                            Ignore unleveled gear: When enabled, the algorithm will
-                                            only consider gear that has been leveled up.
+                                            <strong>Ignore unleveled gear:</strong> When enabled,
+                                            the algorithm will only consider gear that has been
+                                            leveled up. Note: This does not apply to implants as
+                                            they don&apos;t have levels.
                                         </li>
                                         <li>
-                                            Use upgraded stats: When enabled, the algorithm will
-                                            consider gear that has been upgraded in the Upgrade
-                                            Analysis tab in the Gear page.
+                                            <strong>Use upgraded stats:</strong> When enabled, the
+                                            algorithm will consider gear that has been upgraded in
+                                            the Upgrade Analysis tab in the Gear page.
+                                        </li>
+                                        <li>
+                                            <strong>Optimize implants:</strong> When enabled, the
+                                            algorithm will also optimize your ship&apos;s implants
+                                            (Major and 3 Minor slots). Ultimate implants are not
+                                            optimized but will be displayed if equipped. Implants
+                                            use the same stat priorities as gear and follow the same
+                                            &quot;Ignore equipped&quot; rules.
                                         </li>
                                     </ul>
                                 </div>

@@ -401,8 +401,17 @@ export function calculateTotalScore(
         }
     }
 
-    // Simplified cache key - only include essential parameters
-    const cacheKey = `${ship.id}|${equipmentKey}|${shipRole || 'none'}`;
+    // Create implants key for cache
+    const implantsKey = ship.implants
+        ? Object.entries(ship.implants)
+              .filter(([_, implantId]) => implantId !== undefined)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([slot, implantId]) => `${slot}:${implantId}`)
+              .join('|')
+        : 'none';
+
+    // Include implants in cache key to properly differentiate configurations
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first

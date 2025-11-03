@@ -20,6 +20,7 @@ interface AutogearSettingsModalProps {
     statBonuses: StatBonus[];
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
+    optimizeImplants: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -35,6 +36,7 @@ interface AutogearSettingsModalProps {
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
+    onOptimizeImplantsChange: (value: boolean) => void;
     onResetConfig: () => void;
 }
 

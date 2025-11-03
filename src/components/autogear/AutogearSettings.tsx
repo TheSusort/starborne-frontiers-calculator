@@ -32,6 +32,7 @@ interface AutogearSettingsProps {
     statBonuses: StatBonus[];
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
+    optimizeImplants: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -47,6 +48,7 @@ interface AutogearSettingsProps {
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
+    onOptimizeImplantsChange: (value: boolean) => void;
     onResetConfig: () => void;
 }
 
@@ -111,6 +113,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     statBonuses,
     useUpgradedStats,
     tryToCompleteSets,
+    optimizeImplants,
     onRoleSelect,
     onAlgorithmSelect,
     onAddPriority,
@@ -124,6 +127,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemoveStatBonus,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
+    onOptimizeImplantsChange,
     onResetConfig,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
@@ -278,6 +282,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         checked={tryToCompleteSets}
                         onChange={onTryToCompleteSetsChange}
                         helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
+                    />
+                    <Checkbox
+                        id="optimizeImplants"
+                        label="Optimize implants (EXPERIMENTAL)"
+                        checked={optimizeImplants}
+                        onChange={onOptimizeImplantsChange}
+                        helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
                     />
                 </div>
             </div>
