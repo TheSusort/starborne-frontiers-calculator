@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.21.2';
+export const CURRENT_VERSION = '1.22.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.22.0',
+        date: '2025-11-03',
+        changes: ['Added optimize implants option to autogear'],
+    },
     {
         version: '1.21.2',
         date: '2025-10-17',
