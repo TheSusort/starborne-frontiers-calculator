@@ -42,16 +42,30 @@ export const AutogearPage: React.FC = () => {
     const getSuggestedEquipment = (suggestions: GearSuggestion[], ship: Ship | null) => {
         if (!ship) return {};
         const equipment = { ...ship.equipment };
-        suggestions.forEach((suggestion) => {
-            equipment[suggestion.slotName] = suggestion.gearId;
-        });
+        suggestions
+            .filter((s) => !s.slotName.startsWith('implant_')) // Only gear
+            .forEach((suggestion) => {
+                equipment[suggestion.slotName] = suggestion.gearId;
+            });
         return equipment;
+    };
+
+    const getSuggestedImplants = (suggestions: GearSuggestion[], ship: Ship | null) => {
+        if (!ship) return {};
+        const implants = { ...ship.implants };
+        suggestions
+            .filter((s) => s.slotName.startsWith('implant_')) // Only implants
+            .forEach((suggestion) => {
+                implants[suggestion.slotName] = suggestion.gearId;
+            });
+        return implants;
     };
 
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships } = useShips();
+    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships, updateShip } =
+        useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -74,6 +88,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: boolean;
                 selectedAlgorithm: AutogearAlgorithm;
                 showSecondaryRequirements: boolean;
+                optimizeImplants: boolean;
             }
         >
     >({});
@@ -125,6 +140,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: false,
                 selectedAlgorithm: AutogearAlgorithm.Genetic,
                 showSecondaryRequirements: false,
+                optimizeImplants: false,
             }
         );
     };
@@ -276,6 +292,18 @@ export const AutogearPage: React.FC = () => {
             performanceTracker.startTimer('FilterInventory');
             const availableInventory = inventory
                 .filter((gear) => {
+                    const isImplant = gear.slot.startsWith('implant_');
+
+                    // Always exclude ultimate implants from optimization
+                    if (gear.slot === 'implant_ultimate') {
+                        return false;
+                    }
+
+                    // If optimizeImplants is false, exclude all implants
+                    if (isImplant && !shipConfig.optimizeImplants) {
+                        return false;
+                    }
+
                     // Exclude already used gear
                     if (usedGearIds.has(gear.id)) {
                         return false;
@@ -293,6 +321,12 @@ export const AutogearPage: React.FC = () => {
                     const shipId = gearToShipMap.get(gear.id);
                     const equippedShip = shipId ? getShipById(shipId) : undefined;
 
+                    // IMPLANTS: Always exclude if equipped on another ship
+                    if (isImplant) {
+                        return !equippedShip || equippedShip.id === ship.id;
+                    }
+
+                    // GEAR: Follow ignoreEquipped setting
                     // If ignoreEquipped is true, only include:
                     // 1. Not equipped on any ship, OR
                     // 2. Equipped on selected ship
@@ -310,7 +344,13 @@ export const AutogearPage: React.FC = () => {
                         !equippedShip.equipmentLocked
                     );
                 })
-                .filter((gear) => !shipConfig.ignoreUnleveled || gear.level > 0);
+                .filter((gear) => {
+                    const isImplant = gear.slot.startsWith('implant_');
+                    // Don't apply ignoreUnleveled to implants (they don't have levels)
+                    if (isImplant) return true;
+                    // For gear, apply the ignoreUnleveled filter
+                    return !shipConfig.ignoreUnleveled || gear.level > 0;
+                });
             performanceTracker.endTimer('FilterInventory');
 
             // eslint-disable-next-line no-console
@@ -341,6 +381,7 @@ export const AutogearPage: React.FC = () => {
             performanceTracker.startTimer('PostProcessing');
             const currentEquipment = ship.equipment;
             const suggestedEquipment = getSuggestedEquipment(newSuggestions, ship);
+            const suggestedImplants = getSuggestedImplants(newSuggestions, ship);
 
             // Get active sets
             const currentSets = Object.values(currentEquipment).reduce(
@@ -380,7 +421,7 @@ export const AutogearPage: React.FC = () => {
                 suggestedEquipment,
                 shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
                 ship.refits,
-                ship.implants,
+                suggestedImplants,
                 getEngineeringStatsForShipType(ship.type)
             );
 
@@ -483,20 +524,50 @@ export const AutogearPage: React.FC = () => {
         }
     };
 
-    const applyGearSuggestionsForShip = (shipId: string) => {
+    const applyGearSuggestionsForShip = async (shipId: string) => {
         const ship = selectedShips.find((s) => s?.id === shipId);
         if (!ship) return;
 
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        const gearAssignments = currentShipResults.suggestions.map((suggestion) => ({
-            slot: suggestion.slotName as GearSlotName,
-            gearId: suggestion.gearId,
-        }));
+        // Separate gear and implant suggestions
+        const gearSuggestions = currentShipResults.suggestions.filter(
+            (s) => !s.slotName.startsWith('implant_')
+        );
+        const implantSuggestions = currentShipResults.suggestions.filter((s) =>
+            s.slotName.startsWith('implant_')
+        );
 
-        // Update ships equipment
-        equipMultipleGear(shipId, gearAssignments);
+        // Get current ship state
+        const currentShip = getShipById(shipId);
+        if (!currentShip) return;
+
+        // Prepare updates
+        const updates: Partial<Ship> = {};
+
+        // Add gear updates
+        if (gearSuggestions.length > 0) {
+            const newEquipment = { ...currentShip.equipment };
+            gearSuggestions.forEach((suggestion) => {
+                newEquipment[suggestion.slotName as GearSlotName] = suggestion.gearId;
+            });
+            updates.equipment = newEquipment;
+        }
+
+        // Add implant updates
+        if (implantSuggestions.length > 0) {
+            const newImplants = { ...currentShip.implants };
+            implantSuggestions.forEach((suggestion) => {
+                newImplants[suggestion.slotName as GearSlotName] = suggestion.gearId;
+            });
+            updates.implants = newImplants;
+        }
+
+        // Apply all updates at once
+        if (Object.keys(updates).length > 0) {
+            await updateShip(shipId, updates);
+        }
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
         setShowConfirmModal(false);
@@ -637,6 +708,9 @@ export const AutogearPage: React.FC = () => {
                                                             shipConfig.useUpgradedStats
                                                         }
                                                         isPrinting={isPrinting}
+                                                        optimizeImplants={
+                                                            shipConfig.optimizeImplants
+                                                        }
                                                     />
                                                 </div>
                                             )}
@@ -851,6 +925,9 @@ export const AutogearPage: React.FC = () => {
                     tryToCompleteSets={
                         shipSettings ? getShipConfig(shipSettings.id).tryToCompleteSets : false
                     }
+                    optimizeImplants={
+                        shipSettings ? getShipConfig(shipSettings.id).optimizeImplants : false
+                    }
                     onShipSelect={(ship) => {
                         if (selectedShips.length > 0) {
                             handleShipSelect(ship, 0);
@@ -940,6 +1017,11 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { tryToCompleteSets });
                         }
                     }}
+                    onOptimizeImplantsChange={(optimizeImplants) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { optimizeImplants });
+                        }
+                    }}
                     onResetConfig={() => {
                         if (shipSettings) {
                             resetConfig(shipSettings.id);
@@ -954,6 +1036,7 @@ export const AutogearPage: React.FC = () => {
                                 tryToCompleteSets: false,
                                 selectedAlgorithm: AutogearAlgorithm.Genetic,
                                 showSecondaryRequirements: false,
+                                optimizeImplants: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }

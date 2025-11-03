@@ -37,4 +37,5 @@ export interface SavedAutogearConfig {
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
     algorithm: AutogearAlgorithm;
+    optimizeImplants?: boolean;
 }

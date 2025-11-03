@@ -2,7 +2,7 @@ import { AutogearStrategy } from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
-import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
+import { GEAR_SLOTS, IMPLANT_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import { calculateTotalScore, clearScoreCache } from '../scoring';
 import { BaseStrategy } from '../BaseStrategy';
@@ -31,18 +31,45 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     name = 'Genetic Algorithm';
     description = 'Evolution-inspired approach for finding optimal gear combinations';
 
-    private readonly MUTATION_RATE = 0.1; // 10% chance to mutate each gear piece
+    private readonly MUTATION_RATE = 0.15; // 15% chance to mutate each gear piece
 
-    private getPopulationSize(inventorySize: number): number {
-        return Math.min(1200, Math.max(250, Math.floor(inventorySize * 2)));
+    private getPopulationSize(inventorySize: number, hasImplants: boolean): number {
+        // Smaller but smarter population - quality over quantity
+        const multiplier = hasImplants ? 1.8 : 1.5;
+        return Math.min(800, Math.max(300, Math.floor(inventorySize * multiplier)));
     }
 
-    private getGenerations(populationSize: number): number {
-        return Math.min(50, Math.max(20, Math.floor(40000 / populationSize)));
+    private getGenerations(populationSize: number, hasImplants: boolean): number {
+        // More generations with smaller population for better convergence
+        const baseOperations = hasImplants ? 45000 : 35000;
+        return Math.min(80, Math.max(30, Math.floor(baseOperations / populationSize)));
     }
 
     private getEliteSize(populationSize: number): number {
-        return Math.max(3, Math.min(10, Math.floor(populationSize * 0.01)));
+        // Balance elitism with exploration (3% instead of 5%)
+        return Math.max(8, Math.min(25, Math.floor(populationSize * 0.03)));
+    }
+
+    /**
+     * Determine which slots to optimize based on the available inventory.
+     * If inventory contains implants, include them (except ultimate).
+     */
+    private getSlotsToOptimize(inventory: GearPiece[]): GearSlotName[] {
+        const hasImplants = inventory.some((gear) => gear.slot.startsWith('implant_'));
+
+        const slots = [...Object.keys(GEAR_SLOTS)] as GearSlotName[];
+
+        if (hasImplants) {
+            // Add implant slots except ultimate
+            slots.push(
+                'implant_major' as GearSlotName,
+                'implant_minor_alpha' as GearSlotName,
+                'implant_minor_gamma' as GearSlotName,
+                'implant_minor_sigma' as GearSlotName
+            );
+        }
+
+        return slots;
     }
 
     async findOptimalGear(
@@ -62,18 +89,23 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         // Clear cache at the start of each run
         clearScoreCache();
 
+        const hasImplants = availableInventory.some((gear) => gear.slot.startsWith('implant_'));
+
         // Initialize progress tracking (population size * generations)
-        const totalOperations =
-            this.getPopulationSize(availableInventory.length) *
-            this.getGenerations(this.getPopulationSize(availableInventory.length));
+        const populationSize = this.getPopulationSize(availableInventory.length, hasImplants);
+        const generations = this.getGenerations(populationSize, hasImplants);
+        const totalOperations = populationSize * generations;
         this.initializeProgress(totalOperations);
 
-        const populationSize = this.getPopulationSize(availableInventory.length);
-        const generations = this.getGenerations(populationSize);
         const eliteSize = this.getEliteSize(populationSize);
 
         performanceTracker.startTimer('InitializePopulation');
-        let population = this.initializePopulation(availableInventory, getGearPiece, setPriorities);
+        let population = this.initializePopulation(
+            availableInventory,
+            getGearPiece,
+            setPriorities,
+            populationSize
+        );
         performanceTracker.endTimer('InitializePopulation');
 
         performanceTracker.startTimer('InitialEvaluation');
@@ -93,7 +125,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         performanceTracker.startTimer('GeneticGenerations');
         let bestFitness = population[0]?.fitness || 0;
         let generationsWithoutImprovement = 0;
-        const maxGenerationsWithoutImprovement = 50;
+        // Allow more generations without improvement (reduced from 50 to 15)
+        // This prevents premature convergence
+        const maxGenerationsWithoutImprovement = Math.max(15, Math.floor(generations * 0.3));
 
         for (let generation = 0; generation < generations; generation++) {
             const newPopulation: Individual[] = [];
@@ -160,15 +194,16 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private initializePopulation(
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        setPriorities?: SetPriority[]
+        setPriorities: SetPriority[] | undefined,
+        populationSize: number
     ): Individual[] {
         const population: Individual[] = [];
+        const slotsToOptimize = this.getSlotsToOptimize(inventory);
 
-        for (let i = 0; i < this.getPopulationSize(inventory.length); i++) {
+        for (let i = 0; i < populationSize; i++) {
             const equipment: Partial<Record<GearSlotName, string>> = {};
 
-            Object.keys(GEAR_SLOTS).forEach((slotKey) => {
-                const slot = slotKey as GearSlotName;
+            slotsToOptimize.forEach((slot) => {
                 equipment[slot] = this.getPreferredGearForSlot(
                     slot,
                     inventory,
@@ -234,9 +269,32 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         tryToCompleteSets?: boolean
     ): number {
         performanceTracker.startTimer('CalculateFitness');
+
+        // Split equipment into gear and implants for proper scoring
+        const gearOnly: Partial<Record<GearSlotName, string>> = {};
+        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
+
+        Object.entries(equipment).forEach(([slot, gearId]) => {
+            if (slot.startsWith('implant_')) {
+                implantsOnly[slot as GearSlotName] = gearId;
+            } else {
+                gearOnly[slot as GearSlotName] = gearId;
+            }
+        });
+
+        // Only override implants if we're optimizing them (i.e., if there are implant slots in equipment)
+        // Otherwise, keep the ship's existing implants for scoring
+        const hasImplantSlots = Object.keys(implantsOnly).length > 0;
+        const shipWithNewImplants: Ship = hasImplantSlots
+            ? {
+                  ...ship,
+                  implants: implantsOnly,
+              }
+            : ship;
+
         const result = calculateTotalScore(
-            ship,
-            equipment,
+            shipWithNewImplants,
+            gearOnly,
             priorities,
             getGearPiece,
             getEngineeringStatsForShipType,
@@ -263,11 +321,20 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private crossover(parent1: Individual, parent2: Individual): Individual {
         const childEquipment: Partial<Record<GearSlotName, string>> = {};
 
-        Object.keys(GEAR_SLOTS).forEach((slotKey) => {
-            const slot = slotKey as GearSlotName;
-            // Randomly choose from either parent
-            childEquipment[slot] =
-                Math.random() < 0.5 ? parent1.equipment[slot] : parent2.equipment[slot];
+        // Get all slots present in either parent
+        const allSlots = new Set([
+            ...Object.keys(parent1.equipment),
+            ...Object.keys(parent2.equipment),
+        ]) as Set<GearSlotName>;
+
+        // Use weighted crossover based on parent fitness
+        const totalFitness = parent1.fitness + parent2.fitness;
+        const parent1Weight = totalFitness > 0 ? parent1.fitness / totalFitness : 0.5;
+
+        allSlots.forEach((slot) => {
+            // Weighted choice favoring the fitter parent
+            const useParent1 = Math.random() < parent1Weight;
+            childEquipment[slot] = useParent1 ? parent1.equipment[slot] : parent2.equipment[slot];
         });
 
         return { equipment: childEquipment, fitness: 0 };
@@ -279,8 +346,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): void {
-        Object.keys(GEAR_SLOTS).forEach((slotKey) => {
-            const slot = slotKey as GearSlotName;
+        const slotsToOptimize = this.getSlotsToOptimize(inventory);
+
+        slotsToOptimize.forEach((slot) => {
             if (Math.random() < this.MUTATION_RATE) {
                 individual.equipment[slot] = this.getPreferredGearForSlot(
                     slot,
@@ -303,8 +371,15 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const availablePieces = inventory.filter((gear) => gear.slot === slot);
         if (availablePieces.length === 0) return undefined;
 
-        if (!setPriorities || setPriorities.length === 0 || Math.random() < 0.5) {
-            // Sometimes pick random piece to maintain diversity
+        // OPTIMIZATION: Implants don't have set bonuses - just pick randomly for diversity
+        const isImplantSlot = slot.startsWith('implant_');
+        if (isImplantSlot) {
+            return availablePieces[Math.floor(Math.random() * availablePieces.length)].id;
+        }
+
+        // For gear: If no set priorities or random chance for diversity (20%)
+        if (!setPriorities || setPriorities.length === 0 || Math.random() < 0.2) {
+            // Pick random piece to maintain diversity
             return availablePieces[Math.floor(Math.random() * availablePieces.length)].id;
         }
 
@@ -317,23 +392,37 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
         });
 
-        // Find pieces that would contribute to desired sets
+        // Find pieces that would contribute to desired sets with weighted scoring
         const piecesWithSetScore = availablePieces.map((piece) => {
             let score = 0;
             if (piece.setBonus) {
                 const currentCount = setCount[piece.setBonus] || 0;
                 const relevantPriority = setPriorities.find((p) => p.setName === piece.setBonus);
-                if (relevantPriority && currentCount < relevantPriority.count) {
-                    score = 1;
+                if (relevantPriority) {
+                    // Higher score if we're closer to completing the set
+                    const remaining = Math.max(0, relevantPriority.count - currentCount);
+                    if (remaining > 0) {
+                        // Weight based on priority count and how close we are to completing
+                        score =
+                            relevantPriority.count * 10 + (relevantPriority.count - remaining) * 5;
+                    }
                 }
             }
             return { piece, score };
         });
 
-        // Prefer pieces that contribute to desired sets
+        // Sort by score descending
+        piecesWithSetScore.sort((a, b) => b.score - a.score);
+
+        // Prefer pieces that contribute to desired sets (top 50%)
         const bestPieces = piecesWithSetScore.filter((p) => p.score > 0);
         if (bestPieces.length > 0) {
-            return bestPieces[Math.floor(Math.random() * bestPieces.length)].piece.id;
+            // Select from top candidates with weighted randomness (favor higher scores)
+            const topCandidates = bestPieces.slice(
+                0,
+                Math.max(1, Math.ceil(bestPieces.length * 0.5))
+            );
+            return topCandidates[Math.floor(Math.random() * topCandidates.length)].piece.id;
         }
 
         // Fall back to random piece if no good set pieces found

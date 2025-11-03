@@ -58,6 +58,8 @@ describe('AutogearSettings Component', () => {
         onResetConfig: vi.fn(),
         tryToCompleteSets: false,
         onTryToCompleteSetsChange: vi.fn(),
+        optimizeImplants: false,
+        onOptimizeImplantsChange: vi.fn(),
     };
 
     beforeEach(() => {
@@ -186,5 +188,26 @@ describe('AutogearSettings Component', () => {
         fireEvent.click(option);
 
         expect(defaultProps.onAlgorithmSelect).toHaveBeenCalledWith(AutogearAlgorithm.BeamSearch);
+    });
+
+    test('renders optimize implants checkbox', () => {
+        render(<AutogearSettings {...defaultProps} />);
+        const checkbox = screen.getByRole('checkbox', { name: /optimize implants/i });
+        expect(checkbox).toBeInTheDocument();
+
+        fireEvent.click(checkbox);
+        expect(defaultProps.onOptimizeImplantsChange).toHaveBeenCalledWith(true);
+    });
+
+    test('optimize implants checkbox defaults to unchecked', () => {
+        render(<AutogearSettings {...defaultProps} optimizeImplants={false} />);
+        const checkbox = screen.getByRole('checkbox', { name: /optimize implants/i });
+        expect(checkbox).not.toBeChecked();
+    });
+
+    test('optimize implants checkbox can be checked', () => {
+        render(<AutogearSettings {...defaultProps} optimizeImplants={true} />);
+        const checkbox = screen.getByRole('checkbox', { name: /optimize implants/i });
+        expect(checkbox).toBeChecked();
     });
 });

@@ -3,6 +3,7 @@ import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GEAR_SETS, ShipTypeName } from '../../constants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { STATS } from '../../constants/stats';
+import { StatName } from '../../types/stats';
 
 interface AutogearConfigListProps {
     shipRole: ShipTypeName | null;
@@ -13,6 +14,7 @@ interface AutogearConfigListProps {
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
+    optimizeImplants: boolean;
 }
 
 export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
@@ -24,9 +26,17 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
     ignoreUnleveled,
     useUpgradedStats,
     tryToCompleteSets,
+    optimizeImplants,
 }) => {
     const hasConfig =
-        statPriorities.length > 0 || setPriorities.length > 0 || statBonuses.length > 0;
+        statPriorities.length > 0 ||
+        setPriorities.length > 0 ||
+        statBonuses.length > 0 ||
+        optimizeImplants ||
+        ignoreEquipped ||
+        ignoreUnleveled ||
+        useUpgradedStats ||
+        tryToCompleteSets;
 
     if (!hasConfig) {
         return <div className="text-xs text-gray-400 px-2 py-1">No configuration set</div>;
@@ -41,8 +51,9 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                 </div>
             )}
 
-            <div className="flex flex-wrap gap-1 divide-x-2 divide-gray-500 *:ps-1">
+            <div className="flex flex-wrap gap-1 divide-x-2 divide-gray-500 *:ps-1 ms-[-0.25rem]">
                 {/* Settings */}
+                {optimizeImplants && <span>Include implants</span>}
                 {ignoreEquipped && <span>Ignore equipped</span>}
                 {ignoreUnleveled && <span>Ignore unleveled</span>}
                 {useUpgradedStats && <span>Use upgraded</span>}
@@ -86,7 +97,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                     <>
                         {statBonuses.slice(0, 2).map((bonus, index) => (
                             <span key={index}>
-                                {bonus.stat} +{bonus.percentage}%
+                                {STATS[bonus.stat as StatName]?.label} +{bonus.percentage}%
                             </span>
                         ))}
                         {statBonuses.length > 2 && <span>+{statBonuses.length - 2} more</span>}

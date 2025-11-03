@@ -27,6 +27,7 @@ interface AutogearQuickSettingsProps {
         tryToCompleteSets: boolean;
         selectedAlgorithm: AutogearAlgorithm;
         showSecondaryRequirements: boolean;
+        optimizeImplants: boolean;
     };
 }
 
