@@ -539,34 +539,25 @@ export const AutogearPage: React.FC = () => {
             s.slotName.startsWith('implant_')
         );
 
-        // Get current ship state
-        const currentShip = getShipById(shipId);
-        if (!currentShip) return;
-
-        // Prepare updates
-        const updates: Partial<Ship> = {};
-
-        // Add gear updates
+        // Apply gear updates using equipMultipleGear (handles moving gear from other ships)
         if (gearSuggestions.length > 0) {
-            const newEquipment = { ...currentShip.equipment };
-            gearSuggestions.forEach((suggestion) => {
-                newEquipment[suggestion.slotName as GearSlotName] = suggestion.gearId;
-            });
-            updates.equipment = newEquipment;
+            const gearAssignments = gearSuggestions.map((suggestion) => ({
+                slot: suggestion.slotName as GearSlotName,
+                gearId: suggestion.gearId,
+            }));
+            await equipMultipleGear(shipId, gearAssignments);
         }
 
-        // Add implant updates
+        // Apply implant updates using updateShip (implants don't move between ships)
         if (implantSuggestions.length > 0) {
-            const newImplants = { ...currentShip.implants };
-            implantSuggestions.forEach((suggestion) => {
-                newImplants[suggestion.slotName as GearSlotName] = suggestion.gearId;
-            });
-            updates.implants = newImplants;
-        }
-
-        // Apply all updates at once
-        if (Object.keys(updates).length > 0) {
-            await updateShip(shipId, updates);
+            const currentShip = getShipById(shipId);
+            if (currentShip) {
+                const newImplants = { ...currentShip.implants };
+                implantSuggestions.forEach((suggestion) => {
+                    newImplants[suggestion.slotName as GearSlotName] = suggestion.gearId;
+                });
+                await updateShip(shipId, { implants: newImplants });
+            }
         }
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
