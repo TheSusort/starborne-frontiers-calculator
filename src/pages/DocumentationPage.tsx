@@ -1293,6 +1293,11 @@ const DocumentationPage: React.FC = () => {
                                         configurations
                                     </li>
                                 </ul>
+                                <p className="text-gray-300 mt-4">
+                                    Ships can have up to three passive skills: first passive
+                                    (unlocked at lower ranks), second passive (unlocked at higher
+                                    ranks), and third passive (available on newest ships).
+                                </p>
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
