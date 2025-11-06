@@ -82,6 +82,7 @@ export const ImportButton: React.FC<{
                     chargeSkillText: template.charge_skill_text,
                     firstPassiveSkillText: template.first_passive_skill_text,
                     secondPassiveSkillText: template.second_passive_skill_text,
+                    thirdPassiveSkillText: template.third_passive_skill_text,
                 })) || []
             );
         } catch (error) {
