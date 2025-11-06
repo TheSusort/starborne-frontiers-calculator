@@ -182,6 +182,7 @@ export interface NewShipTemplateData {
     chargeSkillText: string;
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
+    thirdPassiveSkillText?: string;
     definitionId: string;
 }
 
@@ -216,6 +217,7 @@ export const addShipTemplate = async (
             charge_skill_text: templateData.chargeSkillText || null,
             first_passive_skill_text: templateData.firstPassiveSkillText || null,
             second_passive_skill_text: templateData.secondPassiveSkillText || null,
+            third_passive_skill_text: templateData.thirdPassiveSkillText || null,
             definition_id: templateData.definitionId || null,
             base_stats: {
                 hp: templateData.hp,
