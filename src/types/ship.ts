@@ -23,6 +23,7 @@ export interface Ship {
     chargeSkillText?: string;
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
+    thirdPassiveSkillText?: string;
     level?: number;
     rank?: number;
     copies?: number;
@@ -67,4 +68,5 @@ export interface ShipData {
     chargeSkillText?: string;
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
+    thirdPassiveSkillText?: string;
 }
