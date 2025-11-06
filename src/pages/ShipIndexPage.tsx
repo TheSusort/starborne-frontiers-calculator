@@ -37,6 +37,7 @@ export const ShipIndexPage: React.FC = () => {
     const [chargeHover, setChargeHover] = useState('');
     const [passive1Hover, setPassive1Hover] = useState('');
     const [passive2Hover, setPassive2Hover] = useState('');
+    const [passive3Hover, setPassive3Hover] = useState('');
 
     const setSelectedFactions = (factions: string[]) => {
         setState((prev) => ({
@@ -349,6 +350,28 @@ export const ShipIndexPage: React.FC = () => {
                                                         <SkillTooltip
                                                             skillText={ship.secondPassiveSkillText}
                                                             skillType="Passive Skill R2"
+                                                        />
+                                                    </Tooltip>
+                                                </div>
+                                            )}
+                                            {ship.thirdPassiveSkillText && (
+                                                <div className="relative">
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="xs"
+                                                        onMouseEnter={() =>
+                                                            setPassive3Hover(ship.name)
+                                                        }
+                                                        onMouseLeave={() => setPassive3Hover('')}
+                                                    >
+                                                        Passive R3
+                                                    </Button>
+                                                    <Tooltip
+                                                        isVisible={passive3Hover === ship.name}
+                                                    >
+                                                        <SkillTooltip
+                                                            skillText={ship.thirdPassiveSkillText}
+                                                            skillType="Passive Skill R3"
                                                         />
                                                     </Tooltip>
                                                 </div>
