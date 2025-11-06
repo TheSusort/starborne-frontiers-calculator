@@ -30,6 +30,7 @@ interface ShipTemplateFormData {
     chargeSkillText: string;
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
+    thirdPassiveSkillText: string;
     definitionId: string;
 }
 
@@ -69,6 +70,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
         chargeSkillText: '',
         firstPassiveSkillText: '',
         secondPassiveSkillText: '',
+        thirdPassiveSkillText: '',
         definitionId: '',
     });
 
@@ -99,6 +101,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
             chargeSkillText: '',
             firstPassiveSkillText: '',
             secondPassiveSkillText: '',
+            thirdPassiveSkillText: '',
             definitionId: '',
         });
     };
@@ -436,6 +439,21 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                     updateField('secondPassiveSkillText', e.target.value)
                                 }
                                 placeholder="Describe the second passive skill..."
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Third Passive Skill
+                            </label>
+                            <textarea
+                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                rows={3}
+                                value={formData.thirdPassiveSkillText}
+                                onChange={(e) =>
+                                    updateField('thirdPassiveSkillText', e.target.value)
+                                }
+                                placeholder="Describe the third passive skill..."
                             />
                         </div>
                     </div>
