@@ -133,6 +133,8 @@ export const ShipIndexPage: React.FC = () => {
                 (ship.firstPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false) ||
                 (ship.secondPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
+                    false) ||
+                (ship.thirdPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false);
             return matchesFaction && matchesType && matchesRarity && matchesSearch;
         });
