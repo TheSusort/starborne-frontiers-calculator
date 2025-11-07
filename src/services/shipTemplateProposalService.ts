@@ -182,7 +182,7 @@ export interface NewShipTemplateData {
     chargeSkillText: string;
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
-    thirdPassiveSkillText?: string;
+    thirdPassiveSkillText: string;
     definitionId: string;
 }
 
