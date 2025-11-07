@@ -260,6 +260,7 @@ export const Sidebar: React.FC = () => {
             },
             { path: '/ships/index', label: 'Ship Database' },
             { path: '/implants', label: 'Implants' },
+            { path: '/buffs', label: 'Effects' },
             { path: '/shared-encounters', label: 'Shared Encounters' },
             { path: '/documentation', label: 'Help' },
         ];

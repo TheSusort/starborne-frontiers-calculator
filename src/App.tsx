@@ -29,6 +29,7 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
 const ImplantIndexPage = lazy(() => import('./pages/ImplantIndexPage'));
+const EffectIndexPage = lazy(() => import('./pages/EffectIndexPage'));
 const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const LeaderboardPage = lazy(() => import('./pages/ships/LeaderboardPage'));
@@ -181,6 +182,10 @@ const App: React.FC = () => {
                                                                 <Route
                                                                     path="/implants"
                                                                     element={<ImplantIndexPage />}
+                                                                />
+                                                                <Route
+                                                                    path="/buffs"
+                                                                    element={<EffectIndexPage />}
                                                                 />
                                                                 <Route
                                                                     path="/documentation"

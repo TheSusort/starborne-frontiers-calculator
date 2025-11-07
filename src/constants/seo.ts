@@ -84,6 +84,12 @@ export const SEO_CONFIG = {
         description: 'Browse and search through all available implants in Starborne Frontiers.',
         keywords: 'starborne, frontiers, implants, database, stats, effects',
     },
+    effectIndex: {
+        title: 'Effect Index - Starborne Frontiers Calculator',
+        description:
+            'Browse all buffs, debuffs, and effects in Starborne Frontiers. Search and filter through 155+ game effects.',
+        keywords: 'starborne, frontiers, buffs, debuffs, effects, status effects, abilities',
+    },
     documentation: {
         title: 'Documentation',
         description:

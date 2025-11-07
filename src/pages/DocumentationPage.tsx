@@ -127,6 +127,16 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#effect-index"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Effect Index
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#leaderboards"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -1324,6 +1334,67 @@ const DocumentationPage: React.FC = () => {
                                     <li>Plan future team compositions</li>
                                     <li>Learn about ship abilities and synergies</li>
                                 </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Effect Index Section */}
+                    <section id="effect-index" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Effect Index
+                        </h2>
+                        <div className="bg-dark p-4 border border-dark-border space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Browse All Buffs, Debuffs, and Effects
+                            </h3>
+                            <p className="text-gray-300">
+                                The Effect Index provides a comprehensive reference of all buffs,
+                                debuffs, and effects in the game. Use the search bar to find
+                                specific effects or filter by type.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Search effects by name, type, or description</li>
+                                    <li>Filter by type: buffs, debuffs, or effects</li>
+                                    <li>Sort effects alphabetically</li>
+                                    <li>Color-coded badges for quick identification</li>
+                                    <li>Over 155 effects catalogued</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Effect Types</h4>
+                                <div className="space-y-3 text-gray-300">
+                                    <div>
+                                        <span className="text-green-400 font-semibold">Buffs:</span>{' '}
+                                        Positive effects that enhance your ship&apos;s capabilities
+                                        (e.g., Attack Up, Defense Up, Speed Up)
+                                    </div>
+                                    <div>
+                                        <span className="text-red-400 font-semibold">Debuffs:</span>{' '}
+                                        Negative effects applied to enemy ships that reduce their
+                                        effectiveness (e.g., Attack Down, Corrosion, Stasis)
+                                    </div>
+                                    <div>
+                                        <span className="text-blue-400 font-semibold">
+                                            Effects:
+                                        </span>{' '}
+                                        Utility effects that modify gameplay mechanics (e.g.,
+                                        Cleanse, Purge, Charge Manipulation)
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-green-900/50 border border-green-700">
+                                <h4 className="font-semibold text-green-200 mb-2">Pro Tip</h4>
+                                <p className="text-green-100">
+                                    Use the Effect Index as a quick reference during battles to
+                                    understand what status effects are doing. Search for keywords
+                                    like &quot;hacking&quot; or &quot;security&quot; to find effects
+                                    that interact with specific stats.
+                                </p>
                             </div>
                         </div>
                     </section>

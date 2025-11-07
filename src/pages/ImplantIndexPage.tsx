@@ -4,7 +4,6 @@ import { PageLayout } from '../components/ui';
 import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
-import { SearchInput } from '../components/ui/SearchInput';
 import { Loader } from '../components/ui/Loader';
 import { Image } from '../components/ui/Image';
 import Seo from '../components/seo/Seo';
@@ -17,7 +16,7 @@ export const ImplantIndexPage: React.FC = () => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const { state, setState, clearFilters } = usePersistedFilters('implant-database-filters');
-    const hasActiveFilters = (state.filters.types?.length ?? 0) > 0;
+    const hasActiveFilters = (state.filters.types?.length ?? 0) > 0 || searchQuery.length > 0;
 
     const setSelectedTypes = (types: string[]) => {
         setState((prev) => ({
@@ -104,14 +103,6 @@ export const ImplantIndexPage: React.FC = () => {
             >
                 <div className="space-y-6">
                     <div className="flex flex-col">
-                        <div className="flex-grow max-w-md mb-2">
-                            <SearchInput
-                                value={searchQuery}
-                                onChange={setSearchQuery}
-                                placeholder="Search implants by name or description..."
-                                className="w-full mb-2"
-                            />
-                        </div>
                         {filteredAndSortedImplants.length > 0 && (
                             <span className="text-sm text-gray-400">
                                 Showing {filteredAndSortedImplants.length} implants
@@ -122,11 +113,17 @@ export const ImplantIndexPage: React.FC = () => {
                             filters={filters}
                             isOpen={isFilterOpen}
                             onToggle={() => setIsFilterOpen(!isFilterOpen)}
-                            onClear={clearFilters}
+                            onClear={() => {
+                                clearFilters();
+                                setSearchQuery('');
+                            }}
                             hasActiveFilters={hasActiveFilters}
                             sortOptions={sortOptions}
                             sort={state.sort}
                             setSort={setSort}
+                            searchValue={searchQuery}
+                            onSearchChange={setSearchQuery}
+                            searchPlaceholder="Search implants by name or description..."
                         />
                     </div>
 
