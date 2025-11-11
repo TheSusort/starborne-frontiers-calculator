@@ -48,93 +48,103 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
     const processRole = async (
         role: ShipTypeName,
-        index: number,
+        roleIndex: number,
         newResults: Record<
             ShipTypeName,
             Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
-        >
-    ): Promise<void> => {
-        return new Promise((resolve) => {
-            // Use setTimeout to allow UI updates
-            setTimeout(() => {
-                // Determine simulation count based on filters
-                // Increase runs for higher rarity filters (fewer pieces = more accuracy per piece)
-                let simulationCount = 20; // Default for rare+
-                if (selectedRarity === 'legendary') {
-                    simulationCount = 80; // High accuracy for legendary pieces
-                } else if (selectedRarity === 'epic') {
-                    simulationCount = 40; // Medium accuracy for epic pieces
-                } else if (maxLevel !== 16) {
-                    simulationCount = 40; // Increased accuracy when level filter is applied
-                }
+        >,
+        totalSteps: number,
+        completedSteps: number
+    ): Promise<number> => {
+        // Determine simulation count based on filters
+        let simulationCount = 20; // Default for rare+
+        if (selectedRarity === 'legendary') {
+            simulationCount = 80; // High accuracy for legendary pieces
+        } else if (selectedRarity === 'epic') {
+            simulationCount = 40; // Medium accuracy for epic pieces
+        } else if (maxLevel !== 16) {
+            simulationCount = 40; // Increased accuracy when level filter is applied
+        }
 
-                // Filter inventory by maxLevel
-                const filteredInventory = inventory.filter((piece) => piece.level <= maxLevel);
+        // Filter inventory by maxLevel
+        const filteredInventory = inventory.filter((piece) => piece.level <= maxLevel);
 
-                // Get overall results
-                const roleResults = analyzePotentialUpgrades(
-                    filteredInventory,
-                    role,
-                    6,
-                    undefined,
-                    selectedRarity,
-                    simulationCount
-                );
+        // Get slot entries - GEAR_SLOTS already excludes implants
+        const slotEntries = Object.entries(GEAR_SLOTS);
 
-                // Get slot-specific results
-                const slotResults = Object.entries(GEAR_SLOTS)
-                    .filter(([_, slot]) => !slot.label.includes('Implant'))
-                    .reduce(
-                        (acc, [slotName, _]) => {
-                            acc[slotName] = analyzePotentialUpgrades(
-                                filteredInventory,
-                                role,
-                                6,
-                                slotName as GearSlotName,
-                                selectedRarity,
-                                simulationCount
-                            );
-                            return acc;
-                        },
-                        {} as Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>>
-                    );
-
-                newResults[role] = {
-                    all: roleResults,
-                    ...slotResults,
-                };
-                setResults({ ...newResults });
-
-                // Update progress
-                setOptimizationProgress({
-                    current: index + 1,
-                    total: shipRoles.length,
-                    percentage: Math.round(((index + 1) / shipRoles.length) * 100),
-                });
-
-                resolve();
-            }, 0);
+        // Process 'all' first
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const roleResults = analyzePotentialUpgrades(
+            filteredInventory,
+            role,
+            6,
+            undefined,
+            selectedRarity,
+            simulationCount
+        );
+        completedSteps++;
+        setOptimizationProgress({
+            current: completedSteps,
+            total: totalSteps,
+            percentage: Math.round((completedSteps / totalSteps) * 100),
         });
+
+        // Process each slot individually with yields
+        const slotResults: Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>> = {};
+        for (const [slotName, _] of slotEntries) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            slotResults[slotName as GearSlotName] = analyzePotentialUpgrades(
+                filteredInventory,
+                role,
+                6,
+                slotName as GearSlotName,
+                selectedRarity,
+                simulationCount
+            );
+            completedSteps++;
+            setOptimizationProgress({
+                current: completedSteps,
+                total: totalSteps,
+                percentage: Math.round((completedSteps / totalSteps) * 100),
+            });
+        }
+
+        newResults[role] = {
+            all: roleResults,
+            ...slotResults,
+        };
+        setResults({ ...newResults });
+
+        return completedSteps;
     };
 
     const handleSimulateUpgrades = async () => {
         try {
             setIsLoading(true);
-            setOptimizationProgress({ current: 0, total: shipRoles.length, percentage: 0 });
+
+            // Calculate total steps: for each role, we process 'all' + each gear slot
+            // GEAR_SLOTS contains only the 6 gear slots (weapon, hull, generator, sensor, software, thrusters)
+            // Implants are in IMPLANT_SLOTS, so no filtering needed
+            const slotsPerRole = 1 + Object.keys(GEAR_SLOTS).length; // 1 for 'all' + 6 gear slots = 7
+            const totalSteps = shipRoles.length * slotsPerRole;
+
+            setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
 
             await simulateUpgrades(inventory);
+
             // Process each role sequentially with UI updates
+            let completedSteps = 0;
             for (let i = 0; i < shipRoles.length; i++) {
                 const role = shipRoles[i];
-                await processRole(role, i, results);
+                completedSteps = await processRole(role, i, results, totalSteps, completedSteps);
             }
 
-            // After all roles are processed, simulate upgrades
-            // Pass the results directly to simulateUpgrades
             addNotification('success', 'Gear upgrades simulated successfully');
         } catch (error) {
             addNotification('error', 'Failed to simulate gear upgrades');
         } finally {
+            // Small delay to show 100% completion before hiding progress bar
+            await new Promise((resolve) => setTimeout(resolve, 500));
             setIsLoading(false);
             setOptimizationProgress(null);
         }
@@ -151,18 +161,29 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
     const handleAnalyze = async () => {
         setIsLoading(true);
-        setOptimizationProgress({ current: 0, total: shipRoles.length, percentage: 0 });
+
+        // Calculate total steps: for each role, we process 'all' + each gear slot
+        // GEAR_SLOTS contains only the 6 gear slots (weapon, hull, generator, sensor, software, thrusters)
+        // Implants are in IMPLANT_SLOTS, so no filtering needed
+        const slotsPerRole = 1 + Object.keys(GEAR_SLOTS).length; // 1 for 'all' + 6 gear slots = 7
+        const totalSteps = shipRoles.length * slotsPerRole;
+
+        setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
+
         const newResults: Record<
             ShipTypeName,
             Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
         > = {};
 
         // Process each role sequentially with UI updates between each
+        let completedSteps = 0;
         for (let i = 0; i < shipRoles.length; i++) {
             const role = shipRoles[i];
-            await processRole(role, i, newResults);
+            completedSteps = await processRole(role, i, newResults, totalSteps, completedSteps);
         }
 
+        // Small delay to show 100% completion before hiding progress bar
+        await new Promise((resolve) => setTimeout(resolve, 500));
         setIsLoading(false);
         setOptimizationProgress(null);
     };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader } from './Loader';
 
 interface ProgressBarProps {
     current: number;
@@ -24,6 +25,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 aria-valuenow={current}
                 aria-valuemax={total}
             >
+                <Loader size="sm" />
                 {label && <label className="text-sm text-gray-400">{label}</label>}
                 <div className="flex justify-between mb-1">
                     <span className="text-sm text-gray-400">
@@ -33,7 +35,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 </div>
                 <div className="w-full bg-gray-700 h-2.5">
                     <div
-                        className="bg-gradient-to-r from-amber-700 via-primary to-amber-700 h-2.5 transition-all duration-50"
+                        className="bg-gradient-to-r from-amber-700 via-primary to-amber-700 h-2.5"
                         data-testid="progress-fill"
                         style={{ width: `${percentage}%` }}
                     />
