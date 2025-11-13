@@ -58,78 +58,77 @@ export const AllUsersTable: React.FC = () => {
         <div className="bg-dark-lighter p-6 border border-gray-700">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">All Users</h3>
-                <div className="text-sm text-gray-400">
-                    Total: {totalCount.toLocaleString()} users
+                <div className="flex items-center gap-2">
+                    <Input
+                        type="text"
+                        placeholder="Search by email..."
+                        value={search}
+                        onChange={(e) => {
+                            setSearch(e.target.value);
+                            setCurrentPage(1); // Reset to first page on search
+                        }}
+                        className="max-w-xs"
+                    />
                 </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="mb-4">
-                <Input
-                    type="text"
-                    placeholder="Search by email..."
-                    value={search}
-                    onChange={(e) => {
-                        setSearch(e.target.value);
-                        setCurrentPage(1); // Reset to first page on search
-                    }}
-                    className="max-w-md"
-                />
-            </div>
-
-            {loading ? (
-                <Loader />
-            ) : (
-                <>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="border-b border-gray-700">
-                                    <th className="pb-3 ps-3 font-semibold text-gray-300">#</th>
-                                    <th
-                                        className="pb-3 font-semibold text-gray-300 cursor-pointer hover:text-primary transition-colors"
-                                        onClick={() => handleSort('email')}
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            Email {getSortIcon('email')}
-                                        </div>
-                                    </th>
-                                    <th
-                                        className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                        onClick={() => handleSort('total_autogear_runs')}
-                                    >
-                                        <div className="flex items-center justify-end gap-2">
-                                            Autogear Runs {getSortIcon('total_autogear_runs')}
-                                        </div>
-                                    </th>
-                                    <th
-                                        className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                        onClick={() => handleSort('total_data_imports')}
-                                    >
-                                        <div className="flex items-center justify-end gap-2">
-                                            Data Imports {getSortIcon('total_data_imports')}
-                                        </div>
-                                    </th>
-                                    <th
-                                        className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                        onClick={() => handleSort('total_activity')}
-                                    >
-                                        <div className="flex items-center justify-end gap-2">
-                                            Total Activity {getSortIcon('total_activity')}
-                                        </div>
-                                    </th>
-                                    <th
-                                        className="pb-3 pe-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                        onClick={() => handleSort('last_active')}
-                                    >
-                                        <div className="flex items-center justify-end gap-2">
-                                            Last Active {getSortIcon('last_active')}
-                                        </div>
-                                    </th>
+            <>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="border-b border-gray-700">
+                                <th className="pb-3 ps-3 font-semibold text-gray-300">#</th>
+                                <th
+                                    className="pb-3 font-semibold text-gray-300 cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleSort('email')}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        Email {getSortIcon('email')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleSort('total_autogear_runs')}
+                                >
+                                    <div className="flex items-center justify-end gap-2">
+                                        Autogear Runs {getSortIcon('total_autogear_runs')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleSort('total_data_imports')}
+                                >
+                                    <div className="flex items-center justify-end gap-2">
+                                        Data Imports {getSortIcon('total_data_imports')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleSort('total_activity')}
+                                >
+                                    <div className="flex items-center justify-end gap-2">
+                                        Total Activity {getSortIcon('total_activity')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="pb-3 pe-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
+                                    onClick={() => handleSort('last_active')}
+                                >
+                                    <div className="flex items-center justify-end gap-2">
+                                        Last Active {getSortIcon('last_active')}
+                                    </div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={6} className="py-3 text-center text-gray-400">
+                                        <Loader size="sm" />
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                {users.map((user, index) => (
+                            ) : (
+                                users.map((user, index) => (
                                     <tr
                                         key={user.user_id}
                                         className="border-b border-gray-800 hover:bg-dark transition-colors"
@@ -153,43 +152,41 @@ export const AllUsersTable: React.FC = () => {
                                                 : 'N/A'}
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
 
-                    {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="flex justify-between items-center mt-4 px-3">
-                            <div className="text-sm text-gray-400">
-                                Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                                {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
-                                    className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    Previous
-                                </button>
-                                <div className="flex items-center px-3 py-1 text-gray-400">
-                                    Page {currentPage} of {totalPages}
-                                </div>
-                                <button
-                                    onClick={() =>
-                                        setCurrentPage((p) => Math.min(totalPages, p + 1))
-                                    }
-                                    disabled={currentPage === totalPages}
-                                    className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    Next
-                                </button>
-                            </div>
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex justify-between items-center mt-4 px-3">
+                        <div className="text-sm text-gray-400">
+                            Showing {(currentPage - 1) * pageSize + 1} to{' '}
+                            {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
                         </div>
-                    )}
-                </>
-            )}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Previous
+                            </button>
+                            <div className="flex items-center px-3 py-1 text-gray-400">
+                                Page {currentPage} of {totalPages}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </>
         </div>
     );
 };
