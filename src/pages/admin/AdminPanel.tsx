@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
 import { PageLayout, Select, Tabs, CollapsibleForm, Button } from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
-import { TopUsersTable } from '../../components/admin/TopUsersTable';
+import { AllUsersTable } from '../../components/admin/AllUsersTable';
 import { StatCard } from '../../components/admin/StatCard';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
@@ -13,10 +13,8 @@ import { AddShipTemplateForm } from '../../components/admin/AddShipTemplateForm'
 import {
     isAdmin,
     getDailyUsageStats,
-    getTopActiveUsers,
     getTotalUserCount,
     DailyUsageStat,
-    TopUser,
 } from '../../services/adminService';
 import {
     getSystemStats,
@@ -46,7 +44,6 @@ export const AdminPanel: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
     const [dailyStats, setDailyStats] = useState<DailyUsageStat[]>([]);
-    const [topUsers, setTopUsers] = useState<TopUser[]>([]);
     const [totalUsers, setTotalUsers] = useState(0);
     const [daysBack, setDaysBack] = useState(7);
     const [activeTab, setActiveTab] = useState('analytics');
@@ -63,10 +60,9 @@ export const AdminPanel: React.FC = () => {
     const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
 
     const loadData = React.useCallback(async () => {
-        const [statsData, usersData, userCount, sysStats, growth, tables, distribution, proposals] =
+        const [statsData, userCount, sysStats, growth, tables, distribution, proposals] =
             await Promise.all([
                 getDailyUsageStats(daysBack),
-                getTopActiveUsers(5),
                 getTotalUserCount(),
                 getSystemStats(),
                 getGrowthStats(daysBack),
@@ -76,7 +72,6 @@ export const AdminPanel: React.FC = () => {
             ]);
 
         if (statsData) setDailyStats(statsData);
-        if (usersData) setTopUsers(usersData);
         setTotalUsers(userCount);
         if (sysStats) setSystemStats(sysStats);
         if (growth) setGrowthMetrics(growth);
@@ -244,8 +239,8 @@ export const AdminPanel: React.FC = () => {
                             title={`Daily Usage (Last ${daysBack} Days)`}
                         />
 
-                        {/* Top Users Table */}
-                        <TopUsersTable users={topUsers} />
+                        {/* All Users Table */}
+                        <AllUsersTable />
                     </div>
                 )}
 

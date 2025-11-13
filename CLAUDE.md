@@ -39,6 +39,10 @@ npm run migrate-implants    # Migrate implants to Supabase
 npm run migrate-to-supabase # Full migration to Supabase
 ```
 
+### SQL Scripts (Run in Supabase SQL Editor)
+
+- `scripts/sync-user-emails.sql` - Syncs user emails from auth.users to public.users and creates trigger for future users
+
 ## Architecture
 
 ### Data Flow & Storage Strategy
@@ -117,6 +121,8 @@ Defined in `src/constants/storage.ts`:
 **User Data Tables:**
 
 - `users` - User profiles, includes `is_admin` flag
+  - Auto-synced from `auth.users` via trigger on user creation/update
+  - Trigger: `on_auth_user_created` → `handle_new_user()`
 - `ships` - User ship instances (JSONB for stats, equipment, refits)
 - `inventory` - Gear pieces (JSONB for stats)
 - `engineering_stats` - Per-user ship type bonuses
@@ -130,9 +136,22 @@ Defined in `src/constants/storage.ts`:
 
 **Admin Features:**
 
-- Analytics dashboard with user activity, growth metrics
-- Table size monitoring (500 MB Supabase limit, ~15% overhead)
-- Template proposal review system
+- **Analytics Tab:**
+  - Summary stats: Total users, autogear runs, data imports, avg daily active users
+  - Daily usage chart
+  - All users table (sortable, searchable, paginated)
+    - Uses `get_top_active_users` RPC with high limit (10000) - only returns active users
+    - Client-side search by email
+    - Click column headers to sort (email, autogear runs, data imports, total activity, last active)
+    - Pagination (10 users per page)
+    - Shows full usage data: autogear runs, data imports, total activity, last active date
+- **System Health Tab:**
+  - Table size monitoring (500 MB Supabase limit, ~15% overhead)
+  - Growth metrics
+  - User distribution
+- **Templates Tab:**
+  - Template proposal review system
+  - Add new ship templates
 
 ### Game Data Import
 

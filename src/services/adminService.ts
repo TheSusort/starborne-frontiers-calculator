@@ -16,6 +16,27 @@ export interface TopUser {
     last_active: string;
 }
 
+export type UserSortField =
+    | 'email'
+    | 'total_autogear_runs'
+    | 'total_data_imports'
+    | 'total_activity'
+    | 'last_active';
+export type SortDirection = 'asc' | 'desc';
+
+export interface AllUsersParams {
+    search?: string;
+    sortBy?: UserSortField;
+    sortDirection?: SortDirection;
+    limit?: number;
+    offset?: number;
+}
+
+export interface AllUsersResponse {
+    users: TopUser[];
+    totalCount: number;
+}
+
 /**
  * Check if the current user is an admin
  */
@@ -95,5 +116,73 @@ export async function getTotalUserCount(): Promise<number> {
     } catch (error) {
         console.error('Error fetching user count:', error);
         return 0;
+    }
+}
+
+/**
+ * Get all users with sorting, searching, and pagination
+ */
+export async function getAllUsers(params: AllUsersParams = {}): Promise<AllUsersResponse> {
+    try {
+        const {
+            search = '',
+            sortBy = 'total_activity',
+            sortDirection = 'desc',
+            limit = 50,
+            offset = 0,
+        } = params;
+
+        // Use the same RPC function as getTopActiveUsers but with a high limit to get all users
+        const { data: allUsersData, error: rpcError } = await supabase.rpc('get_top_active_users', {
+            limit_count: 10000, // High limit to get all users
+        });
+
+        if (rpcError) {
+            console.error('Error fetching users via RPC:', rpcError);
+            return { users: [], totalCount: 0 };
+        }
+
+        if (!allUsersData || allUsersData.length === 0) {
+            return { users: [], totalCount: 0 };
+        }
+
+        // Convert to TopUser format (the RPC should already return this format)
+        let result: TopUser[] = allUsersData;
+
+        // Apply search filter
+        if (search) {
+            const searchLower = search.toLowerCase();
+            result = result.filter((user) => user.email.toLowerCase().includes(searchLower));
+        }
+
+        // Sort the results
+        result.sort((a, b) => {
+            let aVal: string | number = a[sortBy];
+            let bVal: string | number = b[sortBy];
+
+            // Handle null/undefined values
+            if (!aVal) aVal = sortBy === 'email' ? '' : 0;
+            if (!bVal) bVal = sortBy === 'email' ? '' : 0;
+
+            if (sortDirection === 'asc') {
+                return aVal > bVal ? 1 : -1;
+            } else {
+                return aVal < bVal ? 1 : -1;
+            }
+        });
+
+        // Get the total count after filtering
+        const totalCount = result.length;
+
+        // Apply pagination
+        const paginatedResult = result.slice(offset, offset + limit);
+
+        return {
+            users: paginatedResult,
+            totalCount: totalCount,
+        };
+    } catch (error) {
+        console.error('Error fetching all users:', error);
+        return { users: [], totalCount: 0 };
     }
 }
