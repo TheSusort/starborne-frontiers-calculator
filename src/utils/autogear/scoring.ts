@@ -29,20 +29,20 @@ export function calculateEffectiveHP(hp: number, defense: number): number {
     return hp * (100 / (100 - damageReduction));
 }
 
-// Defense penetration lookup table with known values
+// Defense penetration lookup table with known values at 15k defense
 const DEFENSE_PENETRATION_LOOKUP: Record<number, number> = {
-    0: 74.21,
-    7: 72.71,
-    14: 71.04,
-    20: 69.45,
-    21: 69.17,
-    27: 67.38,
-    34: 65.04,
-    41: 62.37,
+    0: 81.45,
+    7: 80.31,
+    14: 79,
+    20: 77.72,
+    21: 77.49,
+    27: 76,
+    34: 74,
+    41: 71.66,
 };
 
 // Default defense value for calculations
-const DEFAULT_DEFENSE = 10000;
+const DEFAULT_DEFENSE = 15000;
 
 export function calculateDPS(stats: BaseStats): number {
     const attack = stats.attack || 0;
