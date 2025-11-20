@@ -245,6 +245,7 @@ export const Sidebar: React.FC = () => {
                     { path: '/simulation', label: 'Simulation' },
                     { path: '/autogear', label: 'Autogear' },
                     { path: '/encounters', label: 'Encounters' },
+                    { path: '/statistics', label: 'Statistics' },
                 ],
             },
             {

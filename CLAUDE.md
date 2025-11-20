@@ -116,6 +116,106 @@ Defined in `src/constants/storage.ts`:
 
 **Note:** Shield stat is excluded from comparisons (not properly implemented in game)
 
+### Statistics Page
+
+**Purpose:** Comprehensive analytics dashboard for user's fleet, gear, implants, and engineering investments
+
+**Location:** `/statistics` route, accessible from Manager section in sidebar
+
+**Architecture:**
+
+- **Calculation Utilities** (`src/utils/statistics/`):
+  - `shipsStats.ts` - Ship analytics with filtering by role/rarity
+  - `gearStats.ts` - Gear analytics with filtering by set/mainStat/rarity
+  - `implantsStats.ts` - Implant analytics with filtering by type/rarity
+  - `engineeringStats.ts` - Engineering point distribution analysis
+
+- **Components** (`src/components/statistics/`):
+  - `StatisticsPage.tsx` - Main page with tab navigation
+  - `ShipsStatsTab.tsx` - Ship statistics visualization
+  - `GearStatsTab.tsx` - Gear statistics visualization
+  - `ImplantsStatsTab.tsx` - Implant statistics visualization
+  - `EngineeringStatsTab.tsx` - Engineering statistics visualization
+  - `StatCard.tsx` - Reusable metric card component
+
+**Ships Tab Features:**
+
+- **Filters:** Ship role (Attacker/Defender/Supporter/Debuffer), Ship rarity
+- **Metrics:**
+  - Total ships, average level, max level count/percentage
+  - Total refits, average refits per ship
+  - Ships with implants (count/percentage)
+  - Fully geared ships (count/percentage)
+  - Ungeared ships (count/percentage)
+  - Number of unique factions
+- **Visualizations:**
+  - Rarity distribution (pie chart with rarity colors)
+  - Role distribution (bar chart)
+  - Level distribution (histogram with bins: 1-5, 6-10, 11-15, 16-19, 20)
+  - Refits by rarity (bar chart)
+  - Ships by faction (table)
+
+**Gear Tab Features:**
+
+- **Filters:** Gear set bonus, Main stat type, Rarity
+- **Metrics:**
+  - Total gear pieces
+  - Equipped percentage
+  - Average level, average star level
+  - Max level count/percentage
+  - Most common set bonus
+  - Most common main stat
+- **Visualizations:**
+  - Top 10 gear sets (bar chart)
+  - Top 10 main stats with category colors (bar chart)
+  - Rarity distribution (pie chart)
+  - Star level distribution (bar chart, 1-6 stars)
+  - Gear level distribution (histogram with bins: 0-3, 4-7, 8-11, 12-15, 16)
+  - Slot distribution (bar chart)
+
+**Note:** Implants are excluded from gear statistics
+
+**Implants Tab Features:**
+
+- **Filters:** Implant type (Minor Alpha/Gamma/Sigma, Major, Ultimate), Rarity
+- **Metrics:**
+  - Total implants
+  - Equipped percentage
+  - Types available
+- **Visualizations:**
+  - Rarity distribution (pie chart)
+  - Type distribution (bar chart)
+  - Detailed type table with counts and percentages
+
+**Note:** Implants cannot be upgraded, so no level/star statistics are shown
+
+**Engineering Tab Features:**
+
+- **Metrics:**
+  - Total engineering points invested
+  - Average points per role
+  - Most invested role with point count
+  - Roles with zero investment
+- **Visualizations:**
+  - Points by role (horizontal bar chart)
+  - Point distribution by stat type (stacked bar chart per role)
+  - Detailed investment table (rows: roles, columns: stat types)
+  - Warning banner for roles with no investment
+
+**Visualization Library:** Recharts (BarChart, PieChart with responsive containers)
+
+**Empty State:** When no data exists, shows "Upload Game File" message with link to home page import
+
+**Data Sources:**
+- Ships: `useShips()` context
+- Gear: `useInventory()` context (filtered to exclude implants)
+- Implants: `useInventory()` context (filtered to only implants)
+- Engineering: `useEngineeringStats()` context
+
+**Engineering Points Conversion:**
+- Flat stats (hp, attack, defence, speed, hacking, security): 2 stat points per engineering point (divide by 2)
+- Percentage stats: 1 stat point per engineering point (use as-is)
+
 ### Database Schema (Supabase)
 
 **User Data Tables:**
