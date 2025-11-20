@@ -6,7 +6,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.24.0',
         date: '2025-11-20',
-        changes: ['Added statistics page'],
+        changes: [
+            'Added statistics page',
+            'Added edit button to gear in the gear upgrade analysis for easy update after upgrade in game.',
+        ],
     },
     {
         version: '1.23.0',

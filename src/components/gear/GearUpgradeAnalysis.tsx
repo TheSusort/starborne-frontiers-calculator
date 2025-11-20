@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GearPiece } from '../../types/gear';
 import { SHIP_TYPES, ShipTypeName, GEAR_SLOTS, GearSlotName } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
@@ -12,6 +12,7 @@ interface Props {
     inventory: GearPiece[];
     shipRoles: ShipTypeName[];
     mode: 'analysis' | 'simulation';
+    onEdit?: (piece: GearPiece) => void;
 }
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -22,7 +23,7 @@ const RARITY_OPTIONS = [
     { value: 'legendary', label: 'Legendary', description: 'Legendary only' },
 ] as const;
 
-export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode }) => {
+export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode, onEdit }) => {
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
     const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +46,49 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             GearSlotName | 'all'
         >
     );
+
+    // Sync updated gear pieces from inventory into results
+    useEffect(() => {
+        if (Object.keys(results).length === 0) return;
+
+        // Create a map of current inventory for O(1) lookups
+        const inventoryMap = new Map(inventory.map((piece) => [piece.id, piece]));
+
+        let hasChanges = false;
+        const updatedResults = { ...results };
+
+        // Iterate through all results and update any gear pieces that have changed
+        Object.keys(updatedResults).forEach((role) => {
+            const roleResults = updatedResults[role as ShipTypeName];
+            Object.keys(roleResults).forEach((slot) => {
+                const slotResults = roleResults[slot as GearSlotName | 'all'];
+
+                slotResults.forEach((result, index) => {
+                    const updatedPiece = inventoryMap.get(result.piece.id);
+
+                    // Check if the piece exists in inventory and has changed
+                    if (
+                        updatedPiece &&
+                        (updatedPiece.level !== result.piece.level ||
+                            updatedPiece.stars !== result.piece.stars ||
+                            updatedPiece.mainStat?.value !== result.piece.mainStat?.value ||
+                            JSON.stringify(updatedPiece.subStats) !==
+                                JSON.stringify(result.piece.subStats))
+                    ) {
+                        slotResults[index] = {
+                            ...result,
+                            piece: updatedPiece,
+                        };
+                        hasChanges = true;
+                    }
+                });
+            });
+        });
+
+        if (hasChanges) {
+            setResults(updatedResults);
+        }
+    }, [inventory, results]);
 
     const processRole = async (
         role: ShipTypeName,
@@ -348,7 +392,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {currentResults.map((result, index) => (
                                     <div key={result.piece.id} className="space-y-2">
-                                        <GearPieceDisplay gear={result.piece} />
+                                        <GearPieceDisplay
+                                            gear={result.piece}
+                                            mode="manage"
+                                            onEdit={onEdit}
+                                        />
                                         <div className="text-sm px-4 pb-4">
                                             <div
                                                 className={`flex justify-between ${winnerColors[index]}`}

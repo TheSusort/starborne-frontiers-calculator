@@ -109,6 +109,7 @@ export const GearPage: React.FC = () => {
                         inventory={inventory}
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="analysis"
+                        onEdit={handleEditPiece}
                     />
                 )}
                 {activeTab === 'simulation' && (
@@ -116,6 +117,7 @@ export const GearPage: React.FC = () => {
                         inventory={inventory}
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="simulation"
+                        onEdit={handleEditPiece}
                     />
                 )}
 
