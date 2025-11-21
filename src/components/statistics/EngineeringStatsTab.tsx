@@ -16,7 +16,9 @@ import {
 import { useAuth } from '../../contexts/AuthProvider';
 import {
     getEngineeringLeaderboard,
+    getEngineeringTokensLeaderboard,
     LeaderboardEntry,
+    TokensLeaderboardEntry,
 } from '../../services/engineeringLeaderboardService';
 import { TrophyIcon } from '../ui/icons';
 
@@ -106,6 +108,8 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
     const { user } = useAuth();
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+    const [tokensLeaderboard, setTokensLeaderboard] = useState<TokensLeaderboardEntry[]>([]);
+    const [tokensLeaderboardLoading, setTokensLeaderboardLoading] = useState(false);
 
     const stats = useMemo(() => {
         return calculateEngineeringStatistics(engineeringStats);
@@ -115,23 +119,31 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
     useEffect(() => {
         if (!user?.id) {
             setLeaderboard([]);
+            setTokensLeaderboard([]);
             return;
         }
 
-        const fetchLeaderboard = async () => {
+        const fetchLeaderboards = async () => {
             setLeaderboardLoading(true);
+            setTokensLeaderboardLoading(true);
             try {
-                const data = await getEngineeringLeaderboard(user.id);
-                setLeaderboard(data);
+                const [pointsData, tokensData] = await Promise.all([
+                    getEngineeringLeaderboard(user.id),
+                    getEngineeringTokensLeaderboard(user.id),
+                ]);
+                setLeaderboard(pointsData);
+                setTokensLeaderboard(tokensData);
             } catch (error) {
-                console.error('Failed to fetch leaderboard:', error);
+                console.error('Failed to fetch leaderboards:', error);
                 setLeaderboard([]);
+                setTokensLeaderboard([]);
             } finally {
                 setLeaderboardLoading(false);
+                setTokensLeaderboardLoading(false);
             }
         };
 
-        fetchLeaderboard();
+        fetchLeaderboards();
     }, [user?.id]);
 
     // Prepare leaderboard chart data
@@ -143,6 +155,16 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
             rank: entry.rank,
         }));
     }, [leaderboard]);
+
+    // Prepare tokens leaderboard chart data
+    const tokensLeaderboardChartData = useMemo(() => {
+        return tokensLeaderboard.map((entry) => ({
+            name: entry.isCurrentUser ? `#${entry.rank} (You)` : `#${entry.rank}`,
+            tokens: entry.totalTokens,
+            isCurrentUser: entry.isCurrentUser,
+            rank: entry.rank,
+        }));
+    }, [tokensLeaderboard]);
 
     // Prepare data for points by role chart
     const roleChartData = stats.byRole.map((role) => ({
@@ -257,65 +279,124 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                 </div>
             </div>
 
-            {/* Engineering Points Leaderboard */}
+            {/* Engineering Leaderboards */}
             {user && (
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
-                    <h3 className="text-lg font-semibold mb-4">Engineering Points Ranking</h3>
-                    <p className="text-sm text-gray-400 mb-4">
-                        See how your total engineering points compare to other players. All rankings
-                        are anonymous.
-                    </p>
-                    {leaderboardLoading ? (
-                        <div className="flex items-center justify-center h-[300px]">
-                            <div className="text-gray-400">Loading leaderboard...</div>
-                        </div>
-                    ) : leaderboardChartData.length === 0 ? (
-                        <div className="flex items-center justify-center h-[300px]">
-                            <div className="text-gray-400">
-                                No leaderboard data available. Start investing engineering points to
-                                appear on the leaderboard!
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Engineering Points Leaderboard */}
+                    <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                        <h3 className="text-lg font-semibold mb-4">Engineering Points Ranking</h3>
+                        <p className="text-sm text-gray-400 mb-4">
+                            Compare your total engineering points with other players.
+                        </p>
+                        {leaderboardLoading ? (
+                            <div className="flex items-center justify-center h-[300px]">
+                                <div className="text-gray-400">Loading leaderboard...</div>
                             </div>
-                        </div>
-                    ) : (
-                        <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={leaderboardChartData} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis type="number" stroke="#9ca3af" />
-                                <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    stroke="#9ca3af"
-                                    width={100}
-                                    tick={<CustomYAxisTick />}
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: '#1f2937',
-                                        border: '1px solid #374151',
-                                        color: '#f3f4f6',
-                                    }}
-                                    labelStyle={{ color: '#f3f4f6' }}
-                                    itemStyle={{ color: '#f3f4f6' }}
-                                    cursor={{ fill: 'transparent' }}
-                                    formatter={(value: number) => [
-                                        `${value.toLocaleString()} points`,
-                                        'Total',
-                                    ]}
-                                />
-                                <Bar dataKey="points">
-                                    {leaderboardChartData.map((entry, index) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={getLeaderboardBarColor(
-                                                entry.rank,
-                                                entry.isCurrentUser
-                                            )}
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    )}
+                        ) : leaderboardChartData.length === 0 ? (
+                            <div className="flex items-center justify-center h-[300px]">
+                                <div className="text-gray-400">
+                                    No data available. Start investing engineering points!
+                                </div>
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={leaderboardChartData} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                    <XAxis type="number" stroke="#9ca3af" />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        stroke="#9ca3af"
+                                        width={100}
+                                        tick={<CustomYAxisTick />}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#1f2937',
+                                            border: '1px solid #374151',
+                                            color: '#f3f4f6',
+                                        }}
+                                        labelStyle={{ color: '#f3f4f6' }}
+                                        itemStyle={{ color: '#f3f4f6' }}
+                                        cursor={{ fill: 'transparent' }}
+                                        formatter={(value: number) => [
+                                            `${value.toLocaleString()} points`,
+                                            'Total',
+                                        ]}
+                                    />
+                                    <Bar dataKey="points">
+                                        {leaderboardChartData.map((entry, index) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={getLeaderboardBarColor(
+                                                    entry.rank,
+                                                    entry.isCurrentUser
+                                                )}
+                                            />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
+
+                    {/* Engineering Tokens Leaderboard */}
+                    <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                        <h3 className="text-lg font-semibold mb-4">Engineering Tokens Ranking</h3>
+                        <p className="text-sm text-gray-400 mb-4">
+                            Compare total tokens spent. Higher levels cost more tokens!
+                        </p>
+                        {tokensLeaderboardLoading ? (
+                            <div className="flex items-center justify-center h-[300px]">
+                                <div className="text-gray-400">Loading leaderboard...</div>
+                            </div>
+                        ) : tokensLeaderboardChartData.length === 0 ? (
+                            <div className="flex items-center justify-center h-[300px]">
+                                <div className="text-gray-400">
+                                    No data available. Start investing engineering points!
+                                </div>
+                            </div>
+                        ) : (
+                            <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={tokensLeaderboardChartData} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                    <XAxis type="number" stroke="#9ca3af" />
+                                    <YAxis
+                                        dataKey="name"
+                                        type="category"
+                                        stroke="#9ca3af"
+                                        width={100}
+                                        tick={<CustomYAxisTick />}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#1f2937',
+                                            border: '1px solid #374151',
+                                            color: '#f3f4f6',
+                                        }}
+                                        labelStyle={{ color: '#f3f4f6' }}
+                                        itemStyle={{ color: '#f3f4f6' }}
+                                        cursor={{ fill: 'transparent' }}
+                                        formatter={(value: number) => [
+                                            `${value.toLocaleString()} tokens`,
+                                            'Total',
+                                        ]}
+                                    />
+                                    <Bar dataKey="tokens">
+                                        {tokensLeaderboardChartData.map((entry, index) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={getLeaderboardBarColor(
+                                                    entry.rank,
+                                                    entry.isCurrentUser
+                                                )}
+                                            />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        )}
+                    </div>
                 </div>
             )}
 
