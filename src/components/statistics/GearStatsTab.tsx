@@ -109,7 +109,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
     return (
         <div className="space-y-6">
             {/* Filters */}
-            <div className="bg-dark-lighter p-4 border border-gray-700 rounded">
+            <div className="bg-dark-lighter p-4 border border-gray-700 ">
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -212,7 +212,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Set Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Top 10 Gear Sets</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={setChartData} layout="vertical">
@@ -239,7 +239,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                 </div>
 
                 {/* Main Stat Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Top 10 Main Stats</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={mainStatChartData} layout="vertical">
@@ -266,7 +266,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                 </div>
 
                 {/* Rarity Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
@@ -296,7 +296,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                 </div>
 
                 {/* Star Level Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Star Level Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={starChartData}>
@@ -316,7 +316,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                 </div>
 
                 {/* Level Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded lg:col-span-2">
+                <div className="bg-dark-lighter p-6 border border-gray-700  lg:col-span-2">
                     <h3 className="text-lg font-semibold mb-4">Level Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={levelChartData}>
@@ -337,7 +337,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
             </div>
 
             {/* Slot Distribution Table */}
-            <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+            <div className="bg-dark-lighter p-6 border border-gray-700 ">
                 <h3 className="text-lg font-semibold mb-4">Gear by Slot</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full">

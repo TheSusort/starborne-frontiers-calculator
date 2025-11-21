@@ -80,7 +80,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
     return (
         <div className="space-y-6">
             {/* Filters */}
-            <div className="bg-dark-lighter p-4 border border-gray-700 rounded">
+            <div className="bg-dark-lighter p-4 border border-gray-700 ">
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -135,7 +135,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Rarity Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <PieChart>
@@ -165,7 +165,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                 </div>
 
                 {/* Type Distribution */}
-                <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+                <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Type Distribution</h3>
                     <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={typeChartData}>
@@ -186,7 +186,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
             </div>
 
             {/* Set Bonus Distribution by Type */}
-            <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+            <div className="bg-dark-lighter p-6 border border-gray-700 ">
                 <h3 className="text-lg font-semibold mb-4">Set Bonus Distribution by Type</h3>
 
                 {/* Minor Implants Row */}
@@ -280,7 +280,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
             </div>
 
             {/* Detailed Table */}
-            <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
+            <div className="bg-dark-lighter p-6 border border-gray-700 ">
                 <h3 className="text-lg font-semibold mb-4">Implants by Type</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full">
