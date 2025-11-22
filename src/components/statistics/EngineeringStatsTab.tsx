@@ -38,15 +38,21 @@ const CHART_COLORS = [
 // Medal colors matching the ship leaderboard
 const MEDAL_COLORS = {
     gold: '#facc15', // yellow-400
+    goldLight: '#fef08a', // yellow-200 (for current user in 1st)
     silver: '#d1d5db', // gray-300
+    silverLight: '#f3f4f6', // gray-100 (for current user in 2nd)
     bronze: '#d97706', // amber-600
-    default: '#d97706', // blue
-    currentUser: '#f7b06e', // green
+    default: '#d97706', // bronze
+    currentUser: '#f7b06e', // orange
 };
 
 // Get bar color based on rank and whether it's the current user
 const getLeaderboardBarColor = (rank: number, isCurrentUser: boolean): string => {
-    if (isCurrentUser) return MEDAL_COLORS.currentUser;
+    if (isCurrentUser) {
+        if (rank === 1) return MEDAL_COLORS.goldLight;
+        if (rank === 2) return MEDAL_COLORS.silverLight;
+        return MEDAL_COLORS.currentUser;
+    }
     if (rank === 1) return MEDAL_COLORS.gold;
     if (rank === 2) return MEDAL_COLORS.silver;
     return MEDAL_COLORS.default;
@@ -308,6 +314,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         type="category"
                                         stroke="#9ca3af"
                                         width={100}
+                                        interval={0}
                                         tick={<CustomYAxisTick />}
                                     />
                                     <Tooltip
@@ -366,6 +373,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         type="category"
                                         stroke="#9ca3af"
                                         width={100}
+                                        interval={0}
                                         tick={<CustomYAxisTick />}
                                     />
                                     <Tooltip
