@@ -14,15 +14,15 @@ interface TabsProps {
 export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
     return (
         <div className="mb-4">
-            <div className="border-b border-gray-700">
-                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+            <div className="border-b border-gray-700 overflow-x-auto overflow-y-hidden tabs-scrollbar">
+                <nav className="-mb-px flex space-x-4 min-w-max" aria-label="Tabs">
                     {tabs.map((tab) => (
                         <button
                             aria-label={tab.label}
                             key={tab.id}
                             onClick={() => onChange(tab.id)}
                             className={`
-                                whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm
+                                whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm flex-shrink-0
                                 ${
                                     activeTab === tab.id
                                         ? 'border-primary text-primary'

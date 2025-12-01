@@ -169,7 +169,7 @@ function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
 
     return Math.round(cost);
 }
-function calculateGearStats(piece: GearPiece): BaseStats {
+export function calculateGearStats(piece: GearPiece): BaseStats {
     // Calculate total crit from this gear piece for crit-capping
     let totalGearCrit = 0;
     if (piece.mainStat?.name === 'crit') {

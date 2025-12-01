@@ -8,6 +8,7 @@ export const StorageKey = {
     CHANGELOG_STATE: 'changelog_state',
     GEAR_UPGRADES: 'gear_upgrades',
     AUTOGEAR_CONFIGS: 'autogear_configs',
+    CRAFTING_MATERIALS: 'crafting_materials',
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];

@@ -3,6 +3,7 @@ import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
 import { GearInventory } from '../../components/gear/GearInventory';
 import { GearUpgradeAnalysis } from '../../components/gear/GearUpgradeAnalysis';
+import { CraftingTab } from '../../components/crafting/CraftingTab';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
@@ -25,6 +26,7 @@ export const GearPage: React.FC = () => {
         { id: 'inventory', label: 'Inventory' },
         { id: 'analysis', label: 'Upgrade Analysis' },
         { id: 'simulation', label: 'Simulate Upgrades' },
+        { id: 'crafting', label: 'Crafting' },
     ];
 
     const handleRemovePiece = async (id: string) => {
@@ -120,6 +122,7 @@ export const GearPage: React.FC = () => {
                         onEdit={handleEditPiece}
                     />
                 )}
+                {activeTab === 'crafting' && <CraftingTab inventory={inventory} />}
 
                 <ConfirmModal
                     isOpen={showDeleteConfirm}
