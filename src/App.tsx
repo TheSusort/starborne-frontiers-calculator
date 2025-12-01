@@ -41,6 +41,9 @@ const DPSCalculatorPage = lazy(() => import('./pages/calculators/DPSCalculatorPa
 const HealingCalculatorPage = lazy(() => import('./pages/calculators/HealingCalculatorPage'));
 const DamageDeconstructionPage = lazy(() => import('./pages/calculators/DamageDeconstructionPage'));
 const JsonDiffCalculatorPage = lazy(() => import('./pages/calculators/JsonDiffCalculatorPage'));
+const RecruitmentCalculatorPage = lazy(
+    () => import('./pages/calculators/RecruitmentCalculatorPage')
+);
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 
 // init hotjar
@@ -172,6 +175,12 @@ const App: React.FC = () => {
                                                                     path="/json-diff"
                                                                     element={
                                                                         <JsonDiffCalculatorPage />
+                                                                    }
+                                                                />
+                                                                <Route
+                                                                    path="/recruitment"
+                                                                    element={
+                                                                        <RecruitmentCalculatorPage />
                                                                     }
                                                                 />
                                                                 <Route
