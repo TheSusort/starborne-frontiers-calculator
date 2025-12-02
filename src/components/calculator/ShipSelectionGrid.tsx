@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { RARITIES, RARITY_ORDER } from '../../constants';
 import { Input } from '../ui/Input';
+import { isEventOnlyShip } from '../../utils/recruitmentCalculator';
 
 interface ShipSelectionGridProps {
     ships: Ship[];
@@ -77,6 +78,7 @@ export const ShipSelectionGrid: React.FC<ShipSelectionGridProps> = ({
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                                 {ships.map((ship) => {
                                     const isSelected = selectedShipNames.has(ship.name);
+                                    const isEventOnly = isEventOnlyShip(ship.name);
                                     return (
                                         <button
                                             key={ship.name}
@@ -93,6 +95,16 @@ export const ShipSelectionGrid: React.FC<ShipSelectionGridProps> = ({
                                             `}
                                         >
                                             {ship.name}
+                                            {isEventOnly && (
+                                                <span
+                                                    className={`
+                                                        ${isSelected ? 'text-dark' : 'text-primary'}
+                                                        ml-1
+                                                    `}
+                                                >
+                                                    *
+                                                </span>
+                                            )}
                                         </button>
                                     );
                                 })}

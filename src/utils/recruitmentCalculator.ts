@@ -2,18 +2,19 @@ import { Ship, AffinityName } from '../types/ship';
 import { RarityName } from '../constants/rarities';
 
 // Ships that cannot be recruited through beacons
-const NON_RECRUITABLE_SHIPS = [
-    'Wusheng',
-    'Lionheart',
-    'Oleander',
-    'Nyxen',
-    'Asphodel',
-    'Lev',
-    'Wildfire',
-    'Amartya',
-];
+const NON_RECRUITABLE_SHIPS = ['Wusheng', 'Lionheart', 'Oleander', 'Nyxen', 'Asphodel', 'Lev'];
+
+// Ships that are only available during events (event-only ships)
+const EVENT_ONLY_SHIPS: string[] = ['Wildfire', 'Amartya'];
 
 export type BeaconType = 'public' | 'specialist' | 'expert' | 'elite';
+
+/**
+ * Check if a ship is event-only
+ */
+export const isEventOnlyShip = (shipName: string): boolean => {
+    return EVENT_ONLY_SHIPS.includes(shipName);
+};
 
 export interface BeaconRates {
     common: number;
@@ -87,9 +88,21 @@ export const getBeaconRates = (beaconType: BeaconType): BeaconRates => {
 
 /**
  * Filter out non-recruitable ships
+ * Note: This includes event-only ships for selection purposes
  */
 export const getRecruitableShips = (ships: Ship[]): Ship[] => {
     return ships.filter((ship) => !NON_RECRUITABLE_SHIPS.includes(ship.name));
+};
+
+/**
+ * Get ships available in the general pool (excludes event-only ships)
+ * Used for probability calculations to exclude event-only ships from pool counts
+ */
+export const getGeneralPoolShips = (ships: Ship[]): Ship[] => {
+    return ships.filter(
+        (ship) =>
+            !NON_RECRUITABLE_SHIPS.includes(ship.name) && !EVENT_ONLY_SHIPS.includes(ship.name)
+    );
 };
 
 /**
@@ -204,7 +217,24 @@ export const calculateShipProbability = (
     ships: Ship[],
     eventShips: EventShip[] = []
 ): number => {
-    const recruitableShips = getRecruitableShips(ships);
+    // Check if ship is event-only
+    const isEventOnly = isEventOnlyShip(ship.name);
+
+    // Event-only ships are only available through specialist beacons during events
+    if (isEventOnly) {
+        if (beaconType !== 'specialist') {
+            return 0; // Event-only ships only available in specialist beacons
+        }
+
+        // Check if this event-only ship is part of the current event
+        const isInEvent = eventShips.some((es) => es.name === ship.name);
+        if (!isInEvent) {
+            return 0; // Event-only ship not in current event
+        }
+    }
+
+    // Use general pool ships (excludes event-only ships) for pool counts
+    const generalPoolShips = getGeneralPoolShips(ships);
     const rates = getBeaconRates(beaconType);
 
     // Get the base rate for the ship's rarity
@@ -223,9 +253,9 @@ export const calculateShipProbability = (
     // Get affinity rate (10% for antimatter, 30% for others)
     const affinityRate = getAffinityRate(ship.affinity);
 
-    // Count ships of the same rarity AND affinity
+    // Count ships of the same rarity AND affinity from general pool
     const shipsOfRarityAndAffinity = getShipsByRarityAndAffinity(
-        recruitableShips,
+        generalPoolShips,
         ship.rarity,
         ship.affinity
     );
@@ -254,9 +284,15 @@ export const calculateShipProbability = (
         }
 
         // This is not an event ship, or it's a guaranteed ship (no rate), but there might be event ships of the same rarity
+        // For pool calculations, exclude event-only ships that are in the event
         const eventShipsOfThisRarity = eventShips.filter((es) => {
-            const eventShip = recruitableShips.find((s) => s.name === es.name);
-            return eventShip && eventShip.rarity === ship.rarity && es.rate !== undefined;
+            const eventShip = generalPoolShips.find((s: Ship) => s.name === es.name);
+            // Also include event-only ships that are in the event
+            const eventOnlyShip = isEventOnlyShip(es.name)
+                ? ships.find((s: Ship) => s.name === es.name)
+                : null;
+            const shipToCheck = eventShip || eventOnlyShip;
+            return shipToCheck && shipToCheck.rarity === ship.rarity && es.rate !== undefined;
         });
 
         if (eventShipsOfThisRarity.length > 0) {
