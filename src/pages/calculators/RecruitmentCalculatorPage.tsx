@@ -319,37 +319,46 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                                 ({rarityInfo.label})
                                                             </span>
                                                         </div>
-                                                        <Input
-                                                            label="Rate Change (%)"
-                                                            type="number"
-                                                            min="0"
-                                                            max="100"
-                                                            value={eventShipRates[ship.name] || 0}
-                                                            onChange={(e) =>
-                                                                updateEventShipRate(
-                                                                    ship.name,
-                                                                    parseFloat(e.target.value) || 0
-                                                                )
-                                                            }
-                                                            disabled={hasThreshold}
-                                                            helpLabel={`Percentage chance that a ${ship.rarity} pull is ${ship.name} (usually 25% or 50%). Disabled if guaranteed threshold is set.`}
-                                                        />
-                                                        <Input
-                                                            label="Guaranteed After (Pulls)"
-                                                            type="number"
-                                                            min="1"
-                                                            value={
-                                                                eventShipThresholds[ship.name] || 0
-                                                            }
-                                                            onChange={(e) =>
-                                                                updateEventShipThreshold(
-                                                                    ship.name,
-                                                                    parseInt(e.target.value) || 0
-                                                                )
-                                                            }
-                                                            disabled={hasRate}
-                                                            helpLabel={`Number of specialist pulls needed to guarantee ${ship.name} (usually ${ship.rarity === 'legendary' ? '100-150' : '40'} pulls). Disabled if rate change is set.`}
-                                                        />
+                                                        <div className="flex items-center gap-2">
+                                                            <Input
+                                                                label="Rate Change (%)"
+                                                                type="number"
+                                                                min="0"
+                                                                max="100"
+                                                                value={
+                                                                    eventShipRates[ship.name] || 0
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateEventShipRate(
+                                                                        ship.name,
+                                                                        parseFloat(
+                                                                            e.target.value
+                                                                        ) || 0
+                                                                    )
+                                                                }
+                                                                disabled={hasThreshold}
+                                                                helpLabel={`Percentage chance that a ${ship.rarity} pull is ${ship.name} (usually 25% or 50%). Disabled if guaranteed threshold is set.`}
+                                                            />
+                                                            <Input
+                                                                label="Guaranteed After (Pulls)"
+                                                                type="number"
+                                                                min="1"
+                                                                value={
+                                                                    eventShipThresholds[
+                                                                        ship.name
+                                                                    ] || 0
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateEventShipThreshold(
+                                                                        ship.name,
+                                                                        parseInt(e.target.value) ||
+                                                                            0
+                                                                    )
+                                                                }
+                                                                disabled={hasRate}
+                                                                helpLabel={`Number of specialist pulls needed to guarantee ${ship.name} (usually ${ship.rarity === 'legendary' ? '100-150' : '40'} pulls). Disabled if rate change is set.`}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 );
                                             })}

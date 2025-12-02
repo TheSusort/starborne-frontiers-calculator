@@ -1,4 +1,4 @@
-import { Ship } from '../types/ship';
+import { Ship, AffinityName } from '../types/ship';
 import { RarityName } from '../constants/rarities';
 
 // Ships that cannot be recruited through beacons
@@ -89,6 +89,25 @@ export const getRecruitableShips = (ships: Ship[]): Ship[] => {
 export const getShipsByRarity = (ships: Ship[], rarity: RarityName): Ship[] => {
     const recruitable = getRecruitableShips(ships);
     return recruitable.filter((ship) => ship.rarity === rarity);
+};
+
+/**
+ * Get ships by rarity AND affinity from recruitable ships
+ */
+export const getShipsByRarityAndAffinity = (
+    ships: Ship[],
+    rarity: RarityName,
+    affinity: AffinityName
+): Ship[] => {
+    const recruitable = getRecruitableShips(ships);
+    return recruitable.filter((ship) => ship.rarity === rarity && ship.affinity === affinity);
+};
+
+/**
+ * Get the affinity split rate (10% for antimatter, 30% for others)
+ */
+export const getAffinityRate = (affinity: AffinityName): number => {
+    return affinity === 'antimatter' ? 0.1 : 0.3;
 };
 
 /**
@@ -187,11 +206,23 @@ export const calculateShipProbability = (
         return 0;
     }
 
-    // Count ships of the same rarity
-    const shipsOfRarity = getShipsByRarity(recruitableShips, ship.rarity);
-    const totalShipsOfRarity = shipsOfRarity.length;
+    // Get ship's affinity (all ships have affinity)
+    if (!ship.affinity) {
+        return 0; // Safety check, though all ships should have affinity
+    }
 
-    if (totalShipsOfRarity === 0) {
+    // Get affinity rate (10% for antimatter, 30% for others)
+    const affinityRate = getAffinityRate(ship.affinity);
+
+    // Count ships of the same rarity AND affinity
+    const shipsOfRarityAndAffinity = getShipsByRarityAndAffinity(
+        recruitableShips,
+        ship.rarity,
+        ship.affinity
+    );
+    const totalShipsOfRarityAndAffinity = shipsOfRarityAndAffinity.length;
+
+    if (totalShipsOfRarityAndAffinity === 0) {
         return 0;
     }
 
@@ -204,12 +235,13 @@ export const calculateShipProbability = (
             // If it has a threshold (guaranteed), it still has a probability before the threshold
             // For guaranteed ships, we still calculate the base probability
             if (eventShipForThisShip.rate !== undefined) {
-                // This is an event ship with rate: probability = rarity rate * event ship rate
+                // Event ship with rate: probability = rarity rate * event ship rate
+                // Event rates are per-ship, so they bypass affinity splitting
                 return rarityRate * eventShipForThisShip.rate;
             }
             // If it's guaranteed (has threshold), we still need to calculate the probability
             // before the threshold for expected pulls calculation
-            // For now, use base probability
+            // Use base probability with affinity split
         }
 
         // This is not an event ship, or it's a guaranteed ship (no rate), but there might be event ships of the same rarity
@@ -225,22 +257,23 @@ export const calculateShipProbability = (
                 0
             );
 
-            // Non-event ships of this rarity: probability = rarity rate * (1 - total event rate) / (number of non-event ships)
-            const nonEventShips = shipsOfRarity.filter(
+            // Get all non-event ships of this rarity and affinity
+            const nonEventShipsOfRarityAndAffinity = shipsOfRarityAndAffinity.filter(
                 (s) => !eventShipsOfThisRarity.some((es) => es.name === s.name)
             );
-            const nonEventCount = nonEventShips.length;
+            const nonEventCount = nonEventShipsOfRarityAndAffinity.length;
 
             if (nonEventCount === 0) {
                 return 0;
             }
 
-            return (rarityRate * (1 - totalEventRate)) / nonEventCount;
+            // Non-event ships: probability = (rarity rate * affinity rate * (1 - total event rate)) / (number of non-event ships of this rarity+affinity)
+            return (rarityRate * affinityRate * (1 - totalEventRate)) / nonEventCount;
         }
     }
 
-    // Base probability: rarity rate / number of ships of that rarity
-    return rarityRate / totalShipsOfRarity;
+    // Base probability: (rarity rate * affinity rate) / number of ships of that rarity AND affinity
+    return (rarityRate * affinityRate) / totalShipsOfRarityAndAffinity;
 };
 
 /**
