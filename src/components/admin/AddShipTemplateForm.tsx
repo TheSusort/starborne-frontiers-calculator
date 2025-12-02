@@ -76,7 +76,13 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        await onSubmit(formData);
+        // Generate definitionId from name: uppercase and replace spaces with underscores
+        const generatedDefinitionId = formData.name.toUpperCase().replace(/\s+/g, '_');
+        const dataToSubmit = {
+            ...formData,
+            definitionId: generatedDefinitionId,
+        };
+        await onSubmit(dataToSubmit);
         // Reset form
         setFormData({
             name: '',

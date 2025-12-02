@@ -180,12 +180,12 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Inferno II',
-        description: '30% Damage',
+        description: "Deals Damage equal to 30% of this units's attack, ignores defense and shield",
         type: 'debuff',
     },
     {
         name: 'Inferno III',
-        description: '45% Damage',
+        description: "Deals Damage equal to 45% of this units's attack, ignores defense and shield",
         type: 'debuff',
     },
     {
@@ -505,7 +505,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Inferno I',
-        description: '15% Damage',
+        description: "Deals Damage equal to 15% of this units's attack, ignores defense and shield",
         type: 'debuff',
     },
     {
@@ -789,5 +789,17 @@ export const BUFFS: Buff[] = [
         name: 'Inc. Repair Up III',
         description: '+75% Incoming Repair',
         type: 'buff',
+    },
+    {
+        name: 'Scorching Radiation',
+        description:
+            'When Inferno deals damage to this unit, deal 100% of the damage to all adjacent units. This damage counts as Inferno damage.',
+        type: 'debuff',
+    },
+    {
+        name: 'Inferno',
+        description:
+            "Deals Damage equal to 15/30/45% of this units's attack, ignores defense and shield.",
+        type: 'debuff',
     },
 ];

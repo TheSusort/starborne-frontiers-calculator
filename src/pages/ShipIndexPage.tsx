@@ -397,14 +397,14 @@ export const ShipIndexPage: React.FC = () => {
                                                         }
                                                         onMouseLeave={() => setPassive3Hover('')}
                                                     >
-                                                        Passive R3
+                                                        Passive R4
                                                     </Button>
                                                     <Tooltip
                                                         isVisible={passive3Hover === ship.name}
                                                     >
                                                         <SkillTooltip
                                                             skillText={ship.thirdPassiveSkillText}
-                                                            skillType="Passive Skill R3"
+                                                            skillType="Passive Skill R4"
                                                         />
                                                     </Tooltip>
                                                 </div>
