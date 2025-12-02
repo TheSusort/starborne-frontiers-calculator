@@ -302,19 +302,82 @@ export const calculateMultipleShipsProbability = (
 };
 
 /**
+ * Calculate probability of having all target ships after N pulls
+ */
+export const calculateProbabilityOfAllShipsAfterPulls = (
+    targetShips: Ship[],
+    beaconType: BeaconType,
+    ships: Ship[],
+    numberOfPulls: number,
+    eventShips: EventShip[] = []
+): number => {
+    if (targetShips.length === 0 || numberOfPulls === 0) {
+        return 0;
+    }
+
+    // Probability of having all ships = product of (probability of having each ship)
+    // P(having ship i in n pulls) = 1 - (1 - p_i)^n
+    let probabilityOfHavingAll = 1;
+
+    for (const ship of targetShips) {
+        const shipProbability = calculateShipProbability(ship, beaconType, ships, eventShips);
+        if (shipProbability === 0) {
+            return 0; // If any ship is impossible, probability of having all is 0
+        }
+        const probabilityOfHavingThisShip = 1 - Math.pow(1 - shipProbability, numberOfPulls);
+        probabilityOfHavingAll *= probabilityOfHavingThisShip;
+    }
+
+    return probabilityOfHavingAll;
+};
+
+/**
  * Calculate expected number of pulls to get a ship
- * @param probability - Probability per pull
+ * @param probability - Probability per pull (for OR mode) or array of individual probabilities (for AND mode)
  * @param beaconType - Type of beacon (only specialist beacons support guaranteed ships)
  * @param eventShips - Optional array of event ships (to check for guaranteed ships)
  * @param targetShipNames - Names of target ships to check against guaranteed ships
+ * @param mode - 'or' for at least one, 'and' for all ships
  */
 export const calculateExpectedPulls = (
-    probability: number,
+    probability: number | number[],
     beaconType: BeaconType,
     eventShips: EventShip[] = [],
-    targetShipNames: string[] = []
+    targetShipNames: string[] = [],
+    mode: 'or' | 'and' = 'or'
 ): number => {
-    if (probability === 0) {
+    if (mode === 'and' && Array.isArray(probability)) {
+        // AND mode: Expected pulls = max of individual expected pulls
+        // Since we need all ships, we need to get the rarest one
+        const expectedPullsArray = probability.map((p) => {
+            if (p === 0) {
+                return Infinity;
+            }
+            // Handle guaranteed ships for specialist beacons
+            if (beaconType === 'specialist') {
+                const guaranteedTargetShips = eventShips.filter(
+                    (es) => es.threshold !== undefined && targetShipNames.includes(es.name)
+                );
+                if (guaranteedTargetShips.length > 0) {
+                    const minThreshold = Math.min(
+                        ...guaranteedTargetShips.map((es) => es.threshold || Infinity)
+                    );
+                    const probBeforeThreshold = 1 - Math.pow(1 - p, minThreshold);
+                    const expectedPullsBeforeThreshold = p > 0 ? 1 / p : Infinity;
+                    return (
+                        probBeforeThreshold * Math.min(expectedPullsBeforeThreshold, minThreshold) +
+                        (1 - probBeforeThreshold) * minThreshold
+                    );
+                }
+            }
+            return 1 / p;
+        });
+        return Math.max(...expectedPullsArray);
+    }
+
+    // OR mode (original logic)
+    const prob = typeof probability === 'number' ? probability : probability[0];
+    if (prob === 0) {
         return Infinity;
     }
 
@@ -339,8 +402,8 @@ export const calculateExpectedPulls = (
             // Expected pulls = (probability of getting it before threshold) * (expected pulls if we get it before threshold)
             //                + (1 - probability of getting it before threshold) * threshold
 
-            const probBeforeThreshold = 1 - Math.pow(1 - probability, minThreshold);
-            const expectedPullsBeforeThreshold = probability > 0 ? 1 / probability : Infinity;
+            const probBeforeThreshold = 1 - Math.pow(1 - prob, minThreshold);
+            const expectedPullsBeforeThreshold = prob > 0 ? 1 / prob : Infinity;
 
             // Weighted average: if we get it early, use early expected pulls; if not, use threshold
             return (
@@ -350,25 +413,70 @@ export const calculateExpectedPulls = (
         }
     }
 
-    return 1 / probability;
+    return 1 / prob;
 };
 
 /**
  * Calculate number of pulls needed for a given confidence level
- * @param probability - Probability per pull
+ * @param probability - Probability per pull (for OR mode) or array of individual probabilities (for AND mode)
  * @param confidence - Confidence level (0-1)
  * @param beaconType - Type of beacon (only specialist beacons support guaranteed ships)
  * @param eventShips - Optional array of event ships (to check for guaranteed ships)
  * @param targetShipNames - Names of target ships to check against guaranteed ships
+ * @param mode - 'or' for at least one, 'and' for all ships
+ * @param targetShips - Array of target ships (needed for AND mode)
+ * @param allShips - All available ships (needed for AND mode)
  */
 export const calculatePullsForConfidence = (
-    probability: number,
+    probability: number | number[],
     confidence: number,
     beaconType: BeaconType,
     eventShips: EventShip[] = [],
-    targetShipNames: string[] = []
+    targetShipNames: string[] = [],
+    mode: 'or' | 'and' = 'or',
+    targetShips: Ship[] = [],
+    allShips: Ship[] = []
 ): number => {
-    if (probability === 0) {
+    if (mode === 'and' && Array.isArray(probability)) {
+        // AND mode: Find n where P(all ships in n pulls) >= confidence
+        // P(all in n) = ∏(1 - (1 - p_i)^n)
+        // We need to solve for n iteratively
+        let n = 1;
+        const maxIterations = 1000000; // Safety limit
+        const step = 100; // Start with larger steps, then refine
+
+        while (n < maxIterations) {
+            let probAll = 1;
+            for (const p of probability) {
+                if (p === 0) {
+                    return Infinity; // If any ship is impossible, can never get all
+                }
+                probAll *= 1 - Math.pow(1 - p, n);
+            }
+
+            if (probAll >= confidence) {
+                // Found it, now refine
+                for (let refined = Math.max(1, n - step); refined < n; refined++) {
+                    let probAllRefined = 1;
+                    for (const p of probability) {
+                        probAllRefined *= 1 - Math.pow(1 - p, refined);
+                    }
+                    if (probAllRefined >= confidence) {
+                        return refined;
+                    }
+                }
+                return n;
+            }
+
+            n += step;
+        }
+
+        return Infinity;
+    }
+
+    // OR mode (original logic)
+    const prob = typeof probability === 'number' ? probability : probability[0];
+    if (prob === 0) {
         return Infinity;
     }
 
@@ -387,9 +495,7 @@ export const calculatePullsForConfidence = (
 
             // If confidence can be achieved before the threshold, calculate normally
             // Otherwise, return the threshold (since it's guaranteed at that point)
-            const pullsBeforeThreshold = Math.ceil(
-                Math.log(1 - confidence) / Math.log(1 - probability)
-            );
+            const pullsBeforeThreshold = Math.ceil(Math.log(1 - confidence) / Math.log(1 - prob));
 
             // If we can achieve the confidence before the threshold, use that
             if (pullsBeforeThreshold < minThreshold) {
@@ -406,7 +512,7 @@ export const calculatePullsForConfidence = (
     // (1 - p)^n <= 1 - confidence
     // n * ln(1 - p) <= ln(1 - confidence)
     // n >= ln(1 - confidence) / ln(1 - p)
-    const n = Math.log(1 - confidence) / Math.log(1 - probability);
+    const n = Math.log(1 - confidence) / Math.log(1 - prob);
     return Math.ceil(n);
 };
 
@@ -474,12 +580,14 @@ export const calculateProbabilityWithPulls = (
 export const calculateRecruitmentResults = (
     targetShips: Ship[],
     ships: Ship[],
-    eventShips: EventShip[] = []
+    eventShips: EventShip[] = [],
+    mode: 'or' | 'and' = 'or'
 ): RecruitmentResult[] => {
     const beaconTypes: BeaconType[] = ['public', 'specialist', 'expert', 'elite'];
     const targetShipNames = targetShips.map((s) => s.name);
 
     return beaconTypes.map((beaconType) => {
+        // Probability per pull stays as OR (at least one) for both modes
         const probability = calculateMultipleShipsProbability(
             targetShips,
             beaconType,
@@ -487,26 +595,41 @@ export const calculateRecruitmentResults = (
             eventShips
         );
 
+        // For AND mode, we need individual probabilities for each ship
+        const individualProbabilities =
+            mode === 'and'
+                ? targetShips.map((ship) =>
+                      calculateShipProbability(ship, beaconType, ships, eventShips)
+                  )
+                : probability;
+
         // Event ships only affect specialist beacon calculations
         const expectedPulls = calculateExpectedPulls(
-            probability,
+            mode === 'and' ? individualProbabilities : probability,
             beaconType,
             eventShips,
-            targetShipNames
+            targetShipNames,
+            mode
         );
         const pullsFor90Percent = calculatePullsForConfidence(
-            probability,
+            mode === 'and' ? individualProbabilities : probability,
             0.9,
             beaconType,
             eventShips,
-            targetShipNames
+            targetShipNames,
+            mode,
+            targetShips,
+            ships
         );
         const pullsFor99Percent = calculatePullsForConfidence(
-            probability,
+            mode === 'and' ? individualProbabilities : probability,
             0.99,
             beaconType,
             eventShips,
-            targetShipNames
+            targetShipNames,
+            mode,
+            targetShips,
+            ships
         );
 
         return {

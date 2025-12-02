@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.25.0';
+export const CURRENT_VERSION = '1.25.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.25.1',
+        date: '2025-12-02',
+        changes: [
+            'Added AND mode to recruitment calculator',
+            'Added affinity adjustments to recruitment calculator',
+        ],
+    },
     {
         version: '1.25.0',
         date: '2025-12-01',

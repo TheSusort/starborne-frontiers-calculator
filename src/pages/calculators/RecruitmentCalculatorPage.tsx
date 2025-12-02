@@ -13,9 +13,11 @@ import { SEO_CONFIG } from '../../constants/seo';
 import {
     calculateRecruitmentResults,
     getRecruitableShips,
+    RecruitmentResult,
     BeaconType,
     EventShip,
     calculateProbabilityWithPulls,
+    calculateProbabilityOfAllShipsAfterPulls,
     groupShipsByRarity,
     getBeaconLabel,
     getBeaconDescription,
@@ -35,6 +37,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
         elite: 0,
     });
     const [isEventSettingsOpen, setIsEventSettingsOpen] = useState(false);
+    const [calculationMode, setCalculationMode] = useState<'or' | 'and'>('or');
 
     // Get recruitable ships
     const recruitableShips = useMemo(() => {
@@ -82,8 +85,8 @@ const RecruitmentCalculatorPage: React.FC = () => {
             return [];
         }
 
-        return calculateRecruitmentResults(selectedShips, allShips, eventShips);
-    }, [selectedShips, allShips, eventShips]);
+        return calculateRecruitmentResults(selectedShips, allShips, eventShips, calculationMode);
+    }, [selectedShips, allShips, eventShips, calculationMode]);
 
     const toggleShipSelection = (shipName: string) => {
         setSelectedShipNames((prev) => {
@@ -241,6 +244,38 @@ const RecruitmentCalculatorPage: React.FC = () => {
                             searchPlaceholder="Type to search ships..."
                         />
                     </div>
+
+                    {/* Calculation Mode Toggle */}
+                    {selectedShips.length > 1 && (
+                        <div className="bg-dark p-4 border border-dark-border">
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm font-medium">Calculation Mode:</span>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant={calculationMode === 'or' ? 'primary' : 'secondary'}
+                                        onClick={() => setCalculationMode('or')}
+                                        size="sm"
+                                    >
+                                        OR (At least one)
+                                    </Button>
+                                    <Button
+                                        variant={
+                                            calculationMode === 'and' ? 'primary' : 'secondary'
+                                        }
+                                        onClick={() => setCalculationMode('and')}
+                                        size="sm"
+                                    >
+                                        AND (All ships)
+                                    </Button>
+                                </div>
+                                <span className="text-xs text-gray-400">
+                                    {calculationMode === 'or'
+                                        ? 'Probability of getting at least one target ship'
+                                        : 'Probability of getting all target ships'}
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Specialist Beacon Settings */}
                     <div className="bg-dark border border-dark-border">
@@ -442,8 +477,9 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                     </p>
                                     {selectedShips.length > 1 && (
                                         <p className="text-sm text-gray-500 mt-1 italic">
-                                            Showing probability of getting{' '}
-                                            <strong>at least one</strong> of the selected ships
+                                            {calculationMode === 'or'
+                                                ? 'Showing probability of getting at least one of the selected ships'
+                                                : 'Showing probability of getting all selected ships'}
                                         </p>
                                     )}
                                 </div>
@@ -489,8 +525,9 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-gray-500 -mt-1">
-                                                    Average number of pulls needed to get at least
-                                                    one target ship
+                                                    {calculationMode === 'or'
+                                                        ? 'Average number of pulls needed to get at least one target ship'
+                                                        : 'Average number of pulls needed to get all target ships (max of individual expected pulls)'}
                                                 </p>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">
@@ -502,6 +539,11 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                             : result.pullsFor90Percent.toLocaleString()}
                                                     </span>
                                                 </div>
+                                                <p className="text-xs text-gray-500 -mt-1">
+                                                    {calculationMode === 'or'
+                                                        ? 'Pulls needed for 90% chance of getting at least one target ship'
+                                                        : 'Pulls needed for 90% chance of getting all target ships'}
+                                                </p>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-400">
                                                         Pulls for 99% chance:
@@ -512,6 +554,11 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                             : result.pullsFor99Percent.toLocaleString()}
                                                     </span>
                                                 </div>
+                                                <p className="text-xs text-gray-500 -mt-1">
+                                                    {calculationMode === 'or'
+                                                        ? 'Pulls needed for 99% chance of getting at least one target ship'
+                                                        : 'Pulls needed for 99% chance of getting all target ships'}
+                                                </p>
                                                 {beaconInventory[result.beaconType] > 0 && (
                                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                                         <div className="flex justify-between mb-2">
@@ -529,28 +576,44 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                                 :
                                                             </span>
                                                             <span className="font-semibold text-primary">
-                                                                {(
-                                                                    calculateProbabilityWithPulls(
-                                                                        result.probability,
-                                                                        beaconInventory[
-                                                                            result.beaconType
-                                                                        ],
-                                                                        result.beaconType,
-                                                                        result.beaconType ===
-                                                                            'specialist'
-                                                                            ? eventShips
-                                                                            : [],
-                                                                        selectedShips.map(
-                                                                            (s) => s.name
-                                                                        )
-                                                                    ) * 100
-                                                                ).toFixed(2)}
+                                                                {calculationMode === 'or'
+                                                                    ? (
+                                                                          calculateProbabilityWithPulls(
+                                                                              result.probability,
+                                                                              beaconInventory[
+                                                                                  result.beaconType
+                                                                              ],
+                                                                              result.beaconType,
+                                                                              result.beaconType ===
+                                                                                  'specialist'
+                                                                                  ? eventShips
+                                                                                  : [],
+                                                                              selectedShips.map(
+                                                                                  (s) => s.name
+                                                                              )
+                                                                          ) * 100
+                                                                      ).toFixed(2)
+                                                                    : (
+                                                                          calculateProbabilityOfAllShipsAfterPulls(
+                                                                              selectedShips,
+                                                                              result.beaconType,
+                                                                              allShips,
+                                                                              beaconInventory[
+                                                                                  result.beaconType
+                                                                              ],
+                                                                              result.beaconType ===
+                                                                                  'specialist'
+                                                                                  ? eventShips
+                                                                                  : []
+                                                                          ) * 100
+                                                                      ).toFixed(2)}
                                                                 %
                                                             </span>
                                                         </div>
                                                         <p className="text-xs text-gray-500 mt-1">
-                                                            Probability of getting at least one
-                                                            target ship
+                                                            {calculationMode === 'or'
+                                                                ? 'Probability of getting at least one target ship'
+                                                                : 'Probability of getting all target ships'}
                                                             {result.beaconType === 'specialist' &&
                                                                 eventShips.some(
                                                                     (es) =>
