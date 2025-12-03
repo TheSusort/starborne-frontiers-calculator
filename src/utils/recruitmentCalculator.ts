@@ -102,6 +102,10 @@ export const getRecruitableShips = (ships: Ship[]): Ship[] => {
     return ships.filter((ship) => !NON_RECRUITABLE_SHIPS.includes(ship.name));
 };
 
+export const getNonRecruitableShips = (): string[] => {
+    return NON_RECRUITABLE_SHIPS;
+};
+
 /**
  * Get ships available in the general pool (excludes event-only ships)
  * Used for probability calculations to exclude event-only ships from pool counts

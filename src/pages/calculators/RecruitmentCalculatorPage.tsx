@@ -13,7 +13,7 @@ import { SEO_CONFIG } from '../../constants/seo';
 import {
     calculateRecruitmentResults,
     getRecruitableShips,
-    RecruitmentResult,
+    getNonRecruitableShips,
     BeaconType,
     EventShip,
     calculateProbabilityWithPulls,
@@ -216,9 +216,9 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                 <strong>Elite Beacon:</strong> 100% Legendary
                             </li>
                             <li className="mt-2">
-                                <strong>Note:</strong> Some ships (Wusheng, Lionheart, Oleander,
-                                Nyxen, Asphodel, Lev) cannot be recruited through beacons and are
-                                excluded from calculations.
+                                <strong>Note:</strong> Some ships (
+                                {getNonRecruitableShips().join(', ')}) cannot be recruited through
+                                beacons and are excluded from calculations.
                             </li>
                         </ul>
                     </div>
