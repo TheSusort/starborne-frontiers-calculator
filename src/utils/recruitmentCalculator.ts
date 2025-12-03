@@ -2,7 +2,15 @@ import { Ship, AffinityName } from '../types/ship';
 import { RarityName } from '../constants/rarities';
 
 // Ships that cannot be recruited through beacons
-const NON_RECRUITABLE_SHIPS = ['Wusheng', 'Lionheart', 'Oleander', 'Nyxen', 'Asphodel', 'Lev'];
+const NON_RECRUITABLE_SHIPS = [
+    'Wusheng',
+    'Lionheart',
+    'Oleander',
+    'Nyxen',
+    'Asphodel',
+    'Lev',
+    'Incinerator',
+];
 
 // Ships that are only available during events (event-only ships)
 const EVENT_ONLY_SHIPS: string[] = ['Wildfire', 'Amartya'];
