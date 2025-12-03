@@ -104,4 +104,11 @@ export const SEO_CONFIG = {
         keywords:
             'json diff, file comparison, starborne frontiers, ship comparison, equipment comparison',
     },
+    recruitment: {
+        title: 'Ship Recruitment Calculator',
+        description:
+            'Calculate the probability of recruiting specific ships from different beacon types in Starborne Frontiers. Includes pity system and event ship rates.',
+        keywords:
+            'ship recruitment, gacha calculator, beacon calculator, ship probability, recruitment calculator, starborne frontiers',
+    },
 } as const;

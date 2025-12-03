@@ -257,6 +257,7 @@ export const Sidebar: React.FC = () => {
                     { path: '/healing', label: 'Healing Calculator' },
                     { path: '/damage-deconstruction', label: 'Hit Deconstruction' },
                     { path: '/json-diff', label: 'JSON Diff Calculator' },
+                    { path: '/recruitment', label: 'Beacon Calculator' },
                 ],
             },
             { path: '/ships/index', label: 'Ship Database' },

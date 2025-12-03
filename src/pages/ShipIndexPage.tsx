@@ -9,7 +9,7 @@ import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
 import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES, ALL_STAT_NAMES } from '../constants';
-import { Ship } from '../types/ship';
+import { Ship, AffinityName } from '../types/ship';
 import { useNotification } from '../hooks/useNotification';
 import { Button } from '../components/ui/Button';
 import { Tooltip } from '../components/ui/layout/Tooltip';
@@ -31,6 +31,7 @@ export const ShipIndexPage: React.FC = () => {
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
+        (state.filters.affinities?.length ?? 0) > 0 ||
         searchQuery.length > 0;
     const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
     const [activeHover, setActiveHover] = useState('');
@@ -60,6 +61,13 @@ export const ShipIndexPage: React.FC = () => {
         }));
     };
 
+    const setSelectedAffinities = (affinities: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, affinities },
+        }));
+    };
+
     const setSort = (sort: SortConfig) => {
         setState((prev) => ({ ...prev, sort }));
     };
@@ -75,6 +83,16 @@ export const ShipIndexPage: React.FC = () => {
             label: STATS[stat].label,
         })),
     ];
+
+    const uniqueAffinities = useMemo(() => {
+        if (!templateShips) return [];
+        const affinities = new Set(
+            templateShips
+                .map((ship) => ship.affinity)
+                .filter((affinity): affinity is AffinityName => affinity !== undefined)
+        );
+        return Array.from(affinities).sort((a, b) => a.localeCompare(b));
+    }, [templateShips]);
 
     const filters: FilterConfig[] = [
         {
@@ -107,6 +125,16 @@ export const ShipIndexPage: React.FC = () => {
                 label: rarity.label,
             })),
         },
+        {
+            id: 'affinity',
+            label: 'Affinity',
+            values: state.filters.affinities ?? [],
+            onChange: setSelectedAffinities,
+            options: uniqueAffinities.map((affinity) => ({
+                value: affinity,
+                label: affinity.charAt(0).toUpperCase() + affinity.slice(1),
+            })),
+        },
     ];
 
     const filteredAndSortedShips = useMemo(() => {
@@ -122,6 +150,9 @@ export const ShipIndexPage: React.FC = () => {
             const matchesRarity =
                 (state.filters.rarities?.length ?? 0) === 0 ||
                 (state.filters.rarities?.includes(ship.rarity) ?? false);
+            const matchesAffinity =
+                (state.filters.affinities?.length ?? 0) === 0 ||
+                ((ship.affinity && state.filters.affinities?.includes(ship.affinity)) ?? false);
             const matchesSearch =
                 searchQuery === '' ||
                 ship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -137,7 +168,9 @@ export const ShipIndexPage: React.FC = () => {
                     false) ||
                 (ship.thirdPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false);
-            return matchesFaction && matchesType && matchesRarity && matchesSearch;
+            return (
+                matchesFaction && matchesType && matchesRarity && matchesAffinity && matchesSearch
+            );
         });
 
         return [...filtered].sort((a, b) => {
@@ -364,14 +397,14 @@ export const ShipIndexPage: React.FC = () => {
                                                         }
                                                         onMouseLeave={() => setPassive3Hover('')}
                                                     >
-                                                        Passive R3
+                                                        Passive R4
                                                     </Button>
                                                     <Tooltip
                                                         isVisible={passive3Hover === ship.name}
                                                     >
                                                         <SkillTooltip
                                                             skillText={ship.thirdPassiveSkillText}
-                                                            skillType="Passive Skill R3"
+                                                            skillType="Passive Skill R4"
                                                         />
                                                     </Tooltip>
                                                 </div>
