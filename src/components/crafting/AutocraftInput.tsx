@@ -134,7 +134,7 @@ export const AutocraftInput: React.FC<Props> = ({
                 <h3 className="text-lg font-semibold mb-4">Set Cores</h3>
                 <div className="space-y-4">
                     {CRAFTABLE_SETS.map((set) => (
-                        <div key={set} className="bg-dark p-4 rounded border border-dark-border">
+                        <div key={set} className="bg-dark p-4 border border-dark-border">
                             <h4 className="font-medium mb-2 capitalize">{set}</h4>
                             <div className="grid grid-cols-3 gap-4">
                                 {RARITY_OPTIONS.map((rarity) => (
@@ -165,10 +165,7 @@ export const AutocraftInput: React.FC<Props> = ({
                 <h3 className="text-lg font-semibold mb-4">Set Materials</h3>
                 <div className="space-y-4">
                     {(['synth_alloy', 'quantum_fiber'] as const).map((materialType) => (
-                        <div
-                            key={materialType}
-                            className="bg-dark p-4 rounded border border-dark-border"
-                        >
+                        <div key={materialType} className="bg-dark p-4 border border-dark-border">
                             <h4 className="font-medium mb-2">
                                 {materialType === 'synth_alloy' ? 'Synth Alloy' : 'Quantum Fiber'}
                             </h4>

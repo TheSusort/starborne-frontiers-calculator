@@ -44,7 +44,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
 
     return (
         <div className="space-y-6">
-            <div className="bg-blue-900/20 border border-blue-700/50 rounded p-4">
+            <div className="bg-blue-900/20 border border-blue-700/50 p-4">
                 <h3 className="font-semibold text-blue-300 mb-2">Summary</h3>
                 <p className="text-sm text-gray-300">
                     Based on your materials, you could craft <strong>{totalPlans}</strong> items
@@ -58,7 +58,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                 </p>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-2">Crafting Cost</h3>
                 <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
@@ -77,7 +77,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">By Set</h3>
                     <div className="space-y-1">
                         {Object.entries(result.expectedResults.bySet).map(([set, count]) => (
@@ -89,7 +89,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                     </div>
                 </div>
 
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">By Slot</h3>
                     <div className="space-y-1">
                         {Object.entries(result.expectedResults.bySlot).map(([slot, count]) => (
@@ -103,7 +103,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                     </div>
                 </div>
 
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">By Rarity</h3>
                     <div className="space-y-1">
                         {Object.entries(result.expectedResults.byRarity).map(([rarity, count]) => (
@@ -117,7 +117,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                     </div>
                 </div>
 
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">By Stars</h3>
                     <div className="space-y-1">
                         {Object.entries(result.expectedResults.byStars).map(([star, count]) => (
@@ -130,7 +130,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                 </div>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-4">
                     Full Probability Matrix (All Sets)
                 </h3>
@@ -184,7 +184,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                 </div>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-4">
                     Probability Matrix by Set
                 </h3>
@@ -266,7 +266,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                 </div>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-4">Crafting Plan Details</h3>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                     {result.plans.map((plan, index) => {
@@ -276,7 +276,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                         return (
                             <div
                                 key={index}
-                                className="text-sm p-2 bg-dark rounded border border-dark-border"
+                                className="text-sm p-2 bg-dark border border-dark-border"
                             >
                                 <div className="flex justify-between items-center">
                                     <div>
@@ -303,7 +303,7 @@ export const AutocraftResults: React.FC<Props> = ({ result }) => {
                 </div>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-4">
                     Remaining Crafting Materials
                 </h3>

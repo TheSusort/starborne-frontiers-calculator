@@ -219,12 +219,12 @@ export const CraftingTab: React.FC<Props> = ({ inventory }) => {
 
             {activeSubTab === 'calculator' && (
                 <div className="space-y-6">
-                    <div className="bg-dark-lighter border border-dark-border rounded p-6">
+                    <div className="bg-dark-lighter border border-dark-border p-6">
                         <h3 className="text-lg font-semibold mb-4">Crafting Configuration</h3>
                         <CraftingInput value={craftingInput} onChange={setCraftingInput} />
                     </div>
 
-                    <div className="bg-dark-lighter border border-dark-border rounded p-6">
+                    <div className="bg-dark-lighter border border-dark-border p-6">
                         <h3 className="text-lg font-semibold mb-4">Probability Results</h3>
                         <CraftingResults result={craftingResult} />
                     </div>
@@ -232,7 +232,7 @@ export const CraftingTab: React.FC<Props> = ({ inventory }) => {
             )}
 
             {activeSubTab === 'suggestions' && (
-                <div className="bg-dark-lighter border border-dark-border rounded p-6">
+                <div className="bg-dark-lighter border border-dark-border p-6">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold">Crafting Suggestions</h3>
                         <Button
@@ -274,7 +274,7 @@ export const CraftingTab: React.FC<Props> = ({ inventory }) => {
 
             {activeSubTab === 'autocraft' && (
                 <div className="space-y-6">
-                    <div className="bg-dark-lighter border border-dark-border rounded p-6">
+                    <div className="bg-dark-lighter border border-dark-border p-6">
                         <div className="flex justify-between items-center mb-4">
                             <div className="flex items-center gap-2">
                                 <h3 className="text-lg font-semibold">Material Input</h3>
@@ -295,7 +295,7 @@ export const CraftingTab: React.FC<Props> = ({ inventory }) => {
                             </Button>
                         </div>
                         {suggestions.length === 0 && (
-                            <div className="bg-yellow-900/20 border border-yellow-700/50 rounded p-3 mb-4">
+                            <div className="bg-yellow-900/20 border border-yellow-700/50 p-3 mb-4">
                                 <p className="text-sm text-yellow-300">
                                     Calculate suggestions first to enable smart material
                                     distribution. Without suggestions, materials will be distributed
@@ -314,7 +314,7 @@ export const CraftingTab: React.FC<Props> = ({ inventory }) => {
                     </div>
 
                     {autocraftResult && (
-                        <div className="bg-dark-lighter border border-dark-border rounded p-6">
+                        <div className="bg-dark-lighter border border-dark-border p-6">
                             <h3 className="text-lg font-semibold mb-4">Autocraft Results</h3>
                             <AutocraftResults result={autocraftResult} />
                         </div>

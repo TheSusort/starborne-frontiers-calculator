@@ -12,7 +12,7 @@ export const CraftingResults: React.FC<Props> = ({ result }) => {
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">Star Distribution</h3>
                     <div className="space-y-2">
                         <div className="flex justify-between">
@@ -36,7 +36,7 @@ export const CraftingResults: React.FC<Props> = ({ result }) => {
                     </div>
                 </div>
 
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">Rarity Distribution</h3>
                     <div className="space-y-2">
                         {Object.entries(result.rarityDistribution).map(([rarity, prob]) => (
@@ -50,7 +50,7 @@ export const CraftingResults: React.FC<Props> = ({ result }) => {
                     </div>
                 </div>
 
-                <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+                <div className="bg-dark-lighter p-4 border border-dark-border">
                     <h3 className="text-sm font-medium text-gray-400 mb-2">Expected Values</h3>
                     <div className="space-y-2">
                         <div className="flex justify-between">
@@ -73,7 +73,7 @@ export const CraftingResults: React.FC<Props> = ({ result }) => {
                 </div>
             </div>
 
-            <div className="bg-dark-lighter p-4 rounded border border-dark-border">
+            <div className="bg-dark-lighter p-4 border border-dark-border">
                 <h3 className="text-sm font-medium text-gray-400 mb-4">Full Probability Matrix</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
