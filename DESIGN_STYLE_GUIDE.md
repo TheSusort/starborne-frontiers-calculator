@@ -110,7 +110,7 @@ Use the `Button` component from `src/components/ui/Button.tsx`:
 
 ### Containers
 
-- **Cards:** Use the `card` class: `card` (includes `bg-dark border border-dark-border p-6`)
+- **Cards:** Use the `card` class: `card` (includes `bg-dark border border-dark-border p-4`)
 - **Modals:** `bg-dark-lighter border border-dark-border p-6` (elevated surface)
 - **Inputs:** `bg-dark-lighter border border-dark-border focus:ring-2 focus:ring-primary focus:border-primary h-10`
 - **Tooltips:** `bg-dark border border-dark-border p-2 rounded`

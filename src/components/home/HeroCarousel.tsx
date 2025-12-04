@@ -96,7 +96,7 @@ export const HeroCarousel: React.FC = () => {
 
     return (
         <div
-            className="relative w-[calc(100%+2rem)] h-[600px] overflow-hidden mb-8 group mt-[-2rem] mx-[-1rem]"
+            className="relative w-[calc(100%+2rem)] lg:w-[calc(100vw-16rem)] h-[600px] overflow-hidden mb-8 mt-[-2rem] group mx-[-1rem] lg:mx-0 lg:ml-[calc(-1rem-max(0px,((100vw-16rem-80rem-2rem)/2)))]"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -113,47 +113,50 @@ export const HeroCarousel: React.FC = () => {
                         style={{
                             backgroundImage: `url(${slide.backgroundImage})`,
                             backgroundSize: 'cover',
-                            backgroundPosition: 'center',
+                            backgroundPosition: 'center top',
                         }}
                     >
                         {/* Gradient overlay for text readability */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
 
                         {/* Content */}
-                        <div className="relative h-full flex flex-col justify-end items-start pb-12 px-4 sm:px-6 lg:px-8">
-                            {/* Use h1 for the first slide for SEO, h2 for others */}
-                            {index === 0 ? (
-                                <h1 className="text-4xl font-bold text-white mb-4 drop-shadow-lg animate-fadeIn">
-                                    {slide.title}
-                                </h1>
-                            ) : (
-                                <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg animate-fadeIn">
-                                    {slide.title}
-                                </h2>
-                            )}
-                            <p className="text-lg text-gray-200 mb-8 max-w-3xl drop-shadow-md animate-fadeIn animation-delay-200">
-                                {slide.subtitle}
-                            </p>
-                            {slide.ctaLink === '#' ? (
-                                <Button
-                                    onClick={(e) => handleCtaClick(slide.ctaLink, e)}
-                                    variant="primary"
-                                    size="lg"
-                                    className="transition-all duration-300 transform hover:scale-105 shadow-lg animate-fadeIn animation-delay-400"
-                                >
-                                    {slide.ctaText}
-                                </Button>
-                            ) : (
-                                <Link to={slide.ctaLink}>
+                        <div className="relative h-full flex flex-col justify-end items-start pb-12">
+                            {/* Content wrapper that aligns with page content */}
+                            <div className="w-full px-4 sm:px-6 lg:px-4 lg:max-w-7xl lg:mx-auto">
+                                {/* Use h1 for the first slide for SEO, h2 for others */}
+                                {index === 0 ? (
+                                    <h1 className="text-4xl font-bold text-white mb-4 drop-shadow-lg animate-fadeIn">
+                                        {slide.title}
+                                    </h1>
+                                ) : (
+                                    <h2 className="text-4xl font-bold text-white mb-4 drop-shadow-lg animate-fadeIn">
+                                        {slide.title}
+                                    </h2>
+                                )}
+                                <p className="text-lg text-gray-200 mb-8 max-w-3xl drop-shadow-md animate-fadeIn animation-delay-200">
+                                    {slide.subtitle}
+                                </p>
+                                {slide.ctaLink === '#' ? (
                                     <Button
+                                        onClick={(e) => handleCtaClick(slide.ctaLink, e)}
                                         variant="primary"
                                         size="lg"
                                         className="transition-all duration-300 transform hover:scale-105 shadow-lg animate-fadeIn animation-delay-400"
                                     >
                                         {slide.ctaText}
                                     </Button>
-                                </Link>
-                            )}
+                                ) : (
+                                    <Link to={slide.ctaLink}>
+                                        <Button
+                                            variant="primary"
+                                            size="lg"
+                                            className="transition-all duration-300 transform hover:scale-105 shadow-lg animate-fadeIn animation-delay-400"
+                                        >
+                                            {slide.ctaText}
+                                        </Button>
+                                    </Link>
+                                )}
+                            </div>
                         </div>
                     </div>
                 ))}
