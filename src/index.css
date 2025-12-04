@@ -142,7 +142,7 @@
 
 @layer components {
     .card {
-        @apply bg-dark border border-dark-border p-6;
+        @apply bg-dark border border-dark-border p-4;
     }
 
     .ship-display-height {

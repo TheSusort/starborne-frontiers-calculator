@@ -127,7 +127,7 @@ const EncounterNotesPage: React.FC = () => {
                 }}
             >
                 <CollapsibleForm isVisible={isFormVisible}>
-                    <div className="bg-dark p-4 mb-6">
+                    <div className="card mb-6">
                         <h2 className="text-xl font-semibold text-white mb-4">
                             {editingEncounter ? 'Edit Encounter' : 'Add New Encounter'}
                         </h2>

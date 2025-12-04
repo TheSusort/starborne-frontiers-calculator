@@ -24,7 +24,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
     if (suggestions.length === 0) return null;
 
     return (
-        <section className="bg-dark p-4">
+        <section className="card">
             <h3 className="font-semibold">Upgrade Suggestions (EXPERIMENTAL)</h3>
             <p className="text-xs text-gray-400 mb-4">
                 <span>

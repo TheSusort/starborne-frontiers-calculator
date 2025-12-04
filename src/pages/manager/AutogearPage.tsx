@@ -857,7 +857,6 @@ export const AutogearPage: React.FC = () => {
                                                         <StatList
                                                             stats={results.currentStats.final}
                                                             title="Current Stats"
-                                                            className="p-4 stat-list"
                                                         />
                                                         <StatList
                                                             stats={results.suggestedStats.final}
@@ -865,7 +864,6 @@ export const AutogearPage: React.FC = () => {
                                                                 results.currentStats.final
                                                             }
                                                             title="Stats with Suggested Gear"
-                                                            className="p-4 stat-list"
                                                         />
                                                     </div>
                                                 </div>

@@ -175,7 +175,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
+        <form onSubmit={handleSubmit} className="space-y-6 card">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Select
                     label="Set Bonus"

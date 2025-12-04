@@ -59,7 +59,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
-                <div className="bg-dark">
+                <div className="card">
                     {!expanded && !isPrinting ? (
                         <div className="grid grid-cols-3 gap-2 bg-dark p-4 w-fit mx-auto">
                             {GEAR_SLOT_ORDER.map((slotName) => {

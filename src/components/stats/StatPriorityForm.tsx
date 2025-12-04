@@ -59,7 +59,7 @@ export const StatPriorityForm: React.FC<Props> = ({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="bg-dark p-4" role="form">
+        <form onSubmit={handleSubmit} className="card" role="form">
             <div className="space-y-2 flex gap-4 items-end">
                 <Select
                     label="Stat"

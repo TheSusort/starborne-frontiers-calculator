@@ -29,7 +29,7 @@ const DocumentationPage: React.FC = () => {
             >
                 <div className="space-y-8 [counter-reset:section] [counter-reset:index]">
                     {/* Table of Contents */}
-                    <nav className="card p-4">
+                    <nav className="card">
                         <h2 className="text-xl font-semibold mb-4">Table of Contents</h2>
                         <hr className="mb-4" />
                         <h4 className="text-lg font-semibold mb-4">Help</h4>
@@ -186,7 +186,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Getting Started
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Introduction</h3>
                             <p className="mb-4">
                                 Welcome to the Starborne Frontiers Calculator, your comprehensive
@@ -287,7 +287,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Tips & Tricks
                         </h2>
-                        <div className="card p-4">
+                        <div className="card">
                             <h3 className="text-xl font-semibold mb-2">Best Practices</h3>
                             <ul className="list-disc pl-6 space-y-2">
                                 <li>
@@ -350,7 +350,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             FAQ
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">FAQ</h3>
                             <p className="text-gray-300">
                                 Here are some frequently asked questions about the app.
@@ -428,7 +428,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Ship Management
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Ship Cards</h3>
                             <p className="text-gray-300">
                                 Each ship in your fleet is displayed as a card containing
@@ -628,7 +628,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Inventory Management
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Gear Cards</h3>
                             <p className="text-gray-300">
                                 Each piece of gear in your inventory is displayed as a card
@@ -825,7 +825,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Autogear
                         </h2>
-                        <div className="card p-4">
+                        <div className="card">
                             <h3 className="text-xl font-semibold mb-2">Autogear System</h3>
                             <p className="mb-4">
                                 The autogear system uses advanced algorithms to find the optimal
@@ -1189,7 +1189,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Engineering Stats
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Ship Type Bonuses</h3>
                             <p className="text-gray-300">
                                 The Engineering Stats page allows you to manage per-ship-type
@@ -1226,7 +1226,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Loadouts
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
                                 Save and Manage Ship Configurations
                             </h3>
@@ -1283,7 +1283,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Ship Database
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Browse All Ships</h3>
                             <p className="text-gray-300">
                                 The Ship Database provides a comprehensive reference for all ships
@@ -1343,7 +1343,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Effect Index
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
                                 Browse All Buffs, Debuffs, and Effects
                             </h3>
@@ -1404,7 +1404,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Leaderboards
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
                                 Ship Performance Rankings
                             </h3>
@@ -1456,7 +1456,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Calculators
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
                                 Advanced Combat Calculators
                             </h3>
@@ -1540,7 +1540,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Encounter Notes
                         </h2>
-                        <div className="card p-4 space-y-4">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
                                 Track and Share Battle Encounters
                             </h3>
@@ -1577,7 +1577,7 @@ const DocumentationPage: React.FC = () => {
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Simulation
                         </h2>
-                        <div className="card p-4">
+                        <div className="card">
                             <h3 className="text-xl font-semibold mb-2">Battle Simulation</h3>
                             <p className="mb-4">The simulation tools allow you to:</p>
                             <ul className="list-disc pl-6 space-y-2">

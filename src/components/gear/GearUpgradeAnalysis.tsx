@@ -377,7 +377,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     ];
 
                     return (
-                        <div key={role} className="space-y-4 bg-dark p-4">
+                        <div key={role} className="space-y-4 card">
                             <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
                             <span className="text-sm text-gray-400">
                                 {SHIP_TYPES[role].description}

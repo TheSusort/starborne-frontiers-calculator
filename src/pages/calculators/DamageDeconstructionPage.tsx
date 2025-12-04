@@ -196,14 +196,14 @@ const DamageDeconstructionPage: React.FC = () => {
         <>
             <Seo {...SEO_CONFIG.damageDeconstruction} />
             <PageLayout
-                title="(BETA) Damage Deconstruction Calculator"
+                title="Damage Deconstruction Calculator"
                 description="
                 Estimate the enemy defense based on the damage reduction.
                 Enter all buffs and debuffs on both attacker and defender.
                 Remember affinity disadvantage/advantage on the attacker.
             "
             >
-                <div className="mb-6 bg-dark p-4">
+                <div className="mb-6 card">
                     <div className="space-y-4">
                         <h4 className="text-lg font-bold">Attacker</h4>
                         <Input
@@ -286,7 +286,7 @@ const DamageDeconstructionPage: React.FC = () => {
                         )}
                     </div>
                 </div>
-                <div className="mb-6 bg-dark p-4">
+                <div className="mb-6 card">
                     <div className="space-y-4">
                         <h4 className="text-lg font-bold">Defender</h4>
                         {renderBuffDebuffSection(
@@ -305,7 +305,7 @@ const DamageDeconstructionPage: React.FC = () => {
                 </div>
 
                 {results && (
-                    <div className="mb-6 bg-dark p-4">
+                    <div className="mb-6 card">
                         <h2 className="text-xl font-bold mb-4">Results</h2>
                         <div className="space-y-2">
                             <p>Damage Reduction: {results.damageReduction.toFixed(2)}%</p>

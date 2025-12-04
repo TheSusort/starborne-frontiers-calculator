@@ -135,7 +135,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     return (
         <div className="space-y-4">
-            <div className="p-4 bg-dark space-y-2">
+            <div className="card space-y-2">
                 <div className="flex justify-between items-center">
                     <span className="text-sm">Predefined Strategies</span>
                     {selectedShip && (
@@ -162,7 +162,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 />
             </div>
 
-            <div className="space-y-2 p-4 bg-dark">
+            <div className="space-y-2 card">
                 <Select
                     label="Algorithm"
                     data-testid="algorithm-select"
@@ -180,7 +180,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShipRole && (
-                <div className="p-4 bg-dark">
+                <div className="card">
                     <Button
                         variant="link"
                         onClick={() => onToggleSecondaryRequirements(!showSecondaryRequirements)}
@@ -231,11 +231,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         hideWeight={showSecondaryRequirements}
                     />
 
-                    <div className="bg-dark p-4 space-y-2">
+                    <div className="card space-y-2">
                         <SetPriorityForm onAdd={onAddSetPriority} />
                     </div>
 
-                    <div className="bg-dark p-4 space-y-2">
+                    <div className="card space-y-2">
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-gray-400">
                             Add stat bonuses that contribute to the role score. These are additive
@@ -252,7 +252,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             </CollapsibleForm>
 
-            <div className="bg-dark p-4 space-y-2">
+            <div className="card space-y-2">
                 <h3 className="font-semibold">Options</h3>
                 <div className="space-y-2">
                     <Checkbox
@@ -294,7 +294,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
-                <div className="bg-dark p-4 space-y-2">
+                <div className="card space-y-2">
                     {statBonuses.length > 0 && (
                         <>
                             <h3 className="font-semibold">Role Stat Bonuses</h3>

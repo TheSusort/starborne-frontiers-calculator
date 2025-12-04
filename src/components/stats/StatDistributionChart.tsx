@@ -12,7 +12,7 @@ export const StatDistributionChart: React.FC<Props> = ({ contributions }) => {
     }
 
     return (
-        <div className="p-4 bg-dark">
+        <div className="card">
             <h3 className="font-semibold">Gear Contribution</h3>
             <p className="text-xs text-gray-400 mb-4">
                 The chart below shows the relative contribution of each gear piece and its stats to

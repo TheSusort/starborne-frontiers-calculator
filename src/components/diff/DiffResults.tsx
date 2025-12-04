@@ -20,7 +20,7 @@ export const DiffResults: React.FC<DiffResultsProps> = ({ diffResults }) => {
         <div className="space-y-6">
             <DiffSummaryComponent summary={summary} />
 
-            <div className="card p-4">
+            <div className="card">
                 <h3 className="text-lg font-bold mb-4">Detailed Changes</h3>
                 <div className="space-y-4">
                     {groupedResults.map((group, groupIndex) => (

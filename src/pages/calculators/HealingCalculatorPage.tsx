@@ -449,7 +449,7 @@ const HealingCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="card p-4">
+                    <div className="card">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold w-full">Healing Comparison Chart</h2>
                             <Select
@@ -592,7 +592,7 @@ const HealingCalculatorPage: React.FC = () => {
                         )}
                     </div>
 
-                    <div className="card p-4">
+                    <div className="card">
                         <h2 className="text-xl font-bold mb-4">Healing Formula Explanation</h2>
                         <p className="mb-2">
                             Healing is calculated based on the healer&apos;s HP, critical hit
@@ -614,7 +614,7 @@ const HealingCalculatorPage: React.FC = () => {
                         </p>
                     </div>
 
-                    <div className="card p-4">
+                    <div className="card">
                         <h2 className="text-xl font-bold mb-4">Optimization Recommendations</h2>
                         <ul className="list-disc pl-5 space-y-2">
                             <li>

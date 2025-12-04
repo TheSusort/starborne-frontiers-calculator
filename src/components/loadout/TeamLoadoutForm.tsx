@@ -57,7 +57,7 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4">
+        <form onSubmit={handleSubmit} className="card space-y-4">
             <div>
                 <Input
                     label="Team Loadout Name"

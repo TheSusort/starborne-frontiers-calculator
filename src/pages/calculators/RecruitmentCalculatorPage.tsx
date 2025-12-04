@@ -199,7 +199,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
             >
                 <div className="space-y-6">
                     {/* Instructions */}
-                    <div className="card p-4">
+                    <div className="card">
                         <h2 className="text-xl font-bold mb-4">How It Works</h2>
                         <ul className="list-disc list-inside space-y-2 text-gray-400 text-sm">
                             <li>
@@ -224,7 +224,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     </div>
 
                     {/* Ship Selection */}
-                    <div className="card p-4">
+                    <div className="card">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold">Select Target Ships</h2>
                             {selectedShipNames.size > 0 && (
@@ -247,7 +247,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
 
                     {/* Calculation Mode Toggle */}
                     {selectedShips.length > 1 && (
-                        <div className="card p-4">
+                        <div className="card">
                             <div className="flex items-center gap-4">
                                 <span className="text-sm font-medium">Calculation Mode:</span>
                                 <div className="flex gap-2">
@@ -405,7 +405,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     </div>
 
                     {/* Beacon Inventory */}
-                    <div className="card p-4">
+                    <div className="card">
                         <h2 className="text-xl font-bold mb-4">Beacon Inventory (Optional)</h2>
                         <p className="text-sm text-gray-400 mb-4">
                             Enter how many beacons you have to see the probability of getting your
@@ -465,7 +465,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
 
                     {/* Results */}
                     {selectedShips.length > 0 && (
-                        <div className="card p-4">
+                        <div className="card">
                             <h2 className="text-xl font-bold mb-4">
                                 Results for {selectedShips.length} Selected Ship
                                 {selectedShips.length !== 1 ? 's' : ''}
@@ -662,7 +662,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     )}
 
                     {selectedShips.length === 0 && (
-                        <div className="card p-4 text-center text-gray-400">
+                        <div className="card text-center text-gray-400">
                             Select one or more ships above to see recruitment probabilities
                         </div>
                     )}

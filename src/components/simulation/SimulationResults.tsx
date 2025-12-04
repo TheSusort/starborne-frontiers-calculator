@@ -461,14 +461,14 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
             } gap-4 mt-4 `}
         >
             <div>
-                <div className="bg-dark p-4 space-y-2">
+                <div className="card space-y-2">
                     <h3 className="text-lg font-semibold">Current Configuration</h3>
                     <div className="flex flex-col gap-2">{renderStats(currentSimulation)}</div>
                 </div>
             </div>
             {suggestedSimulation && (
                 <div>
-                    <div className="bg-dark p-4 space-y-2">
+                    <div className="card space-y-2">
                         <h3 className="text-lg font-semibold">Suggested Configuration</h3>
                         <div className="flex flex-col gap-2">
                             {renderStats(suggestedSimulation, true)}

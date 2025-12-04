@@ -28,7 +28,7 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
                 sortDirection="desc"
             />
 
-            <div className="p-4 bg-dark space-y-2">
+            <div className="card space-y-2">
                 <Select
                     label="Ship Role"
                     options={Object.values(SHIP_TYPES).map((type) => ({

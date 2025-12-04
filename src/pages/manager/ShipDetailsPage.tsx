@@ -154,7 +154,7 @@ export const ShipDetailsPage: React.FC = () => {
                             }}
                         />
 
-                        <section className="bg-dark p-4">
+                        <section className="card">
                             <h3 className="mb-4">Refits ({ship.refits.length}/6)</h3>
                             {ship.refits.length > 0 ? (
                                 <div className="space-y-2">

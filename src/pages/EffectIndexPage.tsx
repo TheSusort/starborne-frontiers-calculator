@@ -110,7 +110,7 @@ export const EffectIndexPage: React.FC = () => {
                             filteredAndSortedEffects.map((buff: Buff, index: number) => (
                                 <div
                                     key={index}
-                                    className="card p-4 hover:border-primary transition-colors duration-200"
+                                    className="card hover:border-primary transition-colors duration-200"
                                 >
                                     <div className="flex flex-col space-y-3">
                                         {/* Type Badge */}

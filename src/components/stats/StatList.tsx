@@ -33,7 +33,7 @@ export const StatList: React.FC<StatListProps> = ({
     ] satisfies (keyof BaseStats)[];
 
     return (
-        <div className={`bg-dark space-y-2 ${className}`} data-testid="stat-list">
+        <div className={`card space-y-2 ${className}`} data-testid="stat-list">
             {title && <h3 className="text-lg font-semibold">{title}</h3>}
             {orderedStatNames.map((statName) => {
                 const value = stats[statName];

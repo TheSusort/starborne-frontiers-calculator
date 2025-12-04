@@ -157,7 +157,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6  bg-dark p-6">
+        <form onSubmit={handleSubmit} className="space-y-6 card">
             <h2 className="text-2xl font-bold ">{editingShip ? 'Edit Ship' : 'Create New Ship'}</h2>
 
             {/* Ship Name with Fetch button */}

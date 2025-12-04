@@ -46,7 +46,7 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 bg-dark p-4">
+        <form onSubmit={handleSubmit} className="card space-y-4">
             <div>
                 <Input
                     label="Loadout Name"
