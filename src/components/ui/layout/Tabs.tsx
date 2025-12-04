@@ -14,7 +14,7 @@ interface TabsProps {
 export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
     return (
         <div className="mb-4">
-            <div className="border-b border-gray-700">
+            <div className="border-b border-dark-border">
                 <nav className="-mb-px flex space-x-4" aria-label="Tabs">
                     {tabs.map((tab) => (
                         <button

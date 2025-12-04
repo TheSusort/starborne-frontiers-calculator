@@ -212,7 +212,7 @@ export const ShipCard: React.FC<Props> = ({
                                                 className={`text-xs ${
                                                     index === activeSets.length - 1
                                                         ? ''
-                                                        : 'border-b border-gray-700 pb-2'
+                                                        : 'border-b border-dark-border pb-2'
                                                 }`}
                                             >
                                                 {GEAR_SETS[setName].description && (

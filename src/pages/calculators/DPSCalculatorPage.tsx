@@ -207,7 +207,7 @@ const DPSCalculatorPage: React.FC = () => {
                 }}
             >
                 <div className="space-y-6">
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <h3 className="text-lg font-bold mb-4">Enemy Defense</h3>
                         <Input
                             label="Enemy Defense"
@@ -367,7 +367,7 @@ const DPSCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">DPS Comparison</h3>
                             <Button variant="secondary" onClick={toggleViewMode}>
@@ -397,7 +397,7 @@ const DPSCalculatorPage: React.FC = () => {
                     </div>
 
                     {/* Defense Penetration Visualization */}
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
                         <p className="text-sm text-gray-400 mb-4">
                             Shows how defense penetration affects damage increase for different
@@ -407,7 +407,7 @@ const DPSCalculatorPage: React.FC = () => {
                         <DefensePenetrationChart height={400} />
                     </div>
 
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
                         <p className="mb-2">
                             DPS (Damage Per Second) is calculated based on your attack value, crit

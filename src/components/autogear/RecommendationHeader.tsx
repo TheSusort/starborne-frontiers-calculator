@@ -40,7 +40,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
     return (
         <div
             onClick={onToggleExpand}
-            className="w-full p-4 bg-dark border-b border-gray-700 hover:bg-dark-lighter transition-colors text-left text-sm"
+            className="w-full p-4 bg-dark border-b border-dark-border hover:bg-dark-lighter transition-colors text-left text-sm"
         >
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">

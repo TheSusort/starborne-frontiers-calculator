@@ -36,19 +36,19 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
 
     if (proposals.length === 0) {
         return (
-            <div className="bg-dark p-6 border border-gray-700 text-center">
+            <div className="card text-center">
                 <p className="text-gray-400">No pending template proposals</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-dark p-6 border border-gray-700">
+        <div className="card">
             <h3 className="text-xl font-semibold mb-4">Template Update Proposals</h3>
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <thead>
-                        <tr className="border-b border-gray-700">
+                        <tr className="border-b border-dark-border">
                             <th className="text-left p-3 text-gray-400">Ship</th>
                             <th className="text-left p-3 text-gray-400">Reports</th>
                             <th className="text-left p-3 text-gray-400">Changes</th>
@@ -122,7 +122,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                         {proposal.stat_differences.map((diff) => (
                                                             <div
                                                                 key={diff.stat}
-                                                                className="bg-dark-lighter p-3 border border-gray-700"
+                                                                className="bg-dark-lighter p-3 border border-dark-border"
                                                             >
                                                                 <div className="text-sm text-gray-400 mb-1">
                                                                     {diff.stat}
@@ -153,7 +153,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                             <h4 className="font-semibold mb-2 text-red-400">
                                                                 Current Stats:
                                                             </h4>
-                                                            <div className="bg-dark-lighter p-3 border border-gray-700 text-sm">
+                                                            <div className="bg-dark-lighter p-3 border border-dark-border text-sm">
                                                                 <pre className="text-gray-300 whitespace-pre-wrap">
                                                                     {JSON.stringify(
                                                                         proposal.current_stats,
@@ -168,7 +168,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                         <h4 className="font-semibold mb-2 text-green-400">
                                                             Proposed Stats:
                                                         </h4>
-                                                        <div className="bg-dark-lighter p-3 border border-gray-700 text-sm">
+                                                        <div className="bg-dark-lighter p-3 border border-dark-border text-sm">
                                                             <pre className="text-gray-300 whitespace-pre-wrap">
                                                                 {JSON.stringify(
                                                                     proposal.proposed_stats,

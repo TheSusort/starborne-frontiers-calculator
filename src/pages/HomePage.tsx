@@ -47,7 +47,7 @@ const HomePage: React.FC = () => {
                     </div>
                     <div className="grid gap-6 md:grid-cols-3">
                         <div
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors group"
+                            className="card hover:border-primary/50 transition-colors group"
                             onMouseEnter={() => {
                                 exportVideoRef.current?.play();
                                 setIsExportPlaying(true);
@@ -65,7 +65,7 @@ const HomePage: React.FC = () => {
                                     1. Import Data
                                 </h3>
                             </div>
-                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-dark-border h-48 relative">
                                 <video
                                     ref={exportVideoRef}
                                     src="/videos/export.mov"
@@ -91,7 +91,7 @@ const HomePage: React.FC = () => {
                             <ImportButton className="w-full" />
                         </div>
                         <div
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors"
+                            className="card hover:border-primary/50 transition-colors"
                             onMouseEnter={() => {
                                 shipsVideoRef.current?.play();
                                 setIsShipsPlaying(true);
@@ -109,7 +109,7 @@ const HomePage: React.FC = () => {
                                     2. View Your Fleet
                                 </h3>
                             </div>
-                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-dark-border h-48 relative">
                                 <video
                                     ref={shipsVideoRef}
                                     src="/videos/ships.mov"
@@ -135,7 +135,7 @@ const HomePage: React.FC = () => {
                             </p>
                         </div>
                         <div
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-colors"
+                            className="card hover:border-primary/50 transition-colors"
                             onMouseEnter={() => {
                                 autogearVideoRef.current?.play();
                                 setIsAutogearPlaying(true);
@@ -153,7 +153,7 @@ const HomePage: React.FC = () => {
                                     3. Optimize Gear
                                 </h3>
                             </div>
-                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-dark-border h-48 relative">
                                 <video
                                     ref={autogearVideoRef}
                                     src="/videos/autogear.mov"
@@ -196,7 +196,7 @@ const HomePage: React.FC = () => {
                         {/* Autogear */}
                         <Link
                             to="/autogear"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Zap
@@ -216,7 +216,7 @@ const HomePage: React.FC = () => {
                         {/* Ship Management */}
                         <Link
                             to="/ships"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Ship
@@ -236,7 +236,7 @@ const HomePage: React.FC = () => {
                         {/* Gear Management */}
                         <Link
                             to="/gear"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Wrench
@@ -256,7 +256,7 @@ const HomePage: React.FC = () => {
                         {/* Combat Simulation */}
                         <Link
                             to="/simulation"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Swords
@@ -276,7 +276,7 @@ const HomePage: React.FC = () => {
                         {/* Loadouts */}
                         <Link
                             to="/loadouts"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Save
@@ -296,7 +296,7 @@ const HomePage: React.FC = () => {
                         {/* Encounters */}
                         <Link
                             to="/encounters"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <MapPin
@@ -316,7 +316,7 @@ const HomePage: React.FC = () => {
                         {/* Engineering Stats */}
                         <Link
                             to="/engineering"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <BarChart3
@@ -336,7 +336,7 @@ const HomePage: React.FC = () => {
                         {/* Calculators */}
                         <Link
                             to="/damage"
-                            className="bg-dark p-6 border border-dark-border hover:border-primary/50 transition-all group"
+                            className="card hover:border-primary/50 transition-all group"
                         >
                             <div className="flex items-center gap-3">
                                 <Calculator
@@ -367,7 +367,7 @@ const HomePage: React.FC = () => {
                     </div>
                     <div className="grid gap-6 md:grid-cols-2">
                         {/* Discord Community */}
-                        <div className="bg-dark p-6 border border-dark-border">
+                        <div className="card">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-indigo-800 flex items-center justify-center">
                                     <MessageCircle className="text-white" size={24} />
@@ -410,7 +410,7 @@ const HomePage: React.FC = () => {
                         </div>
 
                         {/* Open Source */}
-                        <div className="bg-dark p-6 border border-dark-border">
+                        <div className="card">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-12 h-12 bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center">
                                     <Github className="text-white" size={24} />
@@ -454,7 +454,7 @@ const HomePage: React.FC = () => {
                 </section>
 
                 {/* Backup & Restore */}
-                <section className="bg-gradient-to-br from-dark-lighter to-dark p-8 border border-dark-border">
+                <section className="bg-dark p-8 border border-dark-border">
                     <div className="max-w-3xl mx-auto text-center">
                         <div className="flex justify-center mb-4">
                             <div className="w-16 h-16 bg-gradient-to-br from-green-600 to-green-800 flex items-center justify-center">

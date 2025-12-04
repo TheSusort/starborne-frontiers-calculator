@@ -211,7 +211,7 @@ export const SimulationPage: React.FC = () => {
                                     hasChanges={hasGearChanges()}
                                 />
                                 {/*
-                                <hr className="border-gray-700" />
+                                <hr className="border-dark-border" />
 
                                 <ImplantTesting
                                     temporaryImplants={temporaryImplants}

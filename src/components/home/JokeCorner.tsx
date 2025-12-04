@@ -29,10 +29,7 @@ export const JokeCorner: React.FC = () => {
                         />
                     </svg>
                 </button>
-                <Tooltip
-                    isVisible={isVisible}
-                    className="w-72 bg-dark border border-dark-border p-4 shadow-lg"
-                >
+                <Tooltip isVisible={isVisible} className="w-72 card p-4 shadow-lg">
                     <p>{currentJoke}</p>
                 </Tooltip>
             </div>

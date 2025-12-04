@@ -64,7 +64,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     };
 
     return (
-        <div className="border-b border-gray-700 pb-8">
+        <div className="border-b border-dark-border pb-8">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium ">{teamLoadout.name}</h3>
                 <div className="flex gap-2">

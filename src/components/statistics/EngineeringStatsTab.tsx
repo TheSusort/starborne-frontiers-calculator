@@ -192,7 +192,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
     // Empty state
     if (stats.totalPoints === 0) {
         return (
-            <div className="bg-dark p-12 border border-gray-700 text-center">
+            <div className="bg-dark p-12 border border-dark-border text-center">
                 <div className="text-gray-400 text-lg">No engineering points invested yet.</div>
             </div>
         );
@@ -228,7 +228,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Points by Role */}
-                <div className="bg-dark p-6 border border-gray-700">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Points by Role</h3>
                     <BaseChart height={400}>
                         <BarChart data={roleChartData} layout="vertical">
@@ -242,7 +242,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                 </div>
 
                 {/* Stat Type Breakdown */}
-                <div className="bg-dark p-6 border border-gray-700">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Point Distribution by Stat Type</h3>
                     <BaseChart height={400}>
                         <BarChart data={stackedChartData}>
@@ -268,7 +268,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
             {user && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Engineering Points Leaderboard */}
-                    <div className="bg-dark p-6 border border-gray-700">
+                    <div className="card">
                         <h3 className="text-lg font-semibold mb-4">Engineering Points Ranking</h3>
                         <p className="text-sm text-gray-400 mb-4">
                             Compare your total engineering points with other players.
@@ -323,7 +323,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                     </div>
 
                     {/* Engineering Tokens Leaderboard */}
-                    <div className="bg-dark p-6 border border-gray-700">
+                    <div className="card">
                         <h3 className="text-lg font-semibold mb-4">Engineering Tokens Ranking</h3>
                         <p className="text-sm text-gray-400 mb-4">
                             Compare total tokens spent. Higher levels cost more tokens!
@@ -380,12 +380,12 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
             )}
 
             {/* Detailed Table */}
-            <div className="bg-dark p-6 border border-gray-700">
+            <div className="card">
                 <h3 className="text-lg font-semibold mb-4">Detailed Investment Table</h3>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="border-b border-gray-700">
+                            <tr className="border-b border-dark-border">
                                 <th className="text-left py-2 text-gray-400">Role</th>
                                 {allStatNames.map((statName) => (
                                     <th

@@ -132,7 +132,7 @@ export const ImplantIndexPage: React.FC = () => {
                             filteredAndSortedImplants.map((implant: ImplantData, index: number) => (
                                 <div
                                     key={index}
-                                    className="bg-dark p-4 border border-dark-border hover:border-primary transition-colors duration-200"
+                                    className="card p-4 hover:border-primary transition-colors duration-200"
                                 >
                                     <div className="flex flex-col">
                                         <div className="flex items-center gap-4 mb-4">

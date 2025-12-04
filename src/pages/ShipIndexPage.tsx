@@ -294,7 +294,7 @@ export const ShipIndexPage: React.FC = () => {
                                     onQuickAdd={onQuickAdd}
                                     isAdded={addedShips.has(ship.name)}
                                 >
-                                    <div className="flex flex-col items-center justify-center border-b border-gray-700 pb-2 m-3">
+                                    <div className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3">
                                         {ship.imageKey && (
                                             <Image
                                                 src={`${ship.imageKey}_Portrait.png`}

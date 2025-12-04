@@ -75,11 +75,11 @@ export function DataTable<T>({
     };
 
     return (
-        <div className={`bg-dark p-6 border border-gray-700 ${className}`}>
+        <div className={`card ${className}`}>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead>
-                        <tr className="border-b border-gray-700">
+                        <tr className="border-b border-dark-border">
                             {columns.map((column) => (
                                 <th
                                     key={column.key}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
+import { Textarea } from '../ui/Textarea';
 import { FACTIONS } from '../../constants/factions';
 import { RARITIES } from '../../constants/rarities';
 import { SHIP_TYPES } from '../../constants/shipTypes';
@@ -132,7 +133,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="bg-dark p-6 border border-gray-700">
+        <form onSubmit={handleSubmit} className="card">
             <h3 className="text-xl font-semibold mb-4">Add New Ship Template</h3>
 
             <div className="space-y-4">
@@ -393,11 +394,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                     <h4 className="text-lg font-semibold mb-3 text-primary">Skills</h4>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Active Skill
-                            </label>
-                            <textarea
-                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                            <Textarea
+                                label="Active Skill"
                                 rows={3}
                                 value={formData.activeSkillText}
                                 onChange={(e) => updateField('activeSkillText', e.target.value)}
@@ -406,11 +404,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Charge Skill
-                            </label>
-                            <textarea
-                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                            <Textarea
+                                label="Charge Skill"
                                 rows={3}
                                 value={formData.chargeSkillText}
                                 onChange={(e) => updateField('chargeSkillText', e.target.value)}
@@ -419,11 +414,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                First Passive Skill
-                            </label>
-                            <textarea
-                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                            <Textarea
+                                label="First Passive Skill"
                                 rows={3}
                                 value={formData.firstPassiveSkillText}
                                 onChange={(e) =>
@@ -434,11 +426,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Second Passive Skill
-                            </label>
-                            <textarea
-                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                            <Textarea
+                                label="Second Passive Skill"
                                 rows={3}
                                 value={formData.secondPassiveSkillText}
                                 onChange={(e) =>
@@ -449,11 +438,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Third Passive Skill
-                            </label>
-                            <textarea
-                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                            <Textarea
+                                label="Third Passive Skill"
                                 rows={3}
                                 value={formData.thirdPassiveSkillText}
                                 onChange={(e) =>

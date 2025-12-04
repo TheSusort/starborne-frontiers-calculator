@@ -114,7 +114,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
             </div>
 
             {/* File Upload Section */}
-            <div className="bg-dark border border-dark-border p-6 mb-6">
+            <div className="card mb-6">
                 <h2 className="text-xl font-semibold mb-4">Upload Files</h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -170,7 +170,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
             {diffResults.length > 0 && <DiffResults diffResults={diffResults} />}
 
             {/* Information Section */}
-            <div className="bg-dark border border-dark-border p-6 mt-6">
+            <div className="card mt-6">
                 <h2 className="text-xl font-semibold mb-4">How It Works</h2>
                 <div className="space-y-3 text-gray-300">
                     <p>

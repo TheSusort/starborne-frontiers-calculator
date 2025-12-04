@@ -67,7 +67,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
     return (
         <div className="space-y-6">
             {/* Filters */}
-            <div className="bg-dark p-4 border border-gray-700 ">
+            <div className="card p-4">
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -150,7 +150,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Rarity Distribution */}
-                <div className="bg-dark p-6 border border-gray-700 ">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <BaseChart height={300}>
                         <PieChart>
@@ -180,7 +180,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                 </div>
 
                 {/* Role Distribution */}
-                <div className="bg-dark p-6 border border-gray-700 ">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Role Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={roleChartData}>
@@ -194,7 +194,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                 </div>
 
                 {/* Level Distribution */}
-                <div className="bg-dark p-6 border border-gray-700 ">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Level Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={levelChartData}>
@@ -209,7 +209,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
 
                 {/* Refits by Rarity */}
                 {refitsByRarityData.length > 0 && (
-                    <div className="bg-dark p-6 border border-gray-700 ">
+                    <div className="card">
                         <h3 className="text-lg font-semibold mb-4">Refits by Rarity</h3>
                         <BaseChart height={300}>
                             <BarChart data={refitsByRarityData}>
@@ -229,12 +229,12 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
 
             {/* Faction Table */}
             {stats.byFaction.length > 0 && (
-                <div className="bg-dark p-6 border border-gray-700 ">
+                <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Ships by Faction</h3>
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="border-b border-gray-700">
+                                <tr className="border-b border-dark-border">
                                     <th className="text-left py-2 text-gray-400">Faction</th>
                                     <th className="text-right py-2 text-gray-400">Count</th>
                                 </tr>

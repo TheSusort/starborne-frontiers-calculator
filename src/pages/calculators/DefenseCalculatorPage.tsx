@@ -221,7 +221,7 @@ const DefenseCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <h2 className="text-xl font-bold mb-4">Effective HP Explanation</h2>
                         <p className="mb-2">
                             Effective HP represents how much raw damage your ship can take before
@@ -238,7 +238,7 @@ const DefenseCalculatorPage: React.FC = () => {
                         </p>
                     </div>
 
-                    <div className="bg-dark p-4 border border-dark-border">
+                    <div className="card p-4">
                         <h2 className="text-xl font-bold mb-4">Damage Reduction Curve</h2>
                         <p className="mb-4">
                             Damage reduction follows a curve where higher defense values have

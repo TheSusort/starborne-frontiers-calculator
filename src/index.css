@@ -141,6 +141,10 @@
 }
 
 @layer components {
+    .card {
+        @apply bg-dark border border-dark-border p-6;
+    }
+
     .ship-display-height {
         @apply max-h-[calc(min((100vw-2rem-9px)*518/389,518px)+160px)]
                sm:max-h-[calc(min((100vw-16px-2rem-9px)/2*518/389,518px)+160px)]

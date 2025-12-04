@@ -41,7 +41,7 @@ export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
     };
 
     return (
-        <div className="bg-dark p-6 border border-gray-700">
+        <div className="card">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-semibold">Database Tables</h3>
                 <div className={`px-4 py-2 border ${getTotalSizeBgColor()}`}>
@@ -55,7 +55,7 @@ export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead>
-                        <tr className="border-b border-gray-700">
+                        <tr className="border-b border-dark-border">
                             <th className="pb-3 font-semibold text-gray-300">Table Name</th>
                             <th className="pb-3 font-semibold text-gray-300 text-right">Rows</th>
                             <th className="pb-3 font-semibold text-gray-300 text-right">

@@ -59,6 +59,10 @@ rarityText-uncommon/rare/epic/legendary: rgb(229 231 235)
 
 ## Custom Utility Classes
 
+### Card Component
+
+- `card` - Standard card container: `bg-dark border border-dark-border p-6`
+
 ### Effects
 
 - `shine-effect` - Animated shine sweep on hover (buttons)
@@ -106,8 +110,8 @@ Use the `Button` component from `src/components/ui/Button.tsx`:
 
 ### Containers
 
-- **Cards:** `bg-dark border border-gray-600 p-6` (or `border-gray-700`)
-- **Modals:** `bg-dark-lighter border border-gray-600 p-6` (elevated surface)
+- **Cards:** Use the `card` class: `card` (includes `bg-dark border border-dark-border p-6`)
+- **Modals:** `bg-dark-lighter border border-dark-border p-6` (elevated surface)
 - **Inputs:** `bg-dark-lighter border border-dark-border focus:ring-2 focus:ring-primary focus:border-primary h-10`
 - **Tooltips:** `bg-dark border border-dark-border p-2 rounded`
 
@@ -147,7 +151,7 @@ Custom `2xl: 1579px` breakpoint. Sidebar visible at `lg:` (1024px+).
 
 ## Quick Reference
 
-**Card:** `bg-dark border border-gray-600 p-6`
+**Card:** `card`
 **Primary Button:** `bg-primary text-dark px-4 py-2 h-10 font-medium`
 **Input:** `bg-dark-lighter border border-dark-border px-4 py-2 h-10`
 **Page Title:** `text-2xl font-bold`

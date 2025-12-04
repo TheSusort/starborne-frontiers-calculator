@@ -20,7 +20,7 @@ export const DiffSummaryComponent: React.FC<DiffSummaryProps> = ({ summary }) =>
     }
 
     return (
-        <div className="bg-dark border border-dark-border p-4 mb-6">
+        <div className="card p-4 mb-6">
             <h3 className="text-lg font-semibold mb-3">Summary</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">

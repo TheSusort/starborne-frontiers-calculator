@@ -381,7 +381,7 @@ export const LeaderboardPage: React.FC = () => {
                                     className={`flex items-center justify-between p-4 border-2 gap-4 relative ${
                                         entry.isCurrentUser
                                             ? 'border-primary bg-primary/10'
-                                            : 'border-gray-700 bg-dark'
+                                            : 'border-dark-border bg-dark'
                                     }`}
                                 >
                                     <div className="flex items-center space-x-4">

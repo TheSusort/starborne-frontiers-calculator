@@ -80,7 +80,7 @@ describe('Tabs Component', () => {
         render(<Tabs {...defaultProps} />);
 
         const tabsContainer = screen.getByRole('navigation').parentElement;
-        expect(tabsContainer).toHaveClass('border-b', 'border-gray-700');
+        expect(tabsContainer).toHaveClass('border-b', 'border-dark-border');
     });
 
     test('maintains tab order', () => {
