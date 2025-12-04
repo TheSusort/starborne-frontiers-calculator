@@ -28,8 +28,16 @@ export const ShipDetailsPage: React.FC = () => {
     const { shipId } = useParams<{ shipId: string }>();
     const navigate = useNavigate();
     const { inventory: availableGear, getGearPiece } = useInventory();
-    const { ships, updateShip, deleteShip, toggleEquipmentLock, unequipAllEquipment, loading } =
-        useShips();
+    const {
+        ships,
+        updateShip,
+        deleteShip,
+        toggleEquipmentLock,
+        unequipAllEquipment,
+        equipImplant,
+        removeImplant,
+        loading,
+    } = useShips();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
     const ship = ships.find((s) => s.id === shipId);
@@ -143,14 +151,10 @@ export const ShipDetailsPage: React.FC = () => {
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                             }}
                             onEquipImplant={(_, slot, gearId) => {
-                                const updatedShip = { ...ship };
-                                updatedShip.implants[slot] = gearId;
-                                updateShip(updatedShip.id, updatedShip);
+                                equipImplant(ship.id, slot, gearId);
                             }}
                             onRemoveImplant={(_, slot) => {
-                                const updatedShip = { ...ship };
-                                delete updatedShip.implants[slot];
-                                updateShip(updatedShip.id, updatedShip);
+                                removeImplant(ship.id, slot);
                             }}
                         />
 

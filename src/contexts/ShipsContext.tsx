@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
 import { Ship, AffinityName } from '../types/ship';
-import { GearSlotName } from '../constants/gearTypes';
+import { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
 import { supabase } from '../config/supabase';
 import { useAuth } from './AuthProvider';
 import { useNotification } from '../hooks/useNotification';
@@ -29,6 +29,8 @@ interface ShipsContextType {
         gearAssignments: { slot: GearSlotName; gearId: string }[]
     ) => Promise<void>;
     removeGear: (shipId: string, slot: GearSlotName) => Promise<void>;
+    equipImplant: (shipId: string, slot: ImplantSlotName, gearId: string) => Promise<void>;
+    removeImplant: (shipId: string, slot: ImplantSlotName) => Promise<void>;
     lockEquipment: (shipId: string, locked: boolean) => Promise<void>;
     toggleEquipmentLock: (shipId: string) => Promise<void>;
     validateGearAssignments: () => void;
@@ -824,6 +826,93 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         [user?.id, loadShips, addNotification, localShips, setStorageShips]
     );
 
+    const equipImplant = useCallback(
+        async (shipId: string, slot: ImplantSlotName, gearId: string) => {
+            // Optimistic update
+            const updatedShips = localShips.map((ship) =>
+                ship.id === shipId
+                    ? {
+                          ...ship,
+                          implants: {
+                              ...ship.implants,
+                              [slot]: gearId,
+                          },
+                      }
+                    : ship
+            );
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
+
+            if (!user?.id) return;
+
+            try {
+                // Delete existing implant in this slot for this ship
+                const { error: deleteError } = await supabase
+                    .from('ship_implants')
+                    .delete()
+                    .eq('ship_id', shipId)
+                    .eq('slot', slot);
+
+                if (deleteError) throw deleteError;
+
+                // Insert new implant
+                const { error: insertError } = await supabase.from('ship_implants').insert({
+                    ship_id: shipId,
+                    slot,
+                    id: gearId,
+                });
+
+                if (insertError) throw insertError;
+            } catch (error) {
+                // Revert optimistic update on error
+                await loadShips();
+                console.error('Error equipping implant:', error);
+                addNotification('error', 'Failed to equip implant');
+                throw error;
+            }
+        },
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+    );
+
+    const removeImplant = useCallback(
+        async (shipId: string, slot: ImplantSlotName) => {
+            // Optimistic update
+            const updatedShips = localShips.map((ship) => {
+                if (ship.id === shipId) {
+                    const implants = { ...ship.implants };
+                    delete implants[slot];
+                    return {
+                        ...ship,
+                        implants,
+                    };
+                }
+                return ship;
+            });
+            setLocalShips(updatedShips);
+            setStorageShips(updatedShips);
+
+            if (!user?.id) return;
+
+            try {
+                // Remove implant from database
+                const { error } = await supabase
+                    .from('ship_implants')
+                    .delete()
+                    .eq('ship_id', shipId)
+                    .eq('slot', slot);
+
+                if (error) throw error;
+            } catch (error) {
+                // Revert optimistic update on error
+                await loadShips();
+                console.error('Error removing implant:', error);
+                addNotification('error', 'Failed to remove implant');
+                throw error;
+            }
+        },
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+    );
+
     const lockEquipment = useCallback(
         async (shipId: string, locked: boolean) => {
             // Optimistic update
@@ -960,6 +1049,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 equipGear,
                 equipMultipleGear,
                 removeGear,
+                equipImplant,
+                removeImplant,
                 lockEquipment,
                 toggleEquipmentLock,
                 validateGearAssignments,
