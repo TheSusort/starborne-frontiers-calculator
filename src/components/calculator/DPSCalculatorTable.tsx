@@ -7,7 +7,7 @@ interface DPSCalculatorTableProps {
 }
 
 const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500 rounded">
+    <div className="bg-dark p-4 border border-red-500">
         <h3 className="text-lg font-bold text-red-500 mb-2">Table Error</h3>
         <p>There was an error rendering the DPS calculation table.</p>
     </div>

@@ -53,7 +53,7 @@ export const HangarNameModal: React.FC<Props> = ({
                 </p>
 
                 {fileSize && (
-                    <div className="bg-blue-900/20 border border-blue-500/30 rounded p-3">
+                    <div className="bg-blue-900/20 border border-blue-500/30 p-3">
                         <p className="text-blue-300 text-sm">
                             <strong>File size:</strong> {(fileSize / 1024 / 1024).toFixed(1)}MB
                             {fileSize > 10 * 1024 * 1024 && (

@@ -13,6 +13,7 @@ export * from './Button';
 export * from './Checkbox';
 export * from './CheckboxGroup';
 export * from './Input';
+export * from './Pagination';
 export * from './ProgressBar';
 export * from './Select';
 export * from './Textarea';

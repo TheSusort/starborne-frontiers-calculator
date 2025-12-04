@@ -5,7 +5,7 @@ import { Offcanvas } from './Offcanvas';
 import logo from '/favicon.ico?url';
 import { LoginButton } from '../../auth/LoginButton';
 import { MenuIcon } from '../icons/MenuIcon';
-import { ChevronDownIcon } from '../icons/ChevronIcons';
+import { ChevronDownIcon } from '../icons';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
@@ -290,10 +290,12 @@ export const Sidebar: React.FC = () => {
         }) => (
             <div className="space-y-2 flex flex-col h-full">
                 <span className="text-xs text-gray-400 hidden lg:block">v{CURRENT_VERSION}</span>
-                <h1 className=" text-xl font-bold mb-8 hidden lg:flex gap-2 items-center">
-                    <img src={logo} alt="logo" className="w-8 h-8" />
-                    {APP_NAME}
-                </h1>
+                <Link to="/">
+                    <h1 className=" text-xl font-bold mb-2 hidden lg:flex gap-2 items-center">
+                        <img src={logo} alt="logo" className="w-8 h-8" />
+                        {APP_NAME}
+                    </h1>
+                </Link>
 
                 <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
                     {navigationLinks.map((item) => (
@@ -336,10 +338,12 @@ export const Sidebar: React.FC = () => {
                     >
                         <MenuIcon className="h-6 w-6" />
                     </button>
-                    <h1 className="text-white text-xl font-bold flex items-center gap-2">
-                        <img src={logo} alt="logo" className="w-8 h-8" />
-                        {APP_NAME}
-                    </h1>
+                    <Link to="/">
+                        <h1 className="text-white text-xl font-bold flex items-center gap-2">
+                            <img src={logo} alt="logo" className="w-8 h-8" />
+                            {APP_NAME}
+                        </h1>
+                    </Link>
                     <span className="text-xs text-gray-400">v{CURRENT_VERSION}</span>
                 </div>
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TopUser, UserSortField, SortDirection, getAllUsers } from '../../services/adminService';
-import { Input } from '../ui';
+import { Input, Pagination } from '../ui';
 import { Loader } from '../ui/Loader';
 
 export const AllUsersTable: React.FC = () => {
@@ -165,25 +165,12 @@ export const AllUsersTable: React.FC = () => {
                             Showing {(currentPage - 1) * pageSize + 1} to{' '}
                             {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
                         </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Previous
-                            </button>
-                            <div className="flex items-center px-3 py-1 text-gray-400">
-                                Page {currentPage} of {totalPages}
-                            </div>
-                            <button
-                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages}
-                                className="px-3 py-1 bg-dark border border-gray-700 rounded hover:bg-dark-lighter disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                Next
-                            </button>
-                        </div>
+                        <Pagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                            className="mt-0"
+                        />
                     </div>
                 )}
             </>

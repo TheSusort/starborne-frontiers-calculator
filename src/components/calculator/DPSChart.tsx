@@ -35,7 +35,7 @@ interface HeatmapPoint {
 }
 
 const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500 rounded">
+    <div className="bg-dark p-4 border border-red-500">
         <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
         <p className="mb-2">There was an error rendering the DPS Analysis chart.</p>
         <p>You can still view and compare your ship configurations using the data cards above.</p>
@@ -180,7 +180,7 @@ const getLegendData = () => {
 // Custom legend to show DPS value ranges
 const CustomLegend = () => {
     return (
-        <div className="custom-legend flex flex-wrap justify-center mt-4 gap-2 bg-dark-lighter p-2 rounded">
+        <div className="custom-legend flex flex-wrap justify-center mt-4 gap-2 bg-dark-lighter p-2">
             {getLegendData().map((item) => (
                 <div key={item.id} className="flex items-center mr-4">
                     <div className="w-3 h-3 mr-1" style={{ backgroundColor: item.color }} />

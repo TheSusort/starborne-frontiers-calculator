@@ -64,7 +64,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                         <div className="font-semibold">{proposal.ship_name}</div>
                                     </td>
                                     <td className="p-3">
-                                        <span className="px-2 py-1 bg-primary/20 text-primary rounded text-sm">
+                                        <span className="px-2 py-1 bg-primary/20 text-primary text-sm">
                                             {proposal.proposal_count} user
                                             {proposal.proposal_count > 1 ? 's' : ''}
                                         </span>
@@ -122,7 +122,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                         {proposal.stat_differences.map((diff) => (
                                                             <div
                                                                 key={diff.stat}
-                                                                className="bg-dark-lighter p-3 rounded border border-gray-700"
+                                                                className="bg-dark-lighter p-3 border border-gray-700"
                                                             >
                                                                 <div className="text-sm text-gray-400 mb-1">
                                                                     {diff.stat}
@@ -153,7 +153,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                             <h4 className="font-semibold mb-2 text-red-400">
                                                                 Current Stats:
                                                             </h4>
-                                                            <div className="bg-dark-lighter p-3 rounded border border-gray-700 text-sm">
+                                                            <div className="bg-dark-lighter p-3 border border-gray-700 text-sm">
                                                                 <pre className="text-gray-300 whitespace-pre-wrap">
                                                                     {JSON.stringify(
                                                                         proposal.current_stats,
@@ -168,7 +168,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                         <h4 className="font-semibold mb-2 text-green-400">
                                                             Proposed Stats:
                                                         </h4>
-                                                        <div className="bg-dark-lighter p-3 rounded border border-gray-700 text-sm">
+                                                        <div className="bg-dark-lighter p-3 border border-gray-700 text-sm">
                                                             <pre className="text-gray-300 whitespace-pre-wrap">
                                                                 {JSON.stringify(
                                                                     proposal.proposed_stats,

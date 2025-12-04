@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronUpIcon } from './icons/ChevronUpIcon';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { ChevronUpIcon, ChevronDownIcon } from './icons';
 import { InfoIcon } from './icons/InfoIcon';
 import { Tooltip } from './layout/Tooltip';
 

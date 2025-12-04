@@ -17,7 +17,7 @@ interface DefensePenetrationChartProps {
 }
 
 const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500 rounded">
+    <div className="bg-dark p-4 border border-red-500">
         <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
         <p className="mb-2">There was an error rendering the defense penetration chart.</p>
     </div>
@@ -89,7 +89,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
             const data = payload[0].payload;
 
             return (
-                <div className="bg-dark-lighter p-3 border border-dark-border text-white rounded">
+                <div className="bg-dark-lighter p-3 border border-dark-border text-white">
                     <p className="font-bold mb-2">Defense Penetration: {data.penetration}%</p>
                     {payload.map((entry, index) => {
                         if (entry.dataKey === 'penetration') return null;

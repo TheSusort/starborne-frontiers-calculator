@@ -27,7 +27,7 @@ interface DamageReductionChartProps {
 }
 
 const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500 rounded">
+    <div className="bg-dark p-4 border border-red-500">
         <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
         <p className="mb-2">There was an error rendering the damage reduction chart.</p>
         <p>You can still view and compare your ship configurations using the data cards above.</p>

@@ -38,7 +38,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                                 <div
                                     className={`mb-6 ${
                                         entry.version === '1.0.0'
-                                            ? 'mt-8 p-4 text-dark rounded-lg bg-gradient-to-r from-red-500 via-yellow-500 to-purple-500 bg-[length:200%_100%] animate-gradient'
+                                            ? 'mt-8 p-4 text-dark bg-gradient-to-r from-red-500 via-yellow-500 to-purple-500 bg-[length:200%_100%] animate-gradient'
                                             : ''
                                     }`}
                                     style={

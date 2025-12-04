@@ -397,7 +397,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                 Active Skill
                             </label>
                             <textarea
-                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
                                 rows={3}
                                 value={formData.activeSkillText}
                                 onChange={(e) => updateField('activeSkillText', e.target.value)}
@@ -410,7 +410,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                 Charge Skill
                             </label>
                             <textarea
-                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
                                 rows={3}
                                 value={formData.chargeSkillText}
                                 onChange={(e) => updateField('chargeSkillText', e.target.value)}
@@ -423,7 +423,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                 First Passive Skill
                             </label>
                             <textarea
-                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
                                 rows={3}
                                 value={formData.firstPassiveSkillText}
                                 onChange={(e) =>
@@ -438,7 +438,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                 Second Passive Skill
                             </label>
                             <textarea
-                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
                                 rows={3}
                                 value={formData.secondPassiveSkillText}
                                 onChange={(e) =>
@@ -453,7 +453,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                                 Third Passive Skill
                             </label>
                             <textarea
-                                className="w-full bg-dark border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full bg-dark border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary"
                                 rows={3}
                                 value={formData.thirdPassiveSkillText}
                                 onChange={(e) =>

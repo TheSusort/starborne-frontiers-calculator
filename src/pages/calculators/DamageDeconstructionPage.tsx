@@ -259,7 +259,7 @@ const DamageDeconstructionPage: React.FC = () => {
                                     onChange={(e) =>
                                         setForm((prev) => ({ ...prev, isCrit: e.target.checked }))
                                     }
-                                    className="w-4 h-4 text-primary border-dark-border rounded focus:ring-primary"
+                                    className="w-4 h-4 text-primary border-dark-border focus:ring-primary"
                                 />
                                 Critical Hit
                             </label>

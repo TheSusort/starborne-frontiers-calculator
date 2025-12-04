@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DiffGroup } from '../../types/diff';
-import { ChevronDownIcon, ChevronRightIcon } from '../ui/icons/ChevronIcons';
+import { ChevronDownIcon, ChevronRightIcon } from '../ui/icons';
 
 interface DiffGroupProps {
     group: DiffGroup;

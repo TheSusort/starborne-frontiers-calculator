@@ -69,7 +69,7 @@ export const AlternativeRecommendations: React.FC<AlternativeRecommendationsProp
                     {alternatives.map((alt) => (
                         <div
                             key={alt.id}
-                            className={`p-3 rounded border cursor-pointer transition-colors ${
+                            className={`p-3 border cursor-pointer transition-colors ${
                                 selectedAlternative?.id === alt.id
                                     ? 'border-blue-500 bg-blue-900/20'
                                     : 'border-gray-600 bg-gray-800/50 hover:border-gray-500'

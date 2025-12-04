@@ -5,7 +5,7 @@ import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
-import { Button } from '../ui';
+import { Pagination } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
 import { useShips } from '../../contexts/ShipsContext';
 
@@ -292,7 +292,6 @@ export const GearInventory: React.FC<Props> = ({
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleClearFilters = () => {
@@ -368,58 +367,11 @@ export const GearInventory: React.FC<Props> = ({
                         ))}
                     </div>
 
-                    {totalPages > 1 && (
-                        <div className="mt-6 flex justify-center items-center space-x-2">
-                            <Button
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                                variant="secondary"
-                                size="sm"
-                            >
-                                Previous
-                            </Button>
-
-                            <div className="flex items-center space-x-1">
-                                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                    .filter((page) => {
-                                        return (
-                                            page === 1 ||
-                                            page === totalPages ||
-                                            Math.abs(page - currentPage) <= 1
-                                        );
-                                    })
-                                    .map((page, index, array) => {
-                                        const showEllipsis =
-                                            index > 0 && array[index - 1] !== page - 1;
-                                        return (
-                                            <React.Fragment key={page}>
-                                                {showEllipsis && <span className="px-2">...</span>}
-                                                <Button
-                                                    onClick={() => handlePageChange(page)}
-                                                    variant={
-                                                        currentPage === page
-                                                            ? 'primary'
-                                                            : 'secondary'
-                                                    }
-                                                    size="sm"
-                                                >
-                                                    {page}
-                                                </Button>
-                                            </React.Fragment>
-                                        );
-                                    })}
-                            </div>
-
-                            <Button
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                                variant="secondary"
-                                size="sm"
-                            >
-                                Next
-                            </Button>
-                        </div>
-                    )}
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={handlePageChange}
+                    />
                 </>
             )}
         </div>

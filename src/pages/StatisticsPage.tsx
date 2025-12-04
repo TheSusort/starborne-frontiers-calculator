@@ -36,7 +36,7 @@ export const StatisticsPage: React.FC = () => {
                     </div>
                     <Link
                         to="/"
-                        className="px-6 py-3 bg-primary text-white rounded hover:bg-primary-dark transition-colors"
+                        className="px-6 py-3 bg-primary text-white hover:bg-primary-dark transition-colors"
                     >
                         Upload Game File
                     </Link>

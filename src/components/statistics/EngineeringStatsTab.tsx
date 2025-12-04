@@ -201,7 +201,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
     // Empty state
     if (stats.totalPoints === 0) {
         return (
-            <div className="bg-dark-lighter p-12 border border-gray-700 rounded text-center">
+            <div className="bg-dark-lighter p-12 border border-gray-700 text-center">
                 <div className="text-gray-400 text-lg">No engineering points invested yet.</div>
             </div>
         );
