@@ -132,7 +132,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="bg-dark-lighter p-6 border border-gray-700">
+        <form onSubmit={handleSubmit} className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">Add New Ship Template</h3>
 
             <div className="space-y-4">

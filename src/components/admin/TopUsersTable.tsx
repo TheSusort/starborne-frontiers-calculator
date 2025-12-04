@@ -7,7 +7,7 @@ interface TopUsersTableProps {
 
 export const TopUsersTable: React.FC<TopUsersTableProps> = ({ users }) => {
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">Top Active Users</h3>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">

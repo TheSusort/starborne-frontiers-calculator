@@ -22,7 +22,7 @@ export const GrowthChart: React.FC<GrowthChartProps> = ({ data, title }) => {
     }));
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">{title}</h3>
             <BaseChart height={300}>
                 <AreaChart data={chartData}>

@@ -41,7 +41,7 @@ export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
     };
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-semibold">Database Tables</h3>
                 <div className={`px-4 py-2 border ${getTotalSizeBgColor()}`}>

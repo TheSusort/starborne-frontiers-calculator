@@ -21,7 +21,7 @@ export const UsageChart: React.FC<UsageChartProps> = ({ data, title }) => {
     }));
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">{title}</h3>
             <BaseChart height={300}>
                 <LineChart data={chartData}>

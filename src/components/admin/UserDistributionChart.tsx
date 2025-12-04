@@ -58,7 +58,7 @@ export const UserDistributionChart: React.FC<UserDistributionChartProps> = ({ da
     };
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">User Distribution by Activity</h3>
             <div className="flex flex-col md:flex-row items-center gap-4">
                 <BaseChart height={250}>

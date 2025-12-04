@@ -75,7 +75,7 @@ export function DataTable<T>({
     };
 
     return (
-        <div className={`bg-dark-lighter p-6 border border-gray-700 ${className}`}>
+        <div className={`bg-dark p-6 border border-gray-700 ${className}`}>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead>
@@ -130,7 +130,7 @@ export function DataTable<T>({
                             data.map((item, index) => (
                                 <tr
                                     key={getRowKey(item, index)}
-                                    className={`border-b border-gray-800 hover:bg-dark transition-colors ${
+                                    className={`border-b border-gray-800 hover:bg-dark-lighter transition-colors ${
                                         rowClassName ? rowClassName(item, index) : ''
                                     }`}
                                 >

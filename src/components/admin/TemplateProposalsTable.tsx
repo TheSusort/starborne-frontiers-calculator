@@ -36,14 +36,14 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
 
     if (proposals.length === 0) {
         return (
-            <div className="bg-dark-lighter p-6 border border-gray-700 text-center">
+            <div className="bg-dark p-6 border border-gray-700 text-center">
                 <p className="text-gray-400">No pending template proposals</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div className="bg-dark p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">Template Update Proposals</h3>
             <div className="overflow-x-auto">
                 <table className="w-full">

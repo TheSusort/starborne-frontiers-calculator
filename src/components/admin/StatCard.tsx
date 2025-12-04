@@ -10,7 +10,7 @@ interface StatCardProps {
 export const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color = 'blue' }) => {
     return (
         <div
-            className={`p-6 border border-gray-700 hover:border-primary bg-dark-lighter transition-all hover:scale-105`}
+            className={`p-6 border border-gray-700 hover:border-primary bg-dark transition-all hover:scale-105`}
         >
             <div className="flex items-center justify-between">
                 <div>
