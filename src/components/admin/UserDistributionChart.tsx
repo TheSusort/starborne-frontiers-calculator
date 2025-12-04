@@ -1,6 +1,7 @@
 import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Legend, Tooltip } from 'recharts';
 import { UserDistribution } from '../../services/systemHealthService';
+import { BaseChart, ChartTooltip } from '../ui/charts';
 
 interface UserDistributionChartProps {
     data: UserDistribution[];
@@ -60,7 +61,7 @@ export const UserDistributionChart: React.FC<UserDistributionChartProps> = ({ da
         <div className="bg-dark-lighter p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">User Distribution by Activity</h3>
             <div className="flex flex-col md:flex-row items-center gap-4">
-                <ResponsiveContainer width="100%" height={250}>
+                <BaseChart height={250}>
                     <PieChart>
                         <Pie
                             data={chartData}
@@ -80,15 +81,22 @@ export const UserDistributionChart: React.FC<UserDistributionChartProps> = ({ da
                             ))}
                         </Pie>
                         <Tooltip
-                            contentStyle={{
-                                backgroundColor: '#1F2937',
-                                border: '1px solid #374151',
-                                borderRadius: '0.375rem',
+                            content={({ active, payload }) => {
+                                if (!active || !payload || payload.length === 0) return null;
+                                const data = payload[0].payload as {
+                                    name: string;
+                                    value: number;
+                                    percentage: number;
+                                };
+                                return (
+                                    <div className="bg-dark-lighter p-2 border border-dark-border text-white">
+                                        <p className="font-bold">{data.name}</p>
+                                        <p className="text-sm">
+                                            {data.value} users ({data.percentage}%)
+                                        </p>
+                                    </div>
+                                );
                             }}
-                            formatter={(value: number, name: string, item) => [
-                                `${value} users (${item.payload?.percentage ?? 0}%)`,
-                                name,
-                            ]}
                         />
                         <Legend
                             verticalAlign="bottom"
@@ -98,7 +106,7 @@ export const UserDistributionChart: React.FC<UserDistributionChartProps> = ({ da
                             )}
                         />
                     </PieChart>
-                </ResponsiveContainer>
+                </BaseChart>
 
                 {/* Stats breakdown */}
                 <div className="flex-1 space-y-2">

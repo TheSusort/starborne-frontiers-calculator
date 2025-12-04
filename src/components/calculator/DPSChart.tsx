@@ -1,16 +1,8 @@
 import React, { useMemo, useRef } from 'react';
-import {
-    ScatterChart,
-    Scatter,
-    XAxis,
-    YAxis,
-    Tooltip,
-    ResponsiveContainer,
-    Legend,
-    LabelList,
-} from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, Legend, LabelList } from 'recharts';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
+import { BaseChart, DefaultErrorFallback } from '../ui/charts';
 
 interface ShipConfig {
     id: string;
@@ -33,14 +25,6 @@ interface HeatmapPoint {
     z: number; // DPS
     fill: string; // Color for the point
 }
-
-const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500">
-        <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
-        <p className="mb-2">There was an error rendering the DPS Analysis chart.</p>
-        <p>You can still view and compare your ship configurations using the data cards above.</p>
-    </div>
-);
 
 // Custom tooltip component
 interface TooltipProps {
@@ -303,7 +287,12 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
 
     // If no data or error, show fallback
     if (shipPoints.length === 0) {
-        return <ErrorFallback />;
+        return (
+            <DefaultErrorFallback
+                title="Chart Error"
+                message="There was an error rendering the DPS Analysis chart. You can still view and compare your ship configurations using the data cards above."
+            />
+        );
     }
 
     return (
@@ -319,7 +308,16 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                 }}
             >
                 {/* The chart container */}
-                <ResponsiveContainer>
+                <BaseChart
+                    height={height}
+                    error={shipPoints.length === 0 ? new Error('No data') : null}
+                    errorFallback={
+                        <DefaultErrorFallback
+                            title="Chart Error"
+                            message="There was an error rendering the DPS Analysis chart. You can still view and compare your ship configurations using the data cards above."
+                        />
+                    }
+                >
                     <ScatterChart>
                         <XAxis
                             type="number"
@@ -390,7 +388,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                             />
                         </Scatter>
                     </ScatterChart>
-                </ResponsiveContainer>
+                </BaseChart>
             </div>
         </div>
     );

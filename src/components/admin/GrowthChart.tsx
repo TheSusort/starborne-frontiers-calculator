@@ -1,15 +1,7 @@
 import React from 'react';
-import {
-    AreaChart,
-    Area,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-} from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { GrowthMetric } from '../../services/systemHealthService';
+import { BaseChart, ChartTooltip } from '../ui/charts';
 
 interface GrowthChartProps {
     data: GrowthMetric[];
@@ -32,19 +24,12 @@ export const GrowthChart: React.FC<GrowthChartProps> = ({ data, title }) => {
     return (
         <div className="bg-dark-lighter p-6 border border-gray-700">
             <h3 className="text-xl font-semibold mb-4">{title}</h3>
-            <ResponsiveContainer width="100%" height={300}>
+            <BaseChart height={300}>
                 <AreaChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="date" stroke="#9CA3AF" />
                     <YAxis stroke="#9CA3AF" />
-                    <Tooltip
-                        contentStyle={{
-                            backgroundColor: '#1F2937',
-                            border: '1px solid #374151',
-                            borderRadius: '0.375rem',
-                        }}
-                        labelStyle={{ color: '#F9FAFB' }}
-                    />
+                    <Tooltip content={<ChartTooltip />} />
                     <Legend />
                     <Area
                         type="monotone"
@@ -79,7 +64,7 @@ export const GrowthChart: React.FC<GrowthChartProps> = ({ data, title }) => {
                         fillOpacity={0.6}
                     />
                 </AreaChart>
-            </ResponsiveContainer>
+            </BaseChart>
         </div>
     );
 };

@@ -2,17 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { EngineeringStat } from '../../types/stats';
 import { StatCard } from './StatCard';
 import { calculateEngineeringStatistics } from '../../utils/statistics/engineeringStats';
-import {
-    BarChart,
-    Bar,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    Legend,
-    ResponsiveContainer,
-    Cell,
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
+import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useAuth } from '../../contexts/AuthProvider';
 import {
     getEngineeringLeaderboard,
@@ -239,38 +230,26 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                 {/* Points by Role */}
                 <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
                     <h3 className="text-lg font-semibold mb-4">Points by Role</h3>
-                    <ResponsiveContainer width="100%" height={400}>
+                    <BaseChart height={400}>
                         <BarChart data={roleChartData} layout="vertical">
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis type="number" stroke="#9ca3af" />
                             <YAxis dataKey="name" type="category" stroke="#9ca3af" width={150} />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: '#1f2937',
-                                    border: '1px solid #374151',
-                                }}
-                                cursor={{ fill: 'transparent' }}
-                            />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="points" fill="#3b82f6" />
                         </BarChart>
-                    </ResponsiveContainer>
+                    </BaseChart>
                 </div>
 
                 {/* Stat Type Breakdown */}
                 <div className="bg-dark-lighter p-6 border border-gray-700 rounded">
                     <h3 className="text-lg font-semibold mb-4">Point Distribution by Stat Type</h3>
-                    <ResponsiveContainer width="100%" height={400}>
+                    <BaseChart height={400}>
                         <BarChart data={stackedChartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis dataKey="name" stroke="#9ca3af" />
                             <YAxis stroke="#9ca3af" />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: '#1f2937',
-                                    border: '1px solid #374151',
-                                }}
-                                cursor={{ fill: 'transparent' }}
-                            />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Legend />
                             {allStatNames.map((statName, index) => (
                                 <Bar
@@ -281,7 +260,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                 />
                             ))}
                         </BarChart>
-                    </ResponsiveContainer>
+                    </BaseChart>
                 </div>
             </div>
 
@@ -305,7 +284,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                 </div>
                             </div>
                         ) : (
-                            <ResponsiveContainer width="100%" height={300}>
+                            <BaseChart height={300}>
                                 <BarChart data={leaderboardChartData} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                                     <XAxis type="number" stroke="#9ca3af" />
@@ -318,18 +297,14 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         tick={<CustomYAxisTick />}
                                     />
                                     <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: '#1f2937',
-                                            border: '1px solid #374151',
-                                            color: '#f3f4f6',
-                                        }}
-                                        labelStyle={{ color: '#f3f4f6' }}
-                                        itemStyle={{ color: '#f3f4f6' }}
+                                        content={
+                                            <ChartTooltip
+                                                formatter={(value: number | string) =>
+                                                    `${Number(value).toLocaleString()} points`
+                                                }
+                                            />
+                                        }
                                         cursor={{ fill: 'transparent' }}
-                                        formatter={(value: number) => [
-                                            `${value.toLocaleString()} points`,
-                                            'Total',
-                                        ]}
                                     />
                                     <Bar dataKey="points">
                                         {leaderboardChartData.map((entry, index) => (
@@ -343,7 +318,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         ))}
                                     </Bar>
                                 </BarChart>
-                            </ResponsiveContainer>
+                            </BaseChart>
                         )}
                     </div>
 
@@ -364,7 +339,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                 </div>
                             </div>
                         ) : (
-                            <ResponsiveContainer width="100%" height={300}>
+                            <BaseChart height={300}>
                                 <BarChart data={tokensLeaderboardChartData} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                                     <XAxis type="number" stroke="#9ca3af" />
@@ -377,18 +352,14 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         tick={<CustomYAxisTick />}
                                     />
                                     <Tooltip
-                                        contentStyle={{
-                                            backgroundColor: '#1f2937',
-                                            border: '1px solid #374151',
-                                            color: '#f3f4f6',
-                                        }}
-                                        labelStyle={{ color: '#f3f4f6' }}
-                                        itemStyle={{ color: '#f3f4f6' }}
+                                        content={
+                                            <ChartTooltip
+                                                formatter={(value: number | string) =>
+                                                    `${Number(value).toLocaleString()} tokens`
+                                                }
+                                            />
+                                        }
                                         cursor={{ fill: 'transparent' }}
-                                        formatter={(value: number) => [
-                                            `${value.toLocaleString()} tokens`,
-                                            'Total',
-                                        ]}
                                     />
                                     <Bar dataKey="tokens">
                                         {tokensLeaderboardChartData.map((entry, index) => (
@@ -402,7 +373,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                         ))}
                                     </Bar>
                                 </BarChart>
-                            </ResponsiveContainer>
+                            </BaseChart>
                         )}
                     </div>
                 </div>

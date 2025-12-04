@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TopUser, UserSortField, SortDirection, getAllUsers } from '../../services/adminService';
-import { Input, Pagination } from '../ui';
-import { Loader } from '../ui/Loader';
+import { Input, DataTable, Column } from '../ui';
 
 export const AllUsersTable: React.FC = () => {
     const [users, setUsers] = useState<TopUser[]>([]);
@@ -31,31 +30,88 @@ export const AllUsersTable: React.FC = () => {
         loadUsers();
     }, [loadUsers]);
 
-    const handleSort = (field: UserSortField) => {
-        if (sortBy === field) {
+    const handleSort = (field: string) => {
+        const sortField = field as UserSortField;
+        if (sortBy === sortField) {
             // Toggle direction
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         } else {
-            setSortBy(field);
+            setSortBy(sortField);
             setSortDirection('desc');
         }
     };
 
-    const getSortIcon = (field: UserSortField) => {
-        if (sortBy !== field) {
-            return <span className="text-gray-600">⇅</span>;
-        }
-        return sortDirection === 'asc' ? (
-            <span className="text-primary">↑</span>
-        ) : (
-            <span className="text-primary">↓</span>
-        );
-    };
+    const columns: Column<TopUser>[] = useMemo(
+        () => [
+            {
+                key: 'index',
+                label: '#',
+                align: 'left',
+                render: (_, index) => (
+                    <span className="text-gray-400">
+                        {(currentPage - 1) * pageSize + index + 1}
+                    </span>
+                ),
+            },
+            {
+                key: 'email',
+                label: 'Email',
+                sortable: true,
+                align: 'left',
+                render: (user) => <span className="text-gray-200">{user.email}</span>,
+            },
+            {
+                key: 'total_autogear_runs',
+                label: 'Autogear Runs',
+                sortable: true,
+                align: 'right',
+                render: (user) => (
+                    <span className="text-blue-400">
+                        {user.total_autogear_runs.toLocaleString()}
+                    </span>
+                ),
+            },
+            {
+                key: 'total_data_imports',
+                label: 'Data Imports',
+                sortable: true,
+                align: 'right',
+                render: (user) => (
+                    <span className="text-green-400">
+                        {user.total_data_imports.toLocaleString()}
+                    </span>
+                ),
+            },
+            {
+                key: 'total_activity',
+                label: 'Total Activity',
+                sortable: true,
+                align: 'right',
+                render: (user) => (
+                    <span className="text-yellow-400 font-semibold">
+                        {user.total_activity.toLocaleString()}
+                    </span>
+                ),
+            },
+            {
+                key: 'last_active',
+                label: 'Last Active',
+                sortable: true,
+                align: 'right',
+                render: (user) => (
+                    <span className="text-gray-400">
+                        {user.last_active ? new Date(user.last_active).toLocaleDateString() : 'N/A'}
+                    </span>
+                ),
+            },
+        ],
+        [currentPage, pageSize]
+    );
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
     return (
-        <div className="bg-dark-lighter p-6 border border-gray-700">
+        <div>
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-semibold">All Users</h3>
                 <div className="flex items-center gap-2">
@@ -72,108 +128,23 @@ export const AllUsersTable: React.FC = () => {
                 </div>
             </div>
 
-            <>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="border-b border-gray-700">
-                                <th className="pb-3 ps-3 font-semibold text-gray-300">#</th>
-                                <th
-                                    className="pb-3 font-semibold text-gray-300 cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleSort('email')}
-                                >
-                                    <div className="flex items-center gap-2">
-                                        Email {getSortIcon('email')}
-                                    </div>
-                                </th>
-                                <th
-                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleSort('total_autogear_runs')}
-                                >
-                                    <div className="flex items-center justify-end gap-2">
-                                        Autogear Runs {getSortIcon('total_autogear_runs')}
-                                    </div>
-                                </th>
-                                <th
-                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleSort('total_data_imports')}
-                                >
-                                    <div className="flex items-center justify-end gap-2">
-                                        Data Imports {getSortIcon('total_data_imports')}
-                                    </div>
-                                </th>
-                                <th
-                                    className="pb-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleSort('total_activity')}
-                                >
-                                    <div className="flex items-center justify-end gap-2">
-                                        Total Activity {getSortIcon('total_activity')}
-                                    </div>
-                                </th>
-                                <th
-                                    className="pb-3 pe-3 font-semibold text-gray-300 text-right cursor-pointer hover:text-primary transition-colors"
-                                    onClick={() => handleSort('last_active')}
-                                >
-                                    <div className="flex items-center justify-end gap-2">
-                                        Last Active {getSortIcon('last_active')}
-                                    </div>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={6} className="py-3 text-center text-gray-400">
-                                        <Loader size="sm" />
-                                    </td>
-                                </tr>
-                            ) : (
-                                users.map((user, index) => (
-                                    <tr
-                                        key={user.user_id}
-                                        className="border-b border-gray-800 hover:bg-dark transition-colors"
-                                    >
-                                        <td className="py-3 ps-3 text-gray-400">
-                                            {(currentPage - 1) * pageSize + index + 1}
-                                        </td>
-                                        <td className="py-3 text-gray-200">{user.email}</td>
-                                        <td className="py-3 text-right text-blue-400">
-                                            {user.total_autogear_runs.toLocaleString()}
-                                        </td>
-                                        <td className="py-3 text-right text-green-400">
-                                            {user.total_data_imports.toLocaleString()}
-                                        </td>
-                                        <td className="py-3 text-right text-yellow-400 font-semibold">
-                                            {user.total_activity.toLocaleString()}
-                                        </td>
-                                        <td className="py-3 pe-3 text-right text-gray-400">
-                                            {user.last_active
-                                                ? new Date(user.last_active).toLocaleDateString()
-                                                : 'N/A'}
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="flex justify-between items-center mt-4 px-3">
-                        <div className="text-sm text-gray-400">
-                            Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                            {Math.min(currentPage * pageSize, totalCount)} of {totalCount}
-                        </div>
-                        <Pagination
-                            currentPage={currentPage}
-                            totalPages={totalPages}
-                            onPageChange={setCurrentPage}
-                            className="mt-0"
-                        />
-                    </div>
-                )}
-            </>
+            <DataTable
+                data={users}
+                columns={columns}
+                loading={loading}
+                emptyMessage="No users found"
+                getRowKey={(user) => user.user_id}
+                onSort={handleSort}
+                sortBy={sortBy}
+                sortDirection={sortDirection}
+                pagination={{
+                    currentPage,
+                    totalPages,
+                    totalItems: totalCount,
+                    pageSize,
+                    onPageChange: setCurrentPage,
+                }}
+            />
         </div>
     );
 };

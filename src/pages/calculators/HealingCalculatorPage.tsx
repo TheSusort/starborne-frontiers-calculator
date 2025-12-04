@@ -11,11 +11,11 @@ import {
     CartesianGrid,
     Tooltip,
     Legend,
-    ResponsiveContainer,
     ScatterChart,
     Scatter,
     ZAxis,
 } from 'recharts';
+import { BaseChart, ChartTooltip } from '../../components/ui/charts';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
@@ -468,49 +468,51 @@ const HealingCalculatorPage: React.FC = () => {
                             healing output, while keeping other values constant.
                         </p>
 
-                        <div className="h-96">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart
-                                    data={getActiveComparisonData()}
-                                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                                >
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis
-                                        dataKey={activeComparisonChart}
-                                        label={{
-                                            value: getActiveComparisonLabel(),
-                                            position: 'insideBottomRight',
-                                            offset: -10,
-                                        }}
-                                    />
-                                    <YAxis
-                                        label={{
-                                            value: 'Healing (HP)',
-                                            angle: -90,
-                                            position: 'insideLeft',
-                                        }}
-                                    />
-                                    <Tooltip
-                                        formatter={(value) =>
-                                            Math.round(value as number).toLocaleString()
-                                        }
-                                    />
-                                    <Legend />
-                                    {configs.map((config) => (
-                                        <Line
-                                            key={config.id}
-                                            type="monotone"
-                                            dataKey={config.name}
-                                            stroke={
-                                                config.id === bestHealer?.id ? '#8884d8' : '#82ca9d'
+                        <BaseChart height={384}>
+                            <LineChart
+                                data={getActiveComparisonData()}
+                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                            >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis
+                                    dataKey={activeComparisonChart}
+                                    label={{
+                                        value: getActiveComparisonLabel(),
+                                        position: 'insideBottomRight',
+                                        offset: -10,
+                                    }}
+                                />
+                                <YAxis
+                                    label={{
+                                        value: 'Healing (HP)',
+                                        angle: -90,
+                                        position: 'insideLeft',
+                                    }}
+                                />
+                                <Tooltip
+                                    content={
+                                        <ChartTooltip
+                                            formatter={(value: number | string) =>
+                                                Math.round(Number(value)).toLocaleString()
                                             }
-                                            strokeWidth={config.id === bestHealer?.id ? 2 : 1}
-                                            activeDot={{ r: 8 }}
                                         />
-                                    ))}
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
+                                    }
+                                />
+                                <Legend />
+                                {configs.map((config) => (
+                                    <Line
+                                        key={config.id}
+                                        type="monotone"
+                                        dataKey={config.name}
+                                        stroke={
+                                            config.id === bestHealer?.id ? '#8884d8' : '#82ca9d'
+                                        }
+                                        strokeWidth={config.id === bestHealer?.id ? 2 : 1}
+                                        activeDot={{ r: 8 }}
+                                    />
+                                ))}
+                            </LineChart>
+                        </BaseChart>
 
                         <div className="mt-6 flex justify-center">
                             <Button
@@ -531,61 +533,61 @@ const HealingCalculatorPage: React.FC = () => {
                                     Chance (y-axis), and healing amount (bubble size). Each bubble
                                     represents a healer configuration.
                                 </p>
-                                <div className="h-96">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <ScatterChart
-                                            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                                        >
-                                            <CartesianGrid />
-                                            <XAxis
-                                                type="number"
-                                                dataKey="hp"
-                                                name="HP"
-                                                label={{
-                                                    value: 'HP',
-                                                    position: 'insideBottomRight',
-                                                    offset: -10,
-                                                }}
-                                            />
-                                            <YAxis
-                                                type="number"
-                                                dataKey="crit"
-                                                name="Crit Chance"
-                                                label={{
-                                                    value: 'Crit Chance (%)',
-                                                    angle: -90,
-                                                    position: 'insideLeft',
-                                                }}
-                                            />
-                                            <ZAxis
-                                                type="number"
-                                                dataKey="healing"
-                                                range={[100, 1000]}
-                                                name="Healing"
-                                            />
-                                            <Tooltip
-                                                cursor={{ strokeDasharray: '3 3' }}
-                                                formatter={(value, name) => {
-                                                    if (name === 'Healing') {
-                                                        return [
-                                                            Math.round(
-                                                                value as number
-                                                            ).toLocaleString() + ' HP',
-                                                            name,
-                                                        ];
-                                                    }
-                                                    return [value, name];
-                                                }}
-                                            />
-                                            <Legend />
-                                            <Scatter
-                                                name="Healers"
-                                                data={generateBubbleChartData()}
-                                                fill="#8884d8"
-                                            />
-                                        </ScatterChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                <BaseChart height={384}>
+                                    <ScatterChart
+                                        margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+                                    >
+                                        <CartesianGrid />
+                                        <XAxis
+                                            type="number"
+                                            dataKey="hp"
+                                            name="HP"
+                                            label={{
+                                                value: 'HP',
+                                                position: 'insideBottomRight',
+                                                offset: -10,
+                                            }}
+                                        />
+                                        <YAxis
+                                            type="number"
+                                            dataKey="crit"
+                                            name="Crit Chance"
+                                            label={{
+                                                value: 'Crit Chance (%)',
+                                                angle: -90,
+                                                position: 'insideLeft',
+                                            }}
+                                        />
+                                        <ZAxis
+                                            type="number"
+                                            dataKey="healing"
+                                            range={[100, 1000]}
+                                            name="Healing"
+                                        />
+                                        <Tooltip
+                                            content={
+                                                <ChartTooltip
+                                                    formatter={(
+                                                        value: number | string,
+                                                        name: string
+                                                    ) => {
+                                                        if (name === 'Healing') {
+                                                            return `${Math.round(Number(value)).toLocaleString()} HP`;
+                                                        }
+                                                        return String(value);
+                                                    }}
+                                                />
+                                            }
+                                            cursor={{ strokeDasharray: '3 3' }}
+                                        />
+                                        <Legend />
+                                        <Scatter
+                                            name="Healers"
+                                            data={generateBubbleChartData()}
+                                            fill="#8884d8"
+                                        />
+                                    </ScatterChart>
+                                </BaseChart>
                             </div>
                         )}
                     </div>

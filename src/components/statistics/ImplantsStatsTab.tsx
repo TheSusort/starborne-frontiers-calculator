@@ -5,18 +5,8 @@ import { RarityName } from '../../constants/rarities';
 import { Select } from '../ui';
 import { StatCard } from './StatCard';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
-import {
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-} from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { BaseChart, ChartTooltip } from '../ui/charts';
 
 interface ImplantsStatsTabProps {
     gear: GearPiece[];
@@ -137,7 +127,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                 {/* Rarity Distribution */}
                 <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
-                    <ResponsiveContainer width="100%" height={300}>
+                    <BaseChart height={300}>
                         <PieChart>
                             <Pie
                                 data={rarityChartData}
@@ -159,29 +149,23 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                     />
                                 ))}
                             </Pie>
-                            <Tooltip />
+                            <Tooltip content={<ChartTooltip />} />
                         </PieChart>
-                    </ResponsiveContainer>
+                    </BaseChart>
                 </div>
 
                 {/* Type Distribution */}
                 <div className="bg-dark-lighter p-6 border border-gray-700 ">
                     <h3 className="text-lg font-semibold mb-4">Type Distribution</h3>
-                    <ResponsiveContainer width="100%" height={300}>
+                    <BaseChart height={300}>
                         <BarChart data={typeChartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                             <XAxis dataKey="type" stroke="#9ca3af" />
                             <YAxis stroke="#9ca3af" />
-                            <Tooltip
-                                contentStyle={{
-                                    backgroundColor: '#1f2937',
-                                    border: '1px solid #374151',
-                                }}
-                                cursor={{ fill: 'transparent' }}
-                            />
+                            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="count" fill="#8b5cf6" />
                         </BarChart>
-                    </ResponsiveContainer>
+                    </BaseChart>
                 </div>
             </div>
 
@@ -200,7 +184,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                     <h5 className="text-md font-semibold mb-2 text-center">
                                         {typeData.type}
                                     </h5>
-                                    <ResponsiveContainer width="100%" height={300}>
+                                    <BaseChart height={300}>
                                         <BarChart
                                             data={typeData.setBonuses}
                                             layout="vertical"
@@ -217,15 +201,12 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                                 style={{ fontSize: '10px' }}
                                             />
                                             <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: '#1f2937',
-                                                    border: '1px solid #374151',
-                                                }}
+                                                content={<ChartTooltip />}
                                                 cursor={{ fill: 'transparent' }}
                                             />
                                             <Bar dataKey="count" fill="#10b981" />
                                         </BarChart>
-                                    </ResponsiveContainer>
+                                    </BaseChart>
                                 </div>
                             ))}
                     </div>
@@ -247,7 +228,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                     <h5 className="text-md font-semibold mb-2 text-center">
                                         {typeData.type}
                                     </h5>
-                                    <ResponsiveContainer width="100%" height={400}>
+                                    <BaseChart height={400}>
                                         <BarChart
                                             data={typeData.setBonuses}
                                             layout="vertical"
@@ -264,15 +245,12 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                                 style={{ fontSize: '11px' }}
                                             />
                                             <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: '#1f2937',
-                                                    border: '1px solid #374151',
-                                                }}
+                                                content={<ChartTooltip />}
                                                 cursor={{ fill: 'transparent' }}
                                             />
                                             <Bar dataKey="count" fill="#3b82f6" />
                                         </BarChart>
-                                    </ResponsiveContainer>
+                                    </BaseChart>
                                 </div>
                             ))}
                     </div>

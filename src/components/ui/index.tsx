@@ -16,4 +16,6 @@ export * from './Input';
 export * from './Pagination';
 export * from './ProgressBar';
 export * from './Select';
+export * from './tables';
 export * from './Textarea';
+export * from './charts';

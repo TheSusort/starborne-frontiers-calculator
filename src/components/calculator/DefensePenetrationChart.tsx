@@ -1,27 +1,13 @@
 import React, { useMemo } from 'react';
-import {
-    Line,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip,
-    ResponsiveContainer,
-    ComposedChart,
-} from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart } from 'recharts';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
+import { BaseChart, DefaultErrorFallback } from '../ui/charts';
 
 interface DefensePenetrationChartProps {
     height?: number;
     defenseValues?: number[];
     penetrationValues?: number[];
 }
-
-const ErrorFallback = () => (
-    <div className="bg-dark p-4 border border-red-500">
-        <h3 className="text-lg font-bold text-red-500 mb-2">Chart Error</h3>
-        <p className="mb-2">There was an error rendering the defense penetration chart.</p>
-    </div>
-);
 
 export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = ({
     height = 400,
@@ -67,7 +53,12 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
 
     // If no data or error, show fallback
     if (chartData.length === 0) {
-        return <ErrorFallback />;
+        return (
+            <DefaultErrorFallback
+                title="Chart Error"
+                message="There was an error rendering the defense penetration chart."
+            />
+        );
     }
 
     // Custom tooltip component
@@ -136,59 +127,66 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
     return (
         <div className="defense-penetration-chart">
             <h2 className="text-xl font-bold mb-4">Damage Increase by Defense Penetration</h2>
-            <div style={{ width: '100%', height }}>
-                <ResponsiveContainer>
-                    <ComposedChart
-                        data={chartData}
-                        margin={{ top: 5, right: 30, left: 20, bottom: 12 }}
-                    >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#444" />
-                        <XAxis
-                            dataKey="penetration"
-                            name="Defense Penetration"
-                            domain={[0, 66]}
-                            tick={{ fill: '#fff' }}
-                            label={{
-                                value: 'Defense Penetration (%)',
-                                position: 'insideBottom',
-                                offset: -10,
-                                fill: '#fff',
-                            }}
-                            type="number"
-                        />
-                        <YAxis
-                            domain={[0, 200]}
-                            tick={{ fill: '#fff' }}
-                            label={{
-                                value: 'Damage Increase (%)',
-                                angle: -90,
-                                position: 'insideLeft',
-                                fill: '#fff',
-                            }}
-                            type="number"
-                        />
-                        <Tooltip content={<CustomTooltip />} />
+            <BaseChart
+                height={height}
+                error={chartData.length === 0 ? new Error('No data') : null}
+                errorFallback={
+                    <DefaultErrorFallback
+                        title="Chart Error"
+                        message="There was an error rendering the defense penetration chart."
+                    />
+                }
+            >
+                <ComposedChart
+                    data={chartData}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 12 }}
+                >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                    <XAxis
+                        dataKey="penetration"
+                        name="Defense Penetration"
+                        domain={[0, 66]}
+                        tick={{ fill: '#fff' }}
+                        label={{
+                            value: 'Defense Penetration (%)',
+                            position: 'insideBottom',
+                            offset: -10,
+                            fill: '#fff',
+                        }}
+                        type="number"
+                    />
+                    <YAxis
+                        domain={[0, 200]}
+                        tick={{ fill: '#fff' }}
+                        label={{
+                            value: 'Damage Increase (%)',
+                            angle: -90,
+                            position: 'insideLeft',
+                            fill: '#fff',
+                        }}
+                        type="number"
+                    />
+                    <Tooltip content={<CustomTooltip />} />
 
-                        {/* Lines for each defense value */}
-                        {defenseValues.map((defense, index) => (
-                            <Line
-                                key={defense}
-                                type="monotone"
-                                dataKey={`defense_${defense}`}
-                                stroke={colors[index % colors.length]}
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{
-                                    r: 6,
-                                    stroke: colors[index % colors.length],
-                                    strokeWidth: 2,
-                                }}
-                                name={`${(defense / 1000).toFixed(0)}k Defense`}
-                            />
-                        ))}
-                    </ComposedChart>
-                </ResponsiveContainer>
-            </div>
+                    {/* Lines for each defense value */}
+                    {defenseValues.map((defense, index) => (
+                        <Line
+                            key={defense}
+                            type="monotone"
+                            dataKey={`defense_${defense}`}
+                            stroke={colors[index % colors.length]}
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{
+                                r: 6,
+                                stroke: colors[index % colors.length],
+                                strokeWidth: 2,
+                            }}
+                            name={`${(defense / 1000).toFixed(0)}k Defense`}
+                        />
+                    ))}
+                </ComposedChart>
+            </BaseChart>
 
             {/* Legend */}
             <div className="flex flex-wrap justify-center gap-4 mt-6">

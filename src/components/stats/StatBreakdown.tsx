@@ -98,21 +98,29 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                                     {STATS[statName].shortLabel}
                                 </td>
                                 <td className="p-1 text-gray-400">{baseValue || '-'}</td>
-                                <td className={`p-1 ${refitValue ? 'text-yellow-400' : ''}`}>
+                                <td
+                                    className={`p-1 ${refitValue ? 'text-yellow-400' : 'text-gray-400'}`}
+                                >
                                     {refitValue ? formatValue(refitValue) : '-'}
                                 </td>
                                 <td
-                                    className={`p-1 border-r border-gray-600 ${engineeringValue ? 'text-blue-400' : ''}`}
+                                    className={`p-1 border-r border-gray-600 ${engineeringValue ? 'text-blue-400' : 'text-gray-400'}`}
                                 >
                                     {engineeringValue ? formatValue(engineeringValue) : '-'}
                                 </td>
-                                <td className={`p-1 ${gearValue ? 'text-green-400' : ''}`}>
+                                <td
+                                    className={`p-1 ${gearValue ? 'text-green-400' : 'text-gray-400'}`}
+                                >
                                     {gearValue ? formatValue(gearValue) : '-'}
                                 </td>
-                                <td className={`p-1 ${setsValue ? 'text-emerald-400' : ''}`}>
+                                <td
+                                    className={`p-1 ${setsValue ? 'text-emerald-400' : 'text-gray-400'}`}
+                                >
                                     {setsValue ? formatValue(setsValue) : '-'}
                                 </td>
-                                <td className={`p-1 ${implantValue ? 'text-purple-400' : ''}`}>
+                                <td
+                                    className={`p-1 ${implantValue ? 'text-purple-400' : 'text-gray-400'}`}
+                                >
                                     {implantValue ? formatValue(implantValue) : '-'}
                                 </td>
                                 <td className={`p-1 border-l border-gray-600`}>
