@@ -65,7 +65,7 @@ const HomePage: React.FC = () => {
                                     1. Import Data
                                 </h3>
                             </div>
-                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
                                 <video
                                     ref={exportVideoRef}
                                     src="/videos/export.mov"
@@ -109,7 +109,7 @@ const HomePage: React.FC = () => {
                                     2. View Your Fleet
                                 </h3>
                             </div>
-                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
                                 <video
                                     ref={shipsVideoRef}
                                     src="/videos/ships.mov"
@@ -153,7 +153,7 @@ const HomePage: React.FC = () => {
                                     3. Optimize Gear
                                 </h3>
                             </div>
-                            <div className="mb-4 rounded-md overflow-hidden border border-gray-700 h-48 relative">
+                            <div className="mb-4 overflow-hidden border border-gray-700 h-48 relative">
                                 <video
                                     ref={autogearVideoRef}
                                     src="/videos/autogear.mov"

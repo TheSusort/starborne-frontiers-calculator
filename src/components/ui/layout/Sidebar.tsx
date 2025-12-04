@@ -127,7 +127,7 @@ const NavigationItem: React.FC<{
                     )}
                     <Tooltip
                         isVisible={showTooltip}
-                        className="bg-dark border border-dark-border p-2 rounded"
+                        className="bg-dark border border-dark-border p-2"
                     >
                         Login to access this feature
                     </Tooltip>
@@ -183,10 +183,7 @@ const NavigationItem: React.FC<{
                         />
                     ))}
                 </CollapsibleSection>
-                <Tooltip
-                    isVisible={showTooltip}
-                    className="bg-dark border border-dark-border p-2 rounded"
-                >
+                <Tooltip isVisible={showTooltip} className="bg-dark border border-dark-border p-2">
                     Login to access this feature
                 </Tooltip>
             </div>
