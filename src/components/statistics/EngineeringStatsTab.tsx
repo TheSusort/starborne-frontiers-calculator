@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { EngineeringStat } from '../../types/stats';
-import { StatCard } from './StatCard';
+import { StatCard } from '../ui';
 import { calculateEngineeringStatistics } from '../../utils/statistics/engineeringStats';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';

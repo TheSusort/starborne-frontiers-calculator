@@ -117,8 +117,8 @@ const NavigationItem: React.FC<{
                             section-split-effect text-right
                             ${
                                 isActive(item.path)
-                                    ? 'bg-primary hover:bg-primary-hover text-dark border-primary hover:border-primary-hover'
-                                    : 'border-dark-border bg-dark'
+                                    ? 'text-primary after:bg-primary after:border-primary border-dark-border bg-dark/50'
+                                    : 'border-dark-border bg-dark hover:after:border-r'
                             }
                         `}
                         >
@@ -155,7 +155,7 @@ const NavigationItem: React.FC<{
                         isDisabled
                             ? 'border-dark-border bg-dark opacity-50 cursor-not-allowed'
                             : isItemActive || hasActiveChild
-                              ? 'bg-primary hover:bg-primary-hover text-dark border-primary hover:border-primary-hover'
+                              ? 'text-primary after:bg-primary after:border-primary border-dark-border bg-dark'
                               : 'border-dark-border bg-dark'
                     }
                 `}

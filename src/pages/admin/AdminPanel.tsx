@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { PageLayout, Select, Tabs, CollapsibleForm, Button } from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
 import { AllUsersTable } from '../../components/admin/AllUsersTable';
-import { StatCard } from '../../components/admin/StatCard';
+import { StatCard } from '../../components/ui';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { UserDistributionChart } from '../../components/admin/UserDistributionChart';

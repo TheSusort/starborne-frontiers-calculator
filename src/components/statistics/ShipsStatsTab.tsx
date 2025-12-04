@@ -3,7 +3,7 @@ import { Ship } from '../../types/ship';
 import { ShipTypeName } from '../../constants';
 import { RarityName } from '../../constants/rarities';
 import { Select } from '../ui';
-import { StatCard } from './StatCard';
+import { StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';

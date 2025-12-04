@@ -4,7 +4,7 @@ import { Ship } from '../../types/ship';
 import { GearSetName } from '../../constants';
 import { RarityName } from '../../constants/rarities';
 import { Select } from '../ui';
-import { StatCard } from './StatCard';
+import { StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';

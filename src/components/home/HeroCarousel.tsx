@@ -117,7 +117,7 @@ export const HeroCarousel: React.FC = () => {
                         }}
                     >
                         {/* Gradient overlay for text readability */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/10" />
+                        <div className="absolute inset-0 bg-gradient-to-tr from-black/90 via-black/30 to-black/10" />
 
                         {/* Content */}
                         <div className="relative h-full flex flex-col justify-end items-start pb-12">

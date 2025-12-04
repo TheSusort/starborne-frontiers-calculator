@@ -110,12 +110,11 @@
             background-color: inherit;
             transition: all 0.2s ease-in-out;
             border: inherit;
-            border-right: 0;
+            border-right-width: 0;
         }
 
         &:hover::after {
             right: calc(100% + 6px);
-            border-right: inherit;
         }
     }
 

@@ -3,7 +3,7 @@ import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
 import { Select } from '../ui';
-import { StatCard } from './StatCard';
+import { StatCard } from '../ui';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
