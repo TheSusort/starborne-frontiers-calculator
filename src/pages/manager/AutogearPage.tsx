@@ -854,17 +854,21 @@ export const AutogearPage: React.FC = () => {
                                                         Stat Comparison
                                                     </h4>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <StatList
-                                                            stats={results.currentStats.final}
-                                                            title="Current Stats"
-                                                        />
-                                                        <StatList
-                                                            stats={results.suggestedStats.final}
-                                                            comparisonStats={
-                                                                results.currentStats.final
-                                                            }
-                                                            title="Stats with Suggested Gear"
-                                                        />
+                                                        <div className="card">
+                                                            <StatList
+                                                                stats={results.currentStats.final}
+                                                                title="Current Stats"
+                                                            />
+                                                        </div>
+                                                        <div className="card">
+                                                            <StatList
+                                                                stats={results.suggestedStats.final}
+                                                                comparisonStats={
+                                                                    results.currentStats.final
+                                                                }
+                                                                title="Stats with Suggested Gear"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             )}
