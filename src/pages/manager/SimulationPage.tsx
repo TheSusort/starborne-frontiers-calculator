@@ -13,9 +13,9 @@ import { GearTesting } from '../../components/simulation/GearTesting';
 import { Modal } from '../../components/ui/layout/Modal';
 import { GearInventory } from '../../components/gear/GearInventory';
 import { useNotification } from '../../hooks/useNotification';
-import { GearSlotName } from '../../constants';
+import { GearSlotName, ImplantSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
-//import { ImplantTesting } from '../../components/simulation/ImplantTesting';
+import { ImplantTesting } from '../../components/simulation/ImplantTesting';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -28,7 +28,7 @@ interface SimulationState {
 }
 
 export const SimulationPage: React.FC = () => {
-    const { getShipById } = useShips();
+    const { getShipById, updateShip } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
     const [selectedRole, setSelectedRole] = useState<ShipTypeName>('ATTACKER');
     const { getGearPiece, inventory } = useInventory();
@@ -37,6 +37,7 @@ export const SimulationPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const [temporaryGear, setTemporaryGear] = useState<Partial<Record<GearSlotName, string>>>({});
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
+    const [selectedImplantSlot, setSelectedImplantSlot] = useState<ImplantSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const { addNotification } = useNotification();
     const { equipMultipleGear } = useShips();
@@ -129,16 +130,11 @@ export const SimulationPage: React.FC = () => {
             setSimulation(null);
         }
     };
-    /*
-    const handleSaveImplantChanges = () => {
+
+    const handleSaveImplantChanges = async () => {
         if (!selectedShip) return;
 
-        const updatedShip = {
-            ...selectedShip,
-            implants: temporaryImplants,
-        };
-
-        updateShip(selectedShip.id, updatedShip);
+        await updateShip(selectedShip.id, { implants: temporaryImplants });
         addNotification('success', 'Implant changes saved successfully');
     };
 
@@ -147,7 +143,7 @@ export const SimulationPage: React.FC = () => {
             setTemporaryImplants(selectedShip.implants);
             setSimulation(null);
         }
-    };*/
+    };
 
     const handleRoleChange = (role: ShipTypeName) => {
         setSelectedRole(role);
@@ -245,16 +241,25 @@ export const SimulationPage: React.FC = () => {
                                     onResetChanges={handleResetGearChanges}
                                     hasChanges={hasGearChanges()}
                                 />
-                                {/*
                                 <hr className="border-dark-border" />
 
                                 <ImplantTesting
                                     temporaryImplants={temporaryImplants}
-                                    onImplantsChange={setTemporaryImplants}
+                                    getGearPiece={getGearPiece}
+                                    hoveredGear={hoveredGear}
+                                    onGearHover={setHoveredGear}
+                                    onSelectSlot={setSelectedImplantSlot}
+                                    onRemoveImplant={(slot) => {
+                                        setTemporaryImplants((prev) => {
+                                            const next = { ...prev };
+                                            delete next[slot];
+                                            return next;
+                                        });
+                                    }}
                                     onSaveChanges={handleSaveImplantChanges}
                                     onResetChanges={handleResetImplantChanges}
                                     hasChanges={hasImplantChanges()}
-                                />*/}
+                                />
                             </div>
                         </div>
                     )}
@@ -277,6 +282,33 @@ export const SimulationPage: React.FC = () => {
                                     [selectedSlot]: gear.id,
                                 }));
                                 setSelectedSlot(null);
+                            }
+                        }}
+                        onRemove={() => {}}
+                        onEdit={() => {}}
+                    />
+                </Modal>
+
+                <Modal
+                    isOpen={selectedImplantSlot !== null}
+                    onClose={() => setSelectedImplantSlot(null)}
+                    title={`Select ${selectedImplantSlot} for ${selectedShip?.name}`}
+                >
+                    <GearInventory
+                        inventory={inventory.filter(
+                            (gear) =>
+                                selectedImplantSlot &&
+                                gear.slot.startsWith('implant_') &&
+                                gear.slot === selectedImplantSlot
+                        )}
+                        mode="select"
+                        onEquip={(gear) => {
+                            if (selectedImplantSlot) {
+                                setTemporaryImplants((prev) => ({
+                                    ...prev,
+                                    [selectedImplantSlot]: gear.id,
+                                }));
+                                setSelectedImplantSlot(null);
                             }
                         }}
                         onRemove={() => {}}
