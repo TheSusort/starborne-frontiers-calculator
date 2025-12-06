@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.25.1';
+export const CURRENT_VERSION = '1.26.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.26.0',
+        date: '2025-12-06',
+        changes: [
+            'Added bomb damage to debuffer stats',
+            'Added implant testing/quick swap in the simulation page',
+        ],
+    },
     {
         version: '1.25.1',
         date: '2025-12-02',
