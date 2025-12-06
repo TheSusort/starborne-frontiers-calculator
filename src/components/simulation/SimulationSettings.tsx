@@ -31,8 +31,8 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
             <div className="card space-y-2">
                 <Select
                     label="Ship Role"
-                    options={Object.values(SHIP_TYPES).map((type) => ({
-                        value: type.name,
+                    options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
+                        value: key,
                         label: `${type.name} (${type.description})`,
                     }))}
                     value={selectedRole}

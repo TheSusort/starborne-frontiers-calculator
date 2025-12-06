@@ -19,6 +19,8 @@ import { GearPiece } from '../../types/gear';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { ENEMY_COUNT, ENEMY_ATTACK } from '../../constants/simulation';
+import { StatList } from '../../components/stats/StatList';
 
 interface SimulationState {
     current: SimulationSummary;
@@ -28,7 +30,7 @@ interface SimulationState {
 export const SimulationPage: React.FC = () => {
     const { getShipById } = useShips();
     const [selectedShipId, setSelectedShipId] = useState<string>('');
-    const [selectedRole, setSelectedRole] = useState<ShipTypeName>('Attacker');
+    const [selectedRole, setSelectedRole] = useState<ShipTypeName>('ATTACKER');
     const { getGearPiece, inventory } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [simulation, setSimulation] = useState<SimulationState | null>(null);
@@ -48,10 +50,23 @@ export const SimulationPage: React.FC = () => {
             const ship = getShipById(shipId);
             if (ship) {
                 setSelectedShipId(shipId);
-                setSelectedRole(SHIP_TYPES[ship.type].name);
+                setSelectedRole(ship.type);
             }
         }
     }, [searchParams, getShipById]);
+
+    // Normalize role from display name to key if needed
+    const normalizeRoleForSimulation = (role: ShipTypeName): ShipTypeName => {
+        // If it's already a key (uppercase), return it
+        if (role in SHIP_TYPES) {
+            return role as ShipTypeName;
+        }
+        // Otherwise, find the key by matching the display name
+        const foundKey = Object.keys(SHIP_TYPES).find(
+            (key) => SHIP_TYPES[key as ShipTypeName].name === role
+        ) as ShipTypeName | undefined;
+        return foundKey || 'ATTACKER';
+    };
 
     const handleRunSimulation = () => {
         if (!selectedShip) return;
@@ -74,10 +89,12 @@ export const SimulationPage: React.FC = () => {
             getEngineeringStatsForShipType(selectedShip.type)
         );
 
+        const normalizedRole = normalizeRoleForSimulation(selectedRole);
+
         setSimulation({
-            current: runSimulation(currentStats.final, selectedRole, activeCurrentSets),
+            current: runSimulation(currentStats.final, normalizedRole, activeCurrentSets),
             temporary: hasChanges()
-                ? runSimulation(temporaryStats.final, selectedRole, activeTemporarySets)
+                ? runSimulation(temporaryStats.final, normalizedRole, activeTemporarySets)
                 : null,
         });
     };
@@ -147,7 +164,7 @@ export const SimulationPage: React.FC = () => {
         if (selectedShip) {
             setTemporaryGear(selectedShip.equipment);
             setTemporaryImplants(selectedShip.implants);
-            setSelectedRole(SHIP_TYPES[selectedShip.type].name);
+            setSelectedRole(selectedShip.type);
         }
     }, [selectedShip]);
 
@@ -187,6 +204,24 @@ export const SimulationPage: React.FC = () => {
                                 role={selectedRole}
                                 alwaysColumn
                             />
+                        )}
+
+                        {selectedShip && (
+                            <div className="card space-y-4">
+                                <h3 className="text-lg font-semibold">Ship Stats</h3>
+                                <StatList
+                                    stats={
+                                        calculateTotalStats(
+                                            selectedShip.baseStats,
+                                            selectedShip.equipment,
+                                            getGearPiece,
+                                            selectedShip.refits,
+                                            selectedShip.implants,
+                                            getEngineeringStatsForShipType(selectedShip.type)
+                                        ).final
+                                    }
+                                />
+                            </div>
                         )}
                     </div>
                     {selectedShip && (
@@ -258,7 +293,9 @@ export default SimulationPage;
 const SimulationInfo: React.FC = () => (
     <ul className="list-disc list-inside text-sm text-gray-400">
         <li>It will only use 100% damage hits, no ship specific attacks are used.</li>
-        <li>For defenders, it will take hits from an enemy with 15000 attack and 170 security.</li>
+        <li>
+            For defenders, it will take hits from {ENEMY_COUNT} enemies with {ENEMY_ATTACK} attack.
+        </li>
         <li>For debuffers, it will also try to hack an enemy with 170 security.</li>
         <li>For supporters, it will heal an ally with using 15% of their max HP.</li>
     </ul>

@@ -26,6 +26,7 @@ export interface SimulationSummary {
 
     // Debuffer specific
     hackSuccessRate?: number;
+    hacking?: number;
 
     // Supporter specific
     averageHealing?: number;
@@ -144,6 +145,7 @@ function runDefenderSimulation(stats: BaseStats): SimulationSummary {
 
 function runDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hacking = stats.hacking || 0;
+    const attack = stats.attack || 0;
 
     // Success rate is the difference between hacking and security as a percentage
     const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
@@ -153,6 +155,8 @@ function runDebufferSimulation(stats: BaseStats): SimulationSummary {
 
     return {
         hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
+        hacking: hacking,
+        attack: attack,
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,
