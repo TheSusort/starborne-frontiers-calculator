@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
 import { AuthModal } from './AuthModal';
 import { Button } from '../ui/Button';
 
 export const LoginButton: React.FC = () => {
     const { user, signOut } = useAuth();
+    const navigate = useNavigate();
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     if (user) {
@@ -14,7 +16,9 @@ export const LoginButton: React.FC = () => {
                     <img
                         src={user.photoURL}
                         alt={user.displayName || user.email || 'User'}
-                        className="w-8 h-8 rounded-full"
+                        className="w-8 h-8 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => navigate('/profile')}
+                        title="View Profile"
                     />
                 )}
                 <Button

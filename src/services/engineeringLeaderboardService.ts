@@ -4,24 +4,28 @@ export interface LeaderboardEntry {
     rank: number;
     totalPoints: number;
     isCurrentUser: boolean;
+    username: string | null;
 }
 
 export interface TokensLeaderboardEntry {
     rank: number;
     totalTokens: number;
     isCurrentUser: boolean;
+    username: string | null;
 }
 
 interface PointsRpcResponse {
     rank: number;
     total_points: number;
     is_current_user: boolean;
+    username: string | null;
 }
 
 interface TokensRpcResponse {
     rank: number;
     total_tokens: number;
     is_current_user: boolean;
+    username: string | null;
 }
 
 export async function getEngineeringLeaderboard(userId: string): Promise<LeaderboardEntry[]> {
@@ -42,6 +46,7 @@ export async function getEngineeringLeaderboard(userId: string): Promise<Leaderb
         rank: entry.rank,
         totalPoints: entry.total_points,
         isCurrentUser: entry.is_current_user,
+        username: entry.username,
     }));
 }
 
@@ -65,5 +70,6 @@ export async function getEngineeringTokensLeaderboard(
         rank: entry.rank,
         totalTokens: entry.total_tokens,
         isCurrentUser: entry.is_current_user,
+        username: entry.username,
     }));
 }

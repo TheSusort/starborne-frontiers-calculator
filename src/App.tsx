@@ -34,6 +34,7 @@ const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
 const LeaderboardPage = lazy(() => import('./pages/ships/LeaderboardPage'));
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 
 // Calculator pages
 const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
@@ -204,6 +205,10 @@ const App: React.FC = () => {
                                                                 <Route
                                                                     path="/statistics"
                                                                     element={<StatisticsPage />}
+                                                                />
+                                                                <Route
+                                                                    path="/profile"
+                                                                    element={<ProfilePage />}
                                                                 />
                                                                 <Route
                                                                     path="/admin"
