@@ -247,7 +247,7 @@ const HomePage: React.FC = () => {
                                     </Button>
                                 </a>
                                 <a
-                                    href="https://buymeacoffee.com/alvbert"
+                                    href="https://www.buymeacoffee.com/starborneplanner"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
