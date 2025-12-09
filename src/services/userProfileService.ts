@@ -43,6 +43,12 @@ export interface TopShipRanking {
     score: number;
 }
 
+export interface UserUsageStats {
+    total_autogear_runs: number;
+    total_data_imports: number;
+    total_activity: number;
+}
+
 /**
  * Get user profile data
  */
@@ -190,6 +196,32 @@ export async function getUserStats(userId: string): Promise<UserStats> {
         implantCount: implantCount || 0,
         engineeringPoints: Math.round(engineeringPoints * 100) / 100,
         engineeringTokens,
+    };
+}
+
+/**
+ * Get user usage statistics (autogear runs, data imports, total activity)
+ */
+export async function getUserUsageStats(userId: string): Promise<UserUsageStats> {
+    const { data, error } = await supabase
+        .from('users')
+        .select('autogear_run_count, data_import_count')
+        .eq('id', userId)
+        .single();
+
+    if (error) {
+        console.error('Error fetching user usage stats:', error);
+        throw error;
+    }
+
+    const autogearRuns = data?.autogear_run_count || 0;
+    const dataImports = data?.data_import_count || 0;
+    const totalActivity = autogearRuns + dataImports;
+
+    return {
+        total_autogear_runs: autogearRuns,
+        total_data_imports: dataImports,
+        total_activity: totalActivity,
     };
 }
 

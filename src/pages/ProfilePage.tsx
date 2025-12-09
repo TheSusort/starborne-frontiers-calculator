@@ -11,9 +11,11 @@ import {
     updateUserProfile,
     checkUsernameAvailability,
     getUserStats,
+    getUserUsageStats,
     getTopShipRankings,
     UserProfile,
     UserStats,
+    UserUsageStats,
     TopShipRanking,
 } from '../services/userProfileService';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
@@ -27,6 +29,7 @@ export const ProfilePage: React.FC = () => {
     const [saving, setSaving] = useState(false);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [stats, setStats] = useState<UserStats | null>(null);
+    const [usageStats, setUsageStats] = useState<UserUsageStats | null>(null);
     const [topShips, setTopShips] = useState<TopShipRanking[]>([]);
     const [shipsLoading, setShipsLoading] = useState(false);
 
@@ -46,14 +49,16 @@ export const ProfilePage: React.FC = () => {
         const loadProfileData = async () => {
             try {
                 setLoading(true);
-                // Load profile and stats first (fast)
-                const [profileData, statsData] = await Promise.all([
+                // Load profile, stats, and usage stats first (fast)
+                const [profileData, statsData, usageData] = await Promise.all([
                     getUserProfile(user.id),
                     getUserStats(user.id),
+                    getUserUsageStats(user.id),
                 ]);
 
                 setProfile(profileData);
                 setStats(statsData);
+                setUsageStats(usageData);
 
                 // Set form values
                 if (profileData) {
@@ -286,6 +291,33 @@ export const ProfilePage: React.FC = () => {
                                     <div className="text-sm text-gray-400">Tokens Spent</div>
                                     <div className="text-2xl font-bold">
                                         {stats.engineeringTokens.toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Usage Statistics */}
+                    {usageStats && (
+                        <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg">
+                            <h2 className="text-xl font-semibold mb-4">Usage Statistics</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <div className="text-sm text-gray-400">Autogear Runs</div>
+                                    <div className="text-2xl font-bold text-blue-400">
+                                        {usageStats.total_autogear_runs.toLocaleString()}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-sm text-gray-400">Data Imports</div>
+                                    <div className="text-2xl font-bold text-green-400">
+                                        {usageStats.total_data_imports.toLocaleString()}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-sm text-gray-400">Total Activity</div>
+                                    <div className="text-2xl font-bold text-yellow-400">
+                                        {usageStats.total_activity.toLocaleString()}
                                     </div>
                                 </div>
                             </div>
