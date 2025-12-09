@@ -13,7 +13,7 @@ const NON_RECRUITABLE_SHIPS = [
 ];
 
 // Ships that are only available during events (event-only ships)
-const EVENT_ONLY_SHIPS: string[] = ['Wildfire', 'Amartya'];
+const EVENT_ONLY_SHIPS: string[] = [];
 
 export type BeaconType = 'public' | 'specialist' | 'expert' | 'elite';
 
