@@ -17,6 +17,8 @@ import { ShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
 import { AffinityName } from '../types/ship';
 import { v4 as uuidv4 } from 'uuid';
+import { calculateMainStatValue } from './gear/mainStatValueFetcher';
+import { getCalibratedMainStat, isCalibrationEligible } from './gear/calibrationCalculator';
 
 interface ImportResult {
     success: boolean;
@@ -197,24 +199,24 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
         const isGear = Object.keys(GEAR_SLOTS).includes(slot);
 
         if (isGear) {
-            gear.push({
+            const mainStatName = getStatName(item.MainStats[0].Attribute.Attribute) as StatName;
+            const mainStatType = getStatType(
+                item.MainStats[0].Attribute.Type,
+                item.MainStats[0].Attribute.Attribute
+            );
+            const mainStatValue = getPercentageStatValue(
+                item.MainStats[0].Attribute.Value,
+                item.MainStats[0].Attribute.Type,
+                item.MainStats[0].Attribute.Attribute
+            );
+
+            const gearPiece: GearPiece = {
                 id: item.Id,
                 slot,
                 level: item.Level,
                 stars: item.Rank,
                 rarity: item.Rarity.toLowerCase() as RarityName,
-                mainStat: createStat(
-                    getStatName(item.MainStats[0].Attribute.Attribute) as StatName,
-                    getPercentageStatValue(
-                        item.MainStats[0].Attribute.Value,
-                        item.MainStats[0].Attribute.Type,
-                        item.MainStats[0].Attribute.Attribute
-                    ),
-                    getStatType(
-                        item.MainStats[0].Attribute.Type,
-                        item.MainStats[0].Attribute.Attribute
-                    )
-                ),
+                mainStat: createStat(mainStatName, mainStatValue, mainStatType),
                 subStats: item.SubStats.map((stat) =>
                     createStat(
                         getStatName(stat.Attribute.Attribute) as StatName,
@@ -228,7 +230,49 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 ),
                 setBonus: getSetBonus(item.Set) as GearSetName,
                 shipId: item.EquippedOnUnit || undefined,
-            });
+            };
+
+            // Detect calibration: if main stat value doesn't match expected base value
+            // but matches calibrated value, and gear is equipped, mark as calibrated
+            if (gearPiece.mainStat && isCalibrationEligible(gearPiece) && item.EquippedOnUnit) {
+                const expectedBaseValue = calculateMainStatValue(
+                    gearPiece.mainStat.name,
+                    gearPiece.mainStat.type,
+                    gearPiece.stars,
+                    gearPiece.level
+                );
+
+                // If actual value doesn't match base, check if it matches calibrated
+                if (Math.abs(gearPiece.mainStat.value - expectedBaseValue) > 0.1) {
+                    // Create a temporary gear piece with base stat to calculate calibrated value
+                    const baseGearPiece: GearPiece = {
+                        ...gearPiece,
+                        mainStat: {
+                            ...gearPiece.mainStat,
+                            value: expectedBaseValue,
+                        },
+                    };
+
+                    // Check if actual value matches what calibrated would be
+                    const calibratedStat = getCalibratedMainStat(baseGearPiece);
+                    if (
+                        calibratedStat &&
+                        Math.abs(gearPiece.mainStat.value - calibratedStat.value) < 0.1
+                    ) {
+                        // This gear appears to be calibrated - mark it as calibrated to the equipped ship
+                        gearPiece.calibration = {
+                            shipId: item.EquippedOnUnit,
+                        };
+                        // Also update mainStat to base value for storage
+                        gearPiece.mainStat = {
+                            ...gearPiece.mainStat,
+                            value: expectedBaseValue,
+                        };
+                    }
+                }
+            }
+
+            gear.push(gearPiece);
         } else {
             implants.push({
                 id: item.Id,

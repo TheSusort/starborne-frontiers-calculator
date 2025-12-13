@@ -168,7 +168,8 @@ export const ShipInventory: React.FC<Props> = ({
                             getGearPiece,
                             a.refits,
                             a.implants,
-                            undefined // engineering stats
+                            undefined, // engineering stats
+                            a.id
                         );
                         const bStats = calculateTotalStats(
                             b.baseStats,
@@ -176,7 +177,8 @@ export const ShipInventory: React.FC<Props> = ({
                             getGearPiece,
                             b.refits,
                             b.implants,
-                            undefined // engineering stats
+                            undefined, // engineering stats
+                            b.id
                         );
                         const statName = state.sort.field as StatName;
                         const aValue = aStats.final[statName] || 0;

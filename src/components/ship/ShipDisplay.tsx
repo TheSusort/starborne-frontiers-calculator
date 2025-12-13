@@ -125,7 +125,8 @@ export const ShipDisplay: React.FC<Props> = memo(
             getGearPiece,
             ship.refits,
             ship.implants,
-            getEngineeringStatsForShipType(ship.type)
+            getEngineeringStatsForShipType(ship.type),
+            ship.id
         );
 
         const handleLeaderboardClick = (shipName: string) => {

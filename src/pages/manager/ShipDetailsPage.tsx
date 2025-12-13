@@ -79,7 +79,8 @@ export const ShipDetailsPage: React.FC = () => {
             getGearPiece,
             ship.refits,
             ship.implants,
-            getEngineeringStatsForShipType(ship.type)
+            getEngineeringStatsForShipType(ship.type),
+            ship.id
         ).final,
         orphanSetPieces
     );

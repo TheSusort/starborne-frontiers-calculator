@@ -2,7 +2,7 @@ import { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
-import { Button, CheckIcon, CloseIcon, EditIcon } from '../ui';
+import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
 import { ImplantName } from '../../constants/implants';
@@ -10,6 +10,10 @@ import IMPLANTS from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { Tooltip } from '../ui/layout/Tooltip';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
+import {
+    isCalibrationEligible,
+    getCalibratedMainStat,
+} from '../../utils/gear/calibrationCalculator';
 
 interface Props {
     gear: GearPiece;
@@ -18,6 +22,7 @@ interface Props {
     onRemove?: (id: string) => void;
     onEdit?: (piece: GearPiece) => void;
     onEquip?: (piece: GearPiece) => void;
+    onCalibrate?: (piece: GearPiece) => void;
     className?: string;
     small?: boolean;
 }
@@ -30,10 +35,11 @@ export const GearPieceDisplay = memo(
         onRemove,
         onEdit,
         onEquip,
+        onCalibrate,
         className = '',
         small = false,
     }: Props) => {
-        const { getShipFromGearId, gearToShipMap } = useShips();
+        const { getShipFromGearId, getShipById, gearToShipMap } = useShips();
         const { getUpgrade } = useGearUpgrades();
 
         // Use memoized map for O(1) lookup instead of searching through all ships
@@ -59,6 +65,29 @@ export const GearPieceDisplay = memo(
             [gear.setBonus]
         );
 
+        // Calibration-related computed values
+        const isCalibrated = !!gear.calibration?.shipId;
+        const equippedShipId = gearToShipMap.get(gear.id);
+        const isCalibrationActive =
+            isCalibrated && equippedShipId && gear.calibration?.shipId === equippedShipId;
+        const calibratedShipName = useMemo(() => {
+            if (gear.calibration?.shipId) {
+                const ship = getShipById(gear.calibration.shipId);
+                return ship?.name;
+            }
+            return undefined;
+        }, [gear.calibration?.shipId, getShipById]);
+        const canCalibrate = isCalibrationEligible(gear);
+
+        // Get the main stat to display - use calibrated if calibration is active
+        const displayMainStat = useMemo(() => {
+            if (!gear.mainStat) return null;
+            if (isCalibrationActive && isCalibrationEligible(gear)) {
+                return getCalibratedMainStat(gear);
+            }
+            return gear.mainStat;
+        }, [gear, isCalibrationActive]);
+
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);
         }, [gear.id, onRemove]);
@@ -70,6 +99,10 @@ export const GearPieceDisplay = memo(
         const handleEquip = useCallback(() => {
             onEquip?.(gear);
         }, [gear, onEquip]);
+
+        const handleCalibrate = useCallback(() => {
+            onCalibrate?.(gear);
+        }, [gear, onCalibrate]);
 
         if (!gear?.id) return null;
         return (
@@ -137,6 +170,14 @@ export const GearPieceDisplay = memo(
                                 <>
                                     <span className="text-yellow-400">★ {gear.stars}</span>
                                     <div className="ps-3">Lvl {gear.level}</div>
+                                    {isCalibrated && (
+                                        <div
+                                            className="ps-2 text-cyan-400 flex items-center gap-1"
+                                            title={`Calibrated to ${calibratedShipName}`}
+                                        >
+                                            <CalibrationIcon className="w-3 h-3" />
+                                        </div>
+                                    )}
                                 </>
                             )}
                             {isImplant && mode !== 'subcompact' && (
@@ -148,6 +189,20 @@ export const GearPieceDisplay = memo(
                     </div>
                     {mode === 'manage' ? (
                         <div className="flex gap-2">
+                            {!isImplant && canCalibrate && onCalibrate && (
+                                <Button
+                                    aria-label={
+                                        isCalibrated ? 'Recalibrate gear' : 'Calibrate gear'
+                                    }
+                                    title={isCalibrated ? 'Recalibrate gear' : 'Calibrate gear'}
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={handleCalibrate}
+                                    className={isCalibrated ? 'text-cyan-400' : ''}
+                                >
+                                    <CalibrationIcon />
+                                </Button>
+                            )}
                             {!isImplant && onEdit && (
                                 <Button
                                     aria-label="Edit gear piece"
@@ -201,9 +256,11 @@ export const GearPieceDisplay = memo(
                                     <StatDisplay
                                         stats={[gear.mainStat as Stat]}
                                         upgradedStats={
-                                            upgrade?.mainStat && !isMaxLevel
-                                                ? [upgrade.mainStat as Stat]
-                                                : undefined
+                                            isCalibrationActive && displayMainStat
+                                                ? [displayMainStat as Stat]
+                                                : upgrade?.mainStat && !isMaxLevel
+                                                  ? [upgrade.mainStat as Stat]
+                                                  : undefined
                                         }
                                     />
                                 </div>
@@ -258,6 +315,14 @@ export const GearPieceDisplay = memo(
                         {shipName && mode !== 'subcompact' && (
                             <span className="text-xs !mt-auto pt-2"> Equipped by: {shipName}</span>
                         )}
+
+                        {/* Calibration info */}
+                        {isCalibrated && calibratedShipName && mode !== 'subcompact' && (
+                            <div className="text-xs text-cyan-400 flex items-center gap-1 pt-1">
+                                <CalibrationIcon className="w-3 h-3" />
+                                <span>Calibrated to: {calibratedShipName}</span>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -285,6 +350,11 @@ export const GearPieceDisplay = memo(
             prevGear.setBonus !== nextGear.setBonus ||
             prevGear.shipId !== nextGear.shipId
         ) {
+            return false;
+        }
+
+        // Compare calibration
+        if (prevGear.calibration?.shipId !== nextGear.calibration?.shipId) {
             return false;
         }
 

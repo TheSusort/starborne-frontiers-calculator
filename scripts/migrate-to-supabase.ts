@@ -95,6 +95,7 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
                             stars: item.stars,
                             rarity: item.rarity,
                             set_bonus: item.setBonus,
+                            calibration_ship_id: item.calibration?.shipId || null,
                         })
                         .select()
                         .single();

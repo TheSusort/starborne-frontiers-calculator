@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.27.0';
+export const CURRENT_VERSION = '1.28.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.28.0',
+        date: '2025-12-13',
+        changes: ['Added calibration calculator'],
+    },
     {
         version: '1.27.0',
         date: '2025-12-09',

@@ -78,7 +78,8 @@ export const SimulationPage: React.FC = () => {
             getGearPiece,
             selectedShip.refits,
             selectedShip.implants,
-            getEngineeringStatsForShipType(selectedShip.type)
+            getEngineeringStatsForShipType(selectedShip.type),
+            selectedShip.id
         );
 
         const temporaryStats = calculateTotalStats(
@@ -87,7 +88,8 @@ export const SimulationPage: React.FC = () => {
             getGearPiece,
             selectedShip.refits,
             temporaryImplants,
-            getEngineeringStatsForShipType(selectedShip.type)
+            getEngineeringStatsForShipType(selectedShip.type),
+            selectedShip.id
         );
 
         const normalizedRole = normalizeRoleForSimulation(selectedRole);

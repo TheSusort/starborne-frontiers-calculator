@@ -3,6 +3,8 @@ import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
 import { GearInventory } from '../../components/gear/GearInventory';
 import { GearUpgradeAnalysis } from '../../components/gear/GearUpgradeAnalysis';
+import { GearCalibrationAnalysis } from '../../components/gear/GearCalibrationAnalysis';
+import { CalibrationModal } from '../../components/gear/CalibrationModal';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
@@ -21,8 +23,11 @@ export const GearPage: React.FC = () => {
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
     const [activeTab, setActiveTab] = useState('inventory');
+    const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
+    const [calibratingGear, setCalibratingGear] = useState<GearPiece | null>(null);
     const tabs = [
         { id: 'inventory', label: 'Inventory' },
+        { id: 'calibration', label: 'Calibration' },
         { id: 'analysis', label: 'Upgrade Analysis' },
         { id: 'simulation', label: 'Simulate Upgrades' },
     ];
@@ -69,6 +74,27 @@ export const GearPage: React.FC = () => {
         }
     };
 
+    const handleOpenCalibration = (piece: GearPiece) => {
+        setCalibratingGear(piece);
+        setCalibrationModalOpen(true);
+    };
+
+    const handleCloseCalibration = () => {
+        setCalibrationModalOpen(false);
+        setCalibratingGear(null);
+    };
+
+    const handleConfirmCalibration = async (gearId: string, shipId: string) => {
+        try {
+            await updateGearPiece(gearId, {
+                calibration: { shipId },
+            });
+            addNotification('success', 'Gear calibrated successfully');
+        } catch (error) {
+            addNotification('error', 'Failed to calibrate gear');
+        }
+    };
+
     if (loading) {
         return <Loader />;
     }
@@ -101,7 +127,16 @@ export const GearPage: React.FC = () => {
                         inventory={inventory}
                         onRemove={handleRemovePiece}
                         onEdit={handleEditPiece}
+                        onCalibrate={handleOpenCalibration}
                         maxItems={inventory.length}
+                    />
+                )}
+                {activeTab === 'calibration' && (
+                    <GearCalibrationAnalysis
+                        inventory={inventory}
+                        shipRoles={Object.keys(SHIP_TYPES)}
+                        onEdit={handleEditPiece}
+                        onCalibrate={handleOpenCalibration}
                     />
                 )}
                 {activeTab === 'analysis' && (
@@ -136,6 +171,13 @@ export const GearPage: React.FC = () => {
                     }
                     confirmLabel="Delete"
                     cancelLabel="Cancel"
+                />
+
+                <CalibrationModal
+                    isOpen={calibrationModalOpen}
+                    onClose={handleCloseCalibration}
+                    gear={calibratingGear}
+                    onConfirm={handleConfirmCalibration}
                 />
             </PageLayout>
         </>

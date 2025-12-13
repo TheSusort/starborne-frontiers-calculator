@@ -16,6 +16,7 @@ interface Props {
     onRemove: (id: string) => void;
     onEdit: (piece: GearPiece) => void;
     onEquip?: (piece: GearPiece) => void;
+    onCalibrate?: (piece: GearPiece) => void;
     mode?: 'manage' | 'select';
     maxItems?: number;
 }
@@ -25,6 +26,7 @@ export const GearInventory: React.FC<Props> = ({
     onRemove,
     onEdit,
     onEquip,
+    onCalibrate,
     mode = 'manage',
     maxItems,
 }) => {
@@ -363,6 +365,7 @@ export const GearInventory: React.FC<Props> = ({
                                 onEdit={onEdit}
                                 onRemove={onRemove}
                                 onEquip={onEquip}
+                                onCalibrate={onCalibrate}
                             />
                         ))}
                     </div>

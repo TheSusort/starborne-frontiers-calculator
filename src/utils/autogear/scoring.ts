@@ -430,7 +430,8 @@ export function calculateTotalScore(
         getGearPiece,
         ship.refits,
         ship.implants,
-        getEngineeringStatsForShipType(ship.type)
+        getEngineeringStatsForShipType(ship.type),
+        ship.id
     );
     performanceTracker.endTimer('CalculateTotalStats');
 

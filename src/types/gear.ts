@@ -14,6 +14,11 @@ export interface GearPiece {
     setBonus: GearSetName | null;
     shipId?: string;
     cost?: number;
+    /** Calibration data - only applicable to level 16 gear with 5-6 stars */
+    calibration?: {
+        /** The ship ID this gear is calibrated to */
+        shipId: string;
+    };
 }
 
 export interface GearSetBonus {

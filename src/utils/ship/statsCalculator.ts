@@ -4,6 +4,7 @@ import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
 import { PercentageOnlyStats } from '../../types/stats';
+import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationCalculator';
 
 // Cache for gear piece stats to avoid recalculating
 const gearStatsCache = new Map<string, { mainStat?: Stat; subStats?: Stat[] }>();
@@ -23,7 +24,8 @@ export const calculateTotalStats = (
     getGearPiece: (id: string) => GearPiece | undefined,
     refits: Refit[] = [],
     implants: Partial<Record<GearSlotName, string>> = {},
-    engineeringStats: EngineeringStat | undefined
+    engineeringStats: EngineeringStat | undefined,
+    shipId?: string // Optional ship ID to check if calibrated gear should apply bonus
 ): StatBreakdown => {
     const breakdown: StatBreakdown = {
         base: { ...baseStats },
@@ -52,28 +54,24 @@ export const calculateTotalStats = (
     Object.values(equipment || {}).forEach((gearId) => {
         if (!gearId) return;
 
-        // Check cache first
-        let cachedStats = gearStatsCache.get(gearId);
-        if (!cachedStats) {
-            const gear = getGearPiece(gearId);
-            if (!gear) return;
+        const gear = getGearPiece(gearId);
+        if (!gear) return;
 
-            cachedStats = {
-                mainStat: gear.mainStat || undefined,
-                subStats: gear.subStats,
-            };
+        // Check if gear is calibrated and should apply bonus
+        const shouldApplyCalibration =
+            shipId && gear.calibration?.shipId === shipId && isCalibrationEligible(gear);
 
-            // Cache the stats (limit cache size)
-            if (gearStatsCache.size < 10000) {
-                gearStatsCache.set(gearId, cachedStats);
-            }
+        // Get main stat - apply calibration if applicable
+        let mainStat = gear.mainStat;
+        if (shouldApplyCalibration && mainStat) {
+            mainStat = getCalibratedMainStat(gear);
         }
 
-        if (cachedStats && cachedStats.mainStat) {
-            addStatModifier(cachedStats.mainStat, breakdown.afterGear, breakdown.afterEngineering);
+        if (mainStat) {
+            addStatModifier(mainStat, breakdown.afterGear, breakdown.afterEngineering);
         }
-        if (cachedStats && cachedStats.subStats) {
-            cachedStats.subStats.forEach((stat) =>
+        if (gear.subStats) {
+            gear.subStats.forEach((stat) =>
                 addStatModifier(stat, breakdown.afterGear, breakdown.afterEngineering)
             );
         }

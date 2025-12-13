@@ -43,6 +43,7 @@ interface RawGearData {
     stars: number;
     rarity: RarityName;
     set_bonus: GearSetName;
+    calibration_ship_id?: string | null;
     gear_stats: RawGearStat[];
 }
 
@@ -116,6 +117,12 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
                       type: 'flat',
                   },
             subStats: subStats.length > 0 ? subStats.map(createStat) : [],
+            // Include calibration if calibration_ship_id exists
+            ...(data.calibration_ship_id && {
+                calibration: {
+                    shipId: data.calibration_ship_id,
+                },
+            }),
         };
 
         return isValidGearPiece(gear) ? gear : null;
@@ -345,6 +352,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         stars: newGear.stars,
                         rarity: newGear.rarity,
                         set_bonus: newGear.setBonus,
+                        calibration_ship_id: newGear.calibration?.shipId || null,
                     })
                     .select()
                     .single();
@@ -423,6 +431,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         stars: updatedPiece.stars,
                         rarity: updatedPiece.rarity,
                         set_bonus: updatedPiece.setBonus,
+                        calibration_ship_id: updatedPiece.calibration?.shipId || null,
                     })
                     .eq('id', id)
                     .eq('user_id', user.id);

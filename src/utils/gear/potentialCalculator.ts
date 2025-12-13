@@ -210,18 +210,30 @@ function calculateGearStats(piece: GearPiece): BaseStats {
     );
 
     // Add set bonus stats if the piece has a set
+    // Note: We apply set bonus optimistically (assuming set will be complete)
+    // This is for ranking purposes - in reality, set bonus only applies with minPieces
     if (piece.setBonus && GEAR_SETS[piece.setBonus]) {
         const setBonus = GEAR_SETS[piece.setBonus];
         if (setBonus.stats) {
+            // Use the base stats (afterEngineering) for percentage calculations
+            // This matches how addStatModifier works in calculateTotalStats
+            const baseStats = breakdown.afterEngineering;
             setBonus.stats.forEach((stat) => {
-                const currentValue = breakdown.final[stat.name] || 0;
-                if (
-                    stat.type === 'percentage' &&
-                    !PERCENTAGE_ONLY_STATS.includes(stat.name as PercentageOnlyStats)
-                ) {
-                    breakdown.final[stat.name] = currentValue * (1 + stat.value / 100);
+                const isPercentageOnlyStat = PERCENTAGE_ONLY_STATS.includes(
+                    stat.name as PercentageOnlyStats
+                );
+
+                if (isPercentageOnlyStat) {
+                    // For percentage-only stats (crit, critDamage, etc.), add directly
+                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + stat.value;
+                } else if (stat.type === 'percentage') {
+                    // For percentage stats on flexible stats (attack, hp, etc.), calculate from base
+                    const baseValue = baseStats[stat.name] || 0;
+                    const bonus = baseValue * (stat.value / 100);
+                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + bonus;
                 } else {
-                    breakdown.final[stat.name] = currentValue + stat.value;
+                    // For flat stats, add directly
+                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + stat.value;
                 }
             });
         }

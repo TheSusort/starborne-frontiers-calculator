@@ -300,6 +300,7 @@ export const syncMigratedDataToSupabase = async (
                         stars: item.stars,
                         rarity: item.rarity,
                         set_bonus: item.setBonus,
+                        calibration_ship_id: item.calibration?.shipId || null,
                     }));
 
                     // Upsert inventory items
