@@ -9,6 +9,7 @@ import {
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button, ProgressBar } from '../ui';
 import { Tabs } from '../ui/layout/Tabs';
+import { ShipCalibrationAnalysis } from './ShipCalibrationAnalysis';
 
 interface Props {
     inventory: GearPiece[];
@@ -40,6 +41,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             GearSlotName | 'all'
         >
     );
+    const [activeSubTab, setActiveSubTab] = useState<'candidates' | 'ship'>('candidates');
 
     // Filter inventory to only calibration-eligible gear
     const eligibleInventory = inventory.filter(isCalibrationEligible);
@@ -170,144 +172,171 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         }));
     };
 
+    const subTabs = [
+        { id: 'candidates', label: 'Best Candidates' },
+        { id: 'ship', label: 'Ship Analysis' },
+    ];
+
     return (
         <div className="space-y-8">
-            <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-400">
-                    Find the best gear pieces to calibrate for maximum stat improvements.
-                    {eligibleCount > 0 && (
-                        <span className="ml-2 text-cyan-400">
-                            ({eligibleCount} eligible piece{eligibleCount !== 1 ? 's' : ''})
-                        </span>
-                    )}
-                </span>
-                <Button
-                    variant="primary"
-                    onClick={handleAnalyze}
-                    disabled={isLoading || eligibleCount === 0}
-                >
-                    {isLoading ? 'Analyzing...' : 'Analyze Calibration'}
-                </Button>
-            </div>
+            <Tabs
+                tabs={subTabs}
+                activeTab={activeSubTab}
+                onChange={(tab) => setActiveSubTab(tab as 'candidates' | 'ship')}
+            />
 
-            <div className="text-sm text-gray-400 space-y-2">
-                <p>
-                    Click &quot;Analyze Calibration&quot; to find the best gear pieces to calibrate
-                    for each ship role. Only level 16 gear with 5-6 stars is eligible for
-                    calibration.
-                </p>
-                <p>
-                    <strong>Calibration bonuses:</strong> Flat attack doubles, flat HP/defense +50%,
-                    flat hacking/security +10%, flat speed +5. Percentage stats gain +5pp (5★) or
-                    +7pp (6★).
-                </p>
-                <p className="text-yellow-500">
-                    ⚠️ Calibrated gear is locked to a specific ship. The bonus only applies when
-                    equipped on that ship.
-                </p>
-            </div>
-
-            {eligibleCount === 0 && (
-                <div className="text-center py-12 text-gray-400">
-                    <p className="text-lg">No calibration-eligible gear found.</p>
-                    <p className="text-sm mt-2">
-                        Upgrade gear to level 16 with 5 or 6 stars to calibrate it.
-                    </p>
-                </div>
+            {activeSubTab === 'ship' && (
+                <ShipCalibrationAnalysis onEdit={onEdit} onCalibrate={onCalibrate} />
             )}
 
-            {optimizationProgress && (
-                <ProgressBar
-                    current={optimizationProgress.current}
-                    total={optimizationProgress.total}
-                    percentage={optimizationProgress.percentage}
-                />
-            )}
-
-            {Object.keys(results).length === 0 && !isLoading && eligibleCount > 0 && (
-                <div className="text-center py-12 text-gray-400">
-                    <p className="text-lg">No analysis results yet.</p>
-                    <p className="text-sm mt-2">
-                        Click &quot;Analyze Calibration&quot; to find the best calibration
-                        candidates.
-                    </p>
-                </div>
-            )}
-
-            {shipRoles.map((role) => {
-                const roleResults = results[role] || {};
-                const selectedSlot = selectedSlots[role] || 'all';
-                const currentResults = roleResults[selectedSlot] || [];
-
-                if (currentResults.length === 0) return null;
-
-                const slotTabs = [
-                    { id: 'all', label: 'All Slots' },
-                    ...Object.entries(GEAR_SLOTS)
-                        .filter(([_, slot]) => !slot.label.includes('Implant'))
-                        .map(([slotName, slot]) => ({
-                            id: slotName,
-                            label: slot.label,
-                        })),
-                ];
-
-                return (
-                    <div key={role} className="space-y-4 card">
-                        <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
+            {activeSubTab === 'candidates' && (
+                <>
+                    <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-400">
-                            {SHIP_TYPES[role].description}
+                            Find the best gear pieces to calibrate for maximum stat improvements.
+                            {eligibleCount > 0 && (
+                                <span className="ml-2 text-cyan-400">
+                                    ({eligibleCount} eligible piece{eligibleCount !== 1 ? 's' : ''})
+                                </span>
+                            )}
                         </span>
-                        <Tabs
-                            tabs={slotTabs}
-                            activeTab={selectedSlot}
-                            onChange={(tab) => handleSlotChange(role, tab as GearSlotName | 'all')}
-                        />
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {currentResults.map((result, index) => (
-                                <div key={result.piece.id} className="space-y-2">
-                                    <GearPieceDisplay
-                                        gear={result.piece}
-                                        mode="manage"
-                                        onEdit={onEdit}
-                                    />
-                                    <div className="text-sm px-4 pb-4 space-y-1">
-                                        <div
-                                            className={`flex justify-between ${winnerColors[index] || 'text-gray-300'}`}
-                                        >
-                                            <span>Role Score:</span>
-                                            <span>
-                                                {Math.round(result.currentScore).toLocaleString()}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between text-cyan-400">
-                                            <span>Calibration bonus:</span>
-                                            <span>
-                                                +{Math.round(result.improvement).toLocaleString()}{' '}
-                                                (+{Math.round(result.improvementPercentage)}%)
-                                            </span>
-                                        </div>
-                                        {onCalibrate && !result.piece.calibration && (
-                                            <Button
-                                                variant="secondary"
-                                                size="sm"
-                                                fullWidth
-                                                onClick={() => onCalibrate(result.piece)}
-                                            >
-                                                Calibrate Gear
-                                            </Button>
-                                        )}
-                                        {result.piece.calibration && (
-                                            <div className="text-xs text-cyan-400">
-                                                ✓ Already calibrated
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <Button
+                            variant="primary"
+                            onClick={handleAnalyze}
+                            disabled={isLoading || eligibleCount === 0}
+                        >
+                            {isLoading ? 'Analyzing...' : 'Analyze Calibration'}
+                        </Button>
                     </div>
-                );
-            })}
+
+                    <div className="text-sm text-gray-400 space-y-2">
+                        <p>
+                            Click &quot;Analyze Calibration&quot; to find the best gear pieces to
+                            calibrate for each ship role. Only level 16 gear with 5-6 stars is
+                            eligible for calibration.
+                        </p>
+                        <p>
+                            <strong>Calibration bonuses:</strong> Flat attack doubles, flat
+                            HP/defense +50%, flat hacking/security +10%, flat speed +5. Percentage
+                            stats gain +5pp (5★) or +7pp (6★).
+                        </p>
+                        <p className="text-yellow-500">
+                            ⚠️ Calibrated gear is locked to a specific ship. The bonus only applies
+                            when equipped on that ship.
+                        </p>
+                    </div>
+
+                    {eligibleCount === 0 && (
+                        <div className="text-center py-12 text-gray-400">
+                            <p className="text-lg">No calibration-eligible gear found.</p>
+                            <p className="text-sm mt-2">
+                                Upgrade gear to level 16 with 5 or 6 stars to calibrate it.
+                            </p>
+                        </div>
+                    )}
+
+                    {optimizationProgress && (
+                        <ProgressBar
+                            current={optimizationProgress.current}
+                            total={optimizationProgress.total}
+                            percentage={optimizationProgress.percentage}
+                        />
+                    )}
+
+                    {Object.keys(results).length === 0 && !isLoading && eligibleCount > 0 && (
+                        <div className="text-center py-12 text-gray-400">
+                            <p className="text-lg">No analysis results yet.</p>
+                            <p className="text-sm mt-2">
+                                Click &quot;Analyze Calibration&quot; to find the best calibration
+                                candidates.
+                            </p>
+                        </div>
+                    )}
+
+                    {shipRoles.map((role) => {
+                        const roleResults = results[role] || {};
+                        const selectedSlot = selectedSlots[role] || 'all';
+                        const currentResults = roleResults[selectedSlot] || [];
+
+                        if (currentResults.length === 0) return null;
+
+                        const slotTabs = [
+                            { id: 'all', label: 'All Slots' },
+                            ...Object.entries(GEAR_SLOTS)
+                                .filter(([_, slot]) => !slot.label.includes('Implant'))
+                                .map(([slotName, slot]) => ({
+                                    id: slotName,
+                                    label: slot.label,
+                                })),
+                        ];
+
+                        return (
+                            <div key={role} className="space-y-4 card">
+                                <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
+                                <span className="text-sm text-gray-400">
+                                    {SHIP_TYPES[role].description}
+                                </span>
+                                <Tabs
+                                    tabs={slotTabs}
+                                    activeTab={selectedSlot}
+                                    onChange={(tab) =>
+                                        handleSlotChange(role, tab as GearSlotName | 'all')
+                                    }
+                                />
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {currentResults.map((result, index) => (
+                                        <div key={result.piece.id} className="space-y-2">
+                                            <GearPieceDisplay
+                                                gear={result.piece}
+                                                mode="manage"
+                                                onEdit={onEdit}
+                                            />
+                                            <div className="text-sm px-4 pb-4 space-y-1">
+                                                <div
+                                                    className={`flex justify-between ${winnerColors[index] || 'text-gray-300'}`}
+                                                >
+                                                    <span>Role Score:</span>
+                                                    <span>
+                                                        {Math.round(
+                                                            result.currentScore
+                                                        ).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between text-cyan-400">
+                                                    <span>Calibration bonus:</span>
+                                                    <span>
+                                                        +
+                                                        {Math.round(
+                                                            result.improvement
+                                                        ).toLocaleString()}{' '}
+                                                        (+{Math.round(result.improvementPercentage)}
+                                                        %)
+                                                    </span>
+                                                </div>
+                                                {onCalibrate && !result.piece.calibration && (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        fullWidth
+                                                        onClick={() => onCalibrate(result.piece)}
+                                                    >
+                                                        Calibrate Gear
+                                                    </Button>
+                                                )}
+                                                {result.piece.calibration && (
+                                                    <div className="text-xs text-cyan-400">
+                                                        ✓ Already calibrated
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </>
+            )}
         </div>
     );
 };

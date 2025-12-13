@@ -1,10 +1,12 @@
 import { GearPiece } from '../../types/gear';
 import { Stat, StatName, BaseStats } from '../../types/stats';
-import { ShipTypeName } from '../../constants';
+import { ShipTypeName, GearSlotName } from '../../constants';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { PERCENTAGE_ONLY_STATS, PercentageOnlyStats } from '../../types/stats';
+import { Ship } from '../../types/ship';
+import { EngineeringStat } from '../../types/stats';
 
 /**
  * Calibration stat increases by main stat type and star level.
@@ -108,8 +110,9 @@ function calculateCalibratedStatValue(stat: Stat, stars: number): number {
 /**
  * Reverse the calibration bonus to get the base (uncalibrated) stat value.
  * This is used to calculate what the stat would be without calibration.
+ * @internal - Currently unused but kept for potential future use
  */
-function reverseCalibrationStatValue(stat: Stat, stars: number): number {
+function _reverseCalibrationStatValue(stat: Stat, stars: number): number {
     const bonus = CALIBRATION_BONUSES[stat.name]?.[stat.type];
     if (!bonus) {
         // Default to subtracting percentage points for unknown stats
@@ -338,4 +341,156 @@ export function analyzeCalibrationPotential(
 
     // If count is specified, limit results; otherwise return all sorted results
     return count !== undefined ? sorted.slice(0, count) : sorted;
+}
+
+export interface SlotCalibrationResult {
+    slot: GearSlotName;
+    gear: GearPiece | null;
+    currentScore: number;
+    calibratedScore: number;
+    improvement: number;
+    improvementPercentage: number;
+    isEligible: boolean;
+}
+
+/**
+ * Analyze calibration impact for a specific ship's equipped gear.
+ * Returns per-slot analysis showing how much each slot would improve if calibrated.
+ */
+export function analyzeShipCalibrationImpact(
+    ship: Ship,
+    shipRole: ShipTypeName,
+    getGearPiece: (id: string) => GearPiece | undefined,
+    getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+): {
+    currentTotalScore: number;
+    calibratedTotalScore: number;
+    totalImprovement: number;
+    totalImprovementPercentage: number;
+    slots: SlotCalibrationResult[];
+} {
+    const GEAR_SLOT_NAMES: GearSlotName[] = [
+        'weapon',
+        'hull',
+        'generator',
+        'sensor',
+        'software',
+        'thrusters',
+    ];
+
+    // Calculate current total score with all gear
+    const currentTotalStats = calculateTotalStats(
+        ship.baseStats,
+        ship.equipment,
+        getGearPiece,
+        ship.refits,
+        ship.implants,
+        getEngineeringStatsForShipType(ship.type),
+        ship.id
+    );
+    const currentTotalScore = calculatePriorityScore(currentTotalStats.final, [], shipRole);
+
+    // Calculate per-slot improvements
+    const slotResults: SlotCalibrationResult[] = GEAR_SLOT_NAMES.map((slot) => {
+        const gearId = ship.equipment[slot];
+        const gear = gearId ? getGearPiece(gearId) : null;
+
+        if (!gear) {
+            return {
+                slot,
+                gear: null,
+                currentScore: 0,
+                calibratedScore: 0,
+                improvement: 0,
+                improvementPercentage: 0,
+                isEligible: false,
+            };
+        }
+
+        // Check if this gear is eligible for calibration
+        const eligible = isCalibrationEligible(gear) && !gear.calibration?.shipId;
+
+        // Current score is the total ship score (same for all slots)
+        const currentScore = currentTotalScore;
+
+        // Calculate calibrated score: total ship score if this slot's gear were calibrated
+        let calibratedScore = currentTotalScore;
+        if (eligible) {
+            // Create a modified equipment object with calibrated gear for this slot
+            const calibratedGear = applyCalibrationStats(gear);
+            const calibratedEquipment = {
+                ...ship.equipment,
+                [slot]: calibratedGear.id,
+            };
+
+            // Create a gear getter that returns calibrated gear for this slot only
+            const getCalibratedGearPiece = (id: string) => {
+                if (id === gear.id) {
+                    return calibratedGear;
+                }
+                return getGearPiece(id);
+            };
+
+            const calibratedStats = calculateTotalStats(
+                ship.baseStats,
+                calibratedEquipment,
+                getCalibratedGearPiece,
+                ship.refits,
+                ship.implants,
+                getEngineeringStatsForShipType(ship.type),
+                ship.id
+            );
+            calibratedScore = calculatePriorityScore(calibratedStats.final, [], shipRole);
+        }
+
+        const improvement = calibratedScore - currentTotalScore;
+        const improvementPercentage =
+            currentTotalScore > 0 ? (improvement / currentTotalScore) * 100 : 0;
+
+        return {
+            slot,
+            gear,
+            currentScore,
+            calibratedScore,
+            improvement,
+            improvementPercentage,
+            isEligible: eligible,
+        };
+    });
+
+    // Calculate total improvement if all eligible gear were calibrated
+    const allCalibratedEquipment: Partial<Record<GearSlotName, string>> = { ...ship.equipment };
+    const allCalibratedGearGetter = (id: string) => {
+        const gear = getGearPiece(id);
+        if (!gear) return undefined;
+
+        // Apply calibration if eligible
+        if (isCalibrationEligible(gear) && !gear.calibration?.shipId) {
+            return applyCalibrationStats(gear);
+        }
+        return gear;
+    };
+
+    const calibratedTotalStats = calculateTotalStats(
+        ship.baseStats,
+        allCalibratedEquipment,
+        allCalibratedGearGetter,
+        ship.refits,
+        ship.implants,
+        getEngineeringStatsForShipType(ship.type),
+        ship.id
+    );
+    const calibratedTotalScore = calculatePriorityScore(calibratedTotalStats.final, [], shipRole);
+
+    const totalImprovement = calibratedTotalScore - currentTotalScore;
+    const totalImprovementPercentage =
+        currentTotalScore > 0 ? (totalImprovement / currentTotalScore) * 100 : 0;
+
+    return {
+        currentTotalScore,
+        calibratedTotalScore,
+        totalImprovement,
+        totalImprovementPercentage,
+        slots: slotResults,
+    };
 }
