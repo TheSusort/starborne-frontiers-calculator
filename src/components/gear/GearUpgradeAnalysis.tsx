@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { GearPiece } from '../../types/gear';
-import { SHIP_TYPES, ShipTypeName, GEAR_SLOTS, GearSlotName } from '../../constants';
+import { SHIP_TYPES, ShipTypeName, GEAR_SLOTS, GearSlotName, STATS } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button, Input, ProgressBar } from '../ui';
+import { Button, Input, ProgressBar, Select } from '../ui';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { useNotification } from '../../hooks/useNotification';
 import { Tabs } from '../ui/layout/Tabs';
+import { CloseIcon, GearIcon } from '../ui/icons';
+import { StatName } from '../../types/stats';
+import { Offcanvas } from '../ui/layout/Offcanvas';
 
 interface Props {
     inventory: GearPiece[];
@@ -34,6 +37,10 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     } | null>(null);
     const [selectedRarity, setSelectedRarity] = useState<'rare' | 'epic' | 'legendary'>('rare');
     const [maxLevel, setMaxLevel] = useState<number>(16);
+    const [selectedRole, setSelectedRole] = useState<ShipTypeName | 'all'>('all');
+    const [selectedStats, setSelectedStats] = useState<StatName[]>([]);
+    const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>('AND');
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [results, setResults] = useState<
         Record<
             ShipTypeName,
@@ -124,7 +131,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             6,
             undefined,
             selectedRarity,
-            simulationCount
+            simulationCount,
+            selectedStats,
+            statFilterMode
         );
         completedSteps++;
         setOptimizationProgress({
@@ -143,7 +152,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                 6,
                 slotName as GearSlotName,
                 selectedRarity,
-                simulationCount
+                simulationCount,
+                selectedStats,
+                statFilterMode
             );
             completedSteps++;
             setOptimizationProgress({
@@ -166,11 +177,17 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         try {
             setIsLoading(true);
 
+            // Filter roles based on selection
+            const rolesToProcess =
+                selectedRole === 'all'
+                    ? shipRoles
+                    : shipRoles.filter((role) => role === selectedRole);
+
             // Calculate total steps: for each role, we process 'all' + each gear slot
             // GEAR_SLOTS contains only the 6 gear slots (weapon, hull, generator, sensor, software, thrusters)
             // Implants are in IMPLANT_SLOTS, so no filtering needed
             const slotsPerRole = 1 + Object.keys(GEAR_SLOTS).length; // 1 for 'all' + 6 gear slots = 7
-            const totalSteps = shipRoles.length * slotsPerRole;
+            const totalSteps = rolesToProcess.length * slotsPerRole;
 
             setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
 
@@ -178,8 +195,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
             // Process each role sequentially with UI updates
             let completedSteps = 0;
-            for (let i = 0; i < shipRoles.length; i++) {
-                const role = shipRoles[i];
+            for (let i = 0; i < rolesToProcess.length; i++) {
+                const role = rolesToProcess[i];
                 completedSteps = await processRole(role, i, results, totalSteps, completedSteps);
             }
 
@@ -206,11 +223,15 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     const handleAnalyze = async () => {
         setIsLoading(true);
 
+        // Filter roles based on selection
+        const rolesToProcess =
+            selectedRole === 'all' ? shipRoles : shipRoles.filter((role) => role === selectedRole);
+
         // Calculate total steps: for each role, we process 'all' + each gear slot
         // GEAR_SLOTS contains only the 6 gear slots (weapon, hull, generator, sensor, software, thrusters)
         // Implants are in IMPLANT_SLOTS, so no filtering needed
         const slotsPerRole = 1 + Object.keys(GEAR_SLOTS).length; // 1 for 'all' + 6 gear slots = 7
-        const totalSteps = shipRoles.length * slotsPerRole;
+        const totalSteps = rolesToProcess.length * slotsPerRole;
 
         setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
 
@@ -221,8 +242,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
         // Process each role sequentially with UI updates between each
         let completedSteps = 0;
-        for (let i = 0; i < shipRoles.length; i++) {
-            const role = shipRoles[i];
+        for (let i = 0; i < rolesToProcess.length; i++) {
+            const role = rolesToProcess[i];
             completedSteps = await processRole(role, i, newResults, totalSteps, completedSteps);
         }
 
@@ -241,26 +262,130 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         }));
     };
 
+    // Calculate if there are active filters
+    const hasActiveFilters =
+        selectedRole !== 'all' ||
+        selectedRarity !== 'rare' ||
+        maxLevel !== 16 ||
+        selectedStats.length > 0;
+
+    const handleClearFilters = () => {
+        setSelectedRole('all');
+        setSelectedRarity('rare');
+        setMaxLevel(16);
+        setSelectedStats([]);
+        setStatFilterMode('AND');
+    };
+
     return (
         <div className="space-y-8">
             {mode === 'analysis' && (
                 <>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center flex-wrap gap-2">
                         <span className="text-sm text-gray-400">
                             Find the best gear pieces to upgrade for maximum stat improvements.
                         </span>
-                        <Button variant="primary" onClick={handleAnalyze} disabled={isLoading}>
-                            {isLoading ? 'Analyzing...' : 'Analyze Gear'}
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="primary" onClick={handleAnalyze} disabled={isLoading}>
+                                {isLoading ? 'Analyzing...' : 'Analyze Gear'}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsConfigOpen(true)}
+                                aria-label="Upgrade config"
+                                title="Upgrade config"
+                            >
+                                <GearIcon />
+                            </Button>
+                        </div>
                     </div>
-                    <span className="text-sm text-gray-400">
+                    {hasActiveFilters && (
+                        <div className="flex flex-wrap gap-2">
+                            {selectedRole !== 'all' && (
+                                <Button
+                                    aria-label={`Remove ${SHIP_TYPES[selectedRole].name} filter`}
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() => setSelectedRole('all')}
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Role</span>
+                                            <span className="text-xs">
+                                                {SHIP_TYPES[selectedRole].name}
+                                            </span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            )}
+                            {selectedRarity !== 'rare' && (
+                                <Button
+                                    aria-label={`Remove ${RARITY_OPTIONS.find((o) => o.value === selectedRarity)?.label} filter`}
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() => setSelectedRarity('rare')}
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Rarity</span>
+                                            <span className="text-xs">
+                                                {
+                                                    RARITY_OPTIONS.find(
+                                                        (o) => o.value === selectedRarity
+                                                    )?.label
+                                                }
+                                            </span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            )}
+                            {maxLevel !== 16 && (
+                                <Button
+                                    aria-label="Remove max level filter"
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() => setMaxLevel(16)}
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Max Level</span>
+                                            <span className="text-xs">≤{maxLevel}</span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            )}
+                            {selectedStats.map((stat) => (
+                                <Button
+                                    key={stat}
+                                    aria-label={`Remove ${STATS[stat].label} filter`}
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setSelectedStats(selectedStats.filter((s) => s !== stat))
+                                    }
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Stat</span>
+                                            <span className="text-xs">{STATS[stat].label}</span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="text-sm text-gray-400">
                         Click &quot;Analyze Gear&quot; to find the 6 best gear upgrades for each
                         ship role. The analysis simulates upgrading each piece to level 16 multiple
                         times and averages the results (20 runs for rare+, 40 runs for epic+, 80
                         runs for legendary). Use the rarity and level filters to narrow your search.
                         The improvement percentages show the average improvement to the role score.
                         Results are sorted by total improvement to the role score.
-                    </span>
+                    </div>
                 </>
             )}
 
@@ -296,36 +421,59 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                 </>
             )}
 
-            {/* Filters - only show for analysis mode */}
+            {/* Config Offcanvas - only show for analysis mode */}
             {mode === 'analysis' && (
-                <div className="space-x-4 flex">
-                    {/* Rarity Filter */}
-                    <div className="space-y-1">
-                        <p className="text-sm font-medium py-[6px]">Rarity Filter</p>
-                        <div className="flex flex-wrap gap-2">
-                            {RARITY_OPTIONS.map((option) => (
-                                <Button
-                                    key={option.value}
-                                    onClick={() => setSelectedRarity(option.value)}
-                                    className={`text-sm font-medium transition-colors h-auto text-left`}
-                                    variant={
-                                        selectedRarity === option.value ? 'primary' : 'secondary'
-                                    }
-                                >
-                                    <div>
-                                        <div>{option.label}</div>
-                                        <div className="text-xs opacity-75">
-                                            {option.description}
-                                        </div>
-                                    </div>
-                                </Button>
-                            ))}
+                <Offcanvas
+                    isOpen={isConfigOpen}
+                    onClose={() => setIsConfigOpen(false)}
+                    title="Upgrade Config"
+                >
+                    <div className="space-y-6 pb-6">
+                        {/* Role Filter */}
+                        <div>
+                            <Select
+                                label="Role Filter"
+                                value={selectedRole}
+                                onChange={(value) => setSelectedRole(value as ShipTypeName | 'all')}
+                                options={[
+                                    { value: 'all', label: 'All Roles' },
+                                    ...shipRoles.map((role) => ({
+                                        value: role,
+                                        label: SHIP_TYPES[role].name,
+                                    })),
+                                ]}
+                                helpLabel="Select which ship role(s) to analyze"
+                            />
                         </div>
-                    </div>
 
-                    {/* Level Filter */}
-                    <div>
-                        <div className="flex items-center gap-3">
+                        {/* Rarity Filter */}
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium">Rarity Filter</p>
+                            <div className="flex flex-wrap gap-2">
+                                {RARITY_OPTIONS.map((option) => (
+                                    <Button
+                                        key={option.value}
+                                        onClick={() => setSelectedRarity(option.value)}
+                                        className={`text-sm font-medium transition-colors h-auto text-left`}
+                                        variant={
+                                            selectedRarity === option.value
+                                                ? 'primary'
+                                                : 'secondary'
+                                        }
+                                    >
+                                        <div>
+                                            <div>{option.label}</div>
+                                            <div className="text-xs opacity-75">
+                                                {option.description}
+                                            </div>
+                                        </div>
+                                    </Button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Level Filter */}
+                        <div>
                             <Input
                                 label="Max Level Filter"
                                 type="number"
@@ -334,11 +482,139 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                 min={0}
                                 max={16}
                                 helpLabel="Gear with level above this will be excluded"
-                                className="py-[26px]"
                             />
                         </div>
+
+                        {/* Stat Priorities */}
+                        <div className="space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                <h3 className="text-lg font-medium">Stat Priorities</h3>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <h4 className="text-sm font-semibold">
+                                            Filter by stats (optional)
+                                        </h4>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                variant={
+                                                    statFilterMode === 'AND'
+                                                        ? 'primary'
+                                                        : 'secondary'
+                                                }
+                                                size="sm"
+                                                onClick={() => setStatFilterMode('AND')}
+                                            >
+                                                AND
+                                            </Button>
+                                            <Button
+                                                variant={
+                                                    statFilterMode === 'OR'
+                                                        ? 'primary'
+                                                        : 'secondary'
+                                                }
+                                                size="sm"
+                                                onClick={() => setStatFilterMode('OR')}
+                                            >
+                                                OR
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-gray-400">
+                                        {statFilterMode === 'AND'
+                                            ? 'Only show pieces that have ALL selected stats (as main stat or substat).'
+                                            : 'Only show pieces that have at least ONE of the selected stats (as main stat or substat).'}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            'attack',
+                                            'defence',
+                                            'hp',
+                                            'speed',
+                                            'crit',
+                                            'critDamage',
+                                            'hacking',
+                                            'security',
+                                            'healModifier',
+                                            'shield',
+                                        ].map((stat) => {
+                                            const statName = stat as StatName;
+                                            const isSelected = selectedStats.includes(statName);
+                                            return (
+                                                <Button
+                                                    key={stat}
+                                                    variant={isSelected ? 'primary' : 'secondary'}
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        if (isSelected) {
+                                                            setSelectedStats(
+                                                                selectedStats.filter(
+                                                                    (s) => s !== statName
+                                                                )
+                                                            );
+                                                        } else {
+                                                            setSelectedStats([
+                                                                ...selectedStats,
+                                                                statName,
+                                                            ]);
+                                                        }
+                                                    }}
+                                                >
+                                                    {STATS[statName].label}
+                                                </Button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                {selectedStats.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-semibold">Selected Stats</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedStats.map((stat) => (
+                                                <div
+                                                    key={stat}
+                                                    className="flex items-center gap-2 px-3 py-1 bg-primary/20 rounded"
+                                                >
+                                                    <span className="text-sm">
+                                                        {STATS[stat].label}
+                                                    </span>
+                                                    <Button
+                                                        aria-label={`Remove ${STATS[stat].label}`}
+                                                        variant="danger"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            setSelectedStats(
+                                                                selectedStats.filter(
+                                                                    (s) => s !== stat
+                                                                )
+                                                            );
+                                                        }}
+                                                    >
+                                                        <CloseIcon />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {hasActiveFilters && (
+                            <div className="pt-4">
+                                <Button
+                                    aria-label="Clear filters"
+                                    variant="secondary"
+                                    fullWidth
+                                    onClick={handleClearFilters}
+                                >
+                                    Clear Filters
+                                </Button>
+                            </div>
+                        )}
                     </div>
-                </div>
+                </Offcanvas>
             )}
 
             {mode === 'analysis' && optimizationProgress && (
@@ -359,12 +635,17 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             )}
 
             {mode === 'analysis' &&
-                shipRoles.map((role) => {
+                (selectedRole === 'all' ? shipRoles : [selectedRole]).map((role) => {
                     const roleResults = results[role] || {};
                     const selectedSlot = selectedSlots[role] || 'all';
                     const currentResults = roleResults[selectedSlot] || [];
 
-                    if (currentResults.length === 0) return null;
+                    // Check if there are any results for any slot in this role
+                    const hasAnyResults = Object.values(roleResults).some(
+                        (slotResults) => slotResults && slotResults.length > 0
+                    );
+
+                    if (!hasAnyResults) return null;
 
                     const slotTabs = [
                         { id: 'all', label: 'All Slots' },
@@ -389,32 +670,42 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                     handleSlotChange(role, tab as GearSlotName | 'all')
                                 }
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {currentResults.map((result, index) => (
-                                    <div key={result.piece.id} className="space-y-2">
-                                        <GearPieceDisplay
-                                            gear={result.piece}
-                                            mode="manage"
-                                            onEdit={onEdit}
-                                        />
-                                        <div className="text-sm px-4 pb-4">
-                                            <div
-                                                className={`flex justify-between ${winnerColors[index]}`}
-                                            >
-                                                <span>Avg. gear improvement:</span>
-                                                <span>
-                                                    {' +'}
-                                                    {Math.round(
-                                                        (result.improvement / result.currentScore) *
-                                                            100
-                                                    )}
-                                                    %
-                                                </span>
+                            {currentResults.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {currentResults.map((result, index) => (
+                                        <div key={result.piece.id} className="space-y-2">
+                                            <GearPieceDisplay
+                                                gear={result.piece}
+                                                mode="manage"
+                                                onEdit={onEdit}
+                                            />
+                                            <div className="text-sm px-4 pb-4">
+                                                <div
+                                                    className={`flex justify-between ${winnerColors[index]}`}
+                                                >
+                                                    <span>Avg. gear improvement:</span>
+                                                    <span>
+                                                        {' +'}
+                                                        {Math.round(
+                                                            (result.improvement /
+                                                                result.currentScore) *
+                                                                100
+                                                        )}
+                                                        %
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-gray-400">
+                                    <p className="text-sm">
+                                        No upgrade candidates found for this slot with the current
+                                        filters.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     );
                 })}

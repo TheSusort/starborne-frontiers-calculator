@@ -9,7 +9,7 @@ import {
 } from '../../types/stats';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
-import { ShipTypeName, GearSlotName } from '../../constants';
+import { ShipTypeName, GearSlotName, STAT_NORMALIZERS } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { BaseStats } from '../../types/stats';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -242,13 +242,64 @@ function calculateGearStats(piece: GearPiece): BaseStats {
     return breakdown.final;
 }
 
+// Helper function to get all stats present on a piece (main + substats)
+function getPieceStats(piece: GearPiece): StatName[] {
+    const stats: StatName[] = [];
+
+    if (piece.mainStat) {
+        stats.push(piece.mainStat.name);
+    }
+
+    if (piece.subStats) {
+        piece.subStats.forEach((substat) => {
+            stats.push(substat.name);
+        });
+    }
+
+    return stats;
+}
+
+// Helper function to check if a piece matches selected stats based on mode
+function pieceHasSelectedStats(
+    piece: GearPiece,
+    selectedStats: StatName[],
+    mode: 'AND' | 'OR'
+): boolean {
+    if (selectedStats.length === 0) return true; // No filter if no stats selected
+
+    const pieceStats = getPieceStats(piece);
+
+    if (mode === 'AND') {
+        // Piece must have ALL selected stats
+        return selectedStats.every((stat) => pieceStats.includes(stat));
+    } else {
+        // Piece must have at least ONE selected stat (OR mode)
+        return selectedStats.some((stat) => pieceStats.includes(stat));
+    }
+}
+
+// Helper function to add bonus weight if main stat matches selected stats
+function getMainStatBonus(piece: GearPiece, selectedStats: StatName[], baseScore: number): number {
+    if (selectedStats.length === 0 || !piece.mainStat) return 0;
+
+    // If main stat is one of the selected stats, add significant bonus
+    if (selectedStats.includes(piece.mainStat.name)) {
+        // Add 50% bonus to the base score for main stat match
+        return baseScore * 0.5;
+    }
+
+    return 0;
+}
+
 export function analyzePotentialUpgrades(
     inventory: GearPiece[],
     shipRole: ShipTypeName,
     count: number = 6,
     slot?: GearSlotName,
     minRarity: 'rare' | 'epic' | 'legendary' = 'rare',
-    simulationCount: number = 20
+    simulationCount: number = 20,
+    selectedStats: StatName[] = [],
+    statFilterMode: 'AND' | 'OR' = 'AND'
 ): PotentialResult[] {
     // Clear the gear stats cache to ensure we get fresh calculations for each simulation
     clearGearStatsCache();
@@ -262,17 +313,26 @@ export function analyzePotentialUpgrades(
             piece.level < 16 &&
             eligibleRarities.includes(piece.rarity) &&
             !piece.slot.includes('implant') &&
-            (!slot || piece.slot === slot)
+            (!slot || piece.slot === slot) &&
+            pieceHasSelectedStats(piece, selectedStats, statFilterMode)
     );
 
     const results: PotentialResult[] = eligiblePieces.map((piece) => {
         const currentStats = calculateGearStats(piece);
-        const currentScore = calculatePriorityScore(currentStats, [], shipRole);
+        const baseCurrentScore = calculatePriorityScore(currentStats, [], shipRole);
+        const mainStatBonusCurrent = getMainStatBonus(piece, selectedStats, baseCurrentScore);
+        const currentScore = baseCurrentScore + mainStatBonusCurrent;
 
         const simulations = Array.from({ length: simulationCount }, () => {
             const { piece: upgradedPiece } = simulateUpgrade(piece);
             const upgradedStats = calculateGearStats(upgradedPiece);
-            const potentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
+            const basePotentialScore = calculatePriorityScore(upgradedStats, [], shipRole);
+            const mainStatBonusPotential = getMainStatBonus(
+                upgradedPiece,
+                selectedStats,
+                basePotentialScore
+            );
+            const potentialScore = basePotentialScore + mainStatBonusPotential;
             return { piece: upgradedPiece, score: potentialScore };
         });
 

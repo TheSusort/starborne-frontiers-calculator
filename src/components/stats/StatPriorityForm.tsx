@@ -23,6 +23,7 @@ interface Props {
     hideWeight?: boolean;
     hideMaxLimit?: boolean;
     hideMinLimit?: boolean;
+    hideHardRequirement?: boolean;
 }
 
 export const StatPriorityForm: React.FC<Props> = ({
@@ -31,6 +32,7 @@ export const StatPriorityForm: React.FC<Props> = ({
     hideWeight,
     hideMaxLimit,
     hideMinLimit,
+    hideHardRequirement,
 }) => {
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
@@ -46,7 +48,7 @@ export const StatPriorityForm: React.FC<Props> = ({
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
             weight: hideWeight ? 1 : weight,
-            hardRequirement,
+            hardRequirement: hideHardRequirement ? false : hardRequirement,
         });
 
         setMaxLimit('');
@@ -55,7 +57,9 @@ export const StatPriorityForm: React.FC<Props> = ({
             setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         }
         setSelectedStat(AVAILABLE_STATS[0]);
-        setHardRequirement(false);
+        if (!hideHardRequirement) {
+            setHardRequirement(false);
+        }
     };
 
     return (
@@ -109,15 +113,17 @@ export const StatPriorityForm: React.FC<Props> = ({
                 )}
             </div>
 
-            <div className="mt-4">
-                <Checkbox
-                    id="hardRequirement"
-                    label="Hard requirement"
-                    checked={hardRequirement}
-                    onChange={(checked) => setHardRequirement(checked)}
-                    helpLabel="When enabled, gear combinations that don't meet this requirement will be completely excluded from results. If results are not met, it means that the stat is not achievable."
-                />
-            </div>
+            {!hideHardRequirement && (
+                <div className="mt-4">
+                    <Checkbox
+                        id="hardRequirement"
+                        label="Hard requirement"
+                        checked={hardRequirement}
+                        onChange={(checked) => setHardRequirement(checked)}
+                        helpLabel="When enabled, gear combinations that don't meet this requirement will be completely excluded from results. If results are not met, it means that the stat is not achievable."
+                    />
+                </div>
+            )}
 
             <div className="grow mt-4">
                 <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
