@@ -304,13 +304,18 @@ export const ShipDisplay: React.FC<Props> = memo(
                                                 const implant =
                                                     IMPLANTS[gear.setBonus as ImplantName];
                                                 if (!implant?.imageKey) return null;
+                                                const rarity = gear.rarity || 'common';
                                                 return (
-                                                    <Image
+                                                    <div
                                                         key={slot}
-                                                        src={implant.imageKey}
-                                                        alt={implant.name}
-                                                        className="w-5 h-5"
-                                                    />
+                                                        className={`border ${RARITIES[rarity].borderColor}`}
+                                                    >
+                                                        <Image
+                                                            src={implant.imageKey}
+                                                            alt={implant.name}
+                                                            className="w-5 h-5"
+                                                        />
+                                                    </div>
                                                 );
                                             })}
                                         </div>
