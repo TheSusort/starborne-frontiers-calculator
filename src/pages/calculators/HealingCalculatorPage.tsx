@@ -19,14 +19,12 @@ import { BaseChart, ChartTooltip } from '../../components/ui/charts';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
-// Base heal percent from constants
-const BASE_HEAL_PERCENT = 0.15; // 15% of HP
-
 // Define the type for a healer configuration
 interface HealerConfig {
     id: string;
     name: string;
     hp: number;
+    healPercent: number; // Base healing percentage (e.g., 15 for 15%)
     crit: number;
     critDamage: number;
     healModifier: number;
@@ -36,7 +34,8 @@ interface HealerConfig {
 }
 
 const calculateHealing = (config: HealerConfig) => {
-    const baseHealing = config.hp * BASE_HEAL_PERCENT;
+    const healPercentDecimal = (config.healPercent || 15) / 100; // Convert percentage to decimal
+    const baseHealing = config.hp * healPercentDecimal;
 
     // Calculate crit multiplier
     const critRate = config.crit >= 100 ? 1 : config.crit / 100;
@@ -71,7 +70,15 @@ const comparisonChartOptions = [
 
 const HealingCalculatorPage: React.FC = () => {
     const [configs, setConfigs] = useState<HealerConfig[]>([
-        { id: '1', name: 'Healer 1', hp: 40000, crit: 50, critDamage: 100, healModifier: 20 },
+        {
+            id: '1',
+            name: 'Healer 1',
+            hp: 40000,
+            healPercent: 15,
+            crit: 50,
+            critDamage: 100,
+            healModifier: 20,
+        },
     ]);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
@@ -108,6 +115,7 @@ const HealingCalculatorPage: React.FC = () => {
             id: nextId.toString(),
             name: `Healer ${nextId}`,
             hp: 40000,
+            healPercent: 15,
             crit: 50,
             critDamage: 100,
             healModifier: 20,
@@ -136,7 +144,7 @@ const HealingCalculatorPage: React.FC = () => {
     // Update a healer configuration
     const updateConfig = (
         id: string,
-        field: 'name' | 'hp' | 'crit' | 'critDamage' | 'healModifier',
+        field: 'name' | 'hp' | 'healPercent' | 'crit' | 'critDamage' | 'healModifier',
         value: string | number
     ) => {
         const updatedConfigs = configs.map((config) => {
@@ -299,7 +307,7 @@ const HealingCalculatorPage: React.FC = () => {
             <Seo {...SEO_CONFIG.healing} />
             <PageLayout
                 title="Healing Calculator"
-                description="Calculate effective healing based on HP, crit chance, crit power, and heal modifier"
+                description="Calculate effective healing based on HP, base heal percentage, crit chance, crit power, and heal modifier"
                 action={{
                     label: 'Add Healer',
                     onClick: addConfig,
@@ -345,6 +353,21 @@ const HealingCalculatorPage: React.FC = () => {
                                                     config.id,
                                                     'hp',
                                                     parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
+                                        <Input
+                                            label="Heal % (of HP)"
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="0.1"
+                                            value={config.healPercent}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'healPercent',
+                                                    parseFloat(e.target.value) || 0
                                                 )
                                             }
                                         />
@@ -595,13 +618,13 @@ const HealingCalculatorPage: React.FC = () => {
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">Healing Formula Explanation</h2>
                         <p className="mb-2">
-                            Healing is calculated based on the healer&apos;s HP, critical hit
-                            chance, critical hit power, and healing modifier. We are using 15% as an
-                            example.
+                            Healing is calculated based on the healer&apos;s HP, base healing
+                            percentage (configurable per ship), critical hit chance, critical hit
+                            power, and healing modifier.
                         </p>
                         <p className="mb-2">The formula for calculating Effective Healing is:</p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            Base Healing = HP × 15%
+                            Base Healing = HP × Heal %
                             <br />
                             Crit Multiplier = 1 + (Crit Chance% × Crit Power%) / 10000
                             <br />
@@ -609,8 +632,9 @@ const HealingCalculatorPage: React.FC = () => {
                             / 100)
                         </p>
                         <p>
-                            For example, a ship with 40,000 HP, 50% crit chance, 100% crit power,
-                            and 20% heal modifier has an effective healing of 7,200 HP per heal.
+                            For example, a ship with 40,000 HP, 15% base heal, 50% crit chance, 100%
+                            crit power, and 20% heal modifier has an effective healing of 7,200 HP
+                            per heal.
                         </p>
                     </div>
 

@@ -14,7 +14,12 @@ const scoreCache = new Map<string, number>();
 const CACHE_SIZE_LIMIT = 50000; // Increased cache size for better hit rates
 
 // Pre-computed cache keys for common equipment combinations
+// Using WeakMap would be ideal but we need string keys for the cache
+// Instead, we'll use a more efficient key generation that avoids JSON.stringify
 const equipmentKeyCache = new Map<string, string>();
+
+// Cache for implants key per ship (implants don't change during gear optimization)
+const implantsKeyCache = new Map<string, string>();
 
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
@@ -286,14 +291,31 @@ export function calculatePriorityScore(
     return Math.max(0, baseScore * (1 - penalties / 100));
 }
 
+// Cache for pre-calculated order multipliers to avoid repeated Math.pow calls
+const orderMultiplierCache = new Map<number, number[]>();
+
+/**
+ * Get pre-calculated order multipliers for a given priorities length.
+ * Avoids repeated Math.pow calls in calculateDefaultScore.
+ */
+function getOrderMultipliers(length: number): number[] {
+    let multipliers = orderMultiplierCache.get(length);
+    if (!multipliers) {
+        multipliers = Array.from({ length }, (_, index) => Math.pow(2, length - index - 1));
+        orderMultiplierCache.set(length, multipliers);
+    }
+    return multipliers;
+}
+
 // Helper function for default scoring mode
 function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): number {
     let totalScore = 0;
+    const orderMultipliers = getOrderMultipliers(priorities.length);
     priorities.forEach((priority, index) => {
         const statValue = stats[priority.stat] || 0;
         const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
         const normalizedValue = statValue / normalizer;
-        const orderMultiplier = Math.pow(2, priorities.length - index - 1);
+        const orderMultiplier = orderMultipliers[index];
         totalScore += normalizedValue * (priority.weight || 1) * orderMultiplier;
     });
     return totalScore;
@@ -490,30 +512,38 @@ export function calculateTotalScore(
     // Create cache key from equipment configuration
     performanceTracker.startTimer('CreateCacheKey');
 
-    // Use cached equipment key if available
-    let equipmentKey = equipmentKeyCache.get(JSON.stringify(equipment));
-    if (!equipmentKey) {
-        equipmentKey = Object.entries(equipment)
-            .filter(([_, gearId]) => gearId !== undefined)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([slot, gearId]) => `${slot}:${gearId}`)
-            .join('|');
+    // Generate equipment key more efficiently (avoid JSON.stringify for lookup)
+    // Create a deterministic key by sorting entries
+    const equipmentEntries = Object.entries(equipment)
+        .filter(([_, gearId]) => gearId !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b));
 
+    // Create a fast string key for lookup (without JSON.stringify)
+    const equipmentKeyRaw = equipmentEntries.map(([slot, gearId]) => `${slot}:${gearId}`).join('|');
+
+    // Use cached equipment key if available
+    let equipmentKey = equipmentKeyCache.get(equipmentKeyRaw);
+    if (!equipmentKey) {
+        equipmentKey = equipmentKeyRaw;
         // Cache the equipment key for reuse
         if (equipmentKeyCache.size < 10000) {
-            // Limit equipment key cache size
-            equipmentKeyCache.set(JSON.stringify(equipment), equipmentKey);
+            equipmentKeyCache.set(equipmentKeyRaw, equipmentKey);
         }
     }
 
-    // Create implants key for cache
-    const implantsKey = ship.implants
-        ? Object.entries(ship.implants)
-              .filter(([_, implantId]) => implantId !== undefined)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([slot, implantId]) => `${slot}:${implantId}`)
-              .join('|')
-        : 'none';
+    // Cache implants key per ship (implants don't change during gear optimization)
+    const shipImplantsKey = `${ship.id}_implants`;
+    let implantsKey = implantsKeyCache.get(shipImplantsKey);
+    if (!implantsKey) {
+        implantsKey = ship.implants
+            ? Object.entries(ship.implants)
+                  .filter(([_, implantId]) => implantId !== undefined)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([slot, implantId]) => `${slot}:${implantId}`)
+                  .join('|')
+            : 'none';
+        implantsKeyCache.set(shipImplantsKey, implantsKey);
+    }
 
     // Include implants in cache key to properly differentiate configurations
     const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}`;
@@ -541,14 +571,16 @@ export function calculateTotalScore(
     performanceTracker.endTimer('CalculateTotalStats');
 
     // Add set bonus consideration
+    // Optimize: reuse equipmentEntries we already created for cache key
     performanceTracker.startTimer('CalculateSetCount');
     const setCount: Record<string, number> = {};
-    Object.values(equipment).forEach((gearId) => {
-        if (!gearId) return;
+    // Use equipmentEntries from cache key generation to avoid re-iterating
+    for (const [_, gearId] of equipmentEntries) {
+        if (!gearId) continue;
         const gear = getGearPiece(gearId);
-        if (!gear?.setBonus) return;
+        if (!gear?.setBonus) continue;
         setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;
-    });
+    }
     performanceTracker.endTimer('CalculateSetCount');
 
     // Calculate Arcane Siege multiplier if applicable (reuses setCount, caches implant lookup)
@@ -574,7 +606,8 @@ export function calculateTotalScore(
     if (scoreCache.size >= CACHE_SIZE_LIMIT) {
         // Clear cache if it gets too large
         scoreCache.clear();
-        equipmentKeyCache.clear(); // Also clear equipment key cache
+        equipmentKeyCache.clear();
+        // Note: We keep implantsKeyCache and arcaneSiegeCache as they're per-ship and small
     }
     scoreCache.set(cacheKey, score);
     performanceTracker.endTimer('CacheResult');
@@ -587,6 +620,8 @@ export function calculateTotalScore(
 export function clearScoreCache(): void {
     scoreCache.clear();
     equipmentKeyCache.clear();
+    implantsKeyCache.clear();
     arcaneSiegeCache.clear();
+    orderMultiplierCache.clear();
     clearGearStatsCache();
 }
