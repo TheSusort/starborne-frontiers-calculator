@@ -82,7 +82,7 @@ export const calculateTotalStats = (
     applySetBonuses();
     Object.assign(breakdown.final, breakdown.afterSets);
 
-    // Process implants
+    // Process implants - first apply regular subStats
     Object.values(implants || {}).forEach((implantId) => {
         if (!implantId) return;
         const implant = getGearPiece(implantId);
@@ -91,6 +91,28 @@ export const calculateTotalStats = (
         implant.subStats?.forEach((stat) =>
             addStatModifier(stat, breakdown.final, breakdown.afterEngineering)
         );
+    });
+
+    // Process special ultimate implants that alter stats based on other stats
+    Object.values(implants || {}).forEach((implantId) => {
+        if (!implantId) return;
+        const implant = getGearPiece(implantId);
+        if (!implant || !implant.setBonus) return;
+
+        const percentageMultiplier = getSpecialImplantMultiplier(implant.setBonus, implant.rarity);
+        if (percentageMultiplier === null) return;
+
+        if (implant.setBonus === 'CODE_GUARD') {
+            // CODE_GUARD: Increase security by X% of current hacking
+            const hackingValue = breakdown.final.hacking || 0;
+            const securityBonus = hackingValue * (percentageMultiplier / 100);
+            breakdown.final.security = (breakdown.final.security || 0) + securityBonus;
+        } else if (implant.setBonus === 'CIPHER_LINK') {
+            // CIPHER_LINK: Increase hacking by X% of current security
+            const securityValue = breakdown.final.security || 0;
+            const hackingBonus = securityValue * (percentageMultiplier / 100);
+            breakdown.final.hacking = (breakdown.final.hacking || 0) + hackingBonus;
+        }
     });
 
     return breakdown;
@@ -153,6 +175,36 @@ export const calculateTotalStats = (
         }
     }
 };
+
+/**
+ * Get the percentage multiplier for special ultimate implants (CODE_GUARD, CIPHER_LINK)
+ * based on their rarity. Returns null if the implant type doesn't have a special multiplier.
+ */
+function getSpecialImplantMultiplier(setBonus: string, rarity: string): number | null {
+    if (setBonus === 'CODE_GUARD') {
+        const multipliers: Record<string, number> = {
+            common: 20,
+            uncommon: 25,
+            rare: 30,
+            epic: 35,
+            legendary: 40,
+        };
+        return multipliers[rarity] ?? null;
+    }
+
+    if (setBonus === 'CIPHER_LINK') {
+        const multipliers: Record<string, number> = {
+            common: 20,
+            uncommon: 25,
+            rare: 31,
+            epic: 37,
+            legendary: 45,
+        };
+        return multipliers[rarity] ?? null;
+    }
+
+    return null;
+}
 
 // Function to clear the gear stats cache
 export function clearGearStatsCache(): void {

@@ -118,10 +118,22 @@ export const IMPLANTS: Record<string, ImplantData> = {
                     'This unit increases Security by 25% of its own Hacking at the start of combat.',
             },
             {
+                rarity: 'common',
+                stats: [],
+                description:
+                    'This unit increases Security by 20% of its own Hacking at the start of combat.',
+            },
+            {
                 rarity: 'epic',
                 stats: [],
                 description:
                     'This unit increases Security by 35% of its own Hacking at the start of combat.',
+            },
+            {
+                rarity: 'legendary',
+                stats: [],
+                description:
+                    'This unit increases Security by 40% of its own Hacking at the start of combat.',
             },
         ],
         imageKey: 'codeguard-Photoroom',
@@ -264,13 +276,13 @@ export const IMPLANTS: Record<string, ImplantData> = {
                 rarity: 'epic',
                 stats: [],
                 description:
-                    'This unit increases Security by 37% of its own Hacking at the start of combat.',
+                    'This unit increases Hacking by 37% of its own Security at the start of combat.',
             },
             {
                 rarity: 'legendary',
                 stats: [],
                 description:
-                    'This unit increases Security by 45% of its own Hacking at the start of combat.',
+                    'This unit increases Hacking by 45% of its own Security at the start of combat.',
             },
         ],
     },

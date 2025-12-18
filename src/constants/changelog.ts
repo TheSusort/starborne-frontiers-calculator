@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.29.0';
+export const CURRENT_VERSION = '1.30.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.30.0',
+        date: '2025-12-18',
+        changes: ['Added CODE GUARD / CIPHER LINK calculations to the system'],
+    },
     {
         version: '1.29.0',
         date: '2025-12-17',
