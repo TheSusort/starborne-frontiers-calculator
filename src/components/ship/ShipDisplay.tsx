@@ -25,6 +25,8 @@ import { CheckIcon } from '../ui/icons/CheckIcon';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
 import { TrophyIcon } from '../ui/icons/TrophyIcon';
+import { Image } from '../ui/Image';
+import IMPLANTS, { ImplantName } from '../../constants/implants';
 
 interface Props {
     ship: Ship;
@@ -288,16 +290,34 @@ export const ShipDisplay: React.FC<Props> = memo(
                             variant === 'full' && (
                                 <div className="relative">
                                     <div
-                                        className="flex justify-between text-gray-300 border-b py-1 border-dark-lighter"
+                                        className="flex items-center gap-2 text-gray-300 border-b py-1 border-dark-lighter"
                                         onMouseEnter={() => setIsTooltipVisible(true)}
                                         onMouseLeave={() => setIsTooltipVisible(false)}
                                     >
                                         <span>Implants:</span>
-                                        <span>{Object.keys(ship.implants || {}).length}</span>
+                                        <div className="flex items-center gap-1 ms-auto">
+                                            {IMPLANT_SLOT_ORDER.map((slot) => {
+                                                const implantId = ship.implants?.[slot];
+                                                if (!implantId) return null;
+                                                const gear = getGearPiece(implantId);
+                                                if (!gear?.setBonus) return null;
+                                                const implant =
+                                                    IMPLANTS[gear.setBonus as ImplantName];
+                                                if (!implant?.imageKey) return null;
+                                                return (
+                                                    <Image
+                                                        key={slot}
+                                                        src={implant.imageKey}
+                                                        alt={implant.name}
+                                                        className="w-5 h-5"
+                                                    />
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                     <Tooltip
                                         isVisible={isTooltipVisible}
-                                        className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                        className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-[256px]"
                                     >
                                         {IMPLANT_SLOT_ORDER.map((slot) => (
                                             <React.Fragment key={slot}>
@@ -307,10 +327,6 @@ export const ShipDisplay: React.FC<Props> = memo(
                                                             getGearPiece(
                                                                 ship.implants[slot] as string
                                                             ) as GearPiece
-                                                        }
-                                                        showDetails={
-                                                            getGearPiece(ship.implants[slot])
-                                                                ?.subStats?.length !== 0
                                                         }
                                                         mode="subcompact"
                                                         small

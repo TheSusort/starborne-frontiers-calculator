@@ -119,7 +119,7 @@ export const GearPieceDisplay = memo(
                                 <Image
                                     src={implantInfo.imageKey}
                                     alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
-                                    className={`h-auto translate-y-1 ${small ? 'min-w-4 w-4' : 'min-w-6 w-6'}`}
+                                    className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6 translate-y-1'}`}
                                 />
                             )}
                             {!isImplant && slotInfo && (
@@ -268,7 +268,6 @@ export const GearPieceDisplay = memo(
                         )}
                         {/* Implant Description */}
                         {isImplant &&
-                            mode !== 'subcompact' &&
                             (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
                                 <div>
                                     <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
