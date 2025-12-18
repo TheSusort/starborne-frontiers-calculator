@@ -7,6 +7,7 @@ import { GearPiece } from '../../types/gear';
 import { EngineeringStat } from '../../types/stats';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import { performanceTracker } from './performanceTimer';
+import { RarityName } from '../../constants/rarities';
 
 // Simple cache for gear combinations
 const scoreCache = new Map<string, number>();
@@ -44,7 +45,88 @@ const DEFENSE_PENETRATION_LOOKUP: Record<number, number> = {
 // Default defense value for calculations
 const DEFAULT_DEFENSE = 15000;
 
-export function calculateDPS(stats: BaseStats): number {
+// Arcane Siege multiplier values by rarity
+const ARCANE_SIEGE_MULTIPLIERS: Record<RarityName, number> = {
+    common: 3,
+    uncommon: 6,
+    rare: 10,
+    epic: 15,
+    legendary: 20,
+};
+
+// Cache for Arcane Siege implant info per ship (implants don't change during gear optimization)
+const arcaneSiegeCache = new Map<string, number | null>(); // ship.id -> multiplier or null if no implant
+
+/**
+ * Get the Arcane Siege multiplier for a ship (cached, since implants don't change).
+ * Returns the multiplier percentage (0-20) if ship has ARCANE_SIEGE implant, otherwise null.
+ * This is the base multiplier - still need to check shield count separately.
+ */
+function getArcaneSiegeBaseMultiplier(
+    ship: Ship,
+    getGearPiece: (id: string) => GearPiece | undefined
+): number | null {
+    const cacheKey = ship.id;
+
+    if (arcaneSiegeCache.has(cacheKey)) {
+        return arcaneSiegeCache.get(cacheKey)!;
+    }
+
+    // Check if ship has ARCANE_SIEGE implant
+    let arcaneSiegeImplant: GearPiece | undefined;
+    const implants = ship.implants || {};
+
+    for (const implantId of Object.values(implants)) {
+        if (!implantId) continue;
+        const implant = getGearPiece(implantId);
+        if (implant?.setBonus === 'ARCANE_SIEGE') {
+            arcaneSiegeImplant = implant;
+            break; // Found it, no need to check more
+        }
+    }
+
+    if (!arcaneSiegeImplant) {
+        arcaneSiegeCache.set(cacheKey, null);
+        return null;
+    }
+
+    // Return the multiplier based on implant rarity
+    const rarity = arcaneSiegeImplant.rarity as RarityName;
+    const multiplier = ARCANE_SIEGE_MULTIPLIERS[rarity] || 0;
+    arcaneSiegeCache.set(cacheKey, multiplier);
+    return multiplier;
+}
+
+/**
+ * Calculate Arcane Siege damage multiplier if conditions are met.
+ * Returns the multiplier percentage (0-20) if:
+ * 1. Ship has ARCANE_SIEGE implant (cached check)
+ * 2. Ship has 2+ SHIELD gear pieces (uses pre-calculated setCount)
+ * Otherwise returns 0.
+ *
+ * Optimized to reuse setCount and cache implant lookup.
+ */
+export function calculateArcaneSiegeMultiplier(
+    ship: Ship,
+    setCount: Record<string, number>,
+    getGearPiece: (id: string) => GearPiece | undefined
+): number {
+    // Early exit: check cached implant multiplier
+    const baseMultiplier = getArcaneSiegeBaseMultiplier(ship, getGearPiece);
+    if (baseMultiplier === null) {
+        return 0;
+    }
+
+    // Check if ship has 2+ SHIELD gear pieces (reuse setCount)
+    const shieldCount = setCount['SHIELD'] || 0;
+    if (shieldCount < 2) {
+        return 0;
+    }
+
+    return baseMultiplier;
+}
+
+export function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): number {
     const attack = stats.attack || 0;
     const critMultiplier = calculateCritMultiplier(stats);
     const defensePenetration = stats.defensePenetration || 0;
@@ -59,8 +141,15 @@ export function calculateDPS(stats: BaseStats): number {
         damageReduction = calculateDamageReduction(effectiveDefense);
     }
 
-    // Calculate final DPS with damage reduction
-    return attack * critMultiplier * (1 - damageReduction / 100);
+    // Calculate base DPS with damage reduction
+    const baseDPS = attack * critMultiplier * (1 - damageReduction / 100);
+
+    // Apply Arcane Siege multiplier if applicable (multiplier is a percentage, e.g., 20 for 20%)
+    if (arcaneSiegeMultiplier > 0) {
+        return baseDPS * (1 + arcaneSiegeMultiplier / 100);
+    }
+
+    return baseDPS;
 }
 
 export function calculateHealingPerHit(stats: BaseStats): number {
@@ -79,7 +168,8 @@ export function calculatePriorityScore(
     setCount?: Record<string, number>,
     setPriorities?: SetPriority[],
     statBonuses?: StatBonus[],
-    tryToCompleteSets?: boolean
+    tryToCompleteSets?: boolean,
+    arcaneSiegeMultiplier: number = 0
 ): number {
     let penalties = 0;
 
@@ -154,7 +244,7 @@ export function calculatePriorityScore(
     if (shipRole) {
         switch (shipRole as ShipTypeName) {
             case 'ATTACKER':
-                baseScore = calculateAttackerScore(stats, statBonuses);
+                baseScore = calculateAttackerScore(stats, statBonuses, arcaneSiegeMultiplier);
                 break;
             case 'DEFENDER':
                 baseScore = calculateDefenderScore(stats, statBonuses);
@@ -163,13 +253,13 @@ export function calculatePriorityScore(
                 baseScore = calculateDefenderSecurityScore(stats, statBonuses);
                 break;
             case 'DEBUFFER':
-                baseScore = calculateDebufferScore(stats, statBonuses);
+                baseScore = calculateDebufferScore(stats, statBonuses, arcaneSiegeMultiplier);
                 break;
             case 'DEBUFFER_DEFENSIVE':
                 baseScore = calculateDefensiveDebufferScore(stats, statBonuses);
                 break;
             case 'DEBUFFER_BOMBER':
-                baseScore = calculateBomberDebufferScore(stats, statBonuses);
+                baseScore = calculateBomberDebufferScore(stats, statBonuses, arcaneSiegeMultiplier);
                 break;
             case 'DEBUFFER_CORROSION':
                 baseScore = calculateCorrosionDebufferScore(stats, setCount, statBonuses);
@@ -219,8 +309,12 @@ function applystatBonuses(stats: BaseStats, statBonuses?: StatBonus[]): number {
     }, 0);
 }
 
-function calculateAttackerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
-    const baseDPS = calculateDPS(stats);
+function calculateAttackerScore(
+    stats: BaseStats,
+    statBonuses?: StatBonus[],
+    arcaneSiegeMultiplier: number = 0
+): number {
+    const baseDPS = calculateDPS(stats, arcaneSiegeMultiplier);
 
     const bonusScore = applystatBonuses(stats, statBonuses);
     return baseDPS + bonusScore;
@@ -259,9 +353,13 @@ function calculateDefenderSecurityScore(stats: BaseStats, statBonuses?: StatBonu
     return baseDefenderScore * security;
 }
 
-function calculateDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
+function calculateDebufferScore(
+    stats: BaseStats,
+    statBonuses?: StatBonus[],
+    arcaneSiegeMultiplier: number = 0
+): number {
     const hacking = stats.hacking || 0;
-    const dps = calculateDPS(stats);
+    const dps = calculateDPS(stats, arcaneSiegeMultiplier);
     const bonusScore = applystatBonuses(stats, statBonuses);
 
     return hacking * dps + bonusScore;
@@ -274,12 +372,19 @@ function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBon
     return hacking * effectiveHP + bonusScore;
 }
 
-function calculateBomberDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
+function calculateBomberDebufferScore(
+    stats: BaseStats,
+    statBonuses?: StatBonus[],
+    arcaneSiegeMultiplier: number = 0
+): number {
     const hacking = stats.hacking || 0;
+    // For bomber debuffers, Arcane Siege affects attack-based damage
     const attack = stats.attack || 0;
+    const attackWithMultiplier =
+        arcaneSiegeMultiplier > 0 ? attack * (1 + arcaneSiegeMultiplier / 100) : attack;
     const bonusScore = applystatBonuses(stats, statBonuses);
 
-    return hacking * attack + bonusScore;
+    return hacking * attackWithMultiplier + bonusScore;
 }
 
 function calculateCorrosionDebufferScore(
@@ -446,6 +551,11 @@ export function calculateTotalScore(
     });
     performanceTracker.endTimer('CalculateSetCount');
 
+    // Calculate Arcane Siege multiplier if applicable (reuses setCount, caches implant lookup)
+    performanceTracker.startTimer('CalculateArcaneSiege');
+    const arcaneSiegeMultiplier = calculateArcaneSiegeMultiplier(ship, setCount, getGearPiece);
+    performanceTracker.endTimer('CalculateArcaneSiege');
+
     performanceTracker.startTimer('CalculatePriorityScore');
     const score = calculatePriorityScore(
         totalStats.final,
@@ -454,7 +564,8 @@ export function calculateTotalScore(
         setCount,
         setPriorities,
         statBonuses,
-        tryToCompleteSets
+        tryToCompleteSets,
+        arcaneSiegeMultiplier
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 
@@ -476,5 +587,6 @@ export function calculateTotalScore(
 export function clearScoreCache(): void {
     scoreCache.clear();
     equipmentKeyCache.clear();
+    arcaneSiegeCache.clear();
     clearGearStatsCache();
 }
