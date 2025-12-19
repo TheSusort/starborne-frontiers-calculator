@@ -1,6 +1,6 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { SimulationStatDisplay } from './SimulationStatDisplay';
+import { AverageHealing, HighestHeal, LowestHeal } from './statLines';
 
 interface SupporterStatsProps {
     simulation: SimulationSummary;
@@ -17,28 +17,22 @@ export const SupporterStats: React.FC<SupporterStatsProps> = ({
 }) => {
     return (
         <>
-            <SimulationStatDisplay
-                label="Average Healing"
-                value={simulation.averageHealing || 0}
-                formatValue={(val) => Number(val).toLocaleString()}
-                currentValue={currentSimulation?.averageHealing}
-                suggestedValue={suggestedSimulation?.averageHealing}
+            <AverageHealing
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
-            <SimulationStatDisplay
-                label="Highest Heal"
-                value={simulation.highestHeal || 0}
-                formatValue={(val) => Number(val).toLocaleString()}
-                currentValue={currentSimulation?.highestHeal}
-                suggestedValue={suggestedSimulation?.highestHeal}
+            <HighestHeal
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
-            <SimulationStatDisplay
-                label="Lowest Heal"
-                value={simulation.lowestHeal || 0}
-                formatValue={(val) => Number(val).toLocaleString()}
-                currentValue={currentSimulation?.lowestHeal}
-                suggestedValue={suggestedSimulation?.lowestHeal}
+            <LowestHeal
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
         </>

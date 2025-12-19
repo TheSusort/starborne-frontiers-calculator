@@ -1,5 +1,11 @@
 import React from 'react';
 
+interface ArcaneSiegeInfo {
+    multiplier: number;
+    isShielded: boolean;
+    shieldedDamage: number | null;
+}
+
 interface SimulationStatDisplayProps {
     label: string;
     value: string | number;
@@ -8,6 +14,7 @@ interface SimulationStatDisplayProps {
     suggestedValue?: number;
     showComparison?: boolean;
     comparisonType?: 'percentage' | 'absolute';
+    arcaneSiegeInfo?: ArcaneSiegeInfo;
 }
 
 /**
@@ -40,6 +47,7 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
     suggestedValue,
     showComparison = false,
     comparisonType = 'percentage',
+    arcaneSiegeInfo,
 }) => {
     const displayValue = formatValue ? formatValue(value) : String(value);
     const isImprovement =
@@ -47,6 +55,9 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
         currentValue !== undefined &&
         suggestedValue !== undefined &&
         suggestedValue > currentValue;
+
+    // Only show Arcane Siege info for "Average Damage" label
+    const showArcaneSiege = arcaneSiegeInfo && label === 'Average Damage';
 
     return (
         <div>
@@ -56,6 +67,18 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
                 <span className={`ml-2 ${isImprovement ? 'text-green-500' : 'text-red-500'}`}>
                     ({formatComparison(suggestedValue, currentValue, comparisonType)})
                 </span>
+            )}
+            {showArcaneSiege && (
+                <>
+                    <span className="ml-2 text-blue-400">(if shielded)</span>
+                    {arcaneSiegeInfo.shieldedDamage !== null && (
+                        <span className="ml-2 text-blue-400">
+                            {formatValue
+                                ? formatValue(arcaneSiegeInfo.shieldedDamage)
+                                : arcaneSiegeInfo.shieldedDamage.toLocaleString()}
+                        </span>
+                    )}
+                </>
             )}
         </div>
     );

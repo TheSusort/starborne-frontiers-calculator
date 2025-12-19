@@ -1,12 +1,18 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { SimulationStatDisplay } from './SimulationStatDisplay';
+import { Ship } from '../../types/ship';
+import { GearSuggestion } from '../../types/autogear';
+import { GearPiece } from '../../types/gear';
+import { AverageDamage, HighestHit, LowestHit, CritRate } from './statLines';
 
 interface AttackerStatsProps {
     simulation: SimulationSummary;
     currentSimulation?: SimulationSummary;
     suggestedSimulation?: SimulationSummary;
     showComparison?: boolean;
+    ship?: Ship;
+    suggestions?: GearSuggestion[];
+    getGearPiece?: (id: string) => GearPiece | undefined;
 }
 
 export const AttackerStats: React.FC<AttackerStatsProps> = ({
@@ -14,25 +20,39 @@ export const AttackerStats: React.FC<AttackerStatsProps> = ({
     currentSimulation,
     suggestedSimulation,
     showComparison = false,
+    ship,
+    suggestions,
+    getGearPiece,
 }) => {
     return (
         <>
-            <SimulationStatDisplay
-                label="Average Damage"
-                value={simulation.averageDamage || 0}
-                currentValue={currentSimulation?.averageDamage}
-                suggestedValue={suggestedSimulation?.averageDamage}
+            <AverageDamage
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
+                showComparison={showComparison}
+                ship={ship}
+                suggestions={suggestions}
+                getGearPiece={getGearPiece}
+            />
+            <HighestHit
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
-            <SimulationStatDisplay label="Highest Hit" value={simulation.highestHit || 0} />
-            <SimulationStatDisplay label="Lowest Hit" value={simulation.lowestHit || 0} />
-            {simulation.critRate !== undefined && (
-                <SimulationStatDisplay
-                    label="Crit Rate"
-                    value={simulation.critRate * 100}
-                    formatValue={(val) => `${val}%`}
-                />
-            )}
+            <LowestHit
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
+                showComparison={showComparison}
+            />
+            <CritRate
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
+                showComparison={showComparison}
+            />
         </>
     );
 };

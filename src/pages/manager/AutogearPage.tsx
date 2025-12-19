@@ -841,6 +841,13 @@ export const AutogearPage: React.FC = () => {
                                                             results.suggestedSimulation
                                                         }
                                                         role={shipConfig.shipRole}
+                                                        ship={ship}
+                                                        suggestions={results.suggestions}
+                                                        getGearPiece={
+                                                            shipConfig.useUpgradedStats
+                                                                ? getUpgradedGearPiece
+                                                                : getGearPiece
+                                                        }
                                                     />
                                                 </div>
                                             )}

@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { GearPiece } from '../../types/gear';
-import { SHIP_TYPES, ShipTypeName, GEAR_SLOTS, GearSlotName, STATS } from '../../constants';
+import {
+    SHIP_TYPES,
+    ShipTypeName,
+    GEAR_SLOTS,
+    GearSlotName,
+    STATS,
+    GEAR_SETS,
+} from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button, Input, ProgressBar, Select } from '../ui';
+import { Button, Input, ProgressBar, Select, CheckboxGroup } from '../ui';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { useNotification } from '../../hooks/useNotification';
 import { Tabs } from '../ui/layout/Tabs';
@@ -40,6 +47,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     const [selectedRole, setSelectedRole] = useState<ShipTypeName | 'all'>('all');
     const [selectedStats, setSelectedStats] = useState<StatName[]>([]);
     const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>('AND');
+    const [selectedGearSets, setSelectedGearSets] = useState<string[]>([]);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [results, setResults] = useState<
         Record<
@@ -133,7 +141,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             selectedRarity,
             simulationCount,
             selectedStats,
-            statFilterMode
+            statFilterMode,
+            selectedGearSets
         );
         completedSteps++;
         setOptimizationProgress({
@@ -154,7 +163,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                 selectedRarity,
                 simulationCount,
                 selectedStats,
-                statFilterMode
+                statFilterMode,
+                selectedGearSets
             );
             completedSteps++;
             setOptimizationProgress({
@@ -262,12 +272,27 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         }));
     };
 
+    // Get unique gear sets from inventory
+    const uniqueGearSets = React.useMemo(() => {
+        const sets = new Set(
+            inventory
+                .map((piece) =>
+                    piece.setBonus && GEAR_SETS[piece.setBonus] ? piece.setBonus : null
+                )
+                .filter((set): set is string => set !== null)
+        );
+        return Array.from(sets).sort(
+            (a, b) => GEAR_SETS[a]?.name.localeCompare(GEAR_SETS[b]?.name || '') || 0
+        );
+    }, [inventory]);
+
     // Calculate if there are active filters
     const hasActiveFilters =
         selectedRole !== 'all' ||
         selectedRarity !== 'rare' ||
         maxLevel !== 16 ||
-        selectedStats.length > 0;
+        selectedStats.length > 0 ||
+        selectedGearSets.length > 0;
 
     const handleClearFilters = () => {
         setSelectedRole('all');
@@ -275,6 +300,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         setMaxLevel(16);
         setSelectedStats([]);
         setStatFilterMode('AND');
+        setSelectedGearSets([]);
     };
 
     return (
@@ -371,6 +397,29 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                         <div className="flex flex-col items-start mr-3">
                                             <span className="text-xxs">Stat</span>
                                             <span className="text-xs">{STATS[stat].label}</span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            ))}
+                            {selectedGearSets.map((setName) => (
+                                <Button
+                                    key={setName}
+                                    aria-label={`Remove ${GEAR_SETS[setName]?.name} filter`}
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() =>
+                                        setSelectedGearSets(
+                                            selectedGearSets.filter((s) => s !== setName)
+                                        )
+                                    }
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Set</span>
+                                            <span className="text-xs">
+                                                {GEAR_SETS[setName]?.name || setName}
+                                            </span>
                                         </div>
                                         <CloseIcon />
                                     </div>
@@ -484,6 +533,21 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                 helpLabel="Gear with level above this will be excluded"
                             />
                         </div>
+
+                        {/* Gear Set Filter */}
+                        {uniqueGearSets.length > 0 && (
+                            <div>
+                                <CheckboxGroup
+                                    label="Gear Sets"
+                                    values={selectedGearSets}
+                                    onChange={setSelectedGearSets}
+                                    options={uniqueGearSets.map((setName) => ({
+                                        value: setName,
+                                        label: GEAR_SETS[setName]?.name || setName,
+                                    }))}
+                                />
+                            </div>
+                        )}
 
                         {/* Stat Priorities */}
                         <div className="space-y-4">

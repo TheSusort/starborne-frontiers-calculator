@@ -1,6 +1,6 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { SimulationStatDisplay } from './SimulationStatDisplay';
+import { EffectiveHP } from './statLines';
 
 interface SupporterShieldStatsProps {
     simulation: SimulationSummary;
@@ -17,12 +17,10 @@ export const SupporterShieldStats: React.FC<SupporterShieldStatsProps> = ({
 }) => {
     return (
         <>
-            <SimulationStatDisplay
-                label="HP"
-                value={Math.round(simulation.hp || 0)}
-                formatValue={(val) => Number(val).toLocaleString()}
-                currentValue={currentSimulation?.hp}
-                suggestedValue={suggestedSimulation?.hp}
+            <EffectiveHP
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
         </>

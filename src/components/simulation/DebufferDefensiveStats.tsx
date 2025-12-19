@@ -1,36 +1,38 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import {
-    EffectiveHP,
-    DamageReduction,
-    Security,
-    RoundsSurvived,
-    ShieldGenerated,
-    HealedOnHit,
-} from './statLines';
+import { Ship } from '../../types/ship';
+import { GearSuggestion } from '../../types/autogear';
+import { GearPiece } from '../../types/gear';
+import { Hacking100PercentSuccess, EffectiveHP, Security, AverageDamage } from './statLines';
 
-interface DefenderStatsProps {
+interface DebufferDefensiveStatsProps {
     simulation: SimulationSummary;
     currentSimulation?: SimulationSummary;
     suggestedSimulation?: SimulationSummary;
     showComparison?: boolean;
+    ship?: Ship;
+    suggestions?: GearSuggestion[];
+    getGearPiece?: (id: string) => GearPiece | undefined;
 }
 
-export const DefenderStats: React.FC<DefenderStatsProps> = ({
+export const DebufferDefensiveStats: React.FC<DebufferDefensiveStatsProps> = ({
     simulation,
     currentSimulation,
     suggestedSimulation,
     showComparison = false,
+    ship,
+    suggestions,
+    getGearPiece,
 }) => {
     return (
         <>
-            <EffectiveHP
+            <Hacking100PercentSuccess
                 simulation={simulation}
                 currentSimulation={currentSimulation}
                 suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
-            <DamageReduction
+            <EffectiveHP
                 simulation={simulation}
                 currentSimulation={currentSimulation}
                 suggestedSimulation={suggestedSimulation}
@@ -42,23 +44,14 @@ export const DefenderStats: React.FC<DefenderStatsProps> = ({
                 suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
             />
-            <RoundsSurvived
+            <AverageDamage
                 simulation={simulation}
                 currentSimulation={currentSimulation}
                 suggestedSimulation={suggestedSimulation}
                 showComparison={showComparison}
-            />
-            <ShieldGenerated
-                simulation={simulation}
-                currentSimulation={currentSimulation}
-                suggestedSimulation={suggestedSimulation}
-                showComparison={showComparison}
-            />
-            <HealedOnHit
-                simulation={simulation}
-                currentSimulation={currentSimulation}
-                suggestedSimulation={suggestedSimulation}
-                showComparison={showComparison}
+                ship={ship}
+                suggestions={suggestions}
+                getGearPiece={getGearPiece}
             />
         </>
     );

@@ -53,7 +53,7 @@ const DEFAULT_DEFENSE = 15000;
 // Arcane Siege multiplier values by rarity
 const ARCANE_SIEGE_MULTIPLIERS: Record<RarityName, number> = {
     common: 3,
-    uncommon: 6,
+    uncommon: 5,
     rare: 10,
     epic: 15,
     legendary: 20,

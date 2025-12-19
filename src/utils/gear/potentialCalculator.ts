@@ -299,7 +299,8 @@ export function analyzePotentialUpgrades(
     minRarity: 'rare' | 'epic' | 'legendary' = 'rare',
     simulationCount: number = 20,
     selectedStats: StatName[] = [],
-    statFilterMode: 'AND' | 'OR' = 'AND'
+    statFilterMode: 'AND' | 'OR' = 'AND',
+    selectedGearSets: string[] = []
 ): PotentialResult[] {
     // Clear the gear stats cache to ensure we get fresh calculations for each simulation
     clearGearStatsCache();
@@ -314,7 +315,9 @@ export function analyzePotentialUpgrades(
             eligibleRarities.includes(piece.rarity) &&
             !piece.slot.includes('implant') &&
             (!slot || piece.slot === slot) &&
-            pieceHasSelectedStats(piece, selectedStats, statFilterMode)
+            pieceHasSelectedStats(piece, selectedStats, statFilterMode) &&
+            (selectedGearSets.length === 0 ||
+                (piece.setBonus && selectedGearSets.includes(piece.setBonus)))
     );
 
     const results: PotentialResult[] = eligiblePieces.map((piece) => {

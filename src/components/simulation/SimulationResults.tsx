@@ -4,16 +4,26 @@ import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { AttackerStats } from './AttackerStats';
 import { DefenderStats } from './DefenderStats';
 import { DebufferStats } from './DebufferStats';
+import { DebufferDefensiveStats } from './DebufferDefensiveStats';
+import { DebufferBomberStats } from './DebufferBomberStats';
+import { DebufferCorrosionStats } from './DebufferCorrosionStats';
 import { SupporterStats } from './SupporterStats';
 import { SupporterBufferStats } from './SupporterBufferStats';
 import { SupporterOffensiveStats } from './SupporterOffensiveStats';
 import { SupporterShieldStats } from './SupporterShieldStats';
+
+import { Ship } from '../../types/ship';
+import { GearSuggestion } from '../../types/autogear';
+import { GearPiece } from '../../types/gear';
 
 interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
     suggestedSimulation?: SimulationSummary;
     role: ShipTypeName | null;
     alwaysColumn?: boolean;
+    ship?: Ship;
+    suggestions?: GearSuggestion[];
+    getGearPiece?: (id: string) => GearPiece | undefined;
 }
 
 /**
@@ -40,7 +50,10 @@ const renderStats = (
     role: ShipTypeName | null,
     currentSimulation: SimulationSummary,
     suggestedSimulation?: SimulationSummary,
-    showComparison = false
+    showComparison = false,
+    ship?: Ship,
+    suggestions?: GearSuggestion[],
+    getGearPiece?: (id: string) => GearPiece | undefined
 ) => {
     const normalizedRole = normalizeRole(role);
     const commonProps = {
@@ -48,6 +61,9 @@ const renderStats = (
         currentSimulation,
         suggestedSimulation,
         showComparison,
+        ship,
+        suggestions,
+        getGearPiece,
     };
 
     switch (normalizedRole) {
@@ -55,9 +71,13 @@ const renderStats = (
         case 'DEFENDER_SECURITY':
             return <DefenderStats {...commonProps} />;
         case 'DEBUFFER':
-        case 'DEBUFFER_DEFENSIVE':
-        case 'DEBUFFER_BOMBER':
             return <DebufferStats {...commonProps} />;
+        case 'DEBUFFER_DEFENSIVE':
+            return <DebufferDefensiveStats {...commonProps} />;
+        case 'DEBUFFER_BOMBER':
+            return <DebufferBomberStats {...commonProps} />;
+        case 'DEBUFFER_CORROSION':
+            return <DebufferCorrosionStats {...commonProps} />;
         case 'SUPPORTER':
             return <SupporterStats {...commonProps} />;
         case 'SUPPORTER_BUFFER':
@@ -76,6 +96,9 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
     suggestedSimulation,
     role,
     alwaysColumn = false,
+    ship,
+    suggestions,
+    getGearPiece,
 }) => {
     return (
         <div
@@ -92,7 +115,10 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                             role,
                             currentSimulation,
                             suggestedSimulation,
-                            false
+                            false,
+                            ship,
+                            suggestions,
+                            getGearPiece
                         )}
                     </div>
                 </div>
@@ -107,7 +133,10 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                                 role,
                                 currentSimulation,
                                 suggestedSimulation,
-                                true
+                                true,
+                                ship,
+                                suggestions,
+                                getGearPiece
                             )}
                         </div>
                     </div>
