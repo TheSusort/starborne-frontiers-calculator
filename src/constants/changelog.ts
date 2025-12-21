@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.31.0';
+export const CURRENT_VERSION = '1.32.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.32.0',
+        date: '2025-12-21',
+        changes: ['Added Speed calculator page'],
+    },
     {
         version: '1.31.0',
         date: '2025-12-19',

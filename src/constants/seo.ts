@@ -111,4 +111,11 @@ export const SEO_CONFIG = {
         keywords:
             'ship recruitment, gacha calculator, beacon calculator, ship probability, recruitment calculator, starborne frontiers',
     },
+    speed: {
+        title: 'Speed Calculator',
+        description:
+            'Calculate ship speed with buffs and debuffs, or find the base speed needed to achieve target speeds in Starborne Frontiers.',
+        keywords:
+            'speed calculator, ship speed, speed buffs, speed debuffs, speed modifiers, starborne frontiers',
+    },
 } as const;

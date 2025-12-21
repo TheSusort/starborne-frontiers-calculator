@@ -45,6 +45,7 @@ const JsonDiffCalculatorPage = lazy(() => import('./pages/calculators/JsonDiffCa
 const RecruitmentCalculatorPage = lazy(
     () => import('./pages/calculators/RecruitmentCalculatorPage')
 );
+const SpeedCalculatorPage = lazy(() => import('./pages/calculators/SpeedCalculatorPage'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 
 // init hotjar
@@ -182,6 +183,12 @@ const App: React.FC = () => {
                                                                     path="/recruitment"
                                                                     element={
                                                                         <RecruitmentCalculatorPage />
+                                                                    }
+                                                                />
+                                                                <Route
+                                                                    path="/speed"
+                                                                    element={
+                                                                        <SpeedCalculatorPage />
                                                                     }
                                                                 />
                                                                 <Route
