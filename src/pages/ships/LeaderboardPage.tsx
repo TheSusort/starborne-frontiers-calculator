@@ -380,7 +380,7 @@ export const LeaderboardPage: React.FC = () => {
                                     key={entry.ship.id}
                                     className={`flex items-center justify-between p-4 border-2 gap-4 relative ${
                                         entry.isCurrentUser
-                                            ? 'border-primary bg-primary/10'
+                                            ? 'border-primary bg-dark sticky bottom-0'
                                             : 'border-dark-border bg-dark'
                                     }`}
                                 >

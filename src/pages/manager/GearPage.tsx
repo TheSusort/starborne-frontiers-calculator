@@ -67,7 +67,6 @@ export const GearPage: React.FC = () => {
             }
             setEditingPiece(undefined);
             setIsFormVisible(false);
-            window.scrollTo({ top: 0, behavior: 'smooth' });
             addNotification('success', 'Gear piece saved successfully');
         } catch (error) {
             addNotification('error', 'Failed to save gear piece');
