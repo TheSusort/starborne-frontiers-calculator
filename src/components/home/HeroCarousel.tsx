@@ -50,6 +50,15 @@ const slides: Slide[] = [
         backgroundImage: '/images/Deep_crevasse_01.png',
         gradientClass: 'bg-gradient-to-br from-cyan-900 via-teal-900 to-emerald-900',
     },
+    {
+        id: 5,
+        title: 'Download Starborne Frontiers',
+        subtitle: 'Get the official game launcher and start your journey through the stars',
+        ctaText: 'Download Game',
+        ctaLink: 'https://starbornecdn.azureedge.net/frontiers-env/FrontiersLauncher.exe',
+        backgroundImage: '/images/hero1.png',
+        gradientClass: 'bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900',
+    },
 ];
 
 export const HeroCarousel: React.FC = () => {
@@ -145,6 +154,20 @@ export const HeroCarousel: React.FC = () => {
                                     >
                                         {slide.ctaText}
                                     </Button>
+                                ) : slide.ctaLink.startsWith('http') ? (
+                                    <a
+                                        href={slide.ctaLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <Button
+                                            variant="primary"
+                                            size="lg"
+                                            className="transition-all duration-300 transform hover:scale-105 shadow-lg animate-fadeIn animation-delay-400"
+                                        >
+                                            {slide.ctaText}
+                                        </Button>
+                                    </a>
                                 ) : (
                                     <Link to={slide.ctaLink}>
                                         <Button
