@@ -73,6 +73,7 @@ const renderStats = (
         case 'DEBUFFER':
             return <DebufferStats {...commonProps} />;
         case 'DEBUFFER_DEFENSIVE':
+        case 'DEBUFFER_DEFENSIVE_SECURITY':
             return <DebufferDefensiveStats {...commonProps} />;
         case 'DEBUFFER_BOMBER':
             return <DebufferBomberStats {...commonProps} />;

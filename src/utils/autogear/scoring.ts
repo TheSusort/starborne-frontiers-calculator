@@ -263,6 +263,9 @@ export function calculatePriorityScore(
             case 'DEBUFFER_DEFENSIVE':
                 baseScore = calculateDefensiveDebufferScore(stats, statBonuses);
                 break;
+            case 'DEBUFFER_DEFENSIVE_SECURITY':
+                baseScore = calculateDefensiveSecurityDebufferScore(stats, statBonuses);
+                break;
             case 'DEBUFFER_BOMBER':
                 baseScore = calculateBomberDebufferScore(stats, statBonuses, arcaneSiegeMultiplier);
                 break;
@@ -394,6 +397,16 @@ function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBon
     return hacking * effectiveHP + bonusScore;
 }
 
+function calculateDefensiveSecurityDebufferScore(
+    stats: BaseStats,
+    statBonuses?: StatBonus[]
+): number {
+    const hacking = stats.hacking || 0;
+    const security = stats.security || 0;
+    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    const bonusScore = applystatBonuses(stats, statBonuses);
+    return hacking * security + effectiveHP + bonusScore;
+}
 function calculateBomberDebufferScore(
     stats: BaseStats,
     statBonuses?: StatBonus[],
