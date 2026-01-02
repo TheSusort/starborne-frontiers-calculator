@@ -56,9 +56,12 @@ export function runSimulation(
                 activeSets: activeSets,
             };
         case 'DEBUFFER':
-        case 'DEBUFFER_DEFENSIVE':
         case 'DEBUFFER_BOMBER':
             return runDebufferSimulation(stats);
+        case 'DEBUFFER_DEFENSIVE':
+            return runDefensiveDebufferSimulation(stats);
+        case 'DEBUFFER_DEFENSIVE_SECURITY':
+            return runDefensiveSecurityDebufferSimulation(stats);
         case 'SUPPORTER':
             return runHealingSimulation(stats);
         case 'SUPPORTER_BUFFER':
@@ -157,6 +160,44 @@ function runDebufferSimulation(stats: BaseStats): SimulationSummary {
         hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
         hacking: hacking,
         attack: attack,
+        averageDamage: damageSimulation.averageDamage,
+        highestHit: damageSimulation.highestHit,
+        lowestHit: damageSimulation.lowestHit,
+        critRate: damageSimulation.critRate,
+    };
+}
+
+function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
+    const hacking = stats.hacking || 0;
+    const damageReduction = calculateDamageReduction(stats.defence || 0);
+    const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+
+    // Also run damage simulation as secondary output
+    const damageSimulation = runDamageSimulation(stats);
+
+    return {
+        hacking: hacking,
+        effectiveHP: Math.round(effectiveHP),
+        averageDamage: damageSimulation.averageDamage,
+        highestHit: damageSimulation.highestHit,
+        lowestHit: damageSimulation.lowestHit,
+        critRate: damageSimulation.critRate,
+    };
+}
+
+function runDefensiveSecurityDebufferSimulation(stats: BaseStats): SimulationSummary {
+    const hacking = stats.hacking || 0;
+    const security = stats.security || 0;
+    const damageReduction = calculateDamageReduction(stats.defence || 0);
+    const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+
+    // Also run damage simulation as secondary output
+    const damageSimulation = runDamageSimulation(stats);
+
+    return {
+        hacking: hacking,
+        security: security,
+        effectiveHP: Math.round(effectiveHP),
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,
