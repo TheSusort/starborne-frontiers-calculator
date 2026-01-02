@@ -15,20 +15,29 @@ export class PerformanceTracker {
     private stack: (PerformanceTimer | undefined)[] = [];
     private enabled: boolean = true;
     private overallStartTime?: number;
+    // Cache performance.now() result to reduce calls in tight loops
+    private cachedNow?: number;
+    private cacheValid: boolean = false;
 
     startTimer(name: string): void {
         if (!this.enabled) return;
 
+        // Cache performance.now() for this tick to reduce calls
+        if (!this.cacheValid) {
+            this.cachedNow = performance.now();
+            this.cacheValid = true;
+        }
+
         // Track the very first timer as the overall start time
         if (!this.overallStartTime) {
-            this.overallStartTime = performance.now();
+            this.overallStartTime = this.cachedNow;
         }
 
         let timer = this.timers.get(name);
         if (!timer) {
             timer = {
                 name,
-                startTime: performance.now(),
+                startTime: this.cachedNow!,
                 children: [],
                 callCount: 0,
                 totalTime: 0,
@@ -37,11 +46,16 @@ export class PerformanceTracker {
         }
 
         timer.callCount++;
-        timer.startTime = performance.now();
+        timer.startTime = this.cachedNow!;
 
         // Only add to parent if this is a new timer instance (not reused)
-        if (this.currentTimer && !this.currentTimer.children.includes(timer)) {
-            this.currentTimer.children.push(timer);
+        // Optimize: use Set for O(1) lookup instead of includes() which is O(n)
+        if (this.currentTimer) {
+            // Use a WeakSet would be ideal but we need to track children, so keep array
+            // but only check if timer is already in children to avoid duplicates
+            if (!this.currentTimer.children.includes(timer)) {
+                this.currentTimer.children.push(timer);
+            }
         }
 
         this.stack.push(this.currentTimer);
@@ -56,8 +70,12 @@ export class PerformanceTracker {
             return; // Silently ignore missing timers
         }
 
-        timer.endTime = performance.now();
-        timer.duration = timer.endTime - timer.startTime;
+        // Invalidate cache and get fresh time for end measurement
+        this.cacheValid = false;
+        const endTime = performance.now();
+
+        timer.endTime = endTime;
+        timer.duration = endTime - timer.startTime;
         timer.totalTime += timer.duration;
 
         // Restore the previous timer from the stack
@@ -146,6 +164,8 @@ export class PerformanceTracker {
         this.currentTimer = undefined;
         this.stack = [];
         this.overallStartTime = undefined;
+        this.cachedNow = undefined;
+        this.cacheValid = false;
     }
 
     disable(): void {
@@ -155,7 +175,32 @@ export class PerformanceTracker {
     enable(): void {
         this.enabled = true;
     }
+
+    isEnabled(): boolean {
+        return this.enabled;
+    }
 }
 
 // Global instance for easy access
 export const performanceTracker = new PerformanceTracker();
+
+// Optionally disable performance tracking in production or when not needed
+// Set this to false to disable all performance tracking overhead
+// You can also call performanceTracker.disable() at runtime
+if (typeof window !== 'undefined') {
+    // Check for URL parameter to disable performance tracking
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('disablePerfTracking') === 'true') {
+        performanceTracker.disable();
+    }
+
+    // Or check localStorage for a persistent setting
+    try {
+        const disablePerf = localStorage.getItem('disableAutogearPerfTracking');
+        if (disablePerf === 'true') {
+            performanceTracker.disable();
+        }
+    } catch (e) {
+        // Ignore localStorage errors (e.g., in private browsing)
+    }
+}

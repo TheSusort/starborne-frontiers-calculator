@@ -34,20 +34,23 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private readonly MUTATION_RATE = 0.15; // 15% chance to mutate each gear piece
 
     private getPopulationSize(inventorySize: number, hasImplants: boolean): number {
-        // Smaller but smarter population - quality over quantity
-        const multiplier = hasImplants ? 1.8 : 1.5;
-        return Math.min(800, Math.max(300, Math.floor(inventorySize * multiplier)));
+        // Increased population size for better accuracy (3x increase from previous values)
+        // With the performance improvements, we can afford larger populations
+        const multiplier = hasImplants ? 5.4 : 4.5; // 3x the previous 1.8 and 1.5
+        return Math.min(2400, Math.max(900, Math.floor(inventorySize * multiplier)));
     }
 
     private getGenerations(populationSize: number, hasImplants: boolean): number {
-        // More generations with smaller population for better convergence
-        const baseOperations = hasImplants ? 45000 : 35000;
-        return Math.min(80, Math.max(30, Math.floor(baseOperations / populationSize)));
+        // Increased base operations for more thorough exploration (3x increase)
+        // This allows the algorithm to explore more combinations and converge better
+        const baseOperations = hasImplants ? 135000 : 105000; // 3x the previous 45k and 35k
+        return Math.min(120, Math.max(40, Math.floor(baseOperations / populationSize)));
     }
 
     private getEliteSize(populationSize: number): number {
-        // Balance elitism with exploration (3% instead of 5%)
-        return Math.max(8, Math.min(25, Math.floor(populationSize * 0.03)));
+        // Maintain 3% elite size, but allow for larger elite groups with bigger populations
+        // This ensures we keep the best solutions while exploring more
+        return Math.max(12, Math.min(75, Math.floor(populationSize * 0.03)));
     }
 
     /**
@@ -89,6 +92,16 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         // Clear cache at the start of each run
         clearScoreCache();
 
+        // Create a cached version of getGearPiece to avoid repeated lookups
+        // This cache is scoped to this optimization run
+        const gearCache = new Map<string, GearPiece | undefined>();
+        const cachedGetGearPiece = (id: string): GearPiece | undefined => {
+            if (!gearCache.has(id)) {
+                gearCache.set(id, getGearPiece(id));
+            }
+            return gearCache.get(id);
+        };
+
         const hasImplants = availableInventory.some((gear) => gear.slot.startsWith('implant_'));
 
         // Initialize progress tracking (population size * generations)
@@ -102,7 +115,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
             availableInventory,
-            getGearPiece,
+            cachedGetGearPiece,
             setPriorities,
             populationSize
         );
@@ -113,7 +126,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             population,
             ship,
             priorities,
-            getGearPiece,
+            cachedGetGearPiece,
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
@@ -138,7 +151,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
-                this.mutate(child, availableInventory, getGearPiece, setPriorities);
+                this.mutate(child, availableInventory, cachedGetGearPiece, setPriorities);
                 newPopulation.push(child);
                 this.incrementProgress();
             }
@@ -149,7 +162,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 newPopulation,
                 ship,
                 priorities,
-                getGearPiece,
+                cachedGetGearPiece,
                 getEngineeringStatsForShipType,
                 shipRole,
                 setPriorities,

@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.33.0';
+export const CURRENT_VERSION = '1.33.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.33.1',
+        date: '2026-01-02',
+        changes: ['MASSIVE AUTOGEAR PERFORMANCE OPTIMIZATION, insert wine glass emoji here'],
+    },
     {
         version: '1.33.0',
         date: '2025-12-24',
