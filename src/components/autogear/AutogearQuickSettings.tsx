@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
-import { CloseIcon, GearIcon } from '../ui/icons';
+import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
 import { AutogearConfigList } from './AutogearConfigList';
 import { LLMSuggestions } from './LLMSuggestions';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
@@ -40,6 +41,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onFindOptimalGear,
     getShipConfig,
 }) => {
+    const navigate = useNavigate();
     const [autoOpenIndex, setAutoOpenIndex] = useState<number | null>(null);
 
     const handleAddShip = () => {
@@ -79,6 +81,25 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                 >
                                     {ship && <AutogearConfigList {...getShipConfig(ship.id)} />}
                                     <div className="flex gap-2 items-center">
+                                        {ship && (
+                                            <Button
+                                                variant="secondary"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    navigate(`/ships/${ship.id}`, {
+                                                        state: {
+                                                            from: '/autogear',
+                                                            shipId: ship.id,
+                                                        },
+                                                    });
+                                                }}
+                                                size="sm"
+                                                className="flex gap-2 items-center"
+                                                title="View ship details"
+                                            >
+                                                <InfoIcon />
+                                            </Button>
+                                        )}
                                         <Button
                                             variant="secondary"
                                             onClick={(event) => onOpenSettings(event, index)}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import { ShipCard } from '../../components/ship/ShipCard';
 import { StatDisplay } from '../../components/stats/StatDisplay';
@@ -27,6 +27,7 @@ export const ShipDetailsPage: React.FC = () => {
     const [editingShip, setEditingShip] = useState<Ship | undefined>(undefined);
     const { shipId } = useParams<{ shipId: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const { inventory: availableGear, getGearPiece } = useInventory();
     const {
         ships,
@@ -44,13 +45,31 @@ export const ShipDetailsPage: React.FC = () => {
     const gearLookup = useGearLookup(ship?.equipment || {}, getGearPiece);
     const orphanSetPieces = useOrphanSetPieces(ship || ({} as Ship), gearLookup);
 
+    // Determine back navigation based on where we came from
+    const getBackNavigation = () => {
+        const state = location.state as { from?: string; shipId?: string } | null;
+        if (state?.from === '/autogear' && state?.shipId) {
+            return {
+                label: 'Back to Autogear',
+                onClick: () => navigate(`/autogear?shipId=${state.shipId}`),
+            };
+        }
+        return {
+            label: 'Back to Ships',
+            onClick: () => navigate('/ships'),
+        };
+    };
+
+    const backAction = getBackNavigation();
+
     if (!ship) {
+        const notFoundBackAction = getBackNavigation();
         return (
             <PageLayout
                 title="Ship Not Found"
                 action={{
-                    label: 'Back to Ships',
-                    onClick: () => navigate('/ships'),
+                    label: notFoundBackAction.label,
+                    onClick: notFoundBackAction.onClick,
                     variant: 'secondary',
                 }}
             >
@@ -99,8 +118,8 @@ export const ShipDetailsPage: React.FC = () => {
             <PageLayout
                 title={`${ship.name} Details`}
                 action={{
-                    label: 'Back to Ships',
-                    onClick: () => navigate('/ships'),
+                    label: backAction.label,
+                    onClick: backAction.onClick,
                     variant: 'secondary',
                 }}
             >
