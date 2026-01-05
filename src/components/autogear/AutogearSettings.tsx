@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { ShipSelector } from '../ship/ShipSelector';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import { StatBonusForm } from './StatBonusForm';
 import {
@@ -13,7 +12,7 @@ import {
     CollapsibleForm,
     ChevronDownIcon,
 } from '../ui';
-import { AutogearAlgorithm, AUTOGEAR_STRATEGIES } from '../../utils/autogear/AutogearStrategy';
+import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { SHIP_TYPES, ShipTypeName, STATS } from '../../constants';
@@ -104,7 +103,6 @@ const SetPriorityForm: React.FC<{
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedShip,
     selectedShipRole,
-    selectedAlgorithm,
     priorities,
     ignoreEquipped,
     ignoreUnleveled,
@@ -115,7 +113,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     tryToCompleteSets,
     optimizeImplants,
     onRoleSelect,
-    onAlgorithmSelect,
     onAddPriority,
     onRemovePriority,
     onIgnoreEquippedChange,
@@ -160,23 +157,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     noDefaultSelection
                     defaultOption="Manual"
                 />
-            </div>
-
-            <div className="space-y-2 card">
-                <Select
-                    label="Algorithm"
-                    data-testid="algorithm-select"
-                    options={Object.entries(AUTOGEAR_STRATEGIES).map(([key, { name }]) => ({
-                        value: key,
-                        label: name,
-                    }))}
-                    value={selectedAlgorithm}
-                    onChange={(value) => onAlgorithmSelect(value as AutogearAlgorithm)}
-                    helpLabel="Select the algorithm to use for finding the optimal gear. The default genetic algorithm is recommended."
-                />
-                <p className="text-sm text-gray-400">
-                    {AUTOGEAR_STRATEGIES[selectedAlgorithm].description}
-                </p>
             </div>
 
             {selectedShipRole && (

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
 import { AutogearSuggestion } from '../types/autogearSuggestion';
 import { AIRecommendation, AIRecommendationService } from '../services/aiRecommendations';
-import { getGeminiService } from '../services/gemini';
+import { getMimoService } from '../services/mimo';
 import { COMBAT_SYSTEM_CONTEXT } from '../constants/combatSystemContext';
 import { IMPLANTS } from '../constants/implants';
 import { useShipsData } from './useShipsData';
@@ -142,9 +142,9 @@ export const useLLMRecommendations = ({
         async function internalFetchAI() {
             if (!selectedShip) return;
 
-            const geminiService = getGeminiService();
-            if (!geminiService) {
-                setError('Google API key not configured');
+            const mimoService = getMimoService();
+            if (!mimoService) {
+                setError('Mimo API key not configured');
                 return;
             }
 
@@ -165,7 +165,7 @@ export const useLLMRecommendations = ({
                 };
 
                 // Get LLM suggestion
-                const suggestionResult = await geminiService.getAutogearSuggestion(
+                const suggestionResult = await mimoService.getAutogearSuggestion(
                     selectedShip.name,
                     combinedShipData,
                     COMBAT_SYSTEM_CONTEXT
@@ -194,9 +194,9 @@ export const useLLMRecommendations = ({
         setSource(null);
         setUserVote(null);
 
-        const geminiService = getGeminiService();
-        if (!geminiService) {
-            setError('Google API key not configured');
+        const mimoService = getMimoService();
+        if (!mimoService) {
+            setError('Mimo API key not configured');
             setLoading(false);
             return;
         }
@@ -218,7 +218,7 @@ export const useLLMRecommendations = ({
             };
 
             // Get LLM suggestion
-            const suggestionResult = await geminiService.getAutogearSuggestion(
+            const suggestionResult = await mimoService.getAutogearSuggestion(
                 selectedShip.name,
                 combinedShipData,
                 COMBAT_SYSTEM_CONTEXT

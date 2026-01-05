@@ -60,14 +60,6 @@ const CALIBRATION_BONUSES: Partial<
         flat: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
         percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
     },
-    hpRegen: {
-        flat: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    healModifier: {
-        flat: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
 };
 
 /**

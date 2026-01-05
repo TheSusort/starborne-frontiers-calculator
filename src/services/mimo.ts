@@ -1,7 +1,14 @@
-import { GoogleGenAI } from '@google/genai';
 import { IMPLANTS } from '../constants/implants';
 import { AutogearSuggestion } from '../types/autogearSuggestion';
 import { findBuffsInText, getBuffDescription } from '../utils/buffUtils';
+
+interface MimoResponse {
+    choices: Array<{
+        message: {
+            content: string;
+        };
+    }>;
+}
 
 interface ImplantInfo {
     name: string;
@@ -22,11 +29,13 @@ interface ShipData {
     getGearPiece?: (id: string) => unknown;
 }
 
-export class GeminiService {
-    private genAI: GoogleGenAI;
+export class MimoService {
+    private apiKey: string;
+    private baseUrl: string;
 
-    constructor(apiKey: string) {
-        this.genAI = new GoogleGenAI({ apiKey });
+    constructor(apiKey: string, baseURL?: string) {
+        this.apiKey = apiKey;
+        this.baseUrl = baseURL || 'https://api.xiaomimimo.com/v1';
     }
 
     async getAutogearSuggestion(
@@ -37,19 +46,57 @@ export class GeminiService {
         try {
             const prompt = this.buildPrompt(shipName, shipData, combatSystemContext);
 
-            // Use gemini-2.0-flash-exp model
-            const result = await this.genAI.models.generateContent({
-                model: 'xiaomi/mimo-v2-flash:free',
-                contents: [prompt],
-                config: {
-                    temperature: 0.3,
-                    responseMimeType: 'application/json' as const,
+            const response = await fetch(`${this.baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'api-key': this.apiKey,
+                    'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({
+                    model: 'mimo-v2-flash',
+                    messages: [
+                        {
+                            role: 'system',
+                            content:
+                                'You are a helpful assistant that assists users with autogear configurations for Starborne Frontiers.',
+                        },
+                        {
+                            role: 'user',
+                            content: prompt,
+                        },
+                    ],
+                    temperature: 0.3,
+                    response_format: { type: 'json_object' },
+                }),
             });
 
-            return this.parseResponse(result.text || '');
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('MIMO API error:', response.status, response.statusText, errorText);
+
+                // 403 from localhost is often a CORS restriction - try in production
+                if (response.status === 403 && window.location.hostname === 'localhost') {
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                        '403 error from localhost - MIMO API may block localhost requests. ' +
+                            'This should work in production. Error details:',
+                        errorText
+                    );
+                }
+
+                throw new Error(`MIMO API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data: MimoResponse = await response.json();
+            const content = data.choices[0]?.message?.content;
+
+            if (!content) {
+                throw new Error('No content received from MIMO API');
+            }
+
+            return this.parseResponse(content);
         } catch (error) {
-            console.error('Gemini service error:', error);
+            console.error('MIMO service error:', error);
             return null;
         }
     }
@@ -217,19 +264,22 @@ Example correct outputs:
 
             return parsed as AutogearSuggestion;
         } catch (error) {
-            console.error('Failed to parse Gemini response:', error);
+            console.error('Failed to parse MIMO response:', error);
             return null;
         }
     }
 }
 
 // Environment variable check for API key
-export const getGeminiService = (): GeminiService | null => {
-    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+export const getMimoService = (): MimoService | null => {
+    const apiKey = import.meta.env.VITE_MIMO_API_KEY;
     if (!apiKey) {
         // eslint-disable-next-line no-console
-        console.warn('Google API key not found in environment variables');
+        console.warn('MIMO API key not found in environment variables');
         return null;
     }
-    return new GeminiService(apiKey);
+
+    // Optional: allow custom base URL via environment variable
+    const baseURL = import.meta.env.VITE_MIMO_BASE_URL;
+    return new MimoService(apiKey, baseURL);
 };
