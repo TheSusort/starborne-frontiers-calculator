@@ -32,10 +32,25 @@ interface ShipData {
 export class MimoService {
     private apiKey: string;
     private baseUrl: string;
+    private useProxy: boolean;
 
-    constructor(apiKey: string, baseURL?: string) {
+    constructor(apiKey: string, baseURL?: string, useProxy = true) {
         this.apiKey = apiKey;
-        this.baseUrl = baseURL || 'https://api.xiaomimimo.com/v1';
+        this.useProxy = useProxy;
+        if (useProxy) {
+            // Supabase Edge Function URL format: https://<project-ref>.supabase.co/functions/v1/mimo-proxy
+            const proxyUrl = import.meta.env.VITE_MIMO_PROXY_URL;
+            if (!proxyUrl) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    'VITE_MIMO_PROXY_URL not set. Proxy mode enabled but no proxy URL configured. ' +
+                        'Set VITE_MIMO_PROXY_URL to your Supabase Edge Function URL.'
+                );
+            }
+            this.baseUrl = proxyUrl || '';
+        } else {
+            this.baseUrl = baseURL || 'https://api.xiaomimimo.com/v1';
+        }
     }
 
     async getAutogearSuggestion(
@@ -46,12 +61,43 @@ export class MimoService {
         try {
             const prompt = this.buildPrompt(shipName, shipData, combatSystemContext);
 
-            const response = await fetch(`${this.baseUrl}/chat/completions`, {
+            // CORS preflight will fail if:
+            // 1. Server doesn't respond to OPTIONS requests with proper CORS headers
+            // 2. Server doesn't allow 'api-key' in Access-Control-Allow-Headers
+            // 3. Server doesn't allow the origin in Access-Control-Allow-Origin
+            // 4. API is designed for server-side only (no browser support)
+            // If using proxy, send Supabase anon key for authentication
+            // If direct, send MIMO api-key
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+
+            if (this.useProxy) {
+                // Supabase Edge Functions require Authorization header with anon key
+                const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+                if (supabaseAnonKey) {
+                    headers['Authorization'] = `Bearer ${supabaseAnonKey}`;
+                } else {
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                        'VITE_SUPABASE_ANON_KEY not found. Supabase Edge Function may require authentication.'
+                    );
+                }
+            } else {
+                headers['api-key'] = this.apiKey;
+            }
+
+            // When using proxy, baseUrl should be the Supabase Edge Function URL
+            // When not using proxy, baseUrl is the MIMO API URL
+            const endpoint = this.useProxy
+                ? this.baseUrl // Proxy URL already includes the full path
+                : `${this.baseUrl}/chat/completions`;
+
+            const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'api-key': this.apiKey,
-                    'Content-Type': 'application/json',
-                },
+                mode: 'cors',
+                credentials: 'omit',
+                headers,
                 body: JSON.stringify({
                     model: 'mimo-v2-flash',
                     messages: [
@@ -65,26 +111,67 @@ export class MimoService {
                             content: prompt,
                         },
                     ],
+                    max_completion_tokens: 1024,
                     temperature: 0.3,
+                    top_p: 0.95,
+                    stream: false,
                     response_format: { type: 'json_object' },
+                    thinking: {
+                        type: 'disabled',
+                    },
                 }),
+            }).catch((fetchError) => {
+                // Network/CORS errors are caught here
+                console.error('MIMO fetch failed - CORS preflight likely blocked:', {
+                    error: fetchError,
+                    message: fetchError.message,
+                    url: `${this.baseUrl}/chat/completions`,
+                    possibleReasons: [
+                        "1. Server doesn't respond to OPTIONS preflight requests",
+                        '2. Server doesn\'t allow "api-key" header in Access-Control-Allow-Headers',
+                        "3. Server doesn't allow your origin in Access-Control-Allow-Origin",
+                        '4. API may be designed for server-side only (no browser support)',
+                        '5. Check Network tab for OPTIONS request - it should show 403/404',
+                    ],
+                });
+                throw new Error(
+                    `MIMO API CORS preflight failed. The API likely doesn't support browser requests. ` +
+                        `Check Network tab for OPTIONS request details. Error: ${fetchError.message}`
+                );
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('MIMO API error:', response.status, response.statusText, errorText);
-
-                // 403 from localhost is often a CORS restriction - try in production
-                if (response.status === 403 && window.location.hostname === 'localhost') {
-                    // eslint-disable-next-line no-console
-                    console.warn(
-                        '403 error from localhost - MIMO API may block localhost requests. ' +
-                            'This should work in production. Error details:',
-                        errorText
-                    );
+                let errorText = '';
+                let errorJson: unknown = null;
+                try {
+                    errorText = await response.text();
+                    // Try to parse as JSON for better error details
+                    try {
+                        errorJson = JSON.parse(errorText);
+                    } catch {
+                        // Not JSON, keep as text
+                    }
+                } catch (e) {
+                    errorText = 'Could not read error response';
                 }
 
-                throw new Error(`MIMO API error: ${response.status} ${response.statusText}`);
+                // Log full error details for debugging
+                console.error('MIMO API error details:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url: `${this.baseUrl}/chat/completions`,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    errorText,
+                    errorJson,
+                });
+
+                // Provide helpful error message
+                const errorMessage =
+                    errorJson && typeof errorJson === 'object' && 'error' in errorJson
+                        ? JSON.stringify(errorJson)
+                        : errorText || `${response.status} ${response.statusText}`;
+
+                throw new Error(`MIMO API error (${response.status}): ${errorMessage}`);
             }
 
             const data: MimoResponse = await response.json();
@@ -97,6 +184,10 @@ export class MimoService {
             return this.parseResponse(content);
         } catch (error) {
             console.error('MIMO service error:', error);
+            // Re-throw network/CORS errors so they're visible
+            if (error instanceof Error && error.message.includes('Failed to connect')) {
+                throw error;
+            }
             return null;
         }
     }
@@ -281,5 +372,7 @@ export const getMimoService = (): MimoService | null => {
 
     // Optional: allow custom base URL via environment variable
     const baseURL = import.meta.env.VITE_MIMO_BASE_URL;
-    return new MimoService(apiKey, baseURL);
+    // Use proxy by default (set VITE_MIMO_USE_PROXY=false to disable)
+    const useProxy = import.meta.env.VITE_MIMO_USE_PROXY !== 'false';
+    return new MimoService(apiKey, baseURL, useProxy);
 };
