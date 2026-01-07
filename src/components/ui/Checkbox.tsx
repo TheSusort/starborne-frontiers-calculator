@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CheckIcon } from './icons/CheckIcon';
 import { Tooltip } from './layout/Tooltip';
 import { InfoIcon } from './icons/InfoIcon';
@@ -24,11 +24,13 @@ export const Checkbox: React.FC<CheckboxProps> = ({
 }) => {
     const id = providedId || `checkbox-${label.toLowerCase().replace(/\s+/g, '-')}`;
     const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+    const infoIconRef = useRef<HTMLDivElement>(null);
 
     const tooltip = (
         <Tooltip
             isVisible={showHelpTooltip}
             className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+            targetElement={infoIconRef.current}
         >
             <p>{helpLabel}</p>
         </Tooltip>
@@ -76,11 +78,13 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                     {label.length > 0 && <>{label}</>}
                     {helpLabel && (
                         <>
-                            <InfoIcon
-                                className="text-sm text-gray-400 h-8 w-8 p-2"
+                            <div
+                                ref={infoIconRef}
                                 onMouseEnter={() => setShowHelpTooltip(true)}
                                 onMouseLeave={() => setShowHelpTooltip(false)}
-                            />
+                            >
+                                <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                            </div>
                             {tooltip}
                         </>
                     )}

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef } from 'react';
 import { GearPiece } from '../../types/gear';
 import {
     GEAR_SETS,
@@ -25,10 +25,12 @@ interface GearSlotProps {
 export const GearSlot: React.FC<GearSlotProps> = memo(
     ({ slotKey, gear, hoveredGear, onSelect, onRemove, onHover }) => {
         const isImplant = gear?.slot.startsWith('implant_');
+        const tooltipRef = useRef<HTMLDivElement>(null);
         if (gear) {
             return (
                 <div className="relative">
                     <div
+                        ref={tooltipRef}
                         className={`${isImplant ? 'w-12 h-12' : 'w-16 h-16'} bg-dark-lighter border ${RARITIES[gear.rarity].borderColor} relative group/gear ${onSelect ? 'cursor-pointer' : ''} flex items-end justify-center`}
                         onClick={() => onSelect && onSelect(slotKey)}
                         onMouseEnter={() => onHover(gear)}
@@ -84,7 +86,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                         )}
                     </div>
 
-                    <Tooltip isVisible={hoveredGear === gear}>
+                    <Tooltip isVisible={hoveredGear === gear} targetElement={tooltipRef.current}>
                         <GearPieceDisplay gear={gear} className="w-48" small />
                     </Tooltip>
                 </div>

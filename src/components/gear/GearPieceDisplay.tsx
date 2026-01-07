@@ -1,4 +1,4 @@
-import { memo, useMemo, useCallback, useState } from 'react';
+import React, { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
@@ -53,6 +53,7 @@ export const GearPieceDisplay = memo(
         }, [gear.id, gearToShipMap, getShipFromGearId]);
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
+        const setTooltipRef = React.useRef<HTMLImageElement>(null);
         const upgrade = getUpgrade(gear.id);
         const isMaxLevel = gear.level >= 16;
 
@@ -125,6 +126,7 @@ export const GearPieceDisplay = memo(
                             {!isImplant && slotInfo && (
                                 <div className="relative">
                                     <img
+                                        ref={setTooltipRef}
                                         src={slotInfo}
                                         alt={GEAR_SETS[gear.setBonus || '']?.name}
                                         className={`h-auto ${small ? 'w-4' : 'w-6'} cursor-help`}
@@ -135,6 +137,7 @@ export const GearPieceDisplay = memo(
                                         <Tooltip
                                             isVisible={showSetTooltip}
                                             className="bg-dark p-2 border border-dark-border min-w-[200px] text-gray-300"
+                                            targetElement={setTooltipRef.current}
                                         >
                                             <div className="space-y-2">
                                                 <div className="font-semibold">

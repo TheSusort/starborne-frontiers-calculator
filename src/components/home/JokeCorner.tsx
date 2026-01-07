@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Tooltip } from '../ui/layout/Tooltip';
 import { getRandomJoke } from '../../constants/jokes';
 
 export const JokeCorner: React.FC = () => {
     const [isVisible, setIsVisible] = useState(false);
     const [currentJoke, setCurrentJoke] = useState(getRandomJoke());
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const handleMouseEnter = () => {
         setCurrentJoke(getRandomJoke());
@@ -15,6 +16,7 @@ export const JokeCorner: React.FC = () => {
         <div className="fixed bottom-4 right-4 z-50">
             <div className="relative">
                 <button
+                    ref={buttonRef}
                     className="w-8 h-8 rounded-full bg-primary hover:bg-primary-hover flex items-center justify-center text-white transition-colors duration-200"
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={() => setIsVisible(false)}
@@ -29,7 +31,11 @@ export const JokeCorner: React.FC = () => {
                         />
                     </svg>
                 </button>
-                <Tooltip isVisible={isVisible} className="w-72 card shadow-lg">
+                <Tooltip
+                    isVisible={isVisible}
+                    className="w-72 card shadow-lg"
+                    targetElement={buttonRef.current}
+                >
                     <p>{currentJoke}</p>
                 </Tooltip>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
 import {
     SHIP_TYPES,
@@ -15,8 +15,10 @@ import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { useNotification } from '../../hooks/useNotification';
 import { Tabs } from '../ui/layout/Tabs';
 import { CloseIcon, GearIcon } from '../ui/icons';
-import { StatName } from '../../types/stats';
+import { StatName, EngineeringStat } from '../../types/stats';
 import { Offcanvas } from '../ui/layout/Offcanvas';
+import { useShips } from '../../contexts/ShipsContext';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 
 interface Props {
     inventory: GearPiece[];
@@ -36,6 +38,8 @@ const RARITY_OPTIONS = [
 export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode, onEdit }) => {
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
+    const { ships } = useShips();
+    const { engineeringStats } = useEngineeringStats();
     const [isLoading, setIsLoading] = useState(false);
     const [optimizationProgress, setOptimizationProgress] = useState<{
         current: number;
@@ -48,6 +52,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     const [selectedStats, setSelectedStats] = useState<StatName[]>([]);
     const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>('AND');
     const [selectedGearSets, setSelectedGearSets] = useState<string[]>([]);
+    const [selectedShipId, setSelectedShipId] = useState<string | 'none'>('none');
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [results, setResults] = useState<
         Record<
@@ -61,6 +66,30 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             GearSlotName | 'all'
         >
     );
+
+    // Create gear lookup function from inventory
+    const getGearPiece = useMemo(
+        () =>
+            (id: string): GearPiece | undefined => {
+                return inventory.find((piece) => piece.id === id);
+            },
+        [inventory]
+    );
+
+    // Create engineering stats lookup function
+    const getEngineeringStatsForShipType = useMemo(
+        () =>
+            (shipType: ShipTypeName): EngineeringStat | undefined => {
+                return engineeringStats.stats.find((stat) => stat.shipType === shipType);
+            },
+        [engineeringStats]
+    );
+
+    // Get selected ship
+    const selectedShip = useMemo(() => {
+        if (selectedShipId === 'none') return undefined;
+        return ships.find((ship) => ship.id === selectedShipId);
+    }, [selectedShipId, ships]);
 
     // Sync updated gear pieces from inventory into results
     useEffect(() => {
@@ -116,13 +145,14 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         completedSteps: number
     ): Promise<number> => {
         // Determine simulation count based on filters
-        let simulationCount = 20; // Default for rare+
+        // Reduced simulation counts for better performance while maintaining reasonable accuracy
+        let simulationCount = 5; // Default for rare+ (reduced from 20)
         if (selectedRarity === 'legendary') {
-            simulationCount = 80; // High accuracy for legendary pieces
+            simulationCount = 20; // High accuracy for legendary pieces (reduced from 80)
         } else if (selectedRarity === 'epic') {
-            simulationCount = 40; // Medium accuracy for epic pieces
+            simulationCount = 10; // Medium accuracy for epic pieces (reduced from 40)
         } else if (maxLevel !== 16) {
-            simulationCount = 40; // Increased accuracy when level filter is applied
+            simulationCount = 5; // Increased accuracy when level filter is applied (reduced from 40)
         }
 
         // Filter inventory by maxLevel
@@ -131,27 +161,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         // Get slot entries - GEAR_SLOTS already excludes implants
         const slotEntries = Object.entries(GEAR_SLOTS);
 
-        // Process 'all' first
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        const roleResults = analyzePotentialUpgrades(
-            filteredInventory,
-            role,
-            6,
-            undefined,
-            selectedRarity,
-            simulationCount,
-            selectedStats,
-            statFilterMode,
-            selectedGearSets
-        );
-        completedSteps++;
-        setOptimizationProgress({
-            current: completedSteps,
-            total: totalSteps,
-            percentage: Math.round((completedSteps / totalSteps) * 100),
-        });
-
-        // Process each slot individually with yields
+        // Process each slot individually FIRST - this populates the baseline cache
+        // When we process 'all' last, it can use the cached baselines for much faster execution
         const slotResults: Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>> = {};
         for (const [slotName, _] of slotEntries) {
             await new Promise((resolve) => setTimeout(resolve, 0));
@@ -164,7 +175,10 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                 simulationCount,
                 selectedStats,
                 statFilterMode,
-                selectedGearSets
+                selectedGearSets,
+                selectedShip,
+                getGearPiece,
+                getEngineeringStatsForShipType
             );
             completedSteps++;
             setOptimizationProgress({
@@ -173,6 +187,29 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                 percentage: Math.round((completedSteps / totalSteps) * 100),
             });
         }
+
+        // Process 'all' LAST - now all slot baselines are cached, so this should be fast
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const roleResults = analyzePotentialUpgrades(
+            filteredInventory,
+            role,
+            6,
+            undefined,
+            selectedRarity,
+            simulationCount,
+            selectedStats,
+            statFilterMode,
+            selectedGearSets,
+            selectedShip,
+            getGearPiece,
+            getEngineeringStatsForShipType
+        );
+        completedSteps++;
+        setOptimizationProgress({
+            current: completedSteps,
+            total: totalSteps,
+            percentage: Math.round((completedSteps / totalSteps) * 100),
+        });
 
         newResults[role] = {
             all: roleResults,
@@ -233,6 +270,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     const handleAnalyze = async () => {
         setIsLoading(true);
 
+        // Clear baseline cache at the start of a new analysis session
+        // This ensures we start fresh, but the cache persists across calls within the session
+        const { baselineStatsCache } = await import('../../utils/gear/potentialCalculator');
+        baselineStatsCache.clear();
+
         // Filter roles based on selection
         const rolesToProcess =
             selectedRole === 'all' ? shipRoles : shipRoles.filter((role) => role === selectedRole);
@@ -288,6 +330,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
     // Calculate if there are active filters
     const hasActiveFilters =
+        selectedShipId !== 'none' ||
         selectedRole !== 'all' ||
         selectedRarity !== 'rare' ||
         maxLevel !== 16 ||
@@ -295,6 +338,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         selectedGearSets.length > 0;
 
     const handleClearFilters = () => {
+        setSelectedShipId('none');
         setSelectedRole('all');
         setSelectedRarity('rare');
         setMaxLevel(16);
@@ -327,6 +371,22 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     </div>
                     {hasActiveFilters && (
                         <div className="flex flex-wrap gap-2">
+                            {selectedShipId !== 'none' && selectedShip && (
+                                <Button
+                                    aria-label={`Remove ${selectedShip.name} filter`}
+                                    className="relative flex items-center"
+                                    variant="secondary"
+                                    onClick={() => setSelectedShipId('none')}
+                                >
+                                    <div className="flex items-center">
+                                        <div className="flex flex-col items-start mr-3">
+                                            <span className="text-xxs">Ship</span>
+                                            <span className="text-xs">{selectedShip.name}</span>
+                                        </div>
+                                        <CloseIcon />
+                                    </div>
+                                </Button>
+                            )}
                             {selectedRole !== 'all' && (
                                 <Button
                                     aria-label={`Remove ${SHIP_TYPES[selectedRole].name} filter`}
@@ -432,6 +492,13 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                         ship role. The analysis simulates upgrading each piece to level 16 multiple
                         times and averages the results (20 runs for rare+, 40 runs for epic+, 80
                         runs for legendary). Use the rarity and level filters to narrow your search.
+                        {selectedShip && (
+                            <span className="block mt-2 text-cyan-400">
+                                Analyzing with {selectedShip.name}&apos;s actual stats, gear,
+                                implants, and engineering. When analyzing a slot, any currently
+                                equipped gear in that slot will be removed for comparison.
+                            </span>
+                        )}
                         The improvement percentages show the average improvement to the role score.
                         Results are sorted by total improvement to the role score.
                     </div>
@@ -478,6 +545,25 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     title="Upgrade Config"
                 >
                     <div className="space-y-6 pb-6">
+                        {/* Ship Selector */}
+                        <div>
+                            <Select
+                                label="Ship (Optional)"
+                                value={selectedShipId}
+                                onChange={(value) => setSelectedShipId(value as string | 'none')}
+                                options={[
+                                    { value: 'none', label: 'None (Use dummy values)' },
+                                    ...ships
+                                        .sort((a, b) => a.name.localeCompare(b.name))
+                                        .map((ship) => ({
+                                            value: ship.id,
+                                            label: `${ship.name} (${SHIP_TYPES[ship.type].name})`,
+                                        })),
+                                ]}
+                                helpLabel="Select a ship to analyze upgrades using its actual stats, gear, implants, and engineering. Leave as 'None' to use generic dummy values."
+                            />
+                        </div>
+
                         {/* Role Filter */}
                         <div>
                             <Select

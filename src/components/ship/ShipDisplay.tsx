@@ -1,6 +1,12 @@
 import React, { memo, useState } from 'react';
 import { AffinityName, Ship } from '../../types/ship';
-import { SHIP_TYPES, FACTIONS, RARITIES, IMPLANT_SLOT_ORDER } from '../../constants';
+import {
+    SHIP_TYPES,
+    FACTIONS,
+    RARITIES,
+    IMPLANT_SLOT_ORDER,
+    ImplantSlotName,
+} from '../../constants';
 import {
     Button,
     CloseIcon,
@@ -120,7 +126,8 @@ export const ShipDisplay: React.FC<Props> = memo(
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const navigate = useNavigate();
-        const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+        const [hoveredImplantSlot, setHoveredImplantSlot] = useState<ImplantSlotName | null>(null);
+        const implantTooltipRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
         const statsBreakdown = calculateTotalStats(
             ship.baseStats,
             ship.equipment,
@@ -289,11 +296,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                             Object.keys(ship.implants).length > 0 &&
                             variant === 'full' && (
                                 <div className="relative">
-                                    <div
-                                        className="flex items-center gap-2 text-gray-300 border-b py-1 border-dark-lighter"
-                                        onMouseEnter={() => setIsTooltipVisible(true)}
-                                        onMouseLeave={() => setIsTooltipVisible(false)}
-                                    >
+                                    <div className="flex items-center gap-2 text-gray-300 border-b py-1 border-dark-lighter">
                                         <span>Implants:</span>
                                         <div className="flex items-center gap-1 ms-auto">
                                             {IMPLANT_SLOT_ORDER.map((slot) => {
@@ -308,7 +311,16 @@ export const ShipDisplay: React.FC<Props> = memo(
                                                 return (
                                                     <div
                                                         key={slot}
-                                                        className={`border ${RARITIES[rarity].borderColor}`}
+                                                        ref={(el) => {
+                                                            implantTooltipRefs.current[slot] = el;
+                                                        }}
+                                                        className={`border ${RARITIES[rarity].borderColor} cursor-help`}
+                                                        onMouseEnter={() =>
+                                                            setHoveredImplantSlot(slot)
+                                                        }
+                                                        onMouseLeave={() =>
+                                                            setHoveredImplantSlot(null)
+                                                        }
                                                     >
                                                         <Image
                                                             src={implant.imageKey}
@@ -320,26 +332,25 @@ export const ShipDisplay: React.FC<Props> = memo(
                                             })}
                                         </div>
                                     </div>
-                                    <Tooltip
-                                        isVisible={isTooltipVisible}
-                                        className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-[256px]"
-                                    >
-                                        {IMPLANT_SLOT_ORDER.map((slot) => (
-                                            <React.Fragment key={slot}>
-                                                {ship.implants?.[slot] && (
-                                                    <GearPieceDisplay
-                                                        gear={
-                                                            getGearPiece(
-                                                                ship.implants[slot] as string
-                                                            ) as GearPiece
-                                                        }
-                                                        mode="subcompact"
-                                                        small
-                                                    />
-                                                )}
-                                            </React.Fragment>
-                                        ))}
-                                    </Tooltip>
+                                    {hoveredImplantSlot && ship.implants?.[hoveredImplantSlot] && (
+                                        <Tooltip
+                                            isVisible={true}
+                                            className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-[256px]"
+                                            targetElement={
+                                                implantTooltipRefs.current[hoveredImplantSlot]
+                                            }
+                                        >
+                                            <GearPieceDisplay
+                                                gear={
+                                                    getGearPiece(
+                                                        ship.implants[hoveredImplantSlot] as string
+                                                    ) as GearPiece
+                                                }
+                                                mode="subcompact"
+                                                small
+                                            />
+                                        </Tooltip>
+                                    )}
                                 </div>
                             )}
                         <div className="flex items-center justify-between">

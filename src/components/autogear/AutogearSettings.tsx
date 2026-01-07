@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import { StatBonusForm } from './StatBonusForm';
 import {
@@ -129,6 +129,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
+    const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
 
     return (
         <div className="space-y-4">
@@ -175,15 +176,18 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             {showSecondaryRequirements ? 'Hide' : 'Show'} Secondary Priorities
                         </span>
 
-                        <InfoIcon
-                            className="text-sm text-gray-400 h-8 w-8 p-2"
+                        <div
+                            ref={secondaryRequirementsTooltipRef}
                             onMouseEnter={() => setShowSecondaryRequirementsTooltip(true)}
                             onMouseLeave={() => setShowSecondaryRequirementsTooltip(false)}
-                        />
+                        >
+                            <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                        </div>
                     </Button>
                     <Tooltip
                         isVisible={showSecondaryRequirementsTooltip}
                         className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+                        targetElement={secondaryRequirementsTooltipRef.current}
                     >
                         <p>
                             Add additional minimum/maximum stat requirements, or wanted set pieces

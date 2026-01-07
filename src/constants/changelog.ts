@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.33.1';
+export const CURRENT_VERSION = '1.34.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.34.0',
+        date: '2026-01-07',
+        changes: [
+            'Added ship specific gear upgrade suggestions. PROTIP: Select a role to accompany a ship, as it takes quite a bit longer to compute with a ship.',
+            'Added shortcut to ship details from autogear for quick swapping of implants.',
+            'Fixed an issue with tooltips in offcanvases and modals.',
+        ],
+    },
     {
         version: '1.33.1',
         date: '2026-01-02',

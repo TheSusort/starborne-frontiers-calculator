@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef, useState, useRef } from 'react';
 import { Tooltip } from './layout/Tooltip';
 import { InfoIcon } from './icons/InfoIcon';
 
@@ -14,11 +14,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, Props>(
         const id =
             props.id || props.name || `textarea-${Math.random().toString(36).substring(2, 15)}`;
         const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+        const infoIconRef = useRef<HTMLDivElement>(null);
 
         const tooltip = (
             <Tooltip
                 isVisible={showHelpTooltip}
                 className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+                targetElement={infoIconRef.current}
             >
                 <p>{helpLabel}</p>
             </Tooltip>
@@ -34,11 +36,13 @@ export const Textarea = forwardRef<HTMLTextAreaElement, Props>(
                         {label}
                         {helpLabel && (
                             <>
-                                <InfoIcon
-                                    className="text-sm text-gray-400 h-8 w-8 p-2"
+                                <div
+                                    ref={infoIconRef}
                                     onMouseEnter={() => setShowHelpTooltip(true)}
                                     onMouseLeave={() => setShowHelpTooltip(false)}
-                                />
+                                >
+                                    <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                                </div>
                                 {tooltip}
                             </>
                         )}

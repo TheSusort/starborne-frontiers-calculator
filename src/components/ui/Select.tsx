@@ -36,11 +36,13 @@ export const Select: React.FC<Props> = ({
     const containerRef = useRef<HTMLDivElement>(null);
     const selectId = id || `select-${Math.random().toString(36).substring(2, 15)}`;
     const [showHelpTooltip, setShowHelpTooltip] = useState(false);
+    const infoIconRef = useRef<HTMLDivElement>(null);
 
     const tooltip = (
         <Tooltip
             isVisible={showHelpTooltip}
             className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
+            targetElement={infoIconRef.current}
         >
             <p>{helpLabel}</p>
         </Tooltip>
@@ -108,11 +110,13 @@ export const Select: React.FC<Props> = ({
                     {label}
                     {helpLabel && (
                         <>
-                            <InfoIcon
-                                className="text-sm text-gray-400 h-8 w-8 p-2"
+                            <div
+                                ref={infoIconRef}
                                 onMouseEnter={() => setShowHelpTooltip(true)}
                                 onMouseLeave={() => setShowHelpTooltip(false)}
-                            />
+                            >
+                                <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                            </div>
                             {tooltip}
                         </>
                     )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import {
@@ -63,6 +63,7 @@ export const ShipCard: React.FC<Props> = ({
     const gearLookup = useGearLookup(ship.equipment, getGearPiece);
     const activeSets = useGearSets(ship.equipment, gearLookup);
     const [showGearSets, setShowGearSets] = useState(false);
+    const gearSetsTooltipRef = useRef<HTMLDivElement>(null);
     const handleUnequipAll = () => {
         onUnequipAll(ship.id);
         addNotification('success', `Unequipped all gear on ${ship.name}`);
@@ -179,6 +180,7 @@ export const ShipCard: React.FC<Props> = ({
                         {activeSets.length > 0 && (
                             <div className="relative">
                                 <div
+                                    ref={gearSetsTooltipRef}
                                     className="flex items-center gap-2"
                                     onMouseEnter={() => setShowGearSets(true)}
                                     onMouseLeave={() => setShowGearSets(false)}
@@ -196,6 +198,7 @@ export const ShipCard: React.FC<Props> = ({
                                 <Tooltip
                                     isVisible={showGearSets}
                                     className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
+                                    targetElement={gearSetsTooltipRef.current}
                                 >
                                     {activeSets.map((setName, index) => (
                                         <div key={`${setName}-${index}`}>

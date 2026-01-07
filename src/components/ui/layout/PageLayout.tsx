@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button, InfoIcon, Tooltip } from '../';
 import { Link } from 'react-router-dom';
 
@@ -23,6 +23,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
 }) => {
     const [pathname, hash] = helpLink?.split('#') || [''];
     const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+    const tooltipRef = useRef<HTMLDivElement>(null);
 
     return (
         <div className="space-y-8">
@@ -44,6 +45,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                 )}
                 {helpLink && (
                     <div
+                        ref={tooltipRef}
                         onMouseEnter={() => setIsTooltipVisible(true)}
                         onMouseLeave={() => setIsTooltipVisible(false)}
                         className="relative w-fit"
@@ -62,6 +64,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                         <Tooltip
                             isVisible={isTooltipVisible}
                             className="bg-dark border border-dark-lighter p-2 w-48"
+                            targetElement={tooltipRef.current}
                         >
                             <p className="text-sm text-gray-300">
                                 Click to view the relevant help section

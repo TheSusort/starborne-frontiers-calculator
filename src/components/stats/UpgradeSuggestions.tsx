@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { UpgradeSuggestion } from '../../types/analysis';
 import { Tooltip } from '../ui/layout/Tooltip';
@@ -11,6 +11,7 @@ interface Props {
 export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
     const [tooltips, setTooltips] = useState<Record<string, boolean>>({});
     const [tooltipContent, setTooltipContent] = useState<Record<string, string>>({});
+    const tooltipRefs = useRef<Record<string, HTMLSpanElement | null>>({});
 
     const handleMouseEnter = (id: string, reason: string) => {
         setTooltipContent((prev) => ({ ...prev, [id]: reason }));
@@ -77,6 +78,9 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                 return (
                                     <li key={index}>
                                         <span
+                                            ref={(el) => {
+                                                tooltipRefs.current[tooltipId] = el;
+                                            }}
                                             className="text-xs inline-flex items-center"
                                             onMouseEnter={() =>
                                                 handleMouseEnter(tooltipId, reason.reason)
@@ -85,7 +89,10 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                         >
                                             {reason.title} <InfoIcon />
                                         </span>
-                                        <Tooltip isVisible={tooltips[tooltipId] || false}>
+                                        <Tooltip
+                                            isVisible={tooltips[tooltipId] || false}
+                                            targetElement={tooltipRefs.current[tooltipId]}
+                                        >
                                             <span className="text-gray-400 bg-dark-lighter p-2 border border-gray-300 block">
                                                 {tooltipContent[tooltipId]}
                                             </span>

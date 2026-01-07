@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { Offcanvas } from './Offcanvas';
@@ -59,6 +59,7 @@ const NavigationItem: React.FC<{
     }) => {
         const [isExpanded, setIsExpanded] = useState(initialExpanded);
         const [showTooltip, setShowTooltip] = useState(false);
+        const tooltipRef = useRef<HTMLDivElement>(null);
         const hasChildren = item.children && item.children.length > 0;
         const isItemActive = isActive(item.path);
         const hasActiveChild = hasChildren
@@ -90,6 +91,7 @@ const NavigationItem: React.FC<{
             // Regular link
             return (
                 <div
+                    ref={tooltipRef}
                     className="mb-2 relative"
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={handleMouseLeave}
@@ -128,6 +130,7 @@ const NavigationItem: React.FC<{
                     <Tooltip
                         isVisible={showTooltip}
                         className="bg-dark border border-dark-border p-2"
+                        targetElement={tooltipRef.current}
                     >
                         Login to access this feature
                     </Tooltip>
@@ -138,6 +141,7 @@ const NavigationItem: React.FC<{
         // Expandable menu item
         return (
             <div
+                ref={tooltipRef}
                 className="mb-2 relative"
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
@@ -183,7 +187,11 @@ const NavigationItem: React.FC<{
                         />
                     ))}
                 </CollapsibleSection>
-                <Tooltip isVisible={showTooltip} className="bg-dark border border-dark-border p-2">
+                <Tooltip
+                    isVisible={showTooltip}
+                    className="bg-dark border border-dark-border p-2"
+                    targetElement={tooltipRef.current}
+                >
                     Login to access this feature
                 </Tooltip>
             </div>
