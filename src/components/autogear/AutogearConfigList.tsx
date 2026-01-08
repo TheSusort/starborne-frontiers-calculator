@@ -62,7 +62,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                 {/* Stat Priorities */}
                 {statPriorities.length > 0 && (
                     <>
-                        {statPriorities.slice(0, 3).map((priority, index) => (
+                        {statPriorities.map((priority, index) => (
                             <span key={index}>
                                 {priority.weight && priority.weight !== 1 && (
                                     <span>({priority.weight}x)</span>
@@ -74,33 +74,28 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                                 {STATS[priority.stat]?.label || priority.stat}
                             </span>
                         ))}
-                        {statPriorities.length > 3 && (
-                            <span>+{statPriorities.length - 3} more</span>
-                        )}
                     </>
                 )}
 
                 {/* Set Priorities */}
                 {setPriorities.length > 0 && (
                     <>
-                        {setPriorities.slice(0, 2).map((setPriority, index) => (
+                        {setPriorities.map((setPriority, index) => (
                             <span key={index}>
                                 {setPriority.count} x {GEAR_SETS[setPriority.setName]?.name}
                             </span>
                         ))}
-                        {setPriorities.length > 2 && <span>+{setPriorities.length - 2} more</span>}
                     </>
                 )}
 
                 {/* Stat Bonuses */}
                 {statBonuses.length > 0 && (
                     <>
-                        {statBonuses.slice(0, 2).map((bonus, index) => (
+                        {statBonuses.map((bonus, index) => (
                             <span key={index}>
                                 {STATS[bonus.stat as StatName]?.label} +{bonus.percentage}%
                             </span>
                         ))}
-                        {statBonuses.length > 2 && <span>+{statBonuses.length - 2} more</span>}
                     </>
                 )}
             </div>

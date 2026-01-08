@@ -73,7 +73,7 @@ const AffinityClass = ({ affinity }: { affinity: AffinityName }) => {
 const Header = memo(
     ({ ship, variant = 'full' }: { ship: Ship; variant?: 'full' | 'compact' | 'extended' }) => (
         <div>
-            <div className="flex items-center gap-1 min-h-[28px]">
+            <div className="flex items-center gap-1 min-h-[28px] min-w-[100px]">
                 {ship.type && SHIP_TYPES[ship.type] && (
                     <ShipImage
                         iconUrl={SHIP_TYPES[ship.type].iconUrl}
