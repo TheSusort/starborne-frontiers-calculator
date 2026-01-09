@@ -123,6 +123,7 @@ export const BackupRestoreData: React.FC = () => {
     const { user, signOut } = useAuth();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showDeleteLocalStorageConfirm, setShowDeleteLocalStorageConfirm] = useState(false);
 
     const handleBackup = () => {
         try {
@@ -367,6 +368,20 @@ export const BackupRestoreData: React.FC = () => {
         fileInputRef.current?.click();
     };
 
+    const handleDeleteLocalStorage = () => {
+        try {
+            // Clear all backup keys from local storage
+            BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
+
+            addNotification('success', 'Local storage cleared successfully');
+            addNotification('info', 'Please refresh the page to see the changes');
+            setShowDeleteLocalStorageConfirm(false);
+        } catch (error) {
+            console.error('Error clearing local storage:', error);
+            addNotification('error', 'Failed to clear local storage');
+        }
+    };
+
     const handleDeleteAccount = async () => {
         if (!user?.id) return;
 
@@ -409,14 +424,29 @@ export const BackupRestoreData: React.FC = () => {
                     </Button>
                 </div>
             </div>
-            {user && (
-                <div className="border-t pt-4 mt-4">
-                    <h3 className="text-lg font-medium mb-2">Danger Zone</h3>
-                    <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
-                        Delete Account
+            <div className="border-t pt-4 mt-4">
+                <h3 className="text-lg font-medium mb-2">Danger Zone</h3>
+                <div className="flex flex-col gap-2">
+                    <Button variant="danger" onClick={() => setShowDeleteLocalStorageConfirm(true)}>
+                        Delete Local Storage
                     </Button>
+                    {user && (
+                        <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+                            Delete Account
+                        </Button>
+                    )}
                 </div>
-            )}
+            </div>
+
+            <ConfirmModal
+                isOpen={showDeleteLocalStorageConfirm}
+                onClose={() => setShowDeleteLocalStorageConfirm(false)}
+                onConfirm={handleDeleteLocalStorage}
+                title="Delete Local Storage"
+                message="Are you sure you want to delete all local storage data? This will clear all your ships, gear, loadouts, and other local data. This action cannot be undone. If you're logged in, your cloud data will remain safe."
+                confirmLabel="Delete Local Storage"
+                cancelLabel="Cancel"
+            />
 
             <ConfirmModal
                 isOpen={showDeleteConfirm}
