@@ -419,6 +419,8 @@ const getSetBonus = (set: GearSetName): GearSetName | null => {
             return 'EXPLOIT';
         case 'Defense_Ignore':
             return 'PIERCER';
+        case 'Inc_Crit_Down':
+            return 'HARDENED';
         default:
             return null;
     }

@@ -181,6 +181,12 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         stats: [{ name: 'defensePenetration', value: 7, type: 'percentage' }],
         iconUrl: 'https://cdn.discordapp.com/emojis/1379810146212909097.webp',
     },
+    HARDENED: {
+        name: 'Hardened',
+        stats: [],
+        description: 'Reduces critical damage taken by 5%',
+        iconUrl: 'https://cdn.discordapp.com/emojis/1379810150465929286.webp',
+    },
 } satisfies Record<string, GearSetBonus>;
 
 export type GearSetName = keyof typeof GEAR_SETS | ImplantName;
