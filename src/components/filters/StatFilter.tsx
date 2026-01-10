@@ -7,12 +7,14 @@ import { StatName, StatType } from '../../types/stats';
 interface StatFilterProps {
     statFilters: StatFilterType[];
     onStatFiltersChange: (filters: StatFilterType[]) => void;
+    label?: string;
     className?: string;
 }
 
 export const StatFilter: React.FC<StatFilterProps> = ({
     statFilters,
     onStatFiltersChange,
+    label = 'Stat Filters',
     className = '',
 }) => {
     // Create stat options that separate flat and percentage types for applicable stats
@@ -87,7 +89,7 @@ export const StatFilter: React.FC<StatFilterProps> = ({
     return (
         <div className={`space-y-4 ${className}`}>
             <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-200">Stat Filters</label>
+                <label className="block text-sm font-medium text-gray-200">{label}</label>
 
                 {/* Available stat buttons */}
                 <div className="flex flex-wrap gap-2">

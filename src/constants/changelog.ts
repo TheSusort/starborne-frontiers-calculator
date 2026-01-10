@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.34.0';
+export const CURRENT_VERSION = '1.35.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.35.0',
+        date: '2026-01-10',
+        changes: [
+            'Added critcal damage reduction to autogear',
+            'Added hardened gear set',
+            'Added gear main/sub stat filters to gear inventory',
+        ],
+    },
     {
         version: '1.34.0',
         date: '2026-01-07',

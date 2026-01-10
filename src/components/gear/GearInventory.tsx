@@ -57,7 +57,8 @@ export const GearInventory: React.FC<Props> = ({
         (state.filters.equipped ?? '') !== '' ||
         (state.filters.levelRange &&
             (state.filters.levelRange.min > 0 || state.filters.levelRange.max > 0)) ||
-        (state.filters.statFilters && state.filters.statFilters.length > 0) ||
+        (state.filters.mainStatFilters && state.filters.mainStatFilters.length > 0) ||
+        (state.filters.subStatFilters && state.filters.subStatFilters.length > 0) ||
         searchQuery.length > 0;
 
     const filteredInventory = useMemo(() => {
@@ -85,18 +86,24 @@ export const GearInventory: React.FC<Props> = ({
                 (piece.level >= (state.filters.levelRange.min || 0) &&
                     piece.level <= (state.filters.levelRange.max || 999));
 
-            // Stat filtering
-            const matchesStatFilters =
-                !state.filters.statFilters ||
-                state.filters.statFilters.length === 0 ||
-                state.filters.statFilters.every((statFilter) => {
-                    const allStats = [
-                        ...(piece.mainStat ? [piece.mainStat] : []),
-                        ...piece.subStats,
-                    ];
+            // Main stat filtering (OR logic - gear has ANY of the selected main stats)
+            const matchesMainStatFilters =
+                !state.filters.mainStatFilters ||
+                state.filters.mainStatFilters.length === 0 ||
+                state.filters.mainStatFilters.some((statFilter) => {
+                    if (!piece.mainStat) return false;
+                    return (
+                        piece.mainStat.name === statFilter.statName &&
+                        piece.mainStat.type === statFilter.statType
+                    );
+                });
 
-                    // Check if gear has the specified stat with the specified type
-                    return allStats.some(
+            // Sub stat filtering
+            const matchesSubStatFilters =
+                !state.filters.subStatFilters ||
+                state.filters.subStatFilters.length === 0 ||
+                state.filters.subStatFilters.every((statFilter) => {
+                    return piece.subStats.some(
                         (stat) =>
                             stat.name === statFilter.statName && stat.type === statFilter.statType
                     );
@@ -135,7 +142,8 @@ export const GearInventory: React.FC<Props> = ({
                 matchesRarity &&
                 matchesEquipped &&
                 matchesLevelRange &&
-                matchesStatFilters &&
+                matchesMainStatFilters &&
+                matchesSubStatFilters &&
                 matchesSearch
             );
         });
@@ -218,12 +226,22 @@ export const GearInventory: React.FC<Props> = ({
         }));
     };
 
-    const setStatFilters = (statFilters: StatFilter[]) => {
+    const setMainStatFilters = (mainStatFilters: StatFilter[]) => {
         setState((prev: FilterState) => ({
             ...prev,
             filters: {
                 ...prev.filters,
-                statFilters,
+                mainStatFilters,
+            },
+        }));
+    };
+
+    const setSubStatFilters = (subStatFilters: StatFilter[]) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: {
+                ...prev.filters,
+                subStatFilters,
             },
         }));
     };
@@ -317,10 +335,16 @@ export const GearInventory: React.FC<Props> = ({
 
     const statFilters = [
         {
-            id: 'stats',
-            label: 'Stat Filters',
-            statFilters: state.filters.statFilters || [],
-            onStatFiltersChange: setStatFilters,
+            id: 'mainStats',
+            label: 'Main Stat',
+            statFilters: state.filters.mainStatFilters || [],
+            onStatFiltersChange: setMainStatFilters,
+        },
+        {
+            id: 'subStats',
+            label: 'Sub Stats',
+            statFilters: state.filters.subStatFilters || [],
+            onStatFiltersChange: setSubStatFilters,
         },
     ];
 

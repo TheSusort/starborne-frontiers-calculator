@@ -25,6 +25,8 @@ export interface FilterState {
             max: number;
         };
         statFilters?: StatFilter[];
+        mainStatFilters?: StatFilter[];
+        subStatFilters?: StatFilter[];
     };
 }
 
@@ -41,6 +43,8 @@ const DEFAULT_STATE: FilterState = {
         affinities: [],
         levelRange: undefined,
         statFilters: [],
+        mainStatFilters: [],
+        subStatFilters: [],
     },
 };
 

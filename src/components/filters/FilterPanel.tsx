@@ -193,7 +193,7 @@ export const FilterPanel: React.FC<Props> = ({
                                     >
                                         <div className="flex items-center">
                                             <div className="flex flex-col items-start mr-3">
-                                                <span className="text-xxs">Stat</span>
+                                                <span className="text-xxs">{filter.label}</span>
                                                 <span className="text-xs">
                                                     {
                                                         STATS[statFilter.statName as StatName]
@@ -312,6 +312,7 @@ export const FilterPanel: React.FC<Props> = ({
                     {statFilters.map((filter) => (
                         <StatFilter
                             key={filter.id}
+                            label={filter.label}
                             statFilters={filter.statFilters}
                             onStatFiltersChange={filter.onStatFiltersChange}
                         />
