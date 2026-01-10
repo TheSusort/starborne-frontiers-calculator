@@ -63,6 +63,7 @@ export interface ShipData {
     shield?: number;
     shieldPenetration?: number;
     defensePenetration?: number;
+    damageReduction?: number;
     imageKey?: string;
     activeSkillText?: string;
     chargeSkillText?: string;

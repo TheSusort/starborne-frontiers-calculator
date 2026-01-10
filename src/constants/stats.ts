@@ -105,6 +105,13 @@ export const STATS: Record<
         engineeringAllowedTypes: [],
         maxValue: { percentage: 0, flat: 0 },
     },
+    damageReduction: {
+        label: 'Damage Reduction',
+        shortLabel: 'DR',
+        allowedTypes: ['percentage'],
+        engineeringAllowedTypes: [],
+        maxValue: { percentage: 0, flat: 0 },
+    },
 };
 
 export const SLOT_MAIN_STATS: Record<GearSlotName, StatName[]> = {

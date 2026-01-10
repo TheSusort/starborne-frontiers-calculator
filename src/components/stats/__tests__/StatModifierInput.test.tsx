@@ -35,6 +35,7 @@ describe('StatModifierInput', () => {
             hpRegen: { allowedTypes: ['percentage'] as StatType[] },
             defensePenetration: { allowedTypes: ['percentage'] as StatType[] },
             shieldPenetration: { allowedTypes: ['percentage'] as StatType[] },
+            damageReduction: { allowedTypes: ['percentage'] as StatType[] },
         },
     };
 

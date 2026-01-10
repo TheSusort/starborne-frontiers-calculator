@@ -30,9 +30,18 @@ export function calculateDamageReduction(defense: number): number {
     return a * Math.exp(-Math.pow((b - Math.log10(defense)) / c, 2));
 }
 
-export function calculateEffectiveHP(hp: number, defense: number): number {
-    const damageReduction = calculateDamageReduction(defense);
-    return hp * (100 / (100 - damageReduction));
+export function calculateEffectiveHP(
+    hp: number,
+    defense: number,
+    damageReductionPercent: number = 0
+): number {
+    const defenseReduction = calculateDamageReduction(defense);
+    // Apply defense-based reduction first, then flat damage reduction
+    // damageReductionPercent is a percentage (e.g., 5 for 5%, 35 for 35%)
+    const effectiveHpFromDefense = hp * (100 / (100 - defenseReduction));
+    // Apply additional damage reduction (capped at 99% to avoid division by zero)
+    const cappedDamageReduction = Math.min(damageReductionPercent, 99);
+    return effectiveHpFromDefense * (100 / (100 - cappedDamageReduction));
 }
 
 // Defense penetration lookup table with known values at 15k defense
@@ -346,8 +355,11 @@ function calculateAttackerScore(
 }
 
 function calculateDefenderScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
-    const damageReduction = calculateDamageReduction(stats.defence || 0);
-    const totalEffectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    const totalEffectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
     const bonusScore = applystatBonuses(stats, statBonuses);
 
     // Calculate incoming damage per round
@@ -392,7 +404,11 @@ function calculateDebufferScore(
 
 function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
     const hacking = stats.hacking || 0;
-    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    const effectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
     const bonusScore = applystatBonuses(stats, statBonuses);
     return hacking * effectiveHP + bonusScore;
 }
@@ -403,7 +419,11 @@ function calculateDefensiveSecurityDebufferScore(
 ): number {
     const hacking = stats.hacking || 0;
     const security = stats.security || 0;
-    const effectiveHP = calculateEffectiveHP(stats.hp || 0, stats.defence || 0);
+    const effectiveHP = calculateEffectiveHP(
+        stats.hp || 0,
+        stats.defence || 0,
+        stats.damageReduction || 0
+    );
     const bonusScore = applystatBonuses(stats, statBonuses);
     return hacking * security + effectiveHP + bonusScore;
 }

@@ -9,6 +9,7 @@ export const PERCENTAGE_ONLY_STATS = [
     'hpRegen',
     'defensePenetration',
     'shieldPenetration',
+    'damageReduction',
 ] as const;
 
 export type PercentageOnlyStats = (typeof PERCENTAGE_ONLY_STATS)[number];
@@ -56,6 +57,7 @@ export interface BaseStats {
     shield?: number; // Percentage of shield generated per round
     shieldPenetration?: number; // Percentage of shield ignored per hit
     defensePenetration?: number; // Percentage of defense ignored per hit
+    damageReduction?: number; // Percentage of incoming damage reduced
 }
 
 export interface EngineeringStats {

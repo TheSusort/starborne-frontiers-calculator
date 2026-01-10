@@ -183,7 +183,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
     HARDENED: {
         name: 'Hardened',
-        stats: [],
+        stats: [{ name: 'damageReduction', value: 5, type: 'percentage' }],
         description: 'Reduces critical damage taken by 5%',
         iconUrl: 'https://cdn.discordapp.com/emojis/1379810150465929286.webp',
     },

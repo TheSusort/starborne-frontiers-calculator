@@ -42,6 +42,7 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
         'shield',
         'shieldPenetration',
         'defensePenetration',
+        'damageReduction',
     ];
 
     const refitDiff = calculateDiff(breakdown.afterRefits, breakdown.base);

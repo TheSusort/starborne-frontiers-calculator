@@ -924,6 +924,7 @@ export const SHIPS: Record<string, ShipData> = {
         critRate: 1,
         critDamage: 4,
         speed: 63,
+        damageReduction: 35,
         imageKey: 'MPL_5',
         activeSkillText:
             'This Unit deals 40% damage, with an additional damage equal to 9% of its Max HP and repairs itself 15% of damage dealt.',

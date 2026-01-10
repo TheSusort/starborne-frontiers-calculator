@@ -214,6 +214,8 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 hpRegen: data.ship_base_stats?.hp_regen || 0,
                 shield: data.ship_base_stats?.shield || 0,
                 defensePenetration: data.ship_base_stats?.defense_penetration || 0,
+                // Iridium's 35% damage reduction passive requires refit 2+
+                damageReduction: data.name === 'Iridium' && data.ship_refits.length >= 2 ? 35 : 0,
             },
             equipment: data.ship_equipment.reduce(
                 (acc: Record<GearSlotName, string>, eq) => {

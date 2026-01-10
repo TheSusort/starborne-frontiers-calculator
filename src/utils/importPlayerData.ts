@@ -129,6 +129,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             shieldPenetration: Math.round(
                 unit.Attributes.BaseWithLevelAndRank.ShieldPenetration * 100
             ),
+            damageReduction: getDamageReduction(unit.Name, unit.Refit),
         };
 
         // Distribute stats among refits
@@ -629,6 +630,14 @@ const getHpRegen = (name: string): number => {
         return 5;
     } else if (name === 'Heliodor') {
         return 8;
+    }
+    return 0;
+};
+
+const getDamageReduction = (name: string, refitCount: number): number => {
+    // Iridium's 35% damage reduction passive requires refit 2 or higher
+    if (name === 'Iridium' && refitCount >= 2) {
+        return 35;
     }
     return 0;
 };
