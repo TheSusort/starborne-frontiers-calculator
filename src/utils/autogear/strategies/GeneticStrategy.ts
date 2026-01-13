@@ -34,16 +34,12 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private readonly MUTATION_RATE = 0.15; // 15% chance to mutate each gear piece
 
     private getPopulationSize(inventorySize: number, hasImplants: boolean): number {
-        // Increased population size for better accuracy (3x increase from previous values)
-        // With the performance improvements, we can afford larger populations
-        const multiplier = hasImplants ? 18 : 4.5; // 3x the previous 1.8 and 1.5
+        const multiplier = hasImplants ? 18 : 4.5;
         return Math.min(2400, Math.max(900, Math.floor(inventorySize * multiplier)));
     }
 
     private getGenerations(populationSize: number, hasImplants: boolean): number {
-        // Increased base operations for more thorough exploration (3x increase)
-        // This allows the algorithm to explore more combinations and converge better
-        const baseOperations = hasImplants ? 360000 : 105000; // 3x the previous 45k and 35k
+        const baseOperations = hasImplants ? 360000 : 105000;
         return Math.min(120, Math.max(40, Math.floor(baseOperations / populationSize)));
     }
 

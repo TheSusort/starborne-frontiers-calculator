@@ -215,7 +215,8 @@ export const SimulationPage: React.FC = () => {
                                             getGearPiece,
                                             selectedShip.refits,
                                             selectedShip.implants,
-                                            getEngineeringStatsForShipType(selectedShip.type)
+                                            getEngineeringStatsForShipType(selectedShip.type),
+                                            selectedShip.id
                                         ).final
                                     }
                                 />

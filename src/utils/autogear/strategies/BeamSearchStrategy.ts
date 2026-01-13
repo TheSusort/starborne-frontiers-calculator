@@ -133,7 +133,8 @@ export class BeamSearchStrategy extends BaseStrategy {
                     getGearPiece,
                     ship.refits,
                     ship.implants,
-                    getEngineeringStatsForShipType(ship.type)
+                    getEngineeringStatsForShipType(ship.type),
+                    ship.id
                 );
 
                 const score = this.calculateConfigurationScore(

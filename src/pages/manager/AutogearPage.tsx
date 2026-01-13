@@ -441,7 +441,8 @@ export const AutogearPage: React.FC = () => {
                 shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
                 ship.refits,
                 ship.implants,
-                getEngineeringStatsForShipType(ship.type)
+                getEngineeringStatsForShipType(ship.type),
+                ship.id
             );
 
             const suggestedStats = calculateTotalStats(
@@ -450,7 +451,8 @@ export const AutogearPage: React.FC = () => {
                 shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
                 ship.refits,
                 suggestedImplants,
-                getEngineeringStatsForShipType(ship.type)
+                getEngineeringStatsForShipType(ship.type),
+                ship.id
             );
 
             if (currentStats && suggestedStats) {
