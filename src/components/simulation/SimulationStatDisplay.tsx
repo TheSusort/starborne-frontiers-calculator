@@ -36,7 +36,7 @@ const formatComparison = (
     if (type === 'percentage') {
         return `${calculatePercentageDiff(suggested, current).toFixed(1)}%`;
     }
-    return `(${(suggested - current).toFixed(1)})`;
+    return `${(suggested - current).toFixed(1)}`;
 };
 
 export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({

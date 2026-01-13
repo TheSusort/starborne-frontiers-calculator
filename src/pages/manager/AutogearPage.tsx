@@ -29,6 +29,7 @@ import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
+import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 
 interface UnmetPriority {
     stat: string;
@@ -363,10 +364,16 @@ export const AutogearPage: React.FC = () => {
                     // For gear, apply the ignoreUnleveled filter
                     return !shipConfig.ignoreUnleveled || gear.level > 0;
                 });
+
+            // Pre-filter implants to keep only top candidates per slot
+            // This dramatically reduces the search space for the genetic algorithm
+            const filteredInventory = shipConfig.optimizeImplants
+                ? filterTopImplantsPerSlot(availableInventory, shipConfig.statPriorities)
+                : availableInventory;
             performanceTracker.endTimer('FilterInventory');
 
             // eslint-disable-next-line no-console
-            console.log(`Available inventory size for ${ship.name}: ${availableInventory.length}`);
+            console.log(`Available inventory size for ${ship.name}: ${filteredInventory.length}`);
 
             // Create calibration-aware gear getter for this ship
             const baseGearGetter = shipConfig.useUpgradedStats
@@ -389,7 +396,7 @@ export const AutogearPage: React.FC = () => {
                 strategy.findOptimalGear(
                     ship,
                     shipConfig.statPriorities,
-                    availableInventory,
+                    filteredInventory,
                     getGearForShip,
                     getEngineeringStatsForShipType,
                     shipConfig.shipRole || undefined,
