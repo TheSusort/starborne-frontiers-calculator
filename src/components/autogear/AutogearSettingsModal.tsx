@@ -21,6 +21,7 @@ interface AutogearSettingsModalProps {
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
+    includeCalibratedGear: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -37,6 +38,7 @@ interface AutogearSettingsModalProps {
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
+    onIncludeCalibratedGearChange: (value: boolean) => void;
     onResetConfig: () => void;
 }
 

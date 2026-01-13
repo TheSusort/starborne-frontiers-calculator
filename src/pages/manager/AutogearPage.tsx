@@ -28,6 +28,7 @@ import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
+import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
 
 interface UnmetPriority {
     stat: string;
@@ -89,6 +90,7 @@ export const AutogearPage: React.FC = () => {
                 selectedAlgorithm: AutogearAlgorithm;
                 showSecondaryRequirements: boolean;
                 optimizeImplants: boolean;
+                includeCalibratedGear: boolean;
             }
         >
     >({});
@@ -141,6 +143,7 @@ export const AutogearPage: React.FC = () => {
                 selectedAlgorithm: AutogearAlgorithm.Genetic,
                 showSecondaryRequirements: false,
                 optimizeImplants: false,
+                includeCalibratedGear: false,
             }
         );
     };
@@ -272,6 +275,8 @@ export const AutogearPage: React.FC = () => {
                 useUpgradedStats: shipConfig.useUpgradedStats,
                 algorithm: shipConfig.selectedAlgorithm,
                 tryToCompleteSets: shipConfig.tryToCompleteSets,
+                optimizeImplants: shipConfig.optimizeImplants,
+                includeCalibratedGear: shipConfig.includeCalibratedGear,
             };
             saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
@@ -317,6 +322,13 @@ export const AutogearPage: React.FC = () => {
                         return false;
                     }
 
+                    // Exclude calibrated gear for other ships (unless override enabled)
+                    if (gear.calibration?.shipId && gear.calibration.shipId !== ship.id) {
+                        if (!shipConfig.includeCalibratedGear) {
+                            return false;
+                        }
+                    }
+
                     // If gear is equipped on a ship
                     const shipId = gearToShipMap.get(gear.id);
                     const equippedShip = shipId ? getShipById(shipId) : undefined;
@@ -356,13 +368,29 @@ export const AutogearPage: React.FC = () => {
             // eslint-disable-next-line no-console
             console.log(`Available inventory size for ${ship.name}: ${availableInventory.length}`);
 
+            // Create calibration-aware gear getter for this ship
+            const baseGearGetter = shipConfig.useUpgradedStats
+                ? getUpgradedGearPiece
+                : getGearPiece;
+            const getGearForShip = (id: string) => {
+                const gear = baseGearGetter(id);
+                if (!gear) return undefined;
+
+                // If calibrated to a DIFFERENT ship, reverse the bonus to get base stats
+                if (gear.calibration?.shipId && gear.calibration.shipId !== ship.id) {
+                    return removeCalibrationStats(gear);
+                }
+
+                return gear; // Calibrated to this ship or uncalibrated - use as-is
+            };
+
             performanceTracker.startTimer('FindOptimalGear');
             const newSuggestions = await Promise.resolve(
                 strategy.findOptimalGear(
                     ship,
                     shipConfig.statPriorities,
                     availableInventory,
-                    shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                    getGearForShip,
                     getEngineeringStatsForShipType,
                     shipConfig.shipRole || undefined,
                     shipConfig.setPriorities,
@@ -928,6 +956,9 @@ export const AutogearPage: React.FC = () => {
                     optimizeImplants={
                         shipSettings ? getShipConfig(shipSettings.id).optimizeImplants : false
                     }
+                    includeCalibratedGear={
+                        shipSettings ? getShipConfig(shipSettings.id).includeCalibratedGear : false
+                    }
                     onShipSelect={(ship) => {
                         if (selectedShips.length > 0) {
                             handleShipSelect(ship, 0);
@@ -1022,6 +1053,11 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { optimizeImplants });
                         }
                     }}
+                    onIncludeCalibratedGearChange={(includeCalibratedGear) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { includeCalibratedGear });
+                        }
+                    }}
                     onResetConfig={() => {
                         if (shipSettings) {
                             resetConfig(shipSettings.id);
@@ -1037,6 +1073,7 @@ export const AutogearPage: React.FC = () => {
                                 selectedAlgorithm: AutogearAlgorithm.Genetic,
                                 showSecondaryRequirements: false,
                                 optimizeImplants: false,
+                                includeCalibratedGear: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }

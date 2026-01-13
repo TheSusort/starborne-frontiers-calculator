@@ -60,6 +60,8 @@ describe('AutogearSettings Component', () => {
         onTryToCompleteSetsChange: vi.fn(),
         optimizeImplants: false,
         onOptimizeImplantsChange: vi.fn(),
+        includeCalibratedGear: false,
+        onIncludeCalibratedGearChange: vi.fn(),
     };
 
     beforeEach(() => {

@@ -38,4 +38,5 @@ export interface SavedAutogearConfig {
     tryToCompleteSets: boolean;
     algorithm: AutogearAlgorithm;
     optimizeImplants?: boolean;
+    includeCalibratedGear?: boolean;
 }

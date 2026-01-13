@@ -32,6 +32,7 @@ interface AutogearSettingsProps {
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
+    includeCalibratedGear: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
@@ -48,6 +49,7 @@ interface AutogearSettingsProps {
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
+    onIncludeCalibratedGearChange: (value: boolean) => void;
     onResetConfig: () => void;
 }
 
@@ -112,6 +114,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     useUpgradedStats,
     tryToCompleteSets,
     optimizeImplants,
+    includeCalibratedGear,
     onRoleSelect,
     onAddPriority,
     onRemovePriority,
@@ -125,6 +128,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
     onOptimizeImplantsChange,
+    onIncludeCalibratedGearChange,
     onResetConfig,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
@@ -273,6 +277,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         checked={optimizeImplants}
                         onChange={onOptimizeImplantsChange}
                         helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
+                    />
+                    <Checkbox
+                        id="includeCalibratedGear"
+                        label="Include calibrated gear"
+                        checked={includeCalibratedGear}
+                        onChange={onIncludeCalibratedGearChange}
+                        helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
                     />
                 </div>
             </div>

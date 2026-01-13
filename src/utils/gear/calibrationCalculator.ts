@@ -102,9 +102,8 @@ function calculateCalibratedStatValue(stat: Stat, stars: number): number {
 /**
  * Reverse the calibration bonus to get the base (uncalibrated) stat value.
  * This is used to calculate what the stat would be without calibration.
- * @internal - Currently unused but kept for potential future use
  */
-function _reverseCalibrationStatValue(stat: Stat, stars: number): number {
+function reverseCalibrationStatValue(stat: Stat, stars: number): number {
     const bonus = CALIBRATION_BONUSES[stat.name]?.[stat.type];
     if (!bonus) {
         // Default to subtracting percentage points for unknown stats
@@ -192,6 +191,31 @@ export function applyCalibrationStats(gear: GearPiece): GearPiece {
     return {
         ...gear,
         mainStat: calibratedMainStat,
+    };
+}
+
+/**
+ * Create a copy of the gear piece with calibration stats removed from main stat.
+ * Used when scoring calibrated gear for ships other than the one it's calibrated to.
+ * Since imported calibrated gear has boosted stats, this reverses the bonus to get base stats.
+ */
+export function removeCalibrationStats(gear: GearPiece): GearPiece {
+    if (!isCalibrationEligible(gear) || !gear.calibration?.shipId) {
+        return gear;
+    }
+
+    if (!gear.mainStat) {
+        return gear;
+    }
+
+    const baseMainStat: Stat = {
+        ...gear.mainStat,
+        value: reverseCalibrationStatValue(gear.mainStat, gear.stars),
+    };
+
+    return {
+        ...gear,
+        mainStat: baseMainStat,
     };
 }
 
