@@ -367,8 +367,16 @@ export const AutogearPage: React.FC = () => {
 
             // Pre-filter implants to keep only top candidates per slot
             // This dramatically reduces the search space for the genetic algorithm
+            // Always include currently equipped implants so GA can decide to keep or swap
+            const equippedImplantIds = new Set(
+                Object.values(ship.implants || {}).filter((id): id is string => !!id)
+            );
             const filteredInventory = shipConfig.optimizeImplants
-                ? filterTopImplantsPerSlot(availableInventory, shipConfig.statPriorities)
+                ? filterTopImplantsPerSlot(
+                      availableInventory,
+                      shipConfig.statPriorities,
+                      equippedImplantIds
+                  )
                 : availableInventory;
             performanceTracker.endTimer('FilterInventory');
 

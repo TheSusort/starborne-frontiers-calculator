@@ -104,17 +104,20 @@ function isImplantTypeRelevant(setBonus: string | null, relevantStats: Set<StatN
  * 1. For each implant slot, group implants by their type (setBonus)
  * 2. Only consider implant types that provide stats in the priorities
  * 3. Keep the best implant of each relevant type per slot
+ * 4. Always include currently equipped implants (so GA can decide to keep or swap)
  *
  * This ensures we have diversity of relevant implant types while
  * dramatically reducing the search space.
  *
  * @param inventory - Full inventory including implants
  * @param priorities - Stat priorities to determine relevance
+ * @param equippedImplantIds - IDs of implants currently equipped on the ship (always included)
  * @returns Filtered inventory with only best relevant implants per type per slot
  */
 export function filterTopImplantsPerSlot(
     inventory: GearPiece[],
-    priorities: StatPriority[]
+    priorities: StatPriority[],
+    equippedImplantIds: Set<string> = new Set()
 ): GearPiece[] {
     // Separate gear from implants
     const gear: GearPiece[] = [];
@@ -149,10 +152,21 @@ export function filterTopImplantsPerSlot(
             implantsByType.set(type, existing);
         }
 
-        // For each relevant type, keep only the best implant
+        // Track which implants we've already added
+        const addedIds = new Set<string>();
         let keptCount = 0;
         const relevantTypes: string[] = [];
 
+        // First, always include currently equipped implants for this slot
+        for (const implant of implants) {
+            if (equippedImplantIds.has(implant.id) && !addedIds.has(implant.id)) {
+                filteredImplants.push(implant);
+                addedIds.add(implant.id);
+                keptCount++;
+            }
+        }
+
+        // Then, for each relevant type, keep the best implant (if not already added)
         for (const [type, typeImplants] of implantsByType) {
             // Skip types that don't provide relevant stats
             if (!isImplantTypeRelevant(type, relevantStats)) {
@@ -167,10 +181,14 @@ export function filterTopImplantsPerSlot(
                 score: scoreImplantForPriorities(implant, priorities),
             }));
 
-            // Sort by score descending and keep the best one
+            // Sort by score descending and keep the best one (if not already added)
             scored.sort((a, b) => b.score - a.score);
-            filteredImplants.push(scored[0].implant);
-            keptCount++;
+            const best = scored[0].implant;
+            if (!addedIds.has(best.id)) {
+                filteredImplants.push(best);
+                addedIds.add(best.id);
+                keptCount++;
+            }
         }
 
         // Log for debugging

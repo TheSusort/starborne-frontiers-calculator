@@ -15,6 +15,7 @@ import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
 import Seo from './components/seo/Seo';
 import { AutogearConfigProvider } from './contexts/AutogearConfigContext';
 import { Loader } from './components/ui/Loader';
+import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
@@ -103,126 +104,142 @@ const App: React.FC = () => {
                                             <div className="flex-1 lg:pl-64 max-w-full">
                                                 <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
                                                     <div className="max-w-7xl mx-auto w-full flex-grow">
-                                                        <Suspense fallback={<Loader />}>
-                                                            <Routes>
-                                                                <Route
-                                                                    path="/ships"
-                                                                    element={<ShipsPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/gear"
-                                                                    element={<GearPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/simulation"
-                                                                    element={<SimulationPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/autogear"
-                                                                    element={<AutogearPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/engineering"
-                                                                    element={
-                                                                        <EngineeringStatsPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/loadouts"
-                                                                    element={<LoadoutsPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/encounters"
-                                                                    element={<EncounterNotesPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/"
-                                                                    element={<HomePage />}
-                                                                />
-                                                                <Route
-                                                                    path="/ships/:shipId"
-                                                                    element={<ShipDetailsPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/ships/index"
-                                                                    element={<ShipIndexPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/ships/leaderboard/:shipName"
-                                                                    element={<LeaderboardPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/defense"
-                                                                    element={
-                                                                        <DefenseCalculatorPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/damage"
-                                                                    element={<DPSCalculatorPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/healing"
-                                                                    element={
-                                                                        <HealingCalculatorPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/damage-deconstruction"
-                                                                    element={
-                                                                        <DamageDeconstructionPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/json-diff"
-                                                                    element={
-                                                                        <JsonDiffCalculatorPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/recruitment"
-                                                                    element={
-                                                                        <RecruitmentCalculatorPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/speed"
-                                                                    element={
-                                                                        <SpeedCalculatorPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/shared-encounters"
-                                                                    element={
-                                                                        <SharedEncountersPage />
-                                                                    }
-                                                                />
-                                                                <Route
-                                                                    path="/implants"
-                                                                    element={<ImplantIndexPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/buffs"
-                                                                    element={<EffectIndexPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/documentation"
-                                                                    element={<DocumentationPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/statistics"
-                                                                    element={<StatisticsPage />}
-                                                                />
-                                                                <Route
-                                                                    path="/profile"
-                                                                    element={<ProfilePage />}
-                                                                />
-                                                                <Route
-                                                                    path="/admin"
-                                                                    element={<AdminPanel />}
-                                                                />
-                                                            </Routes>
-                                                        </Suspense>
+                                                        <ChunkErrorBoundary>
+                                                            <Suspense fallback={<Loader />}>
+                                                                <Routes>
+                                                                    <Route
+                                                                        path="/ships"
+                                                                        element={<ShipsPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/gear"
+                                                                        element={<GearPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/simulation"
+                                                                        element={<SimulationPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/autogear"
+                                                                        element={<AutogearPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/engineering"
+                                                                        element={
+                                                                            <EngineeringStatsPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/loadouts"
+                                                                        element={<LoadoutsPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/encounters"
+                                                                        element={
+                                                                            <EncounterNotesPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/"
+                                                                        element={<HomePage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/ships/:shipId"
+                                                                        element={
+                                                                            <ShipDetailsPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/ships/index"
+                                                                        element={<ShipIndexPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/ships/leaderboard/:shipName"
+                                                                        element={
+                                                                            <LeaderboardPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/defense"
+                                                                        element={
+                                                                            <DefenseCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/damage"
+                                                                        element={
+                                                                            <DPSCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/healing"
+                                                                        element={
+                                                                            <HealingCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/damage-deconstruction"
+                                                                        element={
+                                                                            <DamageDeconstructionPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/json-diff"
+                                                                        element={
+                                                                            <JsonDiffCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/recruitment"
+                                                                        element={
+                                                                            <RecruitmentCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/speed"
+                                                                        element={
+                                                                            <SpeedCalculatorPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/shared-encounters"
+                                                                        element={
+                                                                            <SharedEncountersPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/implants"
+                                                                        element={
+                                                                            <ImplantIndexPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/buffs"
+                                                                        element={
+                                                                            <EffectIndexPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/documentation"
+                                                                        element={
+                                                                            <DocumentationPage />
+                                                                        }
+                                                                    />
+                                                                    <Route
+                                                                        path="/statistics"
+                                                                        element={<StatisticsPage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/profile"
+                                                                        element={<ProfilePage />}
+                                                                    />
+                                                                    <Route
+                                                                        path="/admin"
+                                                                        element={<AdminPanel />}
+                                                                    />
+                                                                </Routes>
+                                                            </Suspense>
+                                                        </ChunkErrorBoundary>
                                                     </div>
 
                                                     <JokeCorner />
