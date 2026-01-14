@@ -19,6 +19,7 @@ interface SimulationStatDisplayProps {
 
 /**
  * Calculates the percentage difference between two values
+ *
  */
 const calculatePercentageDiff = (suggested: number, current: number): number => {
     if (current === 0) return 0;
