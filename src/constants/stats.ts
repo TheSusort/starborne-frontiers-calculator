@@ -106,8 +106,8 @@ export const STATS: Record<
         maxValue: { percentage: 0, flat: 0 },
     },
     damageReduction: {
-        label: 'Damage Reduction',
-        shortLabel: 'DR',
+        label: 'Critical DR',
+        shortLabel: 'CDR',
         allowedTypes: ['percentage'],
         engineeringAllowedTypes: [],
         maxValue: { percentage: 0, flat: 0 },

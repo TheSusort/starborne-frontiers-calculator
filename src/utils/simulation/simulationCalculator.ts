@@ -110,8 +110,12 @@ export function runDamageSimulation(stats: BaseStats): SimulationSummary {
 }
 
 function runDefenderSimulation(stats: BaseStats): SimulationSummary {
-    const damageReduction = calculateDamageReduction(stats.defence || 0);
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    // Calculate damage reduction from defence stat
+    const defenseReduction = calculateDamageReduction(stats.defence || 0);
+    // Calculate effective HP from HP and defence-based damage reduction
+    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
+    // Apply damageReduction stat (from gear/refits) as a separate multiplier
+    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
     let survivalRounds = 0;
     // Calculate average damage taken per hit, now from multiple enemies
     const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
@@ -132,11 +136,11 @@ function runDefenderSimulation(stats: BaseStats): SimulationSummary {
         survivalRounds = Number.MAX_SAFE_INTEGER;
     } else {
         // Recalculate effective survivability including shield and healing against multiple enemies
-        survivalRounds = effectiveHP / (damagePerRound - healingWithShieldPerRound);
+        survivalRounds = finalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
     }
     return {
-        effectiveHP: Math.round(effectiveHP),
-        damageReduction: Math.round(damageReduction * 100) / 100,
+        effectiveHP: Math.round(finalEffectiveHP),
+        damageReduction: Math.round(defenseReduction * 100) / 100,
         shieldPerRound: Math.round(shieldPerRound),
         healingPerHit: Math.round(healingPerHit),
         survivedRounds: survivalRounds,
@@ -169,15 +173,17 @@ function runDebufferSimulation(stats: BaseStats): SimulationSummary {
 
 function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hacking = stats.hacking || 0;
-    const damageReduction = calculateDamageReduction(stats.defence || 0);
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    const defenseReduction = calculateDamageReduction(stats.defence || 0);
+    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
+    // Apply damageReduction stat (from gear/refits) as a separate multiplier
+    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
 
     // Also run damage simulation as secondary output
     const damageSimulation = runDamageSimulation(stats);
 
     return {
         hacking: hacking,
-        effectiveHP: Math.round(effectiveHP),
+        effectiveHP: Math.round(finalEffectiveHP),
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,
@@ -188,8 +194,10 @@ function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
 function runDefensiveSecurityDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hacking = stats.hacking || 0;
     const security = stats.security || 0;
-    const damageReduction = calculateDamageReduction(stats.defence || 0);
-    const effectiveHP = (stats.hp || 0) * (100 / (100 - damageReduction));
+    const defenseReduction = calculateDamageReduction(stats.defence || 0);
+    const effectiveHP = (stats.hp || 0) * (100 / (100 - defenseReduction));
+    // Apply damageReduction stat (from gear/refits) as a separate multiplier
+    const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
 
     // Also run damage simulation as secondary output
     const damageSimulation = runDamageSimulation(stats);
@@ -197,7 +205,7 @@ function runDefensiveSecurityDebufferSimulation(stats: BaseStats): SimulationSum
     return {
         hacking: hacking,
         security: security,
-        effectiveHP: Math.round(effectiveHP),
+        effectiveHP: Math.round(finalEffectiveHP),
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,

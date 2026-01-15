@@ -36,12 +36,10 @@ export function calculateEffectiveHP(
     damageReductionPercent: number = 0
 ): number {
     const defenseReduction = calculateDamageReduction(defense);
-    // Apply defense-based reduction first, then flat damage reduction
-    // damageReductionPercent is a percentage (e.g., 5 for 5%, 35 for 35%)
+    // Calculate effective HP from HP and defence-based damage reduction
     const effectiveHpFromDefense = hp * (100 / (100 - defenseReduction));
-    // Apply additional damage reduction (capped at 99% to avoid division by zero)
-    const cappedDamageReduction = Math.min(damageReductionPercent, 99);
-    return effectiveHpFromDefense * (100 / (100 - cappedDamageReduction));
+    // Apply damageReduction stat (from gear/refits) as a separate multiplier
+    return effectiveHpFromDefense * (1 + damageReductionPercent / 100);
 }
 
 // Defense penetration lookup table with known values at 15k defense
