@@ -3,6 +3,7 @@ import { useShipsData } from '../../hooks/useShipsData';
 import { PageLayout } from '../../components/ui';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { Loader } from '../../components/ui/Loader';
 import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
 import { ChevronDownIcon, ChevronUpIcon } from '../../components/ui/icons';
@@ -369,25 +370,23 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             in the specialist beacon pool.
                                         </p>
                                         <div className="max-w-xs">
-                                            <label className="block text-sm font-medium mb-2">
-                                                Select Faction
-                                            </label>
-                                            <select
-                                                className="w-full bg-dark border border-dark-border rounded px-3 py-2 text-white"
+                                            <Select
+                                                label="Select Faction"
                                                 value={factionEventFaction}
-                                                onChange={(e) =>
+                                                onChange={(value) =>
                                                     setFactionEventFaction(
-                                                        e.target.value as FactionName
+                                                        value as FactionName | ''
                                                     )
                                                 }
-                                            >
-                                                <option value="">-- Select Faction --</option>
-                                                {Object.entries(FACTIONS).map(([key, faction]) => (
-                                                    <option key={key} value={key}>
-                                                        {faction.name}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                options={Object.entries(FACTIONS).map(
+                                                    ([key, faction]) => ({
+                                                        value: key,
+                                                        label: faction.name,
+                                                    })
+                                                )}
+                                                noDefaultSelection
+                                                defaultOption="-- Select Faction --"
+                                            />
                                         </div>
                                         {factionEventFaction && (
                                             <p className="text-sm text-primary mt-4">
