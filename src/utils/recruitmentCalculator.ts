@@ -253,12 +253,14 @@ const calculateFactionEventPool = (
  * @param beaconType - Type of beacon
  * @param ships - All available ships
  * @param eventShips - Optional array of event ships with their rates (for specialist beacons)
+ * @param factionEvent - Optional faction event (mutually exclusive with eventShips for specialist beacons)
  */
 export const calculateShipProbability = (
     ship: Ship,
     beaconType: BeaconType,
     ships: Ship[],
-    eventShips: EventShip[] = []
+    eventShips: EventShip[] = [],
+    factionEvent?: FactionEvent
 ): number => {
     // Check if ship is event-only
     const isEventOnly = isEventOnlyShip(ship.name);
