@@ -1,5 +1,6 @@
 import { Ship, AffinityName } from '../types/ship';
 import { RarityName } from '../constants/rarities';
+import { FactionName } from '../constants/factions';
 
 // Ships that cannot be recruited through beacons
 const NON_RECRUITABLE_SHIPS = [
@@ -214,6 +215,11 @@ export interface EventShip {
     name: string;
     rate?: number; // 0-1 decimal (optional, mutually exclusive with threshold)
     threshold?: number; // Number of pulls needed for guarantee (optional, mutually exclusive with rate)
+}
+
+export interface FactionEvent {
+    faction: FactionName;
+    multiplier?: number; // Defaults to 20 if not specified
 }
 
 /**
