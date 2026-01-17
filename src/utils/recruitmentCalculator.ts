@@ -290,6 +290,31 @@ export const calculateShipProbability = (
         return 0;
     }
 
+    // Handle faction event for specialist beacons
+    if (factionEvent && beaconType === 'specialist') {
+        // Use general pool ships (excludes non-recruitable and event-only ships)
+        const generalPoolShips = getGeneralPoolShips(ships);
+        const shipsOfRarity = generalPoolShips.filter((s) => s.rarity === ship.rarity);
+
+        if (shipsOfRarity.length === 0) {
+            return 0;
+        }
+
+        const { totalWeight, getShipWeight } = calculateFactionEventPool(
+            generalPoolShips,
+            ship.rarity,
+            factionEvent
+        );
+
+        if (totalWeight === 0) {
+            return 0;
+        }
+
+        // Probability = rarityRate * shipWeight / totalWeight
+        const shipWeight = getShipWeight(ship);
+        return (rarityRate * shipWeight) / totalWeight;
+    }
+
     // Get ship's affinity (all ships have affinity)
     if (!ship.affinity) {
         return 0; // Safety check, though all ships should have affinity
