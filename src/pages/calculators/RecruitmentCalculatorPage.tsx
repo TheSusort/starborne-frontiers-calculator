@@ -16,6 +16,7 @@ import {
     getNonRecruitableShips,
     BeaconType,
     EventShip,
+    FactionEvent,
     calculateProbabilityWithPulls,
     calculateProbabilityOfAllShipsAfterPulls,
     groupShipsByRarity,
@@ -23,6 +24,7 @@ import {
     getBeaconDescription,
     getBeaconRarity,
 } from '../../utils/recruitmentCalculator';
+import { FACTIONS, FactionName } from '../../constants/factions';
 
 const RecruitmentCalculatorPage: React.FC = () => {
     const { ships: allShips, loading, error } = useShipsData();
@@ -38,6 +40,8 @@ const RecruitmentCalculatorPage: React.FC = () => {
     });
     const [isEventSettingsOpen, setIsEventSettingsOpen] = useState(false);
     const [calculationMode, setCalculationMode] = useState<'or' | 'and'>('or');
+    const [eventMode, setEventMode] = useState<'individual' | 'faction'>('individual');
+    const [factionEventFaction, setFactionEventFaction] = useState<FactionName | ''>('');
 
     // Get recruitable ships
     const recruitableShips = useMemo(() => {
@@ -79,14 +83,29 @@ const RecruitmentCalculatorPage: React.FC = () => {
         return ships;
     }, [eventShipNames, eventShipRates, eventShipThresholds]);
 
+    // Build faction event from state
+    const factionEvent = useMemo<FactionEvent | undefined>(() => {
+        if (eventMode !== 'faction' || !factionEventFaction) {
+            return undefined;
+        }
+        return { faction: factionEventFaction };
+    }, [eventMode, factionEventFaction]);
+
     // Calculate results
     const results = useMemo(() => {
         if (selectedShips.length === 0) {
             return [];
         }
-
-        return calculateRecruitmentResults(selectedShips, allShips, eventShips, calculationMode);
-    }, [selectedShips, allShips, eventShips, calculationMode]);
+        // Pass empty eventShips if faction event is active (mutually exclusive)
+        const activeEventShips = eventMode === 'individual' ? eventShips : [];
+        return calculateRecruitmentResults(
+            selectedShips,
+            allShips,
+            activeEventShips,
+            calculationMode,
+            factionEvent
+        );
+    }, [selectedShips, allShips, eventShips, calculationMode, eventMode, factionEvent]);
 
     const toggleShipSelection = (shipName: string) => {
         setSelectedShipNames((prev) => {
@@ -292,42 +311,122 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                     <ChevronDownIcon className="w-5 h-5" />
                                 )}
                             </button>
-                            {eventShipNames.size > 0 && (
-                                <Button variant="secondary" onClick={clearEventShips} size="sm">
-                                    Clear Event Ships ({eventShipNames.size})
+                            {(eventShipNames.size > 0 || factionEventFaction) && (
+                                <Button
+                                    variant="secondary"
+                                    onClick={() => {
+                                        clearEventShips();
+                                        setFactionEventFaction('');
+                                    }}
+                                    size="sm"
+                                >
+                                    Clear Event Settings
                                 </Button>
                             )}
                         </div>
 
                         <CollapsibleAccordion isOpen={isEventSettingsOpen}>
                             <div className="space-y-6">
-                                {/* Event Ship Selection */}
-                                <div>
-                                    <h3 className="text-lg font-semibold mb-2">
-                                        Event Ships (Epic & Legendary)
-                                    </h3>
-                                    <p className="text-sm text-gray-400 mb-4">
-                                        Select ships for events. Each ship can have either a rate
-                                        change or be guaranteed after a certain number of pulls
-                                        (mutually exclusive).
-                                    </p>
-
-                                    {/* Event ships grouped by rarity (epic and legendary only) */}
-                                    <ShipSelectionGrid
-                                        ships={eventEligibleShips}
-                                        selectedShipNames={eventShipNames}
-                                        onToggleSelection={toggleEventShipSelection}
-                                        shipsByRarity={eventShipsByRarity}
-                                        rarities={['legendary', 'epic']}
-                                        headingLevel="h4"
-                                        headingSize="text-md"
-                                        searchLabel="Search Event Ships"
-                                        searchPlaceholder="Type to search epic and legendary ships..."
-                                    />
+                                {/* Event Mode Toggle */}
+                                <div className="flex items-center gap-4 mb-4">
+                                    <span className="text-sm font-medium">Event Type:</span>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant={
+                                                eventMode === 'individual' ? 'primary' : 'secondary'
+                                            }
+                                            onClick={() => {
+                                                setEventMode('individual');
+                                                setFactionEventFaction('');
+                                            }}
+                                            size="sm"
+                                        >
+                                            Individual Ships
+                                        </Button>
+                                        <Button
+                                            variant={
+                                                eventMode === 'faction' ? 'primary' : 'secondary'
+                                            }
+                                            onClick={() => {
+                                                setEventMode('faction');
+                                                clearEventShips();
+                                            }}
+                                            size="sm"
+                                        >
+                                            Faction Event
+                                        </Button>
+                                    </div>
                                 </div>
 
-                                {/* Event Ship Configuration */}
-                                {selectedEventShips.length > 0 && (
+                                {/* Faction Event Settings */}
+                                {eventMode === 'faction' && (
+                                    <div className="bg-dark-lighter p-4 rounded-lg">
+                                        <h3 className="text-lg font-semibold mb-2">
+                                            Faction Event
+                                        </h3>
+                                        <p className="text-sm text-gray-400 mb-4">
+                                            Ships from the selected faction have 20x the pull weight
+                                            in the specialist beacon pool.
+                                        </p>
+                                        <div className="max-w-xs">
+                                            <label className="block text-sm font-medium mb-2">
+                                                Select Faction
+                                            </label>
+                                            <select
+                                                className="w-full bg-dark border border-dark-border rounded px-3 py-2 text-white"
+                                                value={factionEventFaction}
+                                                onChange={(e) =>
+                                                    setFactionEventFaction(
+                                                        e.target.value as FactionName
+                                                    )
+                                                }
+                                            >
+                                                <option value="">-- Select Faction --</option>
+                                                {Object.entries(FACTIONS).map(([key, faction]) => (
+                                                    <option key={key} value={key}>
+                                                        {faction.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {factionEventFaction && (
+                                            <p className="text-sm text-primary mt-4">
+                                                {FACTIONS[factionEventFaction]?.name} ships will
+                                                have 20x weight in specialist beacon pulls.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Event Ship Selection - only show in individual mode */}
+                                {eventMode === 'individual' && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">
+                                            Event Ships (Epic & Legendary)
+                                        </h3>
+                                        <p className="text-sm text-gray-400 mb-4">
+                                            Select ships for events. Each ship can have either a
+                                            rate change or be guaranteed after a certain number of
+                                            pulls (mutually exclusive).
+                                        </p>
+
+                                        {/* Event ships grouped by rarity (epic and legendary only) */}
+                                        <ShipSelectionGrid
+                                            ships={eventEligibleShips}
+                                            selectedShipNames={eventShipNames}
+                                            onToggleSelection={toggleEventShipSelection}
+                                            shipsByRarity={eventShipsByRarity}
+                                            rarities={['legendary', 'epic']}
+                                            headingLevel="h4"
+                                            headingSize="text-md"
+                                            searchLabel="Search Event Ships"
+                                            searchPlaceholder="Type to search epic and legendary ships..."
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Event Ship Configuration - only show in individual mode */}
+                                {eventMode === 'individual' && selectedEventShips.length > 0 && (
                                     <div>
                                         <h3 className="text-lg font-semibold mb-4">
                                             Event Ship Configuration
@@ -502,6 +601,13 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             <p className="text-sm text-gray-400 mb-4">
                                                 {getBeaconDescription(result.beaconType)}
                                             </p>
+                                            {result.beaconType === 'specialist' && factionEvent && (
+                                                <p className="text-sm text-primary mb-2">
+                                                    Faction Event Active:{' '}
+                                                    {FACTIONS[factionEvent.faction]?.name} (20x
+                                                    boost)
+                                                </p>
+                                            )}
 
                                             <div className="space-y-2">
                                                 <div className="flex justify-between">
@@ -585,7 +691,9 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                                               ],
                                                                               result.beaconType,
                                                                               result.beaconType ===
-                                                                                  'specialist'
+                                                                                  'specialist' &&
+                                                                                  eventMode ===
+                                                                                      'individual'
                                                                                   ? eventShips
                                                                                   : [],
                                                                               selectedShips.map(
@@ -602,9 +710,15 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                                                   result.beaconType
                                                                               ],
                                                                               result.beaconType ===
-                                                                                  'specialist'
+                                                                                  'specialist' &&
+                                                                                  eventMode ===
+                                                                                      'individual'
                                                                                   ? eventShips
-                                                                                  : []
+                                                                                  : [],
+                                                                              result.beaconType ===
+                                                                                  'specialist'
+                                                                                  ? factionEvent
+                                                                                  : undefined
                                                                           ) * 100
                                                                       ).toFixed(2)}
                                                                 %
