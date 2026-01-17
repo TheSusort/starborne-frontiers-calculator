@@ -1533,6 +1533,64 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
                         </div>
+
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Recruitment Calculator</h3>
+                            <p className="text-gray-300">
+                                Calculate the probability of obtaining specific ships from different
+                                beacon types.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Beacon Types
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        The calculator supports all beacon types: Public,
+                                        Specialist, Expert, and Elite. Each beacon type has
+                                        different rarity pools and drop rates.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Faction Events
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        During faction events, ships from the selected faction have
+                                        20x the pull weight in specialist beacons. This bypasses the
+                                        normal affinity split - all ships of the same rarity compete
+                                        in a single weighted pool.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Individual Event Ships
+                                    </h4>
+                                    <p className="text-gray-300">
+                                        Configure individual event ships with custom drop rates or
+                                        pity thresholds to accurately calculate probabilities during
+                                        special events.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Use Cases</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>
+                                        Plan beacon spending by calculating odds for target ships
+                                    </li>
+                                    <li>
+                                        Evaluate whether faction events are worth pulling for
+                                        specific ships
+                                    </li>
+                                    <li>Calculate cumulative probability across multiple pulls</li>
+                                </ul>
+                            </div>
+                        </div>
                     </section>
 
                     {/* Encounter Notes Section */}
