@@ -398,21 +398,26 @@ export const calculateMultipleShipsProbability = (
     targetShips: Ship[],
     beaconType: BeaconType,
     ships: Ship[],
-    eventShips: EventShip[] = []
+    eventShips: EventShip[] = [],
+    factionEvent?: FactionEvent
 ): number => {
     if (targetShips.length === 0) {
         return 0;
     }
 
-    // Calculate probability of NOT getting any of the target ships
     let probabilityOfNotGettingAny = 1;
 
     for (const ship of targetShips) {
-        const shipProbability = calculateShipProbability(ship, beaconType, ships, eventShips);
+        const shipProbability = calculateShipProbability(
+            ship,
+            beaconType,
+            ships,
+            eventShips,
+            factionEvent
+        );
         probabilityOfNotGettingAny *= 1 - shipProbability;
     }
 
-    // Probability of getting at least one = 1 - probability of getting none
     return 1 - probabilityOfNotGettingAny;
 };
 
