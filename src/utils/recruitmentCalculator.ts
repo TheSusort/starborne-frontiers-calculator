@@ -706,29 +706,37 @@ export const calculateRecruitmentResults = (
     targetShips: Ship[],
     ships: Ship[],
     eventShips: EventShip[] = [],
-    mode: 'or' | 'and' = 'or'
+    mode: 'or' | 'and' = 'or',
+    factionEvent?: FactionEvent
 ): RecruitmentResult[] => {
     const beaconTypes: BeaconType[] = ['public', 'specialist', 'expert', 'elite'];
     const targetShipNames = targetShips.map((s) => s.name);
 
     return beaconTypes.map((beaconType) => {
-        // Probability per pull stays as OR (at least one) for both modes
+        // Only apply faction event to specialist beacons
+        const activeFactionEvent = beaconType === 'specialist' ? factionEvent : undefined;
+
         const probability = calculateMultipleShipsProbability(
             targetShips,
             beaconType,
             ships,
-            eventShips
+            eventShips,
+            activeFactionEvent
         );
 
-        // For AND mode, we need individual probabilities for each ship
         const individualProbabilities =
             mode === 'and'
                 ? targetShips.map((ship) =>
-                      calculateShipProbability(ship, beaconType, ships, eventShips)
+                      calculateShipProbability(
+                          ship,
+                          beaconType,
+                          ships,
+                          eventShips,
+                          activeFactionEvent
+                      )
                   )
                 : probability;
 
-        // Event ships only affect specialist beacon calculations
         const expectedPulls = calculateExpectedPulls(
             mode === 'and' ? individualProbabilities : probability,
             beaconType,
