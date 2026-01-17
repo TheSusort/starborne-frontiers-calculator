@@ -429,20 +429,25 @@ export const calculateProbabilityOfAllShipsAfterPulls = (
     beaconType: BeaconType,
     ships: Ship[],
     numberOfPulls: number,
-    eventShips: EventShip[] = []
+    eventShips: EventShip[] = [],
+    factionEvent?: FactionEvent
 ): number => {
     if (targetShips.length === 0 || numberOfPulls === 0) {
         return 0;
     }
 
-    // Probability of having all ships = product of (probability of having each ship)
-    // P(having ship i in n pulls) = 1 - (1 - p_i)^n
     let probabilityOfHavingAll = 1;
 
     for (const ship of targetShips) {
-        const shipProbability = calculateShipProbability(ship, beaconType, ships, eventShips);
+        const shipProbability = calculateShipProbability(
+            ship,
+            beaconType,
+            ships,
+            eventShips,
+            factionEvent
+        );
         if (shipProbability === 0) {
-            return 0; // If any ship is impossible, probability of having all is 0
+            return 0;
         }
         const probabilityOfHavingThisShip = 1 - Math.pow(1 - shipProbability, numberOfPulls);
         probabilityOfHavingAll *= probabilityOfHavingThisShip;
