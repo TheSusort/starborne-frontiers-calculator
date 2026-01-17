@@ -223,6 +223,31 @@ export interface FactionEvent {
 }
 
 /**
+ * Calculate weighted pool for faction events
+ * Faction ships get multiplier weight (default 20), non-faction ships get 1
+ */
+const calculateFactionEventPool = (
+    ships: Ship[],
+    rarity: RarityName,
+    factionEvent: FactionEvent
+): { totalWeight: number; getShipWeight: (ship: Ship) => number } => {
+    const multiplier = factionEvent.multiplier ?? 20;
+    const shipsOfRarity = ships.filter((s) => s.rarity === rarity);
+
+    let totalWeight = 0;
+    for (const ship of shipsOfRarity) {
+        const weight = ship.faction === factionEvent.faction ? multiplier : 1;
+        totalWeight += weight;
+    }
+
+    const getShipWeight = (ship: Ship): number => {
+        return ship.faction === factionEvent.faction ? multiplier : 1;
+    };
+
+    return { totalWeight, getShipWeight };
+};
+
+/**
  * Calculate the probability of getting a specific ship from a beacon
  * @param ship - The target ship
  * @param beaconType - Type of beacon
