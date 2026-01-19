@@ -870,7 +870,7 @@ export const AutogearPage: React.FC = () => {
                                             results.suggestedSimulation &&
                                             shouldShowSuggestions && (
                                                 <div>
-                                                    <h4 className="text-lg font-semibold mb-4">
+                                                    <h4 className="text-lg font-semibold mb-2">
                                                         Simulation Results (
                                                         {
                                                             SHIP_TYPES[shipConfig.shipRole || '']
@@ -878,6 +878,9 @@ export const AutogearPage: React.FC = () => {
                                                         }
                                                         )
                                                     </h4>
+                                                    <p className="text-xs text-gray-500 mb-4">
+                                                        Damage calculated against 15k enemy defense
+                                                    </p>
                                                     <SimulationResults
                                                         currentSimulation={
                                                             results.currentSimulation

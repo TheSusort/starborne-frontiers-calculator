@@ -5,6 +5,7 @@ import {
     ENEMY_ATTACK,
     ENEMY_COUNT,
     ENEMY_SECURITY,
+    ENEMY_DEFENSE,
     BASE_HEAL_PERCENT,
 } from '../../constants/simulation';
 export interface SimulationSummary {
@@ -92,11 +93,11 @@ export function runDamageSimulation(stats: BaseStats): SimulationSummary {
     let critCount = 0;
 
     for (let i = 0; i < SIMULATION_ITERATIONS; i++) {
-        const damage = calculateDamage(stats);
+        const { damage, isCrit } = calculateDamage(stats);
         totalDamage += damage;
         highest = Math.max(highest, damage);
         lowest = Math.min(lowest, damage);
-        if (damage > stats.attack) {
+        if (isCrit) {
             critCount++;
         }
     }
@@ -240,15 +241,24 @@ function runHealingSimulation(stats: BaseStats): SimulationSummary {
     };
 }
 
-function calculateDamage(stats: BaseStats): number {
+function calculateDamage(stats: BaseStats): { damage: number; isCrit: boolean } {
     const baseDamage = stats.attack || 0;
     const critRoll = Math.random() * 100;
     const isCrit = critRoll <= (stats.crit || 0);
 
+    // Calculate damage reduction based on defense penetration
+    const defensePenetration = stats.defensePenetration || 0;
+    const effectiveDefense = ENEMY_DEFENSE * (1 - defensePenetration / 100);
+    const damageReduction = calculateDamageReduction(effectiveDefense);
+    const damageMultiplier = 1 - damageReduction / 100;
+
     if (isCrit) {
-        return baseDamage * (1 + (stats.critDamage || 0) / 100);
+        return {
+            damage: baseDamage * (1 + (stats.critDamage || 0) / 100) * damageMultiplier,
+            isCrit: true,
+        };
     }
-    return baseDamage;
+    return { damage: baseDamage * damageMultiplier, isCrit: false };
 }
 
 function calculateHealing(baseHealing: number, healModifier: number, stats: BaseStats): number {
