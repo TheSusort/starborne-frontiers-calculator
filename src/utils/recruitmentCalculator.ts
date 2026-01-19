@@ -256,24 +256,28 @@ export interface FactionEvent {
 
 /**
  * Calculate weighted pool for faction events
- * Faction ships get multiplier weight (default 20), non-faction ships get 1
+ * Combines faction multiplier (20x for faction, 1x for others) with affinity weight (10x for non-antimatter, 1x for antimatter)
+ * Final weight = factionMultiplier × affinityWeight
  */
 const calculateFactionEventPool = (
     ships: Ship[],
     rarity: RarityName,
     factionEvent: FactionEvent
 ): { totalWeight: number; getShipWeight: (ship: Ship) => number } => {
-    const multiplier = factionEvent.multiplier ?? 20;
+    const factionMultiplier = factionEvent.multiplier ?? 20;
     const shipsOfRarity = ships.filter((s) => s.rarity === rarity);
 
     let totalWeight = 0;
     for (const ship of shipsOfRarity) {
-        const weight = ship.faction === factionEvent.faction ? multiplier : 1;
-        totalWeight += weight;
+        const factionWeight = ship.faction === factionEvent.faction ? factionMultiplier : 1;
+        const affinityWeight = getAffinityWeight(ship.affinity || 'chemical');
+        totalWeight += factionWeight * affinityWeight;
     }
 
     const getShipWeight = (ship: Ship): number => {
-        return ship.faction === factionEvent.faction ? multiplier : 1;
+        const factionWeight = ship.faction === factionEvent.faction ? factionMultiplier : 1;
+        const affinityWeight = getAffinityWeight(ship.affinity || 'chemical');
+        return factionWeight * affinityWeight;
     };
 
     return { totalWeight, getShipWeight };

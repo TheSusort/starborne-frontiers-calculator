@@ -39,19 +39,19 @@ const createMockShip = (
 describe('recruitmentCalculator', () => {
     describe('calculateShipProbability with faction events', () => {
         const mockShips: Ship[] = [
-            // Tianchao legendary ships
+            // Tianchao legendary ships (both non-antimatter for faction multiplier test)
             createMockShip('Tianchao Ship 1', 'legendary', 'TIANCHAO', 'chemical'),
             createMockShip('Tianchao Ship 2', 'legendary', 'TIANCHAO', 'electric'),
-            // Other faction legendary ships
+            // Other faction legendary ships (same affinity as Tianchao for fair comparison)
             createMockShip('Other Ship 1', 'legendary', 'BINDERBURG', 'chemical'),
             createMockShip('Other Ship 2', 'legendary', 'GELECEK', 'thermal'),
-            createMockShip('Other Ship 3', 'legendary', 'MARAUDERS', 'antimatter'),
+            createMockShip('Other Ship 3', 'legendary', 'MARAUDERS', 'chemical'),
         ];
 
-        it('should give faction ships 20x weight during faction event', () => {
+        it('should give faction ships 20x weight during faction event (same affinity)', () => {
             const factionEvent: FactionEvent = { faction: 'TIANCHAO' };
-            const tianchaoShip = mockShips[0];
-            const otherShip = mockShips[2];
+            const tianchaoShip = mockShips[0]; // chemical
+            const otherShip = mockShips[2]; // chemical (same affinity for fair comparison)
 
             const tianchaoProbability = calculateShipProbability(
                 tianchaoShip,
@@ -68,7 +68,7 @@ describe('recruitmentCalculator', () => {
                 factionEvent
             );
 
-            // Tianchao ship should have 20x the probability of other ships
+            // Tianchao ship should have 20x the probability of other ships (same affinity)
             expect(tianchaoProbability / otherProbability).toBeCloseTo(20, 1);
         });
 
@@ -94,7 +94,7 @@ describe('recruitmentCalculator', () => {
             expect(withFactionEvent).toBe(withoutFactionEvent);
         });
 
-        it('should ignore affinity during faction events', () => {
+        it('should still apply affinity weighting during faction events', () => {
             // Create ships with different affinities in same faction
             const shipsWithAffinities: Ship[] = [
                 createMockShip('Faction A1', 'legendary', 'TIANCHAO', 'chemical'),
@@ -104,7 +104,8 @@ describe('recruitmentCalculator', () => {
 
             const factionEvent: FactionEvent = { faction: 'TIANCHAO' };
 
-            // Both Tianchao ships should have equal probability regardless of affinity
+            // Chemical Tianchao ship should have 10x probability of antimatter Tianchao ship
+            // (faction multiplier is same, but affinity weight differs: 10 vs 1)
             const chemicalProb = calculateShipProbability(
                 shipsWithAffinities[0],
                 'specialist',
@@ -120,41 +121,45 @@ describe('recruitmentCalculator', () => {
                 factionEvent
             );
 
-            expect(chemicalProb).toBeCloseTo(antimatterProb, 10);
+            expect(chemicalProb / antimatterProb).toBeCloseTo(10, 1);
         });
 
         it('should support custom multiplier', () => {
+            // Use same-affinity ships to test faction multiplier in isolation
+            const sameAffinityShips: Ship[] = [
+                createMockShip('Tianchao Ship', 'legendary', 'TIANCHAO', 'chemical'),
+                createMockShip('Other Ship', 'legendary', 'BINDERBURG', 'chemical'),
+            ];
             const factionEvent: FactionEvent = { faction: 'TIANCHAO', multiplier: 10 };
-            const tianchaoShip = mockShips[0];
-            const otherShip = mockShips[2];
 
             const tianchaoProbability = calculateShipProbability(
-                tianchaoShip,
+                sameAffinityShips[0],
                 'specialist',
-                mockShips,
+                sameAffinityShips,
                 [],
                 factionEvent
             );
             const otherProbability = calculateShipProbability(
-                otherShip,
+                sameAffinityShips[1],
                 'specialist',
-                mockShips,
+                sameAffinityShips,
                 [],
                 factionEvent
             );
 
-            // Should use custom 10x multiplier
+            // Should use custom 10x multiplier (both ships have same affinity weight)
             expect(tianchaoProbability / otherProbability).toBeCloseTo(10, 1);
         });
 
-        it('should calculate correct pool weights', () => {
-            // 2 Tianchao ships * 20 = 40 weight
-            // 3 other ships * 1 = 3 weight
-            // Total = 43 weight
-            // Legendary rate for specialist = 1/66 ≈ 0.01515
+        it('should calculate correct pool weights with affinity', () => {
+            // Using mockShips (all non-antimatter with weight 10):
+            // 2 Tianchao ships: 2 * 20 * 10 = 400 weight
+            // 3 other ships: 3 * 1 * 10 = 30 weight
+            // Total = 430 weight
+            // Legendary rate for specialist = 1/66
 
             const factionEvent: FactionEvent = { faction: 'TIANCHAO' };
-            const tianchaoShip = mockShips[0];
+            const tianchaoShip = mockShips[0]; // chemical, weight = 20 * 10 = 200
 
             const probability = calculateShipProbability(
                 tianchaoShip,
@@ -165,7 +170,9 @@ describe('recruitmentCalculator', () => {
             );
 
             const legendaryRate = 1 / 66;
-            const expectedProbability = (legendaryRate * 20) / 43;
+            // Ship weight = 20 (faction) * 10 (affinity) = 200
+            // Total weight = 2*200 + 3*10 = 430
+            const expectedProbability = (legendaryRate * 200) / 430;
 
             expect(probability).toBeCloseTo(expectedProbability, 10);
         });
