@@ -326,7 +326,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                             )}
                         </div>
 
-                        <CollapsibleAccordion isOpen={isEventSettingsOpen}>
+                        <div className="p-4 bg-dark">
                             <div className="space-y-6">
                                 {/* Event Mode Toggle */}
                                 <div className="flex items-center gap-4 mb-4">
@@ -361,7 +361,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
 
                                 {/* Faction Event Settings */}
                                 {eventMode === 'faction' && (
-                                    <div className="bg-dark-lighter p-4 rounded-lg">
+                                    <div className="bg-dark-lighter p-4">
                                         <h3 className="text-lg font-semibold mb-2">
                                             Faction Event
                                         </h3>
@@ -499,7 +499,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                        </CollapsibleAccordion>
+                        </div>
                     </div>
 
                     {/* Beacon Inventory */}
