@@ -1,4 +1,5 @@
 import React, { Component, ReactNode } from 'react';
+import { Loader } from '../ui/Loader';
 
 interface Props {
     children: ReactNode;
@@ -66,11 +67,9 @@ class ChunkErrorBoundary extends Component<Props, State> {
     render(): ReactNode {
         if (this.state.hasChunkError) {
             return (
-                <div className="flex items-center justify-center min-h-[200px]">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                        <p className="text-gray-400">Updating to latest version...</p>
-                    </div>
+                <div className="flex flex-col items-center justify-center min-h-[200px]">
+                    <Loader size="sm" />
+                    <p className="text-gray-400 mt-4">Updating to latest version...</p>
                 </div>
             );
         }
