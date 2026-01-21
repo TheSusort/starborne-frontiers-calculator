@@ -1,4 +1,5 @@
 import React, { memo, useState } from 'react';
+import { toBlob } from 'html-to-image';
 import { AffinityName, Ship } from '../../types/ship';
 import {
     SHIP_TYPES,
@@ -20,6 +21,7 @@ import {
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useNotification } from '../../hooks/useNotification';
 import { StatList } from '../stats/StatList';
 import { StatBreakdown } from '../stats/StatBreakdown';
 import { Link, useNavigate } from 'react-router-dom';
@@ -33,6 +35,7 @@ import { GearPiece } from '../../types/gear';
 import { TrophyIcon } from '../ui/icons/TrophyIcon';
 import { Image } from '../ui/Image';
 import IMPLANTS, { ImplantName } from '../../constants/implants';
+import { ImageIcon } from '../ui/icons/ImageIcon';
 
 interface Props {
     ship: Ship;
@@ -125,9 +128,44 @@ export const ShipDisplay: React.FC<Props> = memo(
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
+        const { addNotification } = useNotification();
         const navigate = useNavigate();
         const [hoveredImplantSlot, setHoveredImplantSlot] = useState<ImplantSlotName | null>(null);
         const implantTooltipRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+
+        const createAndCopyImage = async () => {
+            const shipElement = document.getElementById(`ship-card-${ship.id}`);
+            if (!shipElement) return;
+
+            try {
+                const blob = await toBlob(shipElement, {
+                    cacheBust: true,
+                    includeQueryParams: true,
+                    skipFonts: true,
+                    filter: (node: Node) => {
+                        if (node instanceof HTMLElement && node.dataset.hideOnCapture === 'true') {
+                            return false;
+                        }
+                        return true;
+                    },
+                });
+
+                if (!blob) {
+                    throw new Error('Failed to create image blob');
+                }
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'image/png': blob,
+                    }),
+                ]);
+                addNotification('success', 'Copied to clipboard!');
+            } catch (error) {
+                console.error('Failed to copy image:', error);
+                addNotification('error', 'Failed to copy image');
+            }
+        };
+
         const statsBreakdown = calculateTotalStats(
             ship.baseStats,
             ship.equipment,
@@ -158,6 +196,7 @@ export const ShipDisplay: React.FC<Props> = memo(
 
         return (
             <div
+                id={`ship-card-${ship.id}`}
                 className={`flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
@@ -168,7 +207,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                 >
                     <Header ship={ship} />
                     {(onEdit || onRemove || onLockEquipment || onQuickAdd) && (
-                        <div className="flex gap-1">
+                        <div className="flex gap-1" data-hide-on-capture="true">
                             {onLockEquipment && (
                                 <Button
                                     variant="secondary"
@@ -232,6 +271,18 @@ export const ShipDisplay: React.FC<Props> = memo(
                                         <div className="flex items-center gap-2">
                                             <ChartIcon />
                                             <span>Simulate ship</span>
+                                        </div>
+                                    </Dropdown.Item>
+
+                                    <Dropdown.Item
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            createAndCopyImage();
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <ImageIcon />
+                                            <span>Copy as image</span>
                                         </div>
                                     </Dropdown.Item>
 

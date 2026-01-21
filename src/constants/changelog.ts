@@ -6,7 +6,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.36.0',
         date: '2026-01-21',
-        changes: ['Added gear expand button in ship details page'],
+        changes: [
+            'Added gear expand button in ship details page',
+            'Added ship copy image to clipboard button in ship card',
+        ],
     },
     {
         version: '1.35.0',

@@ -1,4 +1,4 @@
-import domtoimage from 'dom-to-image';
+import { toBlob } from 'html-to-image';
 import { EncounterNote, SharedEncounterNote } from '../../types/encounters';
 import { Button, CloseIcon, EditIcon, CopyIcon, ShareIcon } from '../ui';
 import FormationGrid from './FormationGrid';
@@ -32,17 +32,25 @@ export const EncounterList = ({
         if (!encounterElement) return;
 
         try {
-            // Create canvas from the encounter div
-            const canvas = await domtoimage.toBlob(encounterElement, {
+            const blob = await toBlob(encounterElement, {
+                cacheBust: true,
+                includeQueryParams: true,
+                skipFonts: true,
                 filter: (node: Node) => {
-                    return node.textContent !== '';
+                    if (node instanceof HTMLElement && node.dataset.hideOnCapture === 'true') {
+                        return false;
+                    }
+                    return true;
                 },
             });
 
-            // Copy to clipboard
+            if (!blob) {
+                throw new Error('Failed to create image blob');
+            }
+
             await navigator.clipboard.write([
                 new ClipboardItem({
-                    'image/png': canvas,
+                    'image/png': blob,
                 }),
             ]);
             addNotification('success', 'Copied to clipboard!');
