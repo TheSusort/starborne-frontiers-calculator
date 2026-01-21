@@ -1,8 +1,13 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.35.0';
+export const CURRENT_VERSION = '1.36.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.36.0',
+        date: '2026-01-21',
+        changes: ['Added gear expand button in ship details page'],
+    },
     {
         version: '1.35.0',
         date: '2026-01-10',
