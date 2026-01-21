@@ -9,6 +9,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         changes: [
             'Added gear expand button in ship details page',
             'Added ship copy image to clipboard button in ship card',
+            'Added buffs, skill multiplier to DPS calculator',
         ],
     },
     {

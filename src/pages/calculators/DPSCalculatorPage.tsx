@@ -3,24 +3,44 @@ import { CloseIcon, PageLayout } from '../../components/ui';
 import { calculateCritMultiplier, calculateDamageReduction } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
-// Calculate DPS with variable enemy defense
+// Calculate DPS with variable enemy defense, buffs, and skill multiplier
 const calculateDPSWithDefense = (
     attack: number,
     crit: number,
     critDamage: number,
     enemyDefense: number,
-    defensePenetration: number
+    defensePenetration: number,
+    skillMultiplier: number,
+    buffs: Buff[]
 ): number => {
+    // Calculate buff totals
+    const attackBuff = buffs
+        .filter((b) => b.stat === 'attack')
+        .reduce((sum, b) => sum + b.value, 0);
+    const critBuff = buffs.filter((b) => b.stat === 'crit').reduce((sum, b) => sum + b.value, 0);
+    const critDamageBuff = buffs
+        .filter((b) => b.stat === 'critDamage')
+        .reduce((sum, b) => sum + b.value, 0);
+    const outgoingDamageBuff = buffs
+        .filter((b) => b.stat === 'outgoingDamage')
+        .reduce((sum, b) => sum + b.value, 0);
+
+    // Apply buffs
+    const effectiveAttack = attack * (1 + attackBuff / 100);
+    const effectiveCrit = Math.min(100, crit + critBuff); // Cap at 100%
+    const effectiveCritDamage = critDamage + critDamageBuff;
+
     const critMultiplier = calculateCritMultiplier({
-        attack,
-        crit,
-        critDamage,
+        attack: effectiveAttack,
+        crit: effectiveCrit,
+        critDamage: effectiveCritDamage,
         defence: 0,
         hp: 0,
         hacking: 0,
@@ -35,9 +55,19 @@ const calculateDPSWithDefense = (
     // Calculate damage reduction based on effective defense
     const damageReduction = calculateDamageReduction(effectiveDefense);
 
-    // Calculate final DPS with damage reduction
-    return attack * critMultiplier * (1 - damageReduction / 100);
+    // Calculate base DPS with damage reduction
+    const baseDPS = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
+
+    // Apply skill multiplier and outgoing damage buff
+    return baseDPS * (skillMultiplier / 100) * (1 + outgoingDamageBuff / 100);
 };
+
+// Define the type for a buff
+interface Buff {
+    id: string;
+    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
+    value: number;
+}
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -47,6 +77,7 @@ interface ShipConfig {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    skillMultiplier: number;
     dps?: number;
 }
 
@@ -59,11 +90,14 @@ const DPSCalculatorPage: React.FC = () => {
             crit: 100,
             critDamage: 125,
             defensePenetration: 0,
+            skillMultiplier: 100,
         },
     ]);
     const [nextId, setNextId] = useState(2);
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
+    const [buffs, setBuffs] = useState<Buff[]>([]);
+    const [nextBuffId, setNextBuffId] = useState(1);
 
     // Calculate DPS for all configs on initial render
     useEffect(() => {
@@ -75,7 +109,9 @@ const DPSCalculatorPage: React.FC = () => {
                 config.crit,
                 config.critDamage,
                 enemyDefense,
-                config.defensePenetration
+                config.defensePenetration,
+                config.skillMultiplier,
+                buffs
             );
             return {
                 ...config,
@@ -87,7 +123,7 @@ const DPSCalculatorPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Empty dependency array - we only want this to run once
 
-    // Recalculate DPS when enemy defense changes
+    // Recalculate DPS when enemy defense or buffs change
     useEffect(() => {
         setConfigs((prevConfigs) =>
             prevConfigs.map((config) => {
@@ -96,7 +132,9 @@ const DPSCalculatorPage: React.FC = () => {
                     config.crit,
                     config.critDamage,
                     enemyDefense,
-                    config.defensePenetration
+                    config.defensePenetration,
+                    config.skillMultiplier,
+                    buffs
                 );
                 return {
                     ...config,
@@ -104,7 +142,7 @@ const DPSCalculatorPage: React.FC = () => {
                 };
             })
         );
-    }, [enemyDefense]);
+    }, [enemyDefense, buffs]);
 
     // Add a new ship configuration
     const addConfig = () => {
@@ -115,6 +153,7 @@ const DPSCalculatorPage: React.FC = () => {
             crit: 100,
             critDamage: 150,
             defensePenetration: 0,
+            skillMultiplier: 100,
         };
 
         // Calculate DPS for the new config
@@ -123,7 +162,9 @@ const DPSCalculatorPage: React.FC = () => {
             newConfig.crit,
             newConfig.critDamage,
             enemyDefense,
-            newConfig.defensePenetration
+            newConfig.defensePenetration,
+            newConfig.skillMultiplier,
+            buffs
         );
 
         setConfigs([
@@ -144,7 +185,7 @@ const DPSCalculatorPage: React.FC = () => {
     // Update a ship configuration
     const updateConfig = (
         id: string,
-        field: 'name' | 'attack' | 'crit' | 'critDamage' | 'defensePenetration',
+        field: 'name' | 'attack' | 'crit' | 'critDamage' | 'defensePenetration' | 'skillMultiplier',
         value: string | number
     ) => {
         const updatedConfigs = configs.map((config) => {
@@ -156,14 +197,17 @@ const DPSCalculatorPage: React.FC = () => {
                     field === 'attack' ||
                     field === 'crit' ||
                     field === 'critDamage' ||
-                    field === 'defensePenetration'
+                    field === 'defensePenetration' ||
+                    field === 'skillMultiplier'
                 ) {
                     const dps = calculateDPSWithDefense(
                         updatedConfig.attack,
                         updatedConfig.crit,
                         updatedConfig.critDamage,
                         enemyDefense,
-                        updatedConfig.defensePenetration
+                        updatedConfig.defensePenetration,
+                        updatedConfig.skillMultiplier,
+                        buffs
                     );
                     return {
                         ...updatedConfig,
@@ -179,6 +223,25 @@ const DPSCalculatorPage: React.FC = () => {
         setConfigs(updatedConfigs);
     };
 
+    // Buff management functions
+    const addBuff = () => {
+        const newBuff: Buff = {
+            id: nextBuffId.toString(),
+            stat: 'attack',
+            value: 0,
+        };
+        setBuffs([...buffs, newBuff]);
+        setNextBuffId(nextBuffId + 1);
+    };
+
+    const removeBuff = (id: string) => {
+        setBuffs(buffs.filter((buff) => buff.id !== id));
+    };
+
+    const updateBuff = (id: string, field: 'stat' | 'value', value: string | number) => {
+        setBuffs(buffs.map((buff) => (buff.id === id ? { ...buff, [field]: value } : buff)));
+    };
+
     // Find the config with the highest DPS
     const bestConfig = configs.reduce(
         (best, current) => {
@@ -189,6 +252,25 @@ const DPSCalculatorPage: React.FC = () => {
         },
         null as ShipConfig | null
     );
+
+    // Find the second best config
+    const secondBestConfig = configs
+        .filter((config) => config.id !== bestConfig?.id)
+        .reduce(
+            (best, current) => {
+                if (!best || (current.dps && best.dps && current.dps > best.dps)) {
+                    return current;
+                }
+                return best;
+            },
+            null as ShipConfig | null
+        );
+
+    // Calculate how much better the best is compared to second best
+    const bestVsSecondPercentage =
+        bestConfig?.dps && secondBestConfig?.dps
+            ? ((bestConfig.dps - secondBestConfig.dps) / secondBestConfig.dps) * 100
+            : null;
 
     const toggleViewMode = () => {
         setViewMode(viewMode === 'table' ? 'heatmap' : 'table');
@@ -217,6 +299,66 @@ const DPSCalculatorPage: React.FC = () => {
                         />
                         <p className="text-sm text-gray-400 mt-2">
                             Common defense value that all ships will be calculated against
+                        </p>
+                    </div>
+
+                    <div className="card">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">Active Buffs</h3>
+                            <Button variant="secondary" onClick={addBuff}>
+                                Add Buff
+                            </Button>
+                        </div>
+                        {buffs.length === 0 ? (
+                            <p className="text-sm text-gray-400">No buffs active</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {buffs.map((buff) => (
+                                    <div key={buff.id} className="flex items-center gap-2">
+                                        <Select
+                                            value={buff.stat}
+                                            onChange={(value) =>
+                                                updateBuff(buff.id, 'stat', value as Buff['stat'])
+                                            }
+                                            options={[
+                                                { value: 'attack', label: 'Attack' },
+                                                { value: 'crit', label: 'Crit Rate' },
+                                                { value: 'critDamage', label: 'Crit Damage' },
+                                                {
+                                                    value: 'outgoingDamage',
+                                                    label: 'Outgoing Damage',
+                                                },
+                                            ]}
+                                            className="flex-1"
+                                        />
+                                        <Input
+                                            type="number"
+                                            value={buff.value}
+                                            onChange={(e) =>
+                                                updateBuff(
+                                                    buff.id,
+                                                    'value',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                            className="w-24"
+                                        />
+                                        <span className="text-gray-400">%</span>
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => removeBuff(buff.id)}
+                                            aria-label="Remove buff"
+                                        >
+                                            <CloseIcon />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <p className="text-sm text-gray-400 mt-2">
+                            Buffs apply to all ships. Attack and Outgoing Damage are multiplicative,
+                            Crit Rate and Crit Damage are additive.
                         </p>
                     </div>
 
@@ -305,6 +447,19 @@ const DPSCalculatorPage: React.FC = () => {
                                                 )
                                             }
                                         />
+                                        <Input
+                                            label="Skill Multiplier (%)"
+                                            type="number"
+                                            min="0"
+                                            value={config.skillMultiplier}
+                                            onChange={(e) =>
+                                                updateConfig(
+                                                    config.id,
+                                                    'skillMultiplier',
+                                                    parseInt(e.target.value) || 0
+                                                )
+                                            }
+                                        />
                                     </div>
 
                                     <div className="mt-4 pt-4 border-t border-dark-border">
@@ -358,8 +513,15 @@ const DPSCalculatorPage: React.FC = () => {
                                     </div>
 
                                     {bestConfig && bestConfig.id === config.id && (
-                                        <div className="text-primary text-sm mt-2 text-center">
-                                            Best ship configuration
+                                        <div className="text-sm mt-2 text-center">
+                                            <span className="text-primary">
+                                                Best ship configuration
+                                            </span>
+                                            {bestVsSecondPercentage !== null && (
+                                                <span className="text-green-500 ml-2">
+                                                    +{bestVsSecondPercentage.toFixed(2)}% vs #2
+                                                </span>
+                                            )}
                                         </div>
                                     )}
                                 </div>
