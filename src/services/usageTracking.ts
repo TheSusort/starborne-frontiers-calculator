@@ -4,8 +4,9 @@ const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000'; // Special UUI
 
 /**
  * Increments the autogear run count for a user (logged in or anonymous)
+ * Returns the new count after incrementing
  */
-export async function trackAutogearRun(userId?: string | null): Promise<void> {
+export async function trackAutogearRun(userId?: string | null): Promise<number | null> {
     try {
         const trackingUserId = userId || ANONYMOUS_USER_ID;
         const { error } = await supabase.rpc('increment_autogear_count', {
@@ -14,9 +15,25 @@ export async function trackAutogearRun(userId?: string | null): Promise<void> {
 
         if (error) {
             console.error('Error tracking autogear run:', error);
+            return null;
         }
+
+        // Fetch the updated count
+        const { data, error: fetchError } = await supabase
+            .from('users')
+            .select('autogear_run_count')
+            .eq('id', trackingUserId)
+            .single();
+
+        if (fetchError) {
+            console.error('Error fetching autogear count:', fetchError);
+            return null;
+        }
+
+        return data?.autogear_run_count || null;
     } catch (error) {
         console.error('Error tracking autogear run:', error);
+        return null;
     }
 }
 
