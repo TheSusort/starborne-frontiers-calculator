@@ -10,6 +10,7 @@ import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { UserDistributionChart } from '../../components/admin/UserDistributionChart';
 import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';
 import { AddShipTemplateForm } from '../../components/admin/AddShipTemplateForm';
+import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
 import {
     isAdmin,
     getDailyUsageStats,
@@ -216,6 +217,9 @@ export const AdminPanel: React.FC = () => {
                 {/* Analytics Tab */}
                 {activeTab === 'analytics' && (
                     <div className="space-y-6">
+                        {/* Live Traffic */}
+                        <LiveTrafficCard />
+
                         {/* Summary Stats */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <StatCard title="Total Users" value={totalUsers.toLocaleString()} />
