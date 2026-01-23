@@ -16,6 +16,7 @@ import Seo from './components/seo/Seo';
 import { AutogearConfigProvider } from './contexts/AutogearConfigContext';
 import { Loader } from './components/ui/Loader';
 import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
+import { startHeartbeat } from './services/heartbeatService';
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
@@ -73,6 +74,11 @@ const App: React.FC = () => {
             setShowChangelog(true);
             setLastSeenVersion(currentState.lastSeenVersion);
         }
+    }, []);
+
+    // Start heartbeat for live traffic tracking
+    useEffect(() => {
+        startHeartbeat(null); // Start with no user
     }, []);
 
     const handleCloseChangelog = () => {
