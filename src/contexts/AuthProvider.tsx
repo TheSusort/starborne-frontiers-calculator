@@ -5,6 +5,7 @@ import { SupabaseAuthService } from '../services/auth/supabaseAuth';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { migratePlayerData, syncMigratedDataToSupabase } from '../utils/migratePlayerData';
+import { updateHeartbeatUser } from '../services/heartbeatService';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -54,6 +55,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const previousUser = currentUser;
             setUser(user);
             setCurrentUser(user);
+
+            // Update heartbeat tracking with user ID
+            updateHeartbeatUser(user?.id ?? null);
             setLoading(false);
 
             if (user) {
