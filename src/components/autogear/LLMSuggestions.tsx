@@ -91,13 +91,14 @@ export const LLMSuggestions: React.FC<LLMSuggestionsProps> = ({ selectedShip, on
                         )}
 
                         <CommunityActions
-                            source={source}
-                            suggestion={suggestion}
-                            communityRecommendation={communityRecommendation}
+                            recommendation={
+                                communityRecommendation as CommunityRecommendation | null
+                            }
                             userVote={userVote}
+                            hasRunAutogear={false}
+                            showShareForm={false}
                             onVote={handleVote}
-                            onSaveToCommmunity={handleSaveToCommmunity}
-                            onApplyConfig={onApplyConfig}
+                            onToggleShareForm={() => {}}
                         />
                     </div>
                 )}
