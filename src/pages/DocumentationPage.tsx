@@ -97,6 +97,16 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#community-recommendations"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Community Recommendations
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#engineering-stats"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -1178,6 +1188,96 @@ const DocumentationPage: React.FC = () => {
                                 <br />
                                 <br />
                             </p>
+                        </div>
+                    </section>
+
+                    {/* Community Recommendations Section */}
+                    <section
+                        id="community-recommendations"
+                        className="space-y-4 [counter-increment:section]"
+                    >
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Community Recommendations
+                        </h2>
+                        <div className="card space-y-4">
+                            <p className="text-gray-300">
+                                The community recommendations system allows players to share their
+                                autogear configurations with others.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Viewing Recommendations
+                                </h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        When you select a ship, you&apos;ll see the highest-voted
+                                        community recommendation
+                                    </li>
+                                    <li>Click to expand and see the full configuration details</li>
+                                    <li>View alternative recommendations from other players</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Sharing Your Build
+                                </h4>
+                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                    <li>
+                                        Configure your autogear settings (stat priorities, set
+                                        bonuses, etc.)
+                                    </li>
+                                    <li>
+                                        Click &quot;Find Optimal Gear&quot; to run the optimization
+                                    </li>
+                                    <li>
+                                        Click &quot;Share to Community&quot; to open the share form
+                                    </li>
+                                    <li>
+                                        Add a descriptive title (e.g., &quot;High Crit DPS
+                                        Build&quot;)
+                                    </li>
+                                    <li>Optionally add a description explaining your strategy</li>
+                                    <li>
+                                        Check &quot;Only show to users with same ultimate
+                                        implant&quot; if your build is implant-specific
+                                    </li>
+                                    <li>Click &quot;Share&quot; to publish</li>
+                                </ol>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Voting</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click &quot;Helpful&quot; or &quot;Not Helpful&quot; to vote
+                                        on recommendations
+                                    </li>
+                                    <li>Your votes help surface the best builds for each ship</li>
+                                    <li>Sign in required to vote or share</li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Pro Tips</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>
+                                        Use descriptive titles that highlight the build&apos;s
+                                        purpose (e.g., &quot;Arena Speed Build&quot; or &quot;Vault
+                                        Tank Build&quot;)
+                                    </li>
+                                    <li>
+                                        When your build relies on a specific ultimate implant,
+                                        enable the implant filter to help users find relevant
+                                        recommendations
+                                    </li>
+                                    <li>
+                                        Check community recommendations before running autogear to
+                                        see what works for other players
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </section>
 
