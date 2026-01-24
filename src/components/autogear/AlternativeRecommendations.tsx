@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../ui/Button';
-import { AIRecommendation } from '../../services/aiRecommendations';
+import { AIRecommendation } from '../../types/communityRecommendation';
 
 interface AlternativeRecommendationsProps {
     alternatives: AIRecommendation[];
