@@ -20,7 +20,6 @@ async function sendHeartbeat(): Promise<void> {
         await supabase.from('heartbeats').insert({
             session_id: getSessionId(),
             user_id: currentUserId,
-            page_path: window.location.pathname,
         });
     } catch (error) {
         // Silently fail - heartbeats are non-critical

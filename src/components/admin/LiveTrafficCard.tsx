@@ -23,7 +23,7 @@ export const LiveTrafficCard: React.FC = () => {
     if (loading) {
         return (
             <div className="card animate-pulse">
-                <div className="h-32 bg-gray-700 rounded"></div>
+                <div className="h-24 bg-gray-700 rounded"></div>
             </div>
         );
     }
@@ -41,7 +41,7 @@ export const LiveTrafficCard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-3 gap-4">
                 <div className="text-center">
                     <div className="text-2xl font-bold text-white">
                         {traffic?.active_sessions ?? 0}
@@ -61,22 +61,6 @@ export const LiveTrafficCard: React.FC = () => {
                     <div className="text-xs text-gray-400">Anonymous</div>
                 </div>
             </div>
-
-            {traffic?.top_pages && traffic.top_pages.length > 0 && (
-                <div>
-                    <h4 className="text-sm text-gray-400 mb-2">Top Pages</h4>
-                    <div className="space-y-1">
-                        {traffic.top_pages.map((page) => (
-                            <div key={page.path} className="flex justify-between text-sm">
-                                <span className="text-gray-300 truncate max-w-[200px]">
-                                    {page.path}
-                                </span>
-                                <span className="text-gray-500">{page.count}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

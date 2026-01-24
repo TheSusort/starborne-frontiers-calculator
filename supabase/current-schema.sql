@@ -87,7 +87,6 @@ CREATE TABLE public.heartbeats (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   session_id text NOT NULL,
   user_id uuid,
-  page_path text NOT NULL,
   created_at timestamptz DEFAULT now(),
   CONSTRAINT heartbeats_pkey PRIMARY KEY (id),
   CONSTRAINT heartbeats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE

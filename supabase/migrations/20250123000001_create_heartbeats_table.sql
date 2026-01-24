@@ -3,18 +3,14 @@ CREATE TABLE public.heartbeats (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   session_id text NOT NULL,
   user_id uuid,
-  page_path text NOT NULL,
   created_at timestamptz DEFAULT now(),
 
   CONSTRAINT heartbeats_pkey PRIMARY KEY (id),
   CONSTRAINT heartbeats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
--- Index for "active in last 60s" queries
+-- Index for queries
 CREATE INDEX heartbeats_created_at_idx ON public.heartbeats (created_at DESC);
-
--- Index for daily aggregation queries
-CREATE INDEX heartbeats_session_user_idx ON public.heartbeats (session_id, user_id);
 
 -- Enable RLS
 ALTER TABLE public.heartbeats ENABLE ROW LEVEL SECURITY;
