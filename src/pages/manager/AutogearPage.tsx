@@ -18,7 +18,7 @@ import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
 import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
-import { Modal } from '../../components/ui/layout/Modal';
+import { MilestoneModal } from '../../components/ui/MilestoneModal';
 import { GEAR_SLOTS } from '../../constants';
 import { useSearchParams } from 'react-router-dom';
 import { Ship } from '../../types/ship';
@@ -1123,37 +1123,11 @@ export const AutogearPage: React.FC = () => {
                     cancelLabel="Cancel"
                 />
 
-                <Modal
+                <MilestoneModal
                     isOpen={showMilestoneModal}
                     onClose={() => setShowMilestoneModal(false)}
-                    title="Milestone Reached!"
-                >
-                    <div className="space-y-4 text-center">
-                        <div className="text-6xl mb-4">🎉</div>
-                        <p className="text-xl font-semibold">{milestoneCount} Autogear Runs!</p>
-                        <p className="text-gray-300">
-                            Thank you for using Starborne Frontiers Calculator! Your continued use
-                            means a lot.
-                        </p>
-                        <p className="text-gray-300">
-                            If you&apos;re enjoying the app and want to support its development,
-                            consider buying me a coffee:
-                        </p>
-                        <div className="pt-4">
-                            <a
-                                href="https://www.buymeacoffee.com/starborneplanner"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-block px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition-colors"
-                            >
-                                ☕ Buy Me a Coffee
-                            </a>
-                        </div>
-                        <p className="text-sm text-gray-500 pt-4">
-                            No pressure - the app will always be free!
-                        </p>
-                    </div>
-                </Modal>
+                    milestoneCount={milestoneCount}
+                />
             </PageLayout>
         </>
     );

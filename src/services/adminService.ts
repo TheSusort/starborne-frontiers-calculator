@@ -16,6 +16,13 @@ export interface TopUser {
     last_active: string;
 }
 
+export interface LiveTraffic {
+    active_sessions: number;
+    authenticated_users: number;
+    anonymous_sessions: number;
+    top_pages: { path: string; count: number }[];
+}
+
 export type UserSortField =
     | 'email'
     | 'total_autogear_runs'
@@ -116,6 +123,35 @@ export async function getTotalUserCount(): Promise<number> {
     } catch (error) {
         console.error('Error fetching user count:', error);
         return 0;
+    }
+}
+
+/**
+ * Get live traffic stats (users active in last 60 seconds)
+ */
+export async function getLiveTraffic(): Promise<LiveTraffic | null> {
+    try {
+        const { data, error } = await supabase.rpc('get_live_traffic');
+
+        if (error) {
+            console.error('Error fetching live traffic:', error);
+            return null;
+        }
+
+        // RPC returns an array with one row
+        if (data && data.length > 0) {
+            return data[0];
+        }
+
+        return {
+            active_sessions: 0,
+            authenticated_users: 0,
+            anonymous_sessions: 0,
+            top_pages: [],
+        };
+    } catch (error) {
+        console.error('Error fetching live traffic:', error);
+        return null;
     }
 }
 

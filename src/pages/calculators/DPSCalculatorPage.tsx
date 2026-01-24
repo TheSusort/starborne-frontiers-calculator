@@ -323,7 +323,7 @@ const DPSCalculatorPage: React.FC = () => {
                                             options={[
                                                 { value: 'attack', label: 'Attack' },
                                                 { value: 'crit', label: 'Crit Rate' },
-                                                { value: 'critDamage', label: 'Crit Damage' },
+                                                { value: 'critDamage', label: 'Crit Power' },
                                                 {
                                                     value: 'outgoingDamage',
                                                     label: 'Outgoing Damage',
