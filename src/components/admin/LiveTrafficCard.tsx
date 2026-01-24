@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getLiveTraffic, LiveTraffic } from '../../services/adminService';
+import { StatCard } from '../ui/StatCard';
 
 const REFRESH_INTERVAL = 10_000; // 10 seconds
 
@@ -29,38 +30,12 @@ export const LiveTrafficCard: React.FC = () => {
     }
 
     return (
-        <div className="card">
-            <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Live Traffic</h3>
-                <div className="flex items-center gap-2">
-                    <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-                    </span>
-                    <span className="text-xs text-gray-400">Live</span>
-                </div>
-            </div>
-
+        <>
             <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-white">
-                        {traffic?.active_sessions ?? 0}
-                    </div>
-                    <div className="text-xs text-gray-400">Active Now</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">
-                        {traffic?.authenticated_users ?? 0}
-                    </div>
-                    <div className="text-xs text-gray-400">Logged In</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-400">
-                        {traffic?.anonymous_sessions ?? 0}
-                    </div>
-                    <div className="text-xs text-gray-400">Anonymous</div>
-                </div>
+                <StatCard title="Active now" value={traffic?.active_sessions ?? 0} color="green" />
+                <StatCard title="Logged in currently" value={traffic?.authenticated_users ?? 0} />
+                <StatCard title="Anonymous sessions" value={traffic?.anonymous_sessions ?? 0} />
             </div>
-        </div>
+        </>
     );
 };
