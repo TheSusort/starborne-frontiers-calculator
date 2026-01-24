@@ -5,7 +5,6 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Loader } from '../../components/ui/Loader';
-import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
 import { ChevronDownIcon, ChevronUpIcon } from '../../components/ui/icons';
 import { RARITIES } from '../../constants';
 import { ShipSelectionGrid } from '../../components/calculator/ShipSelectionGrid';

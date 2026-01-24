@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
 import { SavedAutogearConfig } from '../types/autogear';
-import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
-import { ShipTypeName } from '../constants';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { useAuth } from './AuthProvider';

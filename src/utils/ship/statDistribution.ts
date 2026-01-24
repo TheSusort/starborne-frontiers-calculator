@@ -1,6 +1,6 @@
 import { BaseStats, EngineeringStat } from '../../types/stats';
 import { GearPiece } from '../../types/gear';
-import { GearSlotName, GEAR_SLOTS, ShipTypeName, SHIP_TYPES } from '../../constants';
+import { GearSlotName, GEAR_SLOTS, ShipTypeName } from '../../constants';
 import { calculateTotalScore } from '../autogear/scoring';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';

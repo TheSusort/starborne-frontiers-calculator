@@ -7,7 +7,7 @@ import { DiffResult } from '../../types/diff';
 import { generateDiff } from '../../utils/diff/diffCalculator';
 import { generateLargeFileDiff } from '../../utils/diff/starborneDiffCalculator';
 import { FileUpload, DiffResults } from '../../components/diff';
-import { ExportedPlayData, isExportedPlayData } from '../../types/starborne';
+import { isExportedPlayData } from '../../types/starborne';
 
 const JsonDiffCalculatorPage: React.FC = () => {
     const [file1, setFile1] = useState<File | null>(null);

@@ -559,8 +559,8 @@ export const calculatePullsForConfidence = (
     eventShips: EventShip[] = [],
     targetShipNames: string[] = [],
     mode: 'or' | 'and' = 'or',
-    targetShips: Ship[] = [],
-    allShips: Ship[] = []
+    _targetShips: Ship[] = [],
+    _allShips: Ship[] = []
 ): number => {
     if (mode === 'and' && Array.isArray(probability)) {
         // AND mode: Find n where P(all ships in n pulls) >= confidence

@@ -3,7 +3,7 @@ import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { Ship } from '../../types/ship';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
-import { Hacking100PercentSuccess, Hacking, DoTDamage, AverageDamage } from './statLines';
+import { Hacking100PercentSuccess, Hacking, AverageDamage } from './statLines';
 
 interface DebufferCorrosionStatsProps {
     simulation: SimulationSummary;

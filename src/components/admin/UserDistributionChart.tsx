@@ -1,7 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip } from 'recharts';
 import { UserDistribution } from '../../services/systemHealthService';
-import { BaseChart, ChartTooltip } from '../ui/charts';
+import { BaseChart } from '../ui/charts';
 
 interface UserDistributionChartProps {
     data: UserDistribution[];

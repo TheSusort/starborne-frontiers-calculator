@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AuthService, AuthUser } from '../services/auth/types';
 import { FirebaseAuthService } from '../services/auth/firebaseAuth';
 import { SupabaseAuthService } from '../services/auth/supabaseAuth';
@@ -91,6 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => {
             unsubscribe();
         };
+        // currentUser is intentionally captured to track previous user state in the callback
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, addNotification]);
 
     const signInWithGoogle = async () => {

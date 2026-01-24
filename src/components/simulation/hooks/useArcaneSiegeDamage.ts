@@ -97,7 +97,7 @@ export function useArcaneSiegeDamage({
         const displayedDamage = displayedDamageForSuggested;
 
         // For backward compatibility, also calculate the old shieldedDamage
-        const baseDamage = simulation.averageDamage || 0;
+        const _baseDamage = simulation.averageDamage || 0;
         const shieldedDamage =
             arcaneSiegeInfo.hasImplant && simulation.averageDamage
                 ? simulation.averageDamage * (1 + arcaneSiegeInfo.multiplier / 100)

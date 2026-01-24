@@ -173,7 +173,7 @@ function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
     return Math.round(cost);
 }
 // Helper function to calculate ship stats without a specific piece slot
-function calculateShipBaselineStats(
+function _calculateShipBaselineStats(
     ship: Ship,
     slotToRemove: GearSlotName | undefined,
     getGearPiece: (id: string) => GearPiece | undefined,
@@ -207,7 +207,7 @@ function calculateGearStats(
     getEngineeringStatsForShipType?: (shipType: ShipTypeName) => EngineeringStat | undefined,
     includePiece: boolean = true,
     cachedBaseline?: BaseStats | null,
-    logPerformance: boolean = false
+    _logPerformance: boolean = false
 ): BaseStats {
     // If ship is provided, use ship's actual stats and equipment
     if (ship && getGearPiece && getEngineeringStatsForShipType) {
@@ -506,7 +506,7 @@ const gearStatsCache = new Map<string, BaseStats>();
 const totalStatsCache = new Map<string, BaseStats>();
 
 // Helper to create a signature for a piece's stats (for caching)
-function getPieceStatsSignature(piece: GearPiece): string {
+function _getPieceStatsSignature(piece: GearPiece): string {
     const mainStat = piece.mainStat
         ? `${piece.mainStat.name}_${piece.mainStat.type}_${piece.mainStat.value}`
         : 'none';

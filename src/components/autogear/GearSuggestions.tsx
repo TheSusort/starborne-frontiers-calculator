@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { GearSlot } from '../gear/GearSlot';
 import { Button, LockIcon, UnlockedLockIcon } from '../ui';
-import { GEAR_SLOT_ORDER, IMPLANT_SLOT_ORDER, GearSlotName } from '../../constants';
+import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';

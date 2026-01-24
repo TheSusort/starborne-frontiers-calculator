@@ -144,6 +144,7 @@ export const ShipDisplayImage: React.FC<Props> = memo(
                 getEngineeringStatsForShipType,
                 ship.type,
                 ship.implants,
+                ship.id,
             ]
         );
 

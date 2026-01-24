@@ -106,6 +106,7 @@ export const ImportButton: React.FC<{
             // Otherwise, proceed with normal import
             await processFileImport(file);
         },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [setShips, setInventory, setEngineeringStats, addNotification, user, shareData]
     );
 
@@ -195,6 +196,8 @@ export const ImportButton: React.FC<{
                 if (fileInput) fileInput.value = '';
             }
         },
+        // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         [setShips, setInventory, setEngineeringStats, addNotification, user]
     );
 
@@ -237,14 +240,17 @@ export const ImportButton: React.FC<{
         [selectedFile, addNotification, processFileImport]
     );
 
-    const refreshPage = useCallback((message: string) => {
-        addNotification('success', message);
-        if (!shareData) {
-            setTimeout(() => {
-                window.location.reload();
-            }, 3000);
-        }
-    }, []);
+    const refreshPage = useCallback(
+        (message: string) => {
+            addNotification('success', message);
+            if (!shareData) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            }
+        },
+        [addNotification, shareData]
+    );
 
     return (
         <div>

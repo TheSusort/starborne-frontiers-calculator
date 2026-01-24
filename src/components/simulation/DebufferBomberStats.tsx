@@ -3,7 +3,7 @@ import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { Ship } from '../../types/ship';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
-import { Hacking100PercentSuccess, Attack, BombDamage, AverageDamage } from './statLines';
+import { Hacking100PercentSuccess, BombDamage, AverageDamage } from './statLines';
 
 interface DebufferBomberStatsProps {
     simulation: SimulationSummary;

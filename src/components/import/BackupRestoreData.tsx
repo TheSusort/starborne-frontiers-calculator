@@ -7,7 +7,6 @@ import { StorageKey, StorageKeyType } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
 import { GearSlotName } from '../../constants';
 import { v4 as uuidv4 } from 'uuid';
-import { ImportButton } from './ImportButton';
 
 const BACKUP_KEYS = Object.values(StorageKey);
 
