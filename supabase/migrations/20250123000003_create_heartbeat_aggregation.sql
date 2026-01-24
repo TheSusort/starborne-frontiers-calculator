@@ -21,9 +21,9 @@ BEGIN
     unique_active_users = EXCLUDED.unique_active_users,
     updated_at = now();
 
-  -- Delete heartbeats older than 7 days
+  -- Delete all aggregated heartbeats (yesterday and older)
   DELETE FROM heartbeats
-  WHERE created_at < now() - interval '7 days';
+  WHERE created_at::date <= yesterday;
 END;
 $$;
 
