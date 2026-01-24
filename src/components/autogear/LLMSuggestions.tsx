@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { AutogearSuggestion } from '../../types/autogearSuggestion';
 import { Button } from '../ui/Button';
@@ -8,6 +8,7 @@ import { AlternativeRecommendations } from './AlternativeRecommendations';
 import { CommunityActions } from './CommunityActions';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import { useLLMRecommendations } from '../../hooks/useLLMRecommendations';
+import { CommunityRecommendation } from '../../types/communityRecommendation';
 
 interface LLMSuggestionsProps {
     selectedShip: Ship | null;
@@ -53,14 +54,10 @@ export const LLMSuggestions: React.FC<LLMSuggestionsProps> = ({ selectedShip, on
     return (
         <div className="mt-4 border border-dark-border overflow-hidden">
             <RecommendationHeader
-                source={source}
-                suggestion={suggestion}
-                communityRecommendation={communityRecommendation}
+                recommendation={communityRecommendation as CommunityRecommendation | null}
                 loading={loading}
                 isExpanded={isExpanded}
                 onToggleExpand={() => setIsExpanded(!isExpanded)}
-                onForceAI={handleForceAI}
-                onRetry={handleRetry}
             />
 
             <CollapsibleAccordion isOpen={isExpanded}>

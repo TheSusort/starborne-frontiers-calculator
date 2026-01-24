@@ -1,30 +1,20 @@
 import React from 'react';
-import { Button } from '../ui/Button';
 import { Loader } from '../ui/Loader';
-import { AIRecommendation } from '../../services/aiRecommendations';
-import { AutogearSuggestion } from '../../types/autogearSuggestion';
+import { CommunityRecommendation } from '../../types/communityRecommendation';
 import { ChevronDownIcon } from '../ui/icons';
 
 interface RecommendationHeaderProps {
-    source: 'community' | 'ai' | null;
-    suggestion: AutogearSuggestion | null;
-    communityRecommendation: AIRecommendation | null;
+    recommendation: CommunityRecommendation | null;
     loading: boolean;
     isExpanded: boolean;
     onToggleExpand: () => void;
-    onForceAI: () => void;
-    onRetry: () => void;
 }
 
 export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
-    source,
-    suggestion,
-    communityRecommendation,
+    recommendation,
     loading,
     isExpanded,
     onToggleExpand,
-    onForceAI,
-    onRetry,
 }) => {
     const renderVoteSum = (upvotes: number, downvotes: number) => {
         const sum = upvotes - downvotes;
@@ -37,64 +27,49 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
         }
     };
 
+    const renderContent = () => {
+        if (loading) {
+            return (
+                <div className="flex items-center space-x-2">
+                    <Loader size="sm" />
+                    <span className="text-gray-400">Loading recommendations...</span>
+                </div>
+            );
+        }
+
+        if (recommendation) {
+            return (
+                <div className="flex items-center space-x-2">
+                    <span>{recommendation.title}</span>
+                    {recommendation.is_implant_specific && recommendation.ultimate_implant && (
+                        <span className="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded">
+                            {recommendation.ultimate_implant}
+                        </span>
+                    )}
+                    {renderVoteSum(recommendation.upvotes || 0, recommendation.downvotes || 0)}
+                    <span className="text-gray-400">
+                        ({Math.round((recommendation.score || 0) * 100)}% positive)
+                    </span>
+                </div>
+            );
+        }
+
+        return <span>Community Recommendations</span>;
+    };
+
     return (
         <div
             onClick={onToggleExpand}
-            className="w-full p-4 bg-dark border-b border-dark-border hover:bg-dark-lighter transition-colors text-left text-sm"
+            className="w-full p-4 bg-dark border-b border-dark-border hover:bg-dark-lighter transition-colors text-left text-sm cursor-pointer"
         >
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                    <span className="">
+                    <span>
                         <ChevronDownIcon
                             className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
                         />
                     </span>
-                    <span className="">{'Configuration Suggestion'}</span>
-                    {source === 'community' && communityRecommendation && (
-                        <div className="flex items-center space-x-2">
-                            {renderVoteSum(
-                                communityRecommendation.upvotes || 0,
-                                communityRecommendation.downvotes || 0
-                            )}
-                            <span className="text-gray-400">
-                                ({Math.round((communityRecommendation.score || 0) * 100)}% positive)
-                            </span>
-                        </div>
-                    )}
-                </div>
-                <div className="flex items-center space-x-2">
-                    {loading && (
-                        <div className="flex items-center space-x-2">
-                            <Loader size="sm" />
-                            <span className="text-gray-400 text-sm">Loading...</span>
-                        </div>
-                    )}
-                    {!loading && source === 'community' && (
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onForceAI();
-                            }}
-                            disabled={loading}
-                        >
-                            Generate
-                        </Button>
-                    )}
-                    {!loading && source !== 'community' && suggestion && (
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onRetry();
-                            }}
-                            disabled={loading}
-                        >
-                            Generate
-                        </Button>
-                    )}
+                    {renderContent()}
                 </div>
             </div>
         </div>
