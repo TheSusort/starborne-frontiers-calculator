@@ -5,8 +5,8 @@ import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
 import { AutogearConfigList } from './AutogearConfigList';
-import { LLMSuggestions } from './LLMSuggestions';
-import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import { CommunityRecommendations } from './CommunityRecommendations';
+import { StatPriority, SetPriority, StatBonus, SavedAutogearConfig } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 
@@ -30,6 +30,8 @@ interface AutogearQuickSettingsProps {
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
     };
+    hasRunAutogear?: boolean;
+    lastRunConfigs?: Record<string, SavedAutogearConfig>;
 }
 
 export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
@@ -40,6 +42,8 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onOpenSettings,
     onFindOptimalGear,
     getShipConfig,
+    hasRunAutogear = false,
+    lastRunConfigs = {},
 }) => {
     const navigate = useNavigate();
     const [autoOpenIndex, setAutoOpenIndex] = useState<number | null>(null);
@@ -119,8 +123,14 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                 </ShipSelector>
                             </div>
                         </div>
-                        {/* LLM Suggestions - show for every selected ship */}
-                        {ship && <LLMSuggestions selectedShip={ship} />}
+                        {/* Community Recommendations - show for every selected ship */}
+                        {ship && (
+                            <CommunityRecommendations
+                                selectedShip={ship}
+                                hasRunAutogear={hasRunAutogear}
+                                currentConfig={lastRunConfigs[ship.id] || null}
+                            />
+                        )}
                     </div>
                 ))}
             </div>
