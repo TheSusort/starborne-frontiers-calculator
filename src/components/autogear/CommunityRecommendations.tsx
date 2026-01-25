@@ -135,19 +135,17 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                 )}
 
                 {!loading && !currentRecommendation && !error && (
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-gray-400 text-sm p-4">
                         No community recommendations available for this ship yet.
                     </div>
                 )}
 
                 {currentRecommendation && (
-                    <div className="space-y-4">
+                    <div className="space-y-4 p-4">
                         {currentRecommendation.description && (
-                            <div className="px-4 pt-4">
-                                <p className="text-gray-300 text-sm italic">
-                                    &ldquo;{currentRecommendation.description}&rdquo;
-                                </p>
-                            </div>
+                            <p className="text-gray-300 text-sm italic">
+                                &ldquo;{currentRecommendation.description}&rdquo;
+                            </p>
                         )}
 
                         {suggestionFromRecommendation && (
@@ -182,7 +180,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                 )}
 
                 {!loading && !currentRecommendation && hasRunAutogear && !showShareForm && (
-                    <div className="mt-4 text-center">
+                    <div className="p-4 text-center">
                         <p className="text-gray-400 text-sm mb-2">
                             Be the first to share a recommendation for this ship!
                         </p>
@@ -198,7 +196,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                 )}
 
                 {showShareForm && (
-                    <div className="mt-4 border-t border-gray-600 pt-4">
+                    <div className="p-4 border-t border-dark-border">
                         <h4 className="text-sm font-semibold text-gray-300 mb-3">
                             Share Your Build
                         </h4>

@@ -1,22 +1,33 @@
 import React from 'react';
 import { AutogearSuggestion } from '../../types/autogearSuggestion';
+import { SHIP_TYPES } from '../../constants';
 
 interface RecommendationContentProps {
     suggestion: AutogearSuggestion;
 }
 
 export const RecommendationContent: React.FC<RecommendationContentProps> = ({ suggestion }) => {
+    const getRoleInfo = (role: string) => {
+        const roleData = SHIP_TYPES[role];
+        return roleData || { name: role, iconUrl: '' };
+    };
+
+    const roleInfo = getRoleInfo(suggestion.shipRole);
+
     return (
         <div className="space-y-4">
             {/* Role Suggestion */}
             <div>
                 <h5 className="text-sm font-semibold text-gray-300 mb-1">Recommended Role:</h5>
-                <span className="inline-block px-2 py-1 bg-blue-900/50 text-blue-200 text-sm">
-                    {suggestion.shipRole}
+                <span className="inline-flex items-center gap-2 px-2 py-1 bg-blue-900/50 text-blue-200 text-sm">
+                    {roleInfo.iconUrl && (
+                        <img src={roleInfo.iconUrl} alt={roleInfo.name} className="w-4 h-4" />
+                    )}
+                    {roleInfo.name}
                 </span>
             </div>
 
-            <div className="flex space-x-4 divide-x divide-gray-700 *:ps-4 -mx-4">
+            <div className="flex flex-wrap gap-4">
                 {/* Stat Priorities */}
                 {suggestion.statPriorities && suggestion.statPriorities.length > 0 && (
                     <div>
@@ -103,10 +114,14 @@ export const RecommendationContent: React.FC<RecommendationContentProps> = ({ su
             </div>
 
             {/* Reasoning */}
-            <div>
-                <h5 className="text-sm font-semibold text-gray-300 mb-1">Reasoning:</h5>
-                <p className="text-sm text-gray-400 italic">&ldquo;{suggestion.reasoning}&rdquo;</p>
-            </div>
+            {suggestion.reasoning && (
+                <div>
+                    <h5 className="text-sm font-semibold text-gray-300 mb-1">Reasoning:</h5>
+                    <p className="text-sm text-gray-400 italic">
+                        &ldquo;{suggestion.reasoning}&rdquo;
+                    </p>
+                </div>
+            )}
         </div>
     );
 };
