@@ -41,12 +41,8 @@ export const useCommunityRecommendations = ({
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
 
-    // Check if there's a shareable config (has role and at least some stat bonuses)
-    const canShare =
-        !!selectedShip &&
-        !!currentConfig &&
-        !!currentConfig.shipRole &&
-        currentConfig.statBonuses.length > 0;
+    // Check if there's a shareable config (has a ship and role configured)
+    const canShare = !!selectedShip && !!currentConfig && !!currentConfig.shipRole;
 
     const [recommendation, setRecommendation] = useState<CommunityRecommendation | null>(null);
     const [alternatives, setAlternatives] = useState<CommunityRecommendation[]>([]);
