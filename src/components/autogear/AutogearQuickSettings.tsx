@@ -6,7 +6,7 @@ import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
 import { AutogearConfigList } from './AutogearConfigList';
 import { CommunityRecommendations } from './CommunityRecommendations';
-import { StatPriority, SetPriority, StatBonus, SavedAutogearConfig } from '../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 
@@ -30,8 +30,6 @@ interface AutogearQuickSettingsProps {
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
     };
-    hasRunAutogear?: boolean;
-    lastRunConfigs?: Record<string, SavedAutogearConfig>;
 }
 
 export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
@@ -42,8 +40,6 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onOpenSettings,
     onFindOptimalGear,
     getShipConfig,
-    hasRunAutogear = false,
-    lastRunConfigs = {},
 }) => {
     const navigate = useNavigate();
     const [autoOpenIndex, setAutoOpenIndex] = useState<number | null>(null);
@@ -127,8 +123,26 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                         {ship && (
                             <CommunityRecommendations
                                 selectedShip={ship}
-                                hasRunAutogear={hasRunAutogear}
-                                currentConfig={lastRunConfigs[ship.id] || null}
+                                currentConfig={(() => {
+                                    const config = getShipConfig(ship.id);
+                                    if (!config.shipRole) return null;
+                                    return {
+                                        id: '',
+                                        name: '',
+                                        shipId: ship.id,
+                                        shipRole: config.shipRole,
+                                        statPriorities: config.statPriorities,
+                                        setPriorities: config.setPriorities,
+                                        statBonuses: config.statBonuses,
+                                        ignoreEquipped: config.ignoreEquipped,
+                                        ignoreUnleveled: config.ignoreUnleveled,
+                                        useUpgradedStats: config.useUpgradedStats,
+                                        tryToCompleteSets: config.tryToCompleteSets,
+                                        algorithm: config.selectedAlgorithm,
+                                        showSecondaryRequirements: config.showSecondaryRequirements,
+                                        optimizeImplants: config.optimizeImplants,
+                                    };
+                                })()}
                             />
                         )}
                     </div>

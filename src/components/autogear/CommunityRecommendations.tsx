@@ -45,13 +45,11 @@ const toAIRecommendation = (rec: CommunityRecommendation): AIRecommendation => (
 
 interface CommunityRecommendationsProps {
     selectedShip: Ship | null;
-    hasRunAutogear: boolean;
     currentConfig: SavedAutogearConfig | null;
 }
 
 export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> = ({
     selectedShip,
-    hasRunAutogear,
     currentConfig,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
@@ -67,6 +65,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         showShareForm,
         showAlternatives,
         ultimateImplantName,
+        canShare,
         handleVote,
         handleShare,
         handleSelectAlternative,
@@ -75,7 +74,6 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         setShowAlternatives,
     } = useCommunityRecommendations({
         selectedShip,
-        hasRunAutogear,
         currentConfig,
     });
 
@@ -165,7 +163,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                         <CommunityActions
                             recommendation={currentRecommendation}
                             userVote={userVote}
-                            hasRunAutogear={hasRunAutogear}
+                            canShare={canShare}
                             showShareForm={showShareForm}
                             onVote={handleVote}
                             onToggleShareForm={() => setShowShareForm(!showShareForm)}
@@ -181,7 +179,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                         <CommunityActions
                             recommendation={null}
                             userVote={null}
-                            hasRunAutogear={hasRunAutogear}
+                            canShare={canShare}
                             showShareForm={showShareForm}
                             onVote={() => {}}
                             onToggleShareForm={() => setShowShareForm(true)}

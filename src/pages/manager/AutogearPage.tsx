@@ -2,13 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
-import {
-    GearSuggestion,
-    StatPriority,
-    SetPriority,
-    StatBonus,
-    SavedAutogearConfig,
-} from '../../types/autogear';
+import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
@@ -133,8 +127,6 @@ export const AutogearPage: React.FC = () => {
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
-    const [hasRunAutogear, setHasRunAutogear] = useState(false);
-    const [lastRunConfigs, setLastRunConfigs] = useState<Record<string, SavedAutogearConfig>>({});
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -535,28 +527,6 @@ export const AutogearPage: React.FC = () => {
             setMilestoneCount(newCount);
             setShowMilestoneModal(true);
         }
-
-        // Mark that autogear has been run and store configs
-        setHasRunAutogear(true);
-        const configsMap: Record<string, SavedAutogearConfig> = {};
-        validShips.forEach((ship) => {
-            const config = getShipConfig(ship.id);
-            configsMap[ship.id] = {
-                shipId: ship.id,
-                shipRole: config.shipRole,
-                statPriorities: config.statPriorities,
-                setPriorities: config.setPriorities,
-                statBonuses: config.statBonuses,
-                ignoreEquipped: config.ignoreEquipped,
-                ignoreUnleveled: config.ignoreUnleveled,
-                useUpgradedStats: config.useUpgradedStats,
-                tryToCompleteSets: config.tryToCompleteSets,
-                algorithm: config.selectedAlgorithm,
-                optimizeImplants: config.optimizeImplants,
-                includeCalibratedGear: config.includeCalibratedGear,
-            };
-        });
-        setLastRunConfigs(configsMap);
     };
 
     const handleEquipSuggestionsForShip = (shipId: string) => {
@@ -735,8 +705,6 @@ export const AutogearPage: React.FC = () => {
                             }}
                             onFindOptimalGear={handleAutogear}
                             getShipConfig={getShipConfig}
-                            hasRunAutogear={hasRunAutogear}
-                            lastRunConfigs={lastRunConfigs}
                         />
                     </div>
 

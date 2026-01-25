@@ -6,7 +6,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 interface CommunityActionsProps {
     recommendation: CommunityRecommendation | null;
     userVote: 'upvote' | 'downvote' | null;
-    hasRunAutogear: boolean;
+    canShare: boolean;
     showShareForm: boolean;
     onVote: (voteType: 'upvote' | 'downvote') => void;
     onToggleShareForm: () => void;
@@ -15,7 +15,7 @@ interface CommunityActionsProps {
 export const CommunityActions: React.FC<CommunityActionsProps> = ({
     recommendation,
     userVote,
-    hasRunAutogear,
+    canShare,
     showShareForm,
     onVote,
     onToggleShareForm,
@@ -57,7 +57,7 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
             {!showShareForm && (
                 <div className="flex items-center justify-center">
                     {user ? (
-                        hasRunAutogear ? (
+                        canShare ? (
                             <Button
                                 size="sm"
                                 variant="secondary"
@@ -68,7 +68,7 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
                             </Button>
                         ) : (
                             <span className="text-sm text-gray-500">
-                                Run autogear to share your build
+                                Configure autogear settings to share your build
                             </span>
                         )
                     ) : (

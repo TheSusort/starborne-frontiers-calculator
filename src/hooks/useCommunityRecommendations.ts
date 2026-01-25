@@ -8,7 +8,6 @@ import { useInventory } from '../contexts/InventoryProvider';
 
 interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
-    hasRunAutogear: boolean;
     currentConfig: SavedAutogearConfig | null;
 }
 
@@ -22,6 +21,7 @@ interface UseCommunityRecommendationsReturn {
     showShareForm: boolean;
     showAlternatives: boolean;
     ultimateImplantName: string | null;
+    canShare: boolean;
     handleVote: (voteType: 'upvote' | 'downvote') => Promise<void>;
     handleShare: (
         title: string,
@@ -37,10 +37,16 @@ interface UseCommunityRecommendationsReturn {
 
 export const useCommunityRecommendations = ({
     selectedShip,
-    hasRunAutogear: _hasRunAutogear,
     currentConfig,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
+
+    // Check if there's a shareable config (has role and at least some stat bonuses)
+    const canShare =
+        !!selectedShip &&
+        !!currentConfig &&
+        !!currentConfig.shipRole &&
+        currentConfig.statBonuses.length > 0;
 
     const [recommendation, setRecommendation] = useState<CommunityRecommendation | null>(null);
     const [alternatives, setAlternatives] = useState<CommunityRecommendation[]>([]);
@@ -303,6 +309,7 @@ export const useCommunityRecommendations = ({
         showShareForm,
         showAlternatives,
         ultimateImplantName,
+        canShare,
         handleVote,
         handleShare,
         handleSelectAlternative,
