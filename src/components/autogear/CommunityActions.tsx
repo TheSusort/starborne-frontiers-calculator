@@ -54,17 +54,23 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
             )}
 
             {/* Share button section */}
-            {hasRunAutogear && !showShareForm && (
+            {!showShareForm && (
                 <div className="flex items-center justify-center">
                     {user ? (
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={onToggleShareForm}
-                            className="w-full flex items-center justify-center space-x-2"
-                        >
-                            <span>Share to Community</span>
-                        </Button>
+                        hasRunAutogear ? (
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={onToggleShareForm}
+                                className="w-full flex items-center justify-center space-x-2"
+                            >
+                                <span>Share to Community</span>
+                            </Button>
+                        ) : (
+                            <span className="text-sm text-gray-500">
+                                Run autogear to share your build
+                            </span>
+                        )
                     ) : (
                         <span className="text-sm text-gray-400">Sign in to share your build</span>
                     )}

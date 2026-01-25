@@ -129,19 +129,13 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
 
             <CollapsibleAccordion isOpen={isExpanded}>
                 {error && (
-                    <div className="text-red-400 bg-red-900/20 p-3 border border-red-700">
+                    <div className="text-red-400 bg-red-900/20 border border-red-700">
                         <p className="font-medium">Error: {error}</p>
                     </div>
                 )}
 
-                {!loading && !currentRecommendation && !error && (
-                    <div className="text-gray-400 text-sm p-4">
-                        No community recommendations available for this ship yet.
-                    </div>
-                )}
-
                 {currentRecommendation && (
-                    <div className="space-y-4 p-4">
+                    <div className="space-y-4">
                         {currentRecommendation.description && (
                             <p className="text-gray-300 text-sm italic">
                                 &ldquo;{currentRecommendation.description}&rdquo;
@@ -179,8 +173,8 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                     </div>
                 )}
 
-                {!loading && !currentRecommendation && hasRunAutogear && !showShareForm && (
-                    <div className="p-4 text-center">
+                {!loading && !currentRecommendation && !showShareForm && (
+                    <div className="text-center">
                         <p className="text-gray-400 text-sm mb-2">
                             Be the first to share a recommendation for this ship!
                         </p>
@@ -196,7 +190,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                 )}
 
                 {showShareForm && (
-                    <div className="p-4 border-t border-dark-border">
+                    <div className="border-t border-dark-border">
                         <h4 className="text-sm font-semibold text-gray-300 mb-3">
                             Share Your Build
                         </h4>
