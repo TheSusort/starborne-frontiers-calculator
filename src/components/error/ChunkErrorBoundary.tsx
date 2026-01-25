@@ -59,7 +59,6 @@ class ChunkErrorBoundary extends Component<Props, State> {
             }, 1500);
         } else {
             // Log non-chunk errors for debugging
-            // eslint-disable-next-line no-console
             console.error('Application error:', error, errorInfo);
         }
     }

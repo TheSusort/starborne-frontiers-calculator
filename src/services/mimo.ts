@@ -294,7 +294,6 @@ export const getMimoService = (): MimoService | null => {
     try {
         return new MimoService();
     } catch (error) {
-        // eslint-disable-next-line no-console
         console.error('Failed to initialize MIMO service:', error);
         return null;
     }

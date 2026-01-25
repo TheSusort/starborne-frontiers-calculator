@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from '../config/supabase';
 import type { GearSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
