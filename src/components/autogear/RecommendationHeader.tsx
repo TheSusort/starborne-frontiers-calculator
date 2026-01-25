@@ -36,7 +36,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
     return (
         <div
             onClick={onToggleExpand}
-            className="w-full px-3 py-2 bg-dark-700 hover:bg-dark-600 transition-colors cursor-pointer"
+            className="w-full card hover:bg-dark-lighter transition-colors cursor-pointer border-none"
         >
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -80,7 +80,9 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
                                 )}
                         </div>
                     ) : (
-                        <span className="text-sm text-gray-400">Community Recommendations</span>
+                        <span className="text-sm text-gray-400">
+                            No community recommendations yet
+                        </span>
                     )}
                 </div>
 

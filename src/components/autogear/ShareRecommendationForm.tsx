@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Textarea } from '../ui/Textarea';
 
 interface ShareRecommendationFormProps {
     onSubmit: (title: string, description: string, isImplantSpecific: boolean) => Promise<boolean>;
@@ -78,15 +79,14 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
             />
 
             <div className="space-y-1">
-                <label className="block text-sm font-medium">Description (optional)</label>
-                <textarea
+                <Textarea
+                    label="Description (optional)"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Optional description - explain your build strategy..."
                     maxLength={500}
                     rows={3}
                     disabled={isSubmitting}
-                    className="w-full px-3 py-2 bg-dark-700 border border-dark-600 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 resize-none"
                 />
             </div>
 

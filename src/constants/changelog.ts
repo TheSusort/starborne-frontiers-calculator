@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.36.0';
+export const CURRENT_VERSION = '1.37.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.37.0',
+        date: '2026-01-25',
+        changes: [
+            'Removed AI recommendations',
+            'Added community recommendations',
+            'Added share recommendation form',
+        ],
+    },
     {
         version: '1.36.0',
         date: '2026-01-21',
