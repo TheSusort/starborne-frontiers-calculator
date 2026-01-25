@@ -43,7 +43,6 @@ interface UnmetPriority {
     current: number;
     target: number;
     type: 'min' | 'max';
-    hardRequirement: boolean;
 }
 
 export const AutogearPage: React.FC = () => {
@@ -662,7 +661,6 @@ export const AutogearPage: React.FC = () => {
                     current: currentValue,
                     target: priority.minLimit,
                     type: 'min',
-                    hardRequirement: priority.hardRequirement || false,
                 });
             }
 
@@ -672,7 +670,6 @@ export const AutogearPage: React.FC = () => {
                     current: currentValue,
                     target: priority.maxLimit,
                     type: 'max',
-                    hardRequirement: priority.hardRequirement || false,
                 });
             }
         });
@@ -762,35 +759,25 @@ export const AutogearPage: React.FC = () => {
                                     if (!ship || !results.suggestions.length) return null;
 
                                     const shipConfig = getShipConfig(shipId);
-                                    const shouldShowSuggestions = !getUnmetPriorities(
-                                        results.suggestedStats?.final || {},
-                                        shipId
-                                    ).some((priority) => priority.hardRequirement);
 
                                     return (
                                         <div key={shipId} className="space-y-4">
-                                            {shouldShowSuggestions && (
-                                                <div className="gear-suggestions">
-                                                    <GearSuggestions
-                                                        suggestions={results.suggestions}
-                                                        getGearPiece={getGearPiece}
-                                                        hoveredGear={hoveredGear}
-                                                        onHover={setHoveredGear}
-                                                        onEquip={() =>
-                                                            handleEquipSuggestionsForShip(shipId)
-                                                        }
-                                                        onLockEquipment={handleLockEquipment}
-                                                        ship={ship}
-                                                        useUpgradedStats={
-                                                            shipConfig.useUpgradedStats
-                                                        }
-                                                        isPrinting={isPrinting}
-                                                        optimizeImplants={
-                                                            shipConfig.optimizeImplants
-                                                        }
-                                                    />
-                                                </div>
-                                            )}
+                                            <div className="gear-suggestions">
+                                                <GearSuggestions
+                                                    suggestions={results.suggestions}
+                                                    getGearPiece={getGearPiece}
+                                                    hoveredGear={hoveredGear}
+                                                    onHover={setHoveredGear}
+                                                    onEquip={() =>
+                                                        handleEquipSuggestionsForShip(shipId)
+                                                    }
+                                                    onLockEquipment={handleLockEquipment}
+                                                    ship={ship}
+                                                    useUpgradedStats={shipConfig.useUpgradedStats}
+                                                    isPrinting={isPrinting}
+                                                    optimizeImplants={shipConfig.optimizeImplants}
+                                                />
+                                            </div>
 
                                             {/* Show unmet priorities warning */}
                                             {getUnmetPriorities(
@@ -801,32 +788,14 @@ export const AutogearPage: React.FC = () => {
                                                     <h4 className="text-lg font-semibold text-yellow-200 mb-2">
                                                         Unmet Stat Priorities
                                                     </h4>
-                                                    {getUnmetPriorities(
-                                                        results.suggestedStats?.final || {},
-                                                        shipId
-                                                    ).some(
-                                                        (priority) => priority.hardRequirement
-                                                    ) ? (
-                                                        <p className="text-yellow-100 mb-2">
-                                                            Some stat priorities are marked as hard
-                                                            requirements, which means that the gear
-                                                            combinations that don&apos;t meet them
-                                                            will be completely excluded from
-                                                            results. It wasn&apos;t found this
-                                                            round, so it might be unachievable. Try
-                                                            running it again, or adjust the stat
-                                                            limits.
-                                                        </p>
-                                                    ) : (
-                                                        <p className="text-yellow-100 mb-2">
-                                                            The suggested gear doesn&apos;t meet all
-                                                            stat priorities, but was chosen because
-                                                            hitting the priority had a higher
-                                                            negative impact on the score. Try
-                                                            adjusting the minimum or maximum values
-                                                            for the stat priorities.
-                                                        </p>
-                                                    )}
+                                                    <p className="text-yellow-100 mb-2">
+                                                        The suggested gear doesn&apos;t meet all
+                                                        stat priorities, but was chosen because
+                                                        hitting the priority had a higher negative
+                                                        impact on the score. Try adjusting the
+                                                        minimum or maximum values for the stat
+                                                        priorities.
+                                                    </p>
 
                                                     <ul className="list-disc pl-4 space-y-1">
                                                         {getUnmetPriorities(
@@ -843,8 +812,6 @@ export const AutogearPage: React.FC = () => {
                                                                     ? '<'
                                                                     : '>'}{' '}
                                                                 {priority.target.toFixed(1)}
-                                                                {priority.hardRequirement &&
-                                                                    ' (HARD)'}
                                                             </li>
                                                         ))}
                                                     </ul>
@@ -884,10 +851,6 @@ export const AutogearPage: React.FC = () => {
                                 if (!ship || !results.suggestions.length) return null;
 
                                 const shipConfig = getShipConfig(shipId);
-                                const shouldShowSuggestions = !getUnmetPriorities(
-                                    results.suggestedStats?.final || {},
-                                    shipId
-                                ).some((priority) => priority.hardRequirement);
 
                                 // When printing, show all ships; otherwise only show active tab
                                 if (!isPrinting && activeTab !== shipId) return null;
@@ -908,8 +871,7 @@ export const AutogearPage: React.FC = () => {
 
                                         {/* Simulation Results */}
                                         {results.currentSimulation &&
-                                            results.suggestedSimulation &&
-                                            shouldShowSuggestions && (
+                                            results.suggestedSimulation && (
                                                 <div>
                                                     <h4 className="text-lg font-semibold mb-2">
                                                         Simulation Results (
@@ -942,32 +904,30 @@ export const AutogearPage: React.FC = () => {
                                             )}
 
                                         {/* Stat Lists */}
-                                        {results.currentStats &&
-                                            results.suggestedStats &&
-                                            shouldShowSuggestions && (
-                                                <div>
-                                                    <h4 className="text-lg font-semibold mb-4">
-                                                        Stat Comparison
-                                                    </h4>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        <div className="card">
-                                                            <StatList
-                                                                stats={results.currentStats.final}
-                                                                title="Current Stats"
-                                                            />
-                                                        </div>
-                                                        <div className="card">
-                                                            <StatList
-                                                                stats={results.suggestedStats.final}
-                                                                comparisonStats={
-                                                                    results.currentStats.final
-                                                                }
-                                                                title="Stats with Suggested Gear"
-                                                            />
-                                                        </div>
+                                        {results.currentStats && results.suggestedStats && (
+                                            <div>
+                                                <h4 className="text-lg font-semibold mb-4">
+                                                    Stat Comparison
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="card">
+                                                        <StatList
+                                                            stats={results.currentStats.final}
+                                                            title="Current Stats"
+                                                        />
+                                                    </div>
+                                                    <div className="card">
+                                                        <StatList
+                                                            stats={results.suggestedStats.final}
+                                                            comparisonStats={
+                                                                results.currentStats.final
+                                                            }
+                                                            title="Stats with Suggested Gear"
+                                                        />
                                                     </div>
                                                 </div>
-                                            )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}

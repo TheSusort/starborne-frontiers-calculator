@@ -185,26 +185,8 @@ export function calculatePriorityScore(
 ): number {
     let penalties = 0;
 
-    // Check hard requirements first - if any hard requirement is not met, return 0
+    // Calculate penalties based on min/max limits
     for (const priority of priorities) {
-        if (priority.hardRequirement) {
-            const statValue = stats[priority.stat] || 0;
-
-            if (priority.minLimit && statValue < priority.minLimit) {
-                return 0; // Hard requirement not met
-            }
-
-            if (priority.maxLimit && statValue > priority.maxLimit) {
-                return 0; // Hard requirement not met
-            }
-        }
-    }
-
-    // Calculate penalties based on min/max limits (soft requirements)
-    for (const priority of priorities) {
-        // Skip hard requirements as they were already checked above
-        if (priority.hardRequirement) continue;
-
         const statValue = stats[priority.stat] || 0;
 
         if (priority.minLimit) {

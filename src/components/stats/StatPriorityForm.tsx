@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Input, Select, Checkbox } from '../ui';
+import { Button, Input, Select } from '../ui';
 import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
 import { STATS } from '../../constants/stats';
@@ -23,7 +23,6 @@ interface Props {
     hideWeight?: boolean;
     hideMaxLimit?: boolean;
     hideMinLimit?: boolean;
-    hideHardRequirement?: boolean;
 }
 
 export const StatPriorityForm: React.FC<Props> = ({
@@ -32,13 +31,11 @@ export const StatPriorityForm: React.FC<Props> = ({
     hideWeight,
     hideMaxLimit,
     hideMinLimit,
-    hideHardRequirement,
 }) => {
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
     const [minLimit, setMinLimit] = useState<string>('');
     const [weight, setWeight] = useState<number>(1);
-    const [hardRequirement, setHardRequirement] = useState<boolean>(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -48,7 +45,6 @@ export const StatPriorityForm: React.FC<Props> = ({
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
             weight: hideWeight ? 1 : weight,
-            hardRequirement: hideHardRequirement ? false : hardRequirement,
         });
 
         setMaxLimit('');
@@ -57,9 +53,6 @@ export const StatPriorityForm: React.FC<Props> = ({
             setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         }
         setSelectedStat(AVAILABLE_STATS[0]);
-        if (!hideHardRequirement) {
-            setHardRequirement(false);
-        }
     };
 
     return (
@@ -112,18 +105,6 @@ export const StatPriorityForm: React.FC<Props> = ({
                     />
                 )}
             </div>
-
-            {!hideHardRequirement && (
-                <div className="mt-4">
-                    <Checkbox
-                        id="hardRequirement"
-                        label="Hard requirement"
-                        checked={hardRequirement}
-                        onChange={(checked) => setHardRequirement(checked)}
-                        helpLabel="When enabled, gear combinations that don't meet this requirement will be completely excluded from results. If results are not met, it means that the stat is not achievable."
-                    />
-                </div>
-            )}
 
             <div className="grow mt-4">
                 <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
