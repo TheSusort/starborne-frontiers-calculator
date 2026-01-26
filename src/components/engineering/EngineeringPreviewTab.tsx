@@ -11,12 +11,12 @@ import {
 } from '../../constants/engineeringStats';
 import { ShipSelector } from '../ship/ShipSelector';
 import { RoleSelector } from '../ui/RoleSelector';
-import { StatList } from '../stats/StatList';
+import { SimulationResults } from '../simulation/SimulationResults';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { calculatePriorityScore } from '../../utils/autogear/scoring';
+import { runSimulation } from '../../utils/simulation/simulationCalculator';
 
 export const EngineeringPreviewTab: React.FC = () => {
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
@@ -118,19 +118,17 @@ export const EngineeringPreviewTab: React.FC = () => {
         );
     }, [selectedShip, baseRole, selectedStat, previewEngineeringStats, getGearPiece]);
 
-    // Calculate current role score
-    const currentScore = useMemo(() => {
-        if (!currentStats || !selectedRole) return 0;
-        return calculatePriorityScore(currentStats.final, [], selectedRole);
+    // Run simulation for current stats
+    const currentSimulation = useMemo(() => {
+        if (!currentStats || !selectedRole) return null;
+        return runSimulation(currentStats.final, selectedRole);
     }, [currentStats, selectedRole]);
 
-    // Calculate preview role score
-    const previewScore = useMemo(() => {
-        if (!previewStats || !selectedRole || !selectedStat) return 0;
-        return calculatePriorityScore(previewStats.final, [], selectedRole);
+    // Run simulation for preview stats
+    const previewSimulation = useMemo(() => {
+        if (!previewStats || !selectedRole || !selectedStat) return null;
+        return runSimulation(previewStats.final, selectedRole);
     }, [previewStats, selectedRole, selectedStat]);
-
-    const scoreDiff = selectedStat ? previewScore - currentScore : 0;
 
     // Format large numbers with commas
     const formatNumber = (num: number): string => {
@@ -235,27 +233,21 @@ export const EngineeringPreviewTab: React.FC = () => {
                     </div>
                 )}
 
-                {/* Preview Panel */}
-                {selectedShip && selectedRole && selectedStat && previewStats && currentStats && (
-                    <div className="bg-dark-lighter border border-dark-border p-4 space-y-4">
-                        <h3 className="text-sm font-medium">Preview</h3>
-
-                        {/* Role Score */}
-                        <div className="flex items-center gap-2 text-lg">
-                            <span className="text-gray-400">Role Score:</span>
-                            <span>{formatNumber(currentScore)}</span>
-                            <span className="text-gray-400">→</span>
-                            <span>{formatNumber(previewScore)}</span>
-                            <span className={scoreDiff > 0 ? 'text-green-500' : 'text-red-500'}>
-                                ({scoreDiff > 0 ? '+' : ''}
-                                {formatNumber(scoreDiff)})
-                            </span>
+                {/* Preview Panel - Simulation Results */}
+                {selectedShip &&
+                    selectedRole &&
+                    selectedStat &&
+                    currentSimulation &&
+                    previewSimulation && (
+                        <div className="col-span-1">
+                            <SimulationResults
+                                currentSimulation={currentSimulation}
+                                suggestedSimulation={previewSimulation}
+                                role={selectedRole}
+                                alwaysColumn
+                            />
                         </div>
-
-                        {/* Stat List */}
-                        <StatList stats={previewStats.final} comparisonStats={currentStats.final} />
-                    </div>
-                )}
+                    )}
             </div>
         </div>
     );
