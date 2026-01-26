@@ -12,6 +12,7 @@ import {
 import { ShipSelector } from '../ship/ShipSelector';
 import { RoleSelector } from '../ui/RoleSelector';
 import { SimulationResults } from '../simulation/SimulationResults';
+import { StatList } from '../stats/StatList';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
@@ -233,19 +234,28 @@ export const EngineeringPreviewTab: React.FC = () => {
                     </div>
                 )}
 
-                {/* Preview Panel - Simulation Results */}
+                {/* Preview Panel - Simulation Results and Stat List */}
                 {selectedShip &&
                     selectedRole &&
                     selectedStat &&
+                    currentStats &&
+                    previewStats &&
                     currentSimulation &&
                     previewSimulation && (
-                        <div className="col-span-1">
+                        <div className="col-span-1 space-y-4">
                             <SimulationResults
                                 currentSimulation={currentSimulation}
                                 suggestedSimulation={previewSimulation}
                                 role={selectedRole}
                                 alwaysColumn
                             />
+                            <div className="card">
+                                <StatList
+                                    stats={previewStats.final}
+                                    comparisonStats={currentStats.final}
+                                    title="Stats After Upgrade"
+                                />
+                            </div>
                         </div>
                     )}
             </div>
