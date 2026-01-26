@@ -1,5 +1,6 @@
 export * from './changelog';
 export * from './config';
+export * from './engineeringStats';
 export * from './factions';
 export * from './gearSets';
 export * from './gearTypes';

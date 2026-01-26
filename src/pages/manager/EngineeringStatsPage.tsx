@@ -2,18 +2,25 @@ import React, { useState } from 'react';
 import { EngineeringStats, EngineeringStat } from '../../types/stats';
 import { EngineeringStatsForm } from '../../components/engineering/EngineeringStatsForm';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import { PageLayout, CollapsibleForm } from '../../components/ui';
+import { PageLayout, CollapsibleForm, Tabs } from '../../components/ui';
 import { useNotification } from '../../hooks/useNotification';
 import { EngineeringStatsList } from '../../components/engineering/EngineeringStatsList';
+import { EngineeringPreviewTab } from '../../components/engineering/EngineeringPreviewTab';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+
+const TABS = [
+    { id: 'stats', label: 'Engineering Stats' },
+    { id: 'preview', label: 'Preview Upgrade' },
+];
 
 export const EngineeringStatsPage: React.FC = () => {
     const { engineeringStats, saveEngineeringStats, deleteEngineeringStats, loading } =
         useEngineeringStats();
     const [editingStats, setEditingStats] = useState<EngineeringStat | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
+    const [activeTab, setActiveTab] = useState('stats');
     const { addNotification } = useNotification();
 
     const handleSubmit = (stats: EngineeringStat) => {
@@ -52,37 +59,49 @@ export const EngineeringStatsPage: React.FC = () => {
             <PageLayout
                 title="Engineering Stats Management"
                 description="Manage your engineering stats."
-                action={{
-                    label: isFormVisible ? 'Hide Form' : 'Create',
-                    onClick: () => {
-                        if (editingStats) {
-                            setEditingStats(undefined);
-                        }
-                        setIsFormVisible(!isFormVisible);
-                    },
-                    variant: isFormVisible ? 'secondary' : 'primary',
-                }}
+                action={
+                    activeTab === 'stats'
+                        ? {
+                              label: isFormVisible ? 'Hide Form' : 'Create',
+                              onClick: () => {
+                                  if (editingStats) {
+                                      setEditingStats(undefined);
+                                  }
+                                  setIsFormVisible(!isFormVisible);
+                              },
+                              variant: isFormVisible ? 'secondary' : 'primary',
+                          }
+                        : undefined
+                }
             >
-                <CollapsibleForm isVisible={isFormVisible || !!editingStats}>
-                    <EngineeringStatsForm
-                        initialStats={editingStats}
-                        onSubmit={(stats) => {
-                            handleSubmit(stats);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                    />
-                </CollapsibleForm>
+                <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 
-                <div className="space-y-4 ">
-                    <EngineeringStatsList
-                        stats={engineeringStats.stats}
-                        onEdit={(stat: EngineeringStat) => {
-                            setEditingStats(stat);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        onDelete={handleDelete}
-                    />
-                </div>
+                {activeTab === 'stats' && (
+                    <>
+                        <CollapsibleForm isVisible={isFormVisible || !!editingStats}>
+                            <EngineeringStatsForm
+                                initialStats={editingStats}
+                                onSubmit={(stats) => {
+                                    handleSubmit(stats);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                            />
+                        </CollapsibleForm>
+
+                        <div className="space-y-4 ">
+                            <EngineeringStatsList
+                                stats={engineeringStats.stats}
+                                onEdit={(stat: EngineeringStat) => {
+                                    setEditingStats(stat);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                onDelete={handleDelete}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {activeTab === 'preview' && <EngineeringPreviewTab />}
             </PageLayout>
         </>
     );
