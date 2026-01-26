@@ -20,6 +20,7 @@ export * from './ProgressBar';
 export * from './QuickStartCard';
 export * from './SectionHeader';
 export * from './Select';
+export * from './RoleSelector';
 export * from './StatCard';
 export * from './tables';
 export * from './Textarea';

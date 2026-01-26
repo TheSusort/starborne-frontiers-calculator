@@ -1,8 +1,8 @@
 import React from 'react';
 import { ShipSelector } from '../ship/ShipSelector';
-import { Select } from '../ui';
+import { RoleSelector } from '../ui';
 import { Ship } from '../../types/ship';
-import { SHIP_TYPES, ShipTypeName } from '../../constants';
+import { ShipTypeName } from '../../constants';
 
 interface SimulationSettingsProps {
     selectedShip: Ship | null;
@@ -29,14 +29,11 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
             />
 
             <div className="card space-y-2">
-                <Select
+                <RoleSelector
                     label="Ship Role"
-                    options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
-                        value: key,
-                        label: `${type.name} (${type.description})`,
-                    }))}
                     value={selectedRole}
-                    onChange={(value) => onRoleSelect(value as ShipTypeName)}
+                    onChange={onRoleSelect}
+                    noDefaultSelection={false}
                 />
             </div>
         </div>

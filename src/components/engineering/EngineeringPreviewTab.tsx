@@ -187,7 +187,7 @@ export const EngineeringPreviewTab: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Engineering Stat Radio Buttons */}
                 {selectedShip && selectedRole && baseRole && (
-                    <div className="bg-dark-lighter border border-dark-border p-4 space-y-2">
+                    <div className="card space-y-2 mt-4">
                         <h3 className="text-sm font-medium mb-3">Select stat to preview upgrade</h3>
                         <div className="space-y-2">
                             {roleEngineeringStats.map((statName) => {

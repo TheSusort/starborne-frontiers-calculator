@@ -11,11 +11,12 @@ import {
     InfoIcon,
     CollapsibleForm,
     ChevronDownIcon,
+    RoleSelector,
 } from '../ui';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import { SHIP_TYPES, ShipTypeName, STATS } from '../../constants';
+import { ShipTypeName, STATS } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { StatName } from '../../types/stats';
 
@@ -151,14 +152,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         </Button>
                     )}
                 </div>
-                <Select
-                    data-testid="role-select"
-                    options={Object.entries(SHIP_TYPES).map(([key, type]) => ({
-                        value: key,
-                        label: `${type.name} (${type.description})`,
-                    }))}
+                <RoleSelector
                     value={selectedShipRole || ''}
-                    onChange={(value) => onRoleSelect(value as ShipTypeName)}
+                    onChange={onRoleSelect}
                     noDefaultSelection
                     defaultOption="Manual"
                 />
