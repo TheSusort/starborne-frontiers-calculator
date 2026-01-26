@@ -8,13 +8,13 @@ import {
     getUpgradeCost,
     getStatIncrement,
     isEngineeringFlatStat,
-    BaseRoleName,
 } from '../../constants/engineeringStats';
 import { ShipSelector } from '../ship/ShipSelector';
 import { RoleSelector } from '../ui/RoleSelector';
 import { StatList } from '../stats/StatList';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useInventory } from '../../contexts/InventoryProvider';
+import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { calculatePriorityScore } from '../../utils/autogear/scoring';
 
@@ -25,6 +25,7 @@ export const EngineeringPreviewTab: React.FC = () => {
 
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { getGearPiece } = useInventory();
+    const { getConfig } = useAutogearConfig();
 
     // Get base role from selected role (e.g., DEBUFFER_BOMBER -> DEBUFFER)
     const baseRole = useMemo(() => {
@@ -140,25 +141,30 @@ export const EngineeringPreviewTab: React.FC = () => {
         <div className="space-y-6">
             {/* Ship and Role Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="space-y-2">
                     <label className="block text-sm font-medium mb-2">Ship</label>
                     <ShipSelector
                         selected={selectedShip}
                         onSelect={(ship) => {
                             setSelectedShip(ship);
                             setSelectedStat(null);
+                            // Auto-select the ship's saved role from autogear config
+                            const savedConfig = getConfig(ship.id);
+                            if (savedConfig?.shipRole) {
+                                setSelectedRole(savedConfig.shipRole);
+                            }
                         }}
                         variant="compact"
                     />
+                    <RoleSelector
+                        value={selectedRole}
+                        onChange={(role) => {
+                            setSelectedRole(role);
+                            setSelectedStat(null);
+                        }}
+                        label="Role"
+                    />
                 </div>
-                <RoleSelector
-                    value={selectedRole}
-                    onChange={(role) => {
-                        setSelectedRole(role);
-                        setSelectedStat(null);
-                    }}
-                    label="Role"
-                />
             </div>
 
             {/* Empty States */}
@@ -180,76 +186,77 @@ export const EngineeringPreviewTab: React.FC = () => {
                     Stats tab.
                 </div>
             )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Engineering Stat Radio Buttons */}
+                {selectedShip && selectedRole && baseRole && (
+                    <div className="bg-dark-lighter border border-dark-border p-4 space-y-2">
+                        <h3 className="text-sm font-medium mb-3">Select stat to preview upgrade</h3>
+                        <div className="space-y-2">
+                            {roleEngineeringStats.map((statName) => {
+                                const currentLevel = getStatLevel(statName);
+                                const cost = getUpgradeCost(currentLevel);
+                                const isMaxLevel = currentLevel >= 20;
 
-            {/* Engineering Stat Radio Buttons */}
-            {selectedShip && selectedRole && baseRole && (
-                <div className="bg-dark-lighter border border-dark-border p-4 space-y-2">
-                    <h3 className="text-sm font-medium mb-3">Select stat to preview upgrade</h3>
-                    <div className="space-y-2">
-                        {roleEngineeringStats.map((statName) => {
-                            const currentLevel = getStatLevel(statName);
-                            const cost = getUpgradeCost(currentLevel);
-                            const isMaxLevel = currentLevel >= 20;
-
-                            return (
-                                <label
-                                    key={statName}
-                                    className={`flex items-center justify-between p-3 border border-dark-border cursor-pointer transition-colors ${
-                                        selectedStat === statName
-                                            ? 'bg-primary/20 border-primary'
-                                            : 'hover:bg-dark-border'
-                                    } ${isMaxLevel ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <input
-                                            type="radio"
-                                            name="engineering-stat"
-                                            value={statName}
-                                            checked={selectedStat === statName}
-                                            onChange={() =>
-                                                !isMaxLevel && setSelectedStat(statName)
-                                            }
-                                            disabled={isMaxLevel}
-                                            className="text-primary focus:ring-primary"
-                                        />
-                                        <span>
-                                            {STATS[statName].label}
-                                            <span className="text-gray-400 ml-2">
-                                                (Level {currentLevel} → {currentLevel + 1})
+                                return (
+                                    <label
+                                        key={statName}
+                                        className={`flex items-center justify-between p-3 border border-dark-border cursor-pointer transition-colors ${
+                                            selectedStat === statName
+                                                ? 'bg-primary/20 border-primary'
+                                                : 'hover:bg-dark-border'
+                                        } ${isMaxLevel ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="radio"
+                                                name="engineering-stat"
+                                                value={statName}
+                                                checked={selectedStat === statName}
+                                                onChange={() =>
+                                                    !isMaxLevel && setSelectedStat(statName)
+                                                }
+                                                disabled={isMaxLevel}
+                                                className="text-primary focus:ring-primary"
+                                            />
+                                            <span>
+                                                {STATS[statName].label}
+                                                <span className="text-gray-400 ml-2">
+                                                    (Level {currentLevel} → {currentLevel + 1})
+                                                </span>
                                             </span>
+                                        </div>
+                                        <span className="text-gray-400">
+                                            {isMaxLevel ? 'MAX' : `Cost: ${formatNumber(cost)}`}
                                         </span>
-                                    </div>
-                                    <span className="text-gray-400">
-                                        {isMaxLevel ? 'MAX' : `Cost: ${formatNumber(cost)}`}
-                                    </span>
-                                </label>
-                            );
-                        })}
+                                    </label>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Preview Panel */}
-            {selectedShip && selectedRole && selectedStat && previewStats && currentStats && (
-                <div className="bg-dark-lighter border border-dark-border p-4 space-y-4">
-                    <h3 className="text-sm font-medium">Preview</h3>
+                {/* Preview Panel */}
+                {selectedShip && selectedRole && selectedStat && previewStats && currentStats && (
+                    <div className="bg-dark-lighter border border-dark-border p-4 space-y-4">
+                        <h3 className="text-sm font-medium">Preview</h3>
 
-                    {/* Role Score */}
-                    <div className="flex items-center gap-2 text-lg">
-                        <span className="text-gray-400">Role Score:</span>
-                        <span>{formatNumber(currentScore)}</span>
-                        <span className="text-gray-400">→</span>
-                        <span>{formatNumber(previewScore)}</span>
-                        <span className={scoreDiff > 0 ? 'text-green-500' : 'text-red-500'}>
-                            ({scoreDiff > 0 ? '+' : ''}
-                            {formatNumber(scoreDiff)})
-                        </span>
+                        {/* Role Score */}
+                        <div className="flex items-center gap-2 text-lg">
+                            <span className="text-gray-400">Role Score:</span>
+                            <span>{formatNumber(currentScore)}</span>
+                            <span className="text-gray-400">→</span>
+                            <span>{formatNumber(previewScore)}</span>
+                            <span className={scoreDiff > 0 ? 'text-green-500' : 'text-red-500'}>
+                                ({scoreDiff > 0 ? '+' : ''}
+                                {formatNumber(scoreDiff)})
+                            </span>
+                        </div>
+
+                        {/* Stat List */}
+                        <StatList stats={previewStats.final} comparisonStats={currentStats.final} />
                     </div>
-
-                    {/* Stat List */}
-                    <StatList stats={previewStats.final} comparisonStats={currentStats.final} />
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
