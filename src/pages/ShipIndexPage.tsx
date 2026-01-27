@@ -3,11 +3,13 @@ import { useShipsData } from '../hooks/useShipsData';
 import { useShips } from '../contexts/ShipsContext';
 import { PageLayout } from '../components/ui';
 import { ShipDisplay } from '../components/ship/ShipDisplay';
+import { ShipComparisonPanel } from '../components/ship/ShipComparisonPanel';
 import { Image } from '../components/ui/Image';
 import { Loader } from '../components/ui/Loader';
 import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
+import { useShipComparison } from '../hooks/useShipComparison';
 import { SHIP_TYPES, FACTIONS, RARITY_ORDER, RARITIES, ALL_STAT_NAMES } from '../constants';
 import { Ship, AffinityName } from '../types/ship';
 import { useNotification } from '../hooks/useNotification';
@@ -34,6 +36,13 @@ export const ShipIndexPage: React.FC = () => {
         (state.filters.affinities?.length ?? 0) > 0 ||
         searchQuery.length > 0;
     const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
+    const {
+        comparisonShips,
+        addToComparison,
+        removeFromComparison,
+        clearComparison,
+        isInComparison,
+    } = useShipComparison(templateShips || []);
     const [activeHover, setActiveHover] = useState('');
     const [chargeHover, setChargeHover] = useState('');
     const [passive1Hover, setPassive1Hover] = useState('');
@@ -286,6 +295,19 @@ export const ShipIndexPage: React.FC = () => {
                         />
                     </div>
 
+                    <ShipComparisonPanel
+                        ships={comparisonShips}
+                        onRemove={removeFromComparison}
+                        onClearAll={clearComparison}
+                        renderShip={(ship) => (
+                            <ShipDisplay
+                                ship={ship}
+                                onQuickAdd={onQuickAdd}
+                                isAdded={addedShips.has(ship.name)}
+                            />
+                        )}
+                    />
+
                     <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredAndSortedShips.length > 0 ? (
                             filteredAndSortedShips.map((ship) => (
@@ -294,6 +316,8 @@ export const ShipIndexPage: React.FC = () => {
                                     ship={ship}
                                     onQuickAdd={onQuickAdd}
                                     isAdded={addedShips.has(ship.name)}
+                                    onAddToComparison={addToComparison}
+                                    isInComparison={isInComparison(ship.id)}
                                 >
                                     <div className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3">
                                         {ship.imageKey && (
@@ -303,7 +327,7 @@ export const ShipIndexPage: React.FC = () => {
                                                 className="max-w-full max-h-full w-[152px] h-[206px]"
                                             />
                                         )}
-                                        <div className="mt-2 flex gap-2">
+                                        <div className="mt-2 flex flex-wrap gap-2">
                                             {ship.activeSkillText && (
                                                 <div className="relative">
                                                     <div

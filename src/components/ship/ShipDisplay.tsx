@@ -29,6 +29,7 @@ import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
+import { CompareIcon } from '../ui/icons/CompareIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
@@ -49,6 +50,8 @@ interface Props {
     onQuickAdd?: (ship: Ship) => Promise<void>;
     isAdded?: boolean;
     contentClassName?: string;
+    onAddToComparison?: (shipId: string) => void;
+    isInComparison?: boolean;
 }
 
 const ShipImage = memo(
@@ -125,6 +128,8 @@ export const ShipDisplay: React.FC<Props> = memo(
         onQuickAdd,
         isAdded,
         contentClassName,
+        onAddToComparison,
+        isInComparison,
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -286,6 +291,20 @@ export const ShipDisplay: React.FC<Props> = memo(
                                         </div>
                                     </Dropdown.Item>
 
+                                    {onAddToComparison && !isInComparison && (
+                                        <Dropdown.Item
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onAddToComparison(ship.id);
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <CompareIcon />
+                                                <span>Add to comparison</span>
+                                            </div>
+                                        </Dropdown.Item>
+                                    )}
+
                                     {onEdit && (
                                         <Dropdown.Item
                                             onClick={(e) => {
@@ -317,10 +336,24 @@ export const ShipDisplay: React.FC<Props> = memo(
                             )}
                             {onQuickAdd && (
                                 <>
+                                    {onAddToComparison && !isInComparison && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onAddToComparison(ship.id);
+                                            }}
+                                            title="Add to comparison"
+                                        >
+                                            <CompareIcon />
+                                        </Button>
+                                    )}
                                     <Button
                                         variant="secondary"
                                         size="sm"
                                         onClick={() => handleLeaderboardClick(ship.name)}
+                                        title="View leaderboard"
                                     >
                                         <TrophyIcon />
                                     </Button>
@@ -329,7 +362,7 @@ export const ShipDisplay: React.FC<Props> = memo(
                                         disabled={isAdded}
                                         variant="secondary"
                                         size="sm"
-                                        title={isAdded ? 'Remove from fleet' : 'Add to fleet'}
+                                        title={isAdded ? 'Already in fleet' : 'Add to fleet'}
                                     >
                                         {isAdded ? <CheckIcon /> : <div className="w-4 h-4">+</div>}
                                     </Button>
@@ -341,7 +374,9 @@ export const ShipDisplay: React.FC<Props> = memo(
 
                 {children}
 
-                <div className="px-4 pb-4 relative flex-grow">
+                <div
+                    className={`px-4 pb-4 relative flex-grow ${Object.keys(ship.implants).length > 0 ? '' : 'pt-2'}`}
+                >
                     <div className="space-y-1 text-sm">
                         {ship.implants &&
                             Object.keys(ship.implants).length > 0 &&

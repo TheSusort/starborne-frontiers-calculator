@@ -1,6 +1,7 @@
 export * from './ArrowLeftIcon';
 export * from './CalibrationIcon';
 export * from './ChartIcon';
+export * from './CompareIcon';
 export * from './CheckIcon';
 export * from './ChevronIcons';
 export * from './CloseIcon';

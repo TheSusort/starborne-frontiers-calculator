@@ -27,6 +27,7 @@ import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
+import { CompareIcon } from '../ui/icons/CompareIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
@@ -44,6 +45,8 @@ interface Props {
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onQuickAdd?: (ship: Ship) => Promise<void>;
     isAdded?: boolean;
+    onAddToComparison?: (shipId: string) => void;
+    isInComparison?: boolean;
 }
 
 const ShipImage = memo(
@@ -119,6 +122,8 @@ export const ShipDisplayImage: React.FC<Props> = memo(
         onLockEquipment,
         onQuickAdd,
         isAdded,
+        onAddToComparison,
+        isInComparison,
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -260,6 +265,20 @@ export const ShipDisplayImage: React.FC<Props> = memo(
                                                 <span>Simulate ship</span>
                                             </div>
                                         </Dropdown.Item>
+
+                                        {onAddToComparison && !isInComparison && (
+                                            <Dropdown.Item
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onAddToComparison(ship.id);
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <CompareIcon />
+                                                    <span>Add to comparison</span>
+                                                </div>
+                                            </Dropdown.Item>
+                                        )}
 
                                         {onEdit && (
                                             <Dropdown.Item

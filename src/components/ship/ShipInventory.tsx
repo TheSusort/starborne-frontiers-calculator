@@ -3,6 +3,7 @@ import { Ship, AffinityName } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { ShipCard } from './ShipCard';
+import { ShipComparisonPanel } from './ShipComparisonPanel';
 import {
     FACTIONS,
     GearSlotName,
@@ -16,6 +17,7 @@ import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { SortConfig } from '../filters/SortPanel';
 import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 import { usePersistedViewMode } from '../../hooks/usePersistedViewMode';
+import { useShipComparison } from '../../hooks/useShipComparison';
 import { Pagination } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { STATS } from '../../constants/stats';
@@ -49,6 +51,13 @@ export const ShipInventory: React.FC<Props> = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = usePersistedViewMode('ship-inventory-view-mode');
+    const {
+        comparisonShips,
+        addToComparison,
+        removeFromComparison,
+        clearComparison,
+        isInComparison,
+    } = useShipComparison(ships);
 
     const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters');
     const { getGearPiece } = useInventory();
@@ -332,6 +341,29 @@ export const ShipInventory: React.FC<Props> = ({
                 />
             </div>
 
+            <ShipComparisonPanel
+                ships={comparisonShips}
+                onRemove={removeFromComparison}
+                onClearAll={clearComparison}
+                renderShip={(ship) => (
+                    <ShipCard
+                        ship={ship}
+                        allShips={ships}
+                        hoveredGear={hoveredGear}
+                        availableGear={availableGear}
+                        getGearPiece={getGearPiece}
+                        onEdit={onEdit}
+                        onRemove={onRemove}
+                        onLockEquipment={onLockEquipment}
+                        onEquipGear={onEquipGear}
+                        onRemoveGear={onRemoveGear}
+                        onUnequipAll={onUnequipAll}
+                        onHoverGear={setHoveredGear}
+                        viewMode={viewMode}
+                    />
+                )}
+            />
+
             {sortedInventory.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
                     {ships.length === 0 ? 'No ships created yet' : 'No matching ships found'}
@@ -355,6 +387,8 @@ export const ShipInventory: React.FC<Props> = ({
                                 onUnequipAll={onUnequipAll}
                                 onHoverGear={setHoveredGear}
                                 viewMode={viewMode}
+                                onAddToComparison={addToComparison}
+                                isInComparison={isInComparison(ship.id)}
                             />
                         ))}
                     </div>

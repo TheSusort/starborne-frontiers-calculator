@@ -334,42 +334,38 @@ export const LeaderboardPage: React.FC = () => {
                 description={`Compare ${decodedShipName} ships across all users. Ships are scored using their intended roles by default, or change the role above to see how ships rank differently.`}
             >
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center flex-col md:flex-row gap-2">
-                            <Button onClick={handleBackClick} variant="secondary">
-                                Back to Ship Database
-                            </Button>
+                    <div className="flex items-center flex-col md:flex-row gap-2">
+                        <Button onClick={handleBackClick} variant="secondary">
+                            Back to Ship Database
+                        </Button>
 
-                            <div className="flex md:items-center md:space-x-2 flex-col md:flex-row">
-                                <label
-                                    htmlFor="role-selector"
-                                    className="text-sm font-medium text-gray-300"
-                                >
-                                    Score as:
-                                </label>
-                                <Select
-                                    options={[
-                                        {
-                                            value: '',
-                                            label:
-                                                leaderboardData.length > 0
-                                                    ? `Default (${SHIP_TYPES[leaderboardData[0].ship.type]?.name || 'Ship Role'})`
-                                                    : "Default (Ship's Role)",
-                                        },
-                                        ...Object.entries(SHIP_TYPES).map(([key, type]) => ({
-                                            value: key,
-                                            label: `${type.name}`,
-                                        })),
-                                    ]}
-                                    value={selectedRole || ''}
-                                    onChange={(value) =>
-                                        setSelectedRole(
-                                            value === '' ? null : (value as ShipTypeName)
-                                        )
-                                    }
-                                    className="min-w-48"
-                                />
-                            </div>
+                        <div className="flex md:items-center md:space-x-2 flex-col md:flex-row ml-auto">
+                            <label
+                                htmlFor="role-selector"
+                                className="text-sm font-medium text-gray-300"
+                            >
+                                Score as:
+                            </label>
+                            <Select
+                                options={[
+                                    {
+                                        value: '',
+                                        label:
+                                            leaderboardData.length > 0
+                                                ? `Default (${SHIP_TYPES[leaderboardData[0].ship.type]?.name || 'Ship Role'})`
+                                                : "Default (Ship's Role)",
+                                    },
+                                    ...Object.entries(SHIP_TYPES).map(([key, type]) => ({
+                                        value: key,
+                                        label: `${type.name}`,
+                                    })),
+                                ]}
+                                value={selectedRole || ''}
+                                onChange={(value) =>
+                                    setSelectedRole(value === '' ? null : (value as ShipTypeName))
+                                }
+                                className="min-w-48"
+                            />
                         </div>
                     </div>
 

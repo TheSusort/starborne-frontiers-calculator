@@ -37,6 +37,8 @@ interface Props {
     onRemoveImplant?: (shipId: string, slot: ImplantSlotName) => void;
     variant?: 'full' | 'compact' | 'extended';
     viewMode?: 'list' | 'image';
+    onAddToComparison?: (shipId: string) => void;
+    isInComparison?: boolean;
 }
 
 export const ShipCard: React.FC<Props> = ({
@@ -56,6 +58,8 @@ export const ShipCard: React.FC<Props> = ({
     onRemoveImplant,
     variant = 'full',
     viewMode = 'list',
+    onAddToComparison,
+    isInComparison,
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<(GearSlotName | ImplantSlotName) | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -143,6 +147,8 @@ export const ShipCard: React.FC<Props> = ({
                 onRemove={onRemove}
                 onLockEquipment={onLockEquipment}
                 variant={variant}
+                onAddToComparison={onAddToComparison}
+                isInComparison={isInComparison}
             >
                 <div className="p-4 bg-dark">
                     {!expanded ? (
