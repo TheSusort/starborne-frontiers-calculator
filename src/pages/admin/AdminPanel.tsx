@@ -7,7 +7,6 @@ import { AllUsersTable } from '../../components/admin/AllUsersTable';
 import { StatCard } from '../../components/ui';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
-import { UserDistributionChart } from '../../components/admin/UserDistributionChart';
 import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';
 import { AddShipTemplateForm } from '../../components/admin/AddShipTemplateForm';
 import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
@@ -299,11 +298,6 @@ export const AdminPanel: React.FC = () => {
                                 data={growthMetrics}
                                 title={`Content Growth (Last ${daysBack} Days)`}
                             />
-                        )}
-
-                        {/* User Distribution */}
-                        {userDistribution.length > 0 && (
-                            <UserDistributionChart data={userDistribution} />
                         )}
 
                         {/* Table Sizes */}

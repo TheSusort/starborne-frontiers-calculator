@@ -17,10 +17,15 @@ let currentUserId: string | null = null;
 
 async function sendHeartbeat(): Promise<void> {
     try {
-        await supabase.from('heartbeats').insert({
-            session_id: getSessionId(),
-            user_id: currentUserId,
-        });
+        await supabase.from('heartbeats').upsert(
+            {
+                session_id: getSessionId(),
+                user_id: currentUserId,
+                date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+                last_seen: new Date().toISOString(),
+            },
+            { onConflict: 'session_id,date' }
+        );
     } catch (error) {
         // Silently fail - heartbeats are non-critical
         // eslint-disable-next-line no-console

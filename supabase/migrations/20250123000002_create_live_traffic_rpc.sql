@@ -10,21 +10,14 @@ SECURITY DEFINER
 AS $$
 BEGIN
   RETURN QUERY
-  WITH recent AS (
-    SELECT DISTINCT ON (session_id)
-      session_id,
-      user_id
-    FROM heartbeats
-    WHERE created_at > now() - interval '60 seconds'
-    ORDER BY session_id, created_at DESC
-  )
   SELECT
-    COUNT(DISTINCT r.session_id)::bigint AS active_sessions,
-    COUNT(DISTINCT r.user_id) FILTER (WHERE r.user_id IS NOT NULL)::bigint AS authenticated_users,
-    COUNT(*) FILTER (WHERE r.user_id IS NULL)::bigint AS anonymous_sessions
-  FROM recent r;
+    COUNT(*)::bigint AS active_sessions,
+    COUNT(user_id)::bigint AS authenticated_users,
+    COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS anonymous_sessions
+  FROM heartbeats
+  WHERE last_seen > now() - interval '60 seconds';
 END;
 $$;
 
--- Grant execute to authenticated users (admin check happens in RLS)
+-- Grant execute to authenticated users
 GRANT EXECUTE ON FUNCTION get_live_traffic() TO authenticated;

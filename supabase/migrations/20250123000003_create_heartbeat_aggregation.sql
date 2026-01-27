@@ -8,11 +8,11 @@ DECLARE
   yesterday date := CURRENT_DATE - interval '1 day';
   session_count bigint;
 BEGIN
-  -- Count unique sessions from yesterday
-  SELECT COUNT(DISTINCT COALESCE(user_id::text, session_id))
+  -- Count unique sessions from yesterday (just count rows since one row = one session)
+  SELECT COUNT(*)
   INTO session_count
   FROM heartbeats
-  WHERE created_at::date = yesterday;
+  WHERE date = yesterday;
 
   -- Update daily_usage_stats with yesterday's heartbeat data
   INSERT INTO daily_usage_stats (date, unique_active_users, created_at, updated_at)
@@ -21,9 +21,9 @@ BEGIN
     unique_active_users = EXCLUDED.unique_active_users,
     updated_at = now();
 
-  -- Delete all aggregated heartbeats (yesterday and older)
+  -- Delete yesterday's heartbeats (already aggregated)
   DELETE FROM heartbeats
-  WHERE created_at::date <= yesterday;
+  WHERE date <= yesterday;
 END;
 $$;
 
