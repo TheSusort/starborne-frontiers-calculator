@@ -335,13 +335,24 @@ src/
 
 ### Documentation Updates
 
-**IMPORTANT:** Whenever building a new feature or making changes to an existing feature, you MUST:
+**IMPORTANT:** Documentation must stay synchronized with the codebase. Check for updates needed when:
 
-1. Review `src/pages/DocumentationPage.tsx`
-2. Add or update relevant documentation for the feature
-3. Ensure examples, explanations, and usage instructions are current
+1. **Building new features or changing existing features:**
+   - Review `src/pages/DocumentationPage.tsx`
+   - Add or update relevant documentation for the feature
+   - Ensure examples, explanations, and usage instructions are current
 
-This keeps the in-app documentation synchronized with the actual codebase functionality.
+2. **Updating CLAUDE.md (this file):**
+   - If adding new roles, calculators, pages, or user-facing features to CLAUDE.md
+   - Check if `src/pages/DocumentationPage.tsx` needs corresponding updates
+   - The in-app documentation should reflect all features documented here
+
+**Key areas to keep in sync:**
+- Ship roles (Attacker, Defender, Debuffer variants, Supporter variants)
+- Calculator pages
+- Gear page tabs (Inventory, Calibration, Upgrade Analysis, Simulate Upgrades)
+- Engineering page tabs (Engineering Stats, Preview Upgrade)
+- New navigation items in the sidebar
 
 ## Testing Strategy
 

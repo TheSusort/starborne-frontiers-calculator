@@ -177,6 +177,26 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#shared-encounters"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Shared Encounters
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#statistics"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Statistics
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#simulation"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -509,6 +529,10 @@ const DocumentationPage: React.FC = () => {
                                         Prevent gear from being changed by autogear
                                     </li>
                                     <li>
+                                        <span className="text-primary">Calibrate Gear:</span> Quick
+                                        access to calibrate gear for this ship
+                                    </li>
+                                    <li>
                                         <span className="text-primary">Ship Details:</span> View
                                         detailed ship information in the ship database
                                     </li>
@@ -521,8 +545,31 @@ const DocumentationPage: React.FC = () => {
                                         access to battle simulation with this ship
                                     </li>
                                     <li>
+                                        <span className="text-primary">Compare Ships:</span> Add
+                                        ships to comparison panel to view stats side-by-side
+                                    </li>
+                                    <li>
                                         <span className="text-primary">Delete Ship:</span> Remove
                                         the ship from your fleet
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Ship Comparison</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Compare multiple ships side-by-side to analyze their stats and
+                                    gear configurations:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click &quot;Compare&quot; on ship cards to add them to the
+                                        comparison panel
+                                    </li>
+                                    <li>View up to 4 ships at once</li>
+                                    <li>Compare final stats, gear, and set bonuses</li>
+                                    <li>
+                                        Also available in Ship Database for comparing base stats
                                     </li>
                                 </ul>
                             </div>
@@ -782,31 +829,88 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
 
-                            <h3 className="text-xl font-semibold mb-2">Upgrade Analysis</h3>
+                            <h3 className="text-xl font-semibold mb-2">Gear Page Tabs</h3>
+                            <p className="text-gray-300 mb-4">
+                                The Gear page has four tabs for different management features:
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Inventory Tab</h4>
+                                <p className="text-gray-300">
+                                    Your main gear inventory with filtering, sorting, and search
+                                    capabilities as described above.
+                                </p>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Calibration Tab</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Gear calibration is an in-game feature that boosts your
+                                    gear&apos;s main stat when calibrated to a specific ship.
+                                    Requirements: level 16 gear with 5 or 6 stars.
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Calibration Candidates:</strong> Find your best gear
+                                        pieces to calibrate for each role, ranked by potential score
+                                        improvement
+                                    </li>
+                                    <li>
+                                        <strong>Ship Analysis:</strong> Select a specific ship to
+                                        see which of their equipped gear would benefit most from
+                                        calibration
+                                    </li>
+                                    <li>
+                                        Calibration bonuses vary by stat type (flat attack doubles,
+                                        HP gains ~50%, percentage stats gain 5-7 points)
+                                    </li>
+                                    <li>
+                                        Quick access via &quot;Calibrate Gear&quot; in ship dropdown
+                                        menus
+                                    </li>
+                                </ul>
+                            </div>
+
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
-                                    Upgrade Analysis
+                                    Upgrade Analysis Tab
                                 </h4>
                                 <p className="text-gray-300 mb-2">
-                                    The Upgrade Analysis tab provides insights into your gear
-                                    collection. It shows you which gear pieces are most likely to
-                                    improve your role scores the most, by simulating upgrading them
-                                    10 times, scoring each one using the role scoring system, and
-                                    averaging the results. Displayed per role, and sorted by total
-                                    improvement to the role score. The average improvement is how
-                                    much the gear itself, not the role score, is improved by
-                                    upgrading it.
+                                    This tab shows which gear pieces are most likely to improve your
+                                    role scores when upgraded. It simulates upgrading unlevelled
+                                    gear 10 times, scores each result using the role scoring system,
+                                    and averages the results.
                                 </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        Results are displayed per role, sorted by score improvement
+                                    </li>
+                                    <li>Helps identify high-potential gear worth investing in</li>
+                                </ul>
+                            </div>
 
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Simulate Upgrades Tab
+                                </h4>
                                 <p className="text-gray-300 mb-2">
-                                    You can also simulate upgrading all your unlevelled gear, by
-                                    clicking the Simulate Upgrades button. This will then run
-                                    through all gear and upgrade it randomly, like in the game. The
-                                    upgraded stats will now be displayed in the gear cards.
-                                    <br />
-                                    <br />
-                                    Clear upgrades button is used to reset the gear.
+                                    Simulate upgrading all your unlevelled gear to see potential
+                                    outcomes:
                                 </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click &quot;Simulate Upgrades&quot; to randomly upgrade all
+                                        unlevelled gear (like the in-game RNG)
+                                    </li>
+                                    <li>Upgraded stats are displayed on gear cards</li>
+                                    <li>
+                                        Use &quot;Clear Upgrades&quot; to reset to original stats
+                                    </li>
+                                    <li>
+                                        Enable &quot;Use upgraded stats&quot; in autogear to factor
+                                        simulated upgrades into optimization
+                                    </li>
+                                </ul>
                             </div>
 
                             <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
@@ -936,6 +1040,18 @@ const DocumentationPage: React.FC = () => {
 
                                         <div className="p-4 bg-dark-lighter">
                                             <h4 className="font-semibold text-primary">
+                                                Debuffer (Defensive, Security)
+                                            </h4>
+                                            <p className="text-gray-300">
+                                                Anti-debuffer specialist with survivability:
+                                            </p>
+                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                                <li>Hacking × Security × Effective HP</li>
+                                            </ul>
+                                        </div>
+
+                                        <div className="p-4 bg-dark-lighter">
+                                            <h4 className="font-semibold text-primary">
                                                 Debuffer (Bomber)
                                             </h4>
                                             <p className="text-gray-300">
@@ -943,6 +1059,19 @@ const DocumentationPage: React.FC = () => {
                                             </p>
                                             <ul className="text-gray-300 list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Attack</li>
+                                            </ul>
+                                        </div>
+
+                                        <div className="p-4 bg-dark-lighter">
+                                            <h4 className="font-semibold text-primary">
+                                                Debuffer (Corrosion)
+                                            </h4>
+                                            <p className="text-gray-300">
+                                                DoT specialist for long-term damage:
+                                            </p>
+                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                                <li>Hacking stat × Decimation</li>
+                                                <li>Optimized for corrosion stacking</li>
                                             </ul>
                                         </div>
                                     </div>
@@ -990,6 +1119,21 @@ const DocumentationPage: React.FC = () => {
                                                 <li>Attack power (square root scaled)</li>
                                                 <li>
                                                     Boost set bonus (30,000 points for 4 pieces)
+                                                </li>
+                                            </ul>
+                                        </div>
+
+                                        <div className="p-4 bg-dark-lighter">
+                                            <h4 className="font-semibold text-primary">
+                                                Supporter (Shield)
+                                            </h4>
+                                            <p className="text-gray-300">
+                                                Maximizes shielding capability:
+                                            </p>
+                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                                <li>Maximize HP</li>
+                                                <li>
+                                                    Best for ships that provide shields based on HP
                                                 </li>
                                             </ul>
                                         </div>
@@ -1294,11 +1438,13 @@ const DocumentationPage: React.FC = () => {
                             <p className="text-gray-300">
                                 The Engineering Stats page allows you to manage per-ship-type
                                 engineering bonuses that apply to all ships of that type in your
-                                fleet.
+                                fleet. The page has two tabs: Engineering Stats and Preview Upgrade.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
-                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Engineering Stats Tab
+                                </h4>
                                 <ul className="text-gray-300 list-disc pl-4 space-y-1">
                                     <li>Set engineering bonuses for each ship type</li>
                                     <li>Bonuses automatically apply to all ships of that type</li>
@@ -1310,12 +1456,35 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
 
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Preview Upgrade Tab
+                                </h4>
+                                <p className="text-gray-300 mb-2">
+                                    See how investing in engineering upgrades will affect your ships
+                                    before spending resources:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Select a ship and role to analyze</li>
+                                    <li>Choose which engineering stat to preview upgrading</li>
+                                    <li>See current stats vs. stats after the upgrade</li>
+                                    <li>
+                                        View simulation results showing DPS, survivability, and
+                                        other role-specific metrics
+                                    </li>
+                                    <li>
+                                        Helps decide which engineering stats to prioritize for each
+                                        role
+                                    </li>
+                                </ul>
+                            </div>
+
                             <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
                                 <h4 className="font-semibold text-yellow-200 mb-2">Pro Tip</h4>
                                 <p className="text-yellow-100">
                                     Keep your engineering stats up to date by importing fresh game
-                                    data regularly. These bonuses significantly impact your ship
-                                    performance and autogear suggestions.
+                                    data regularly. Use the Preview Upgrade tab to make informed
+                                    decisions about where to invest your engineering points.
                                 </p>
                             </div>
                         </div>
@@ -1616,6 +1785,30 @@ const DocumentationPage: React.FC = () => {
                                         time periods.
                                     </p>
                                 </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">
+                                        Speed Calculator
+                                    </h4>
+                                    <p className="text-gray-300 mb-2">
+                                        Calculate speed values with various modifiers. Two modes
+                                        available:
+                                    </p>
+                                    <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                        <li>
+                                            <strong>Forward:</strong> Enter base speed and modifiers
+                                            to calculate final speed
+                                        </li>
+                                        <li>
+                                            <strong>Reverse:</strong> Enter target speed range and
+                                            modifiers to find required base speed
+                                        </li>
+                                    </ul>
+                                    <p className="text-gray-300 mt-2">
+                                        Add multiple speed modifiers (buffs/debuffs) and label them
+                                        for easy reference.
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
@@ -1630,6 +1823,10 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>Analyze combat logs to understand battle outcomes</li>
                                     <li>Track account progression over time with JSON Diff</li>
+                                    <li>
+                                        Plan speed tuning to ensure your ships act in the desired
+                                        order
+                                    </li>
                                 </ul>
                             </div>
                         </div>
@@ -1700,11 +1897,11 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">
-                                Track and Share Battle Encounters
+                                Track Your Battle Encounters
                             </h3>
                             <p className="text-gray-300">
                                 Document enemy compositions, strategies, and notes for various game
-                                encounters.
+                                encounters. Your personal encounter notes are stored privately.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
@@ -1714,8 +1911,10 @@ const DocumentationPage: React.FC = () => {
                                     <li>Record enemy ship compositions and stats</li>
                                     <li>Document successful strategies</li>
                                     <li>Add custom notes and observations</li>
-                                    <li>Share encounters with alliance members or the community</li>
-                                    <li>Browse shared encounters from other players</li>
+                                    <li>
+                                        Option to share encounters publicly to the Shared Encounters
+                                        page
+                                    </li>
                                 </ul>
                             </div>
 
@@ -1730,20 +1929,229 @@ const DocumentationPage: React.FC = () => {
                         </div>
                     </section>
 
+                    {/* Shared Encounters Section */}
+                    <section
+                        id="shared-encounters"
+                        className="space-y-4 [counter-increment:section]"
+                    >
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Shared Encounters
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Community-Shared Fleet Formations
+                            </h3>
+                            <p className="text-gray-300">
+                                Browse encounters shared by other players to learn strategies and
+                                fleet compositions for challenging content.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Browse all publicly shared encounters</li>
+                                    <li>Search by name or description</li>
+                                    <li>
+                                        Vote on encounters to help surface the most helpful
+                                        strategies
+                                    </li>
+                                    <li>View enemy compositions and recommended teams</li>
+                                    <li>Learn from community-proven strategies</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    How to Share Your Encounters
+                                </h4>
+                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                    <li>Create an encounter in your personal Encounter Notes</li>
+                                    <li>Toggle the &quot;Share publicly&quot; option</li>
+                                    <li>
+                                        Your encounter will appear in the Shared Encounters page for
+                                        others to view
+                                    </li>
+                                </ol>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Pro Tip</h4>
+                                <p className="text-blue-100">
+                                    Check Shared Encounters before attempting difficult content like
+                                    Faction Ops bosses. The community voting system helps identify
+                                    the most effective strategies.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Statistics Section */}
+                    <section id="statistics" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Statistics
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Fleet and Gear Analytics</h3>
+                            <p className="text-gray-300">
+                                The Statistics page provides a comprehensive analytics dashboard to
+                                understand your collection at a glance. View detailed breakdowns
+                                with charts and metrics across four tabs.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Ships Tab</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Analyze your ship collection with filters by role and rarity:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Total ships, average level, max level count</li>
+                                    <li>Total refits and average refits per ship</li>
+                                    <li>Ships with implants percentage</li>
+                                    <li>Fully geared vs. ungeared ships</li>
+                                    <li>Rarity distribution (pie chart)</li>
+                                    <li>Role distribution (bar chart)</li>
+                                    <li>Level distribution histogram</li>
+                                    <li>Ships by faction breakdown</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Gear Tab</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Analyze your gear inventory with filters by set, main stat, and
+                                    rarity:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Total gear pieces and equipped percentage</li>
+                                    <li>Average level and star level</li>
+                                    <li>Most common set bonus and main stat</li>
+                                    <li>Top 10 gear sets distribution</li>
+                                    <li>Main stat distribution with category colors</li>
+                                    <li>Rarity and star level distributions</li>
+                                    <li>Slot distribution across gear types</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Implants Tab</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Analyze your implant collection with filters by type and rarity:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Total implants and equipped percentage</li>
+                                    <li>Types available (Minor, Major, Ultimate)</li>
+                                    <li>Rarity distribution</li>
+                                    <li>Type distribution breakdown</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Engineering Tab</h4>
+                                <p className="text-gray-300 mb-2">
+                                    Analyze your engineering investment across roles:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Total engineering points invested</li>
+                                    <li>Average points per role</li>
+                                    <li>Most invested role identification</li>
+                                    <li>Warning for roles with zero investment</li>
+                                    <li>Points by role (horizontal bar chart)</li>
+                                    <li>Point distribution by stat type (stacked bar chart)</li>
+                                    <li>Detailed investment table by role and stat</li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Use Cases</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>
+                                        Identify gaps in your collection (undergeared ships,
+                                        underinvested roles)
+                                    </li>
+                                    <li>Track progress toward collection goals</li>
+                                    <li>Find which gear sets you have the most/least of</li>
+                                    <li>Ensure balanced engineering investment across roles</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Simulation Section */}
                     <section id="simulation" className="space-y-4 [counter-increment:section]">
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
                             Simulation
                         </h2>
-                        <div className="card">
+                        <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Battle Simulation</h3>
-                            <p className="mb-4">The simulation tools allow you to:</p>
-                            <ul className="list-disc pl-6 space-y-2">
-                                <li>Test different ship configurations</li>
-                                <li>Simulate combat scenarios</li>
-                                <li>Calculate damage output</li>
-                                <li>Analyze defensive capabilities</li>
-                            </ul>
+                            <p className="text-gray-300 mb-4">
+                                The simulation page allows you to test different gear and implant
+                                configurations without permanently changing your ships.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>Select any ship from your fleet</li>
+                                    <li>Choose a role to simulate (Attacker, Defender, etc.)</li>
+                                    <li>Temporarily swap gear pieces to test alternatives</li>
+                                    <li>Temporarily swap implants to test different setups</li>
+                                    <li>See real-time stat updates as you make changes</li>
+                                    <li>
+                                        Compare current vs. temporary configuration side-by-side
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Simulation Results
+                                </h4>
+                                <p className="text-gray-300 mb-2">
+                                    Results show role-specific metrics based on the selected role:
+                                </p>
+                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Attacker:</strong> DPS, crit rate, crit damage
+                                    </li>
+                                    <li>
+                                        <strong>Defender:</strong> Effective HP, damage reduction,
+                                        survival rounds
+                                    </li>
+                                    <li>
+                                        <strong>Supporter:</strong> Healing output, heal modifiers
+                                    </li>
+                                    <li>
+                                        <strong>Debuffer:</strong> Hacking effectiveness, DPS
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Equip Changes</h4>
+                                <p className="text-gray-300">
+                                    After testing, you can permanently equip your temporary gear
+                                    configuration with one click. The simulation will show you which
+                                    ships will lose gear if you proceed.
+                                </p>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">Pro Tips</h4>
+                                <ul className="text-yellow-100 space-y-2">
+                                    <li>
+                                        Use simulation to test gear before committing to expensive
+                                        upgrades in-game
+                                    </li>
+                                    <li>
+                                        Compare different set bonuses to see which provides better
+                                        results for your role
+                                    </li>
+                                    <li>
+                                        Access simulation quickly via the &quot;Simulator&quot;
+                                        option in ship dropdown menus
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </section>
                 </div>
