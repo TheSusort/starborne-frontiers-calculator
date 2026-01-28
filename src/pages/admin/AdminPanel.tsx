@@ -20,11 +20,9 @@ import {
     getSystemStats,
     getGrowthStats,
     getTableSizes,
-    getUserDistribution,
     SystemStats,
     GrowthMetric,
     TableInfo,
-    UserDistribution,
 } from '../../services/systemHealthService';
 import {
     getPendingProposals,
@@ -52,7 +50,6 @@ export const AdminPanel: React.FC = () => {
     const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
     const [growthMetrics, setGrowthMetrics] = useState<GrowthMetric[]>([]);
     const [tableSizes, setTableSizes] = useState<TableInfo[]>([]);
-    const [userDistribution, setUserDistribution] = useState<UserDistribution[]>([]);
 
     // Template proposals state
     const [templateProposals, setTemplateProposals] = useState<TemplateProposalRecord[]>([]);
@@ -60,23 +57,20 @@ export const AdminPanel: React.FC = () => {
     const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
 
     const loadData = React.useCallback(async () => {
-        const [statsData, userCount, sysStats, growth, tables, distribution, proposals] =
-            await Promise.all([
-                getDailyUsageStats(daysBack),
-                getTotalUserCount(),
-                getSystemStats(),
-                getGrowthStats(daysBack),
-                getTableSizes(),
-                getUserDistribution(),
-                getPendingProposals(),
-            ]);
+        const [statsData, userCount, sysStats, growth, tables, proposals] = await Promise.all([
+            getDailyUsageStats(daysBack),
+            getTotalUserCount(),
+            getSystemStats(),
+            getGrowthStats(daysBack),
+            getTableSizes(),
+            getPendingProposals(),
+        ]);
 
         if (statsData) setDailyStats(statsData);
         setTotalUsers(userCount);
         if (sysStats) setSystemStats(sysStats);
         if (growth) setGrowthMetrics(growth);
         if (tables) setTableSizes(tables);
-        if (distribution) setUserDistribution(distribution);
         if (proposals) setTemplateProposals(proposals);
     }, [daysBack]);
 

@@ -27,12 +27,6 @@ export interface TableInfo {
     indexes_size: string;
 }
 
-export interface UserDistribution {
-    activity_level: string;
-    user_count: number;
-    percentage: number;
-}
-
 export interface SystemSnapshot {
     snapshot_date: string;
     total_ships: number;
@@ -100,25 +94,6 @@ export async function getTableSizes(): Promise<TableInfo[] | null> {
         return data;
     } catch (error) {
         console.error('Error fetching table sizes:', error);
-        return null;
-    }
-}
-
-/**
- * Get user distribution by activity level
- */
-export async function getUserDistribution(): Promise<UserDistribution[] | null> {
-    try {
-        const { data, error } = await supabase.rpc('get_user_distribution');
-
-        if (error) {
-            console.error('Error fetching user distribution:', error);
-            return null;
-        }
-
-        return data;
-    } catch (error) {
-        console.error('Error fetching user distribution:', error);
         return null;
     }
 }
