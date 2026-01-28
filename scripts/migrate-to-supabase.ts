@@ -85,48 +85,34 @@ async function migrateUserData(firebaseUid: string, supabaseUserId: string, stat
         if (Array.isArray(userData['gear-inventory'])) {
             for (const item of userData['gear-inventory']) {
                 try {
-                    const { data: newItem, error: itemError } = await supabase
-                        .from('inventory_items')
-                        .insert({
-                            user_id: supabaseUserId,
-                            firebase_id: item.id,
-                            slot: item.slot,
-                            level: item.level,
-                            stars: item.stars,
-                            rarity: item.rarity,
-                            set_bonus: item.setBonus,
-                            calibration_ship_id: item.calibration?.shipId || null,
-                        })
-                        .select()
-                        .single();
+                    const { error: itemError } = await supabase.from('inventory_items').insert({
+                        user_id: supabaseUserId,
+                        firebase_id: item.id,
+                        slot: item.slot,
+                        level: item.level,
+                        stars: item.stars,
+                        rarity: item.rarity,
+                        set_bonus: item.setBonus,
+                        calibration_ship_id: item.calibration?.shipId || null,
+                        stats: {
+                            mainStat: item.mainStat
+                                ? {
+                                      name: item.mainStat.name,
+                                      value: item.mainStat.value,
+                                      type: item.mainStat.type,
+                                  }
+                                : null,
+                            subStats: Array.isArray(item.subStats)
+                                ? item.subStats.map((stat: { name: string; value: number; type: string }) => ({
+                                      name: stat.name,
+                                      value: stat.value,
+                                      type: stat.type,
+                                  }))
+                                : [],
+                        },
+                    });
 
                     if (itemError) throw itemError;
-
-                    // Migrate gear main stat
-                    if (item.mainStat) {
-                        await supabase.from('gear_stats').insert({
-                            gear_id: newItem.id,
-                            name: item.mainStat.name,
-                            value: item.mainStat.value,
-                            type: item.mainStat.type,
-                            is_main: true,
-                        });
-                    }
-
-                    // Migrate gear stats
-                    if (Array.isArray(item.subStats)) {
-                        for (const stat of item.subStats) {
-                            const { error: statsError } = await supabase.from('gear_stats').insert({
-                                gear_id: newItem.id,
-                                name: stat.name,
-                                value: stat.value,
-                                type: stat.type,
-                                is_main: false,
-                            });
-
-                            if (statsError) throw statsError;
-                        }
-                    }
 
                     stats.inventory++;
                 } catch (error) {

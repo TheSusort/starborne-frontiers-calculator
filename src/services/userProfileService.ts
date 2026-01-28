@@ -280,12 +280,12 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             `
             *,
             ship_base_stats (*),
-            ship_equipment (*, inventory_items (*, gear_stats (*)) ),
+            ship_equipment (*, inventory_items (*) ),
             ship_refits (
                 *,
                 ship_refit_stats (*)
             ),
-            ship_implants (*, inventory_items (*, gear_stats (*)) )
+            ship_implants (*, inventory_items (*) )
         `
         )
         .eq('user_id', userId);
@@ -317,12 +317,12 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 `
                 *,
                 ship_base_stats (*),
-                ship_equipment (*, inventory_items (*, gear_stats (*)) ),
+                ship_equipment (*, inventory_items (*) ),
                 ship_refits (
                     *,
                     ship_refit_stats (*)
                 ),
-                ship_implants (*, inventory_items (*, gear_stats (*)) )
+                ship_implants (*, inventory_items (*) )
             `
             )
             .eq('name', shipName);
@@ -364,6 +364,11 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             }
         };
 
+        interface RawStatsJsonb {
+            mainStat: RawStat | null;
+            subStats: RawStat[];
+        }
+
         interface RawShipData {
             id: string;
             name: string;
@@ -398,7 +403,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     stars: number;
                     rarity: string;
                     set_bonus: string;
-                    gear_stats?: RawStat[];
+                    stats?: RawStatsJsonb | null;
                 };
             }>;
             ship_refits?: Array<{
@@ -414,7 +419,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     stars: number;
                     rarity: string;
                     set_bonus: string;
-                    gear_stats?: RawStat[];
+                    stats?: RawStatsJsonb | null;
                 };
             }>;
         }
@@ -462,9 +467,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             const shipGearMap = new Map<string, InternalGearPiece>();
             data.ship_equipment?.forEach((eq) => {
                 if (eq.inventory_items) {
-                    const gearStats = eq.inventory_items.gear_stats || [];
-                    const mainStat = gearStats.find((stat) => stat.is_main);
-                    const subStats = gearStats.filter((stat) => !stat.is_main);
+                    const statsData = eq.inventory_items.stats || {
+                        mainStat: null,
+                        subStats: [],
+                    };
 
                     const gearPiece = {
                         id: eq.inventory_items.id,
@@ -473,17 +479,17 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         stars: eq.inventory_items.stars,
                         rarity: eq.inventory_items.rarity,
                         setBonus: eq.inventory_items.set_bonus,
-                        mainStat: mainStat
+                        mainStat: statsData.mainStat
                             ? {
-                                  name: mainStat.name,
-                                  value: mainStat.value,
-                                  type: (mainStat.type === 'percentage' ? 'percentage' : 'flat') as
-                                      | 'flat'
-                                      | 'percentage',
-                                  id: mainStat.id,
+                                  name: statsData.mainStat.name,
+                                  value: statsData.mainStat.value,
+                                  type: (statsData.mainStat.type === 'percentage'
+                                      ? 'percentage'
+                                      : 'flat') as 'flat' | 'percentage',
+                                  id: statsData.mainStat.id || '',
                               }
                             : undefined,
-                        subStats: subStats.map(createStat),
+                        subStats: (statsData.subStats || []).map(createStat),
                     };
                     shipGearMap.set(eq.gear_id, gearPiece);
                 }
@@ -492,9 +498,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             const shipImplantMap = new Map<string, InternalImplantPiece>();
             data.ship_implants?.forEach((implant) => {
                 if (implant.inventory_items) {
-                    const implantStats = implant.inventory_items.gear_stats || [];
-                    const mainStat = implantStats.find((stat) => stat.is_main);
-                    const subStats = implantStats.filter((stat) => !stat.is_main);
+                    const statsData = implant.inventory_items.stats || {
+                        mainStat: null,
+                        subStats: [],
+                    };
 
                     const implantPiece = {
                         id: implant.inventory_items.id,
@@ -504,17 +511,17 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         stars: implant.inventory_items.stars,
                         rarity: implant.inventory_items.rarity,
                         setBonus: implant.inventory_items.set_bonus,
-                        mainStat: mainStat
+                        mainStat: statsData.mainStat
                             ? {
-                                  name: mainStat.name,
-                                  value: mainStat.value,
-                                  type: (mainStat.type === 'percentage' ? 'percentage' : 'flat') as
-                                      | 'flat'
-                                      | 'percentage',
-                                  id: mainStat.id,
+                                  name: statsData.mainStat.name,
+                                  value: statsData.mainStat.value,
+                                  type: (statsData.mainStat.type === 'percentage'
+                                      ? 'percentage'
+                                      : 'flat') as 'flat' | 'percentage',
+                                  id: statsData.mainStat.id || '',
                               }
                             : undefined,
-                        subStats: subStats.map(createStat),
+                        subStats: (statsData.subStats || []).map(createStat),
                     };
                     shipImplantMap.set(implant.slot, implantPiece);
                 }
@@ -559,8 +566,11 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 implants:
                     data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
                         if (implant.inventory_items) {
-                            const implantStats = implant.inventory_items.gear_stats || [];
-                            if (implantStats.length > 0) {
+                            const statsData = implant.inventory_items.stats;
+                            if (
+                                statsData &&
+                                (statsData.mainStat || (statsData.subStats?.length ?? 0) > 0)
+                            ) {
                                 // Store implant ID as string (matches Ship type)
                                 acc[implant.slot] = implant.inventory_items.id;
                             }

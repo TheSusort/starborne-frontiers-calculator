@@ -61,12 +61,12 @@ export const LeaderboardPage: React.FC = () => {
                         `
                         *,
                         ship_base_stats (*),
-                        ship_equipment (*, inventory_items (*, gear_stats (*)) ),
+                        ship_equipment (*, inventory_items (*) ),
                         ship_refits (
                             *,
                             ship_refit_stats (*)
                         ),
-                        ship_implants (*, inventory_items (*, gear_stats (*)) )
+                        ship_implants (*, inventory_items (*) )
                     `
                     )
                     .ilike('name', `%${decodeURIComponent(shipName)}%`);
@@ -92,10 +92,11 @@ export const LeaderboardPage: React.FC = () => {
                     const shipGearMap = new Map<string, any>();
                     data.ship_equipment.forEach((eq: any) => {
                         if (eq.inventory_items) {
-                            // Handle gear stats more robustly
-                            const gearStats = eq.inventory_items.gear_stats || [];
-                            const mainStat = gearStats.find((stat: any) => stat.is_main);
-                            const subStats = gearStats.filter((stat: any) => !stat.is_main);
+                            // Read from stats JSONB field
+                            const statsData = eq.inventory_items.stats || {
+                                mainStat: null,
+                                subStats: [],
+                            };
 
                             const gearPiece = {
                                 id: eq.inventory_items.id,
@@ -104,18 +105,17 @@ export const LeaderboardPage: React.FC = () => {
                                 stars: eq.inventory_items.stars,
                                 rarity: eq.inventory_items.rarity,
                                 setBonus: eq.inventory_items.set_bonus,
-                                mainStat: mainStat
+                                mainStat: statsData.mainStat
                                     ? {
-                                          name: mainStat.name,
-                                          value: mainStat.value,
+                                          name: statsData.mainStat.name,
+                                          value: statsData.mainStat.value,
                                           type:
-                                              mainStat.type === 'percentage'
+                                              statsData.mainStat.type === 'percentage'
                                                   ? 'percentage'
                                                   : 'flat',
-                                          id: mainStat.id,
                                       }
                                     : undefined,
-                                subStats: subStats.map(createStat),
+                                subStats: (statsData.subStats || []).map(createStat),
                             };
                             shipGearMap.set(eq.gear_id, gearPiece);
                         }
@@ -125,10 +125,11 @@ export const LeaderboardPage: React.FC = () => {
                     const shipImplantMap = new Map<string, any>();
                     data.ship_implants.forEach((implant: any) => {
                         if (implant.inventory_items) {
-                            // Handle implant stats more robustly (similar to gear)
-                            const implantStats = implant.inventory_items.gear_stats || [];
-                            const mainStat = implantStats.find((stat: any) => stat.is_main);
-                            const subStats = implantStats.filter((stat: any) => !stat.is_main);
+                            // Read from stats JSONB field
+                            const statsData = implant.inventory_items.stats || {
+                                mainStat: null,
+                                subStats: [],
+                            };
 
                             const implantPiece = {
                                 id: implant.inventory_items.id,
@@ -138,18 +139,17 @@ export const LeaderboardPage: React.FC = () => {
                                 stars: implant.inventory_items.stars,
                                 rarity: implant.inventory_items.rarity,
                                 setBonus: implant.inventory_items.set_bonus,
-                                mainStat: mainStat
+                                mainStat: statsData.mainStat
                                     ? {
-                                          name: mainStat.name,
-                                          value: mainStat.value,
+                                          name: statsData.mainStat.name,
+                                          value: statsData.mainStat.value,
                                           type:
-                                              mainStat.type === 'percentage'
+                                              statsData.mainStat.type === 'percentage'
                                                   ? 'percentage'
                                                   : 'flat',
-                                          id: mainStat.id,
                                       }
                                     : undefined,
-                                subStats: subStats.map(createStat),
+                                subStats: (statsData.subStats || []).map(createStat),
                             };
                             shipImplantMap.set(implant.slot, implantPiece);
                         }
@@ -192,8 +192,15 @@ export const LeaderboardPage: React.FC = () => {
                         implants: data.ship_implants.reduce(
                             (acc: Record<string, any>, implant: any) => {
                                 if (implant.inventory_items) {
-                                    const implantStats = implant.inventory_items.gear_stats || [];
-                                    if (implantStats.length > 0) {
+                                    const statsData = implant.inventory_items.stats;
+                                    if (
+                                        statsData &&
+                                        (statsData.mainStat || statsData.subStats?.length)
+                                    ) {
+                                        const implantStats = [
+                                            ...(statsData.mainStat ? [statsData.mainStat] : []),
+                                            ...(statsData.subStats || []),
+                                        ];
                                         acc[implant.slot] = {
                                             id: implant.inventory_items.id,
                                             description: implant.description,

@@ -29,11 +29,15 @@ const RETRY_DELAY = 1000; // 1 second
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-interface RawGearStat {
+interface RawStatData {
     name: StatName;
     value: number;
     type: StatType;
-    is_main: boolean;
+}
+
+interface RawStatsJsonb {
+    mainStat: RawStatData | null;
+    subStats: RawStatData[];
 }
 
 interface RawGearData {
@@ -44,7 +48,7 @@ interface RawGearData {
     rarity: RarityName;
     set_bonus: GearSetName;
     calibration_ship_id?: string | null;
-    gear_stats: RawGearStat[];
+    stats: RawStatsJsonb | null;
 }
 
 // Type guard for valid gear piece
@@ -83,10 +87,9 @@ const isValidGearPiece = (gear: unknown): gear is GearPiece => {
 // Helper function to transform Supabase data into GearPiece format
 const transformGearData = (data: RawGearData): GearPiece | null => {
     try {
-        const mainStat = data.gear_stats?.find((stat) => stat.is_main);
-        const subStats = data.gear_stats?.filter((stat) => !stat.is_main) || [];
+        const statsData = data.stats;
 
-        const createStat = (stat: RawGearStat): Stat => {
+        const createStat = (stat: RawStatData): Stat => {
             if (stat.type === 'percentage') {
                 return {
                     name: stat.name,
@@ -109,14 +112,14 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
             stars: data.stars,
             rarity: data.rarity,
             setBonus: data.set_bonus,
-            mainStat: mainStat
-                ? createStat(mainStat)
+            mainStat: statsData?.mainStat
+                ? createStat(statsData.mainStat)
                 : {
                       name: 'hp',
                       value: 0,
                       type: 'flat',
                   },
-            subStats: subStats.length > 0 ? subStats.map(createStat) : [],
+            subStats: statsData?.subStats?.length ? statsData.subStats.map(createStat) : [],
             // Include calibration if calibration_ship_id exists
             ...(data.calibration_ship_id && {
                 calibration: {
@@ -177,12 +180,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             try {
                 let query = supabase
                     .from('inventory_items')
-                    .select(
-                        `
-                    *,
-                    gear_stats (*)
-                `
-                    )
+                    .select('*')
                     .eq('user_id', user.id)
                     .order('id')
                     .limit(BATCH_SIZE);
@@ -342,7 +340,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 if (!user?.id) return optimisticGear;
 
-                // Create gear record
+                // Create gear record with stats JSONB
+                const statsJsonb = {
+                    mainStat: newGear.mainStat
+                        ? {
+                              name: newGear.mainStat.name,
+                              value: newGear.mainStat.value,
+                              type: newGear.mainStat.type,
+                          }
+                        : null,
+                    subStats: (newGear.subStats || []).map((stat) => ({
+                        name: stat.name,
+                        value: stat.value,
+                        type: stat.type,
+                    })),
+                };
+
                 const { data: gearData, error: gearError } = await supabase
                     .from('inventory_items')
                     .insert({
@@ -353,33 +366,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                         rarity: newGear.rarity,
                         set_bonus: newGear.setBonus,
                         calibration_ship_id: newGear.calibration?.shipId || null,
+                        stats: statsJsonb,
                     })
                     .select()
                     .single();
 
                 if (gearError || !gearData) throw gearError;
-
-                // Create gear stats
-                const stats = [
-                    {
-                        gear_id: gearData.id,
-                        name: newGear.mainStat?.name as StatName,
-                        value: newGear.mainStat?.value as number,
-                        type: newGear.mainStat?.type as StatType,
-                        is_main: true,
-                    },
-                    ...(newGear.subStats || []).map((stat) => ({
-                        gear_id: gearData.id,
-                        name: stat.name,
-                        value: stat.value,
-                        type: stat.type,
-                        is_main: false,
-                    })),
-                ];
-
-                const { error: statsError } = await supabase.from('gear_stats').insert(stats);
-
-                if (statsError) throw statsError;
 
                 // Update state with real data
                 //await loadInventory();
@@ -422,58 +414,42 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 if (!user?.id) return;
 
+                // Build update object
+                const updateData: Record<string, unknown> = {
+                    slot: updatedPiece.slot,
+                    level: updatedPiece.level,
+                    stars: updatedPiece.stars,
+                    rarity: updatedPiece.rarity,
+                    set_bonus: updatedPiece.setBonus,
+                    calibration_ship_id: updatedPiece.calibration?.shipId || null,
+                };
+
+                // Update stats JSONB if stats are being updated
+                if (updates.mainStat || updates.subStats) {
+                    updateData.stats = {
+                        mainStat: updatedPiece.mainStat
+                            ? {
+                                  name: updatedPiece.mainStat.name,
+                                  value: updatedPiece.mainStat.value,
+                                  type: updatedPiece.mainStat.type,
+                              }
+                            : null,
+                        subStats: (updatedPiece.subStats || []).map((stat) => ({
+                            name: stat.name,
+                            value: stat.value,
+                            type: stat.type,
+                        })),
+                    };
+                }
+
                 // Update gear record
                 const { error: gearError } = await supabase
                     .from('inventory_items')
-                    .update({
-                        slot: updatedPiece.slot,
-                        level: updatedPiece.level,
-                        stars: updatedPiece.stars,
-                        rarity: updatedPiece.rarity,
-                        set_bonus: updatedPiece.setBonus,
-                        calibration_ship_id: updatedPiece.calibration?.shipId || null,
-                    })
+                    .update(updateData)
                     .eq('id', id)
                     .eq('user_id', user.id);
 
                 if (gearError) throw gearError;
-
-                // Update gear stats if provided
-                if (updates.mainStat || updates.subStats) {
-                    // Delete existing stats
-                    const { error: deleteError } = await supabase
-                        .from('gear_stats')
-                        .delete()
-                        .eq('gear_id', id);
-
-                    if (deleteError) throw deleteError;
-
-                    // Insert new stats
-                    const stats = [
-                        {
-                            gear_id: id,
-                            name: updatedPiece.mainStat?.name as StatName,
-                            value: updatedPiece.mainStat?.value as number,
-                            type: updatedPiece.mainStat?.type as StatType,
-                            is_main: true,
-                        },
-                        ...(updatedPiece.subStats?.map((stat) => ({
-                            gear_id: id,
-                            name: stat.name,
-                            value: stat.value,
-                            type: stat.type,
-                            is_main: false,
-                        })) || []),
-                    ].filter(Boolean);
-
-                    if (stats.length > 0) {
-                        const { error: statsError } = await supabase
-                            .from('gear_stats')
-                            .insert(stats);
-
-                        if (statsError) throw statsError;
-                    }
-                }
 
                 // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
                 if (user?.id) {

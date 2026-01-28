@@ -291,7 +291,7 @@ export const syncMigratedDataToSupabase = async (
                 for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
                     const batch = validInventory.slice(i, i + BATCH_SIZE);
 
-                    // Prepare batch of inventory items
+                    // Prepare batch of inventory items with stats JSONB
                     const inventoryItems = batch.map((item) => ({
                         id: item.id,
                         user_id: userId,
@@ -301,6 +301,20 @@ export const syncMigratedDataToSupabase = async (
                         rarity: item.rarity,
                         set_bonus: item.setBonus,
                         calibration_ship_id: item.calibration?.shipId || null,
+                        stats: {
+                            mainStat: item.mainStat
+                                ? {
+                                      name: item.mainStat.name,
+                                      value: item.mainStat.value,
+                                      type: item.mainStat.type || 'flat',
+                                  }
+                                : null,
+                            subStats: (item.subStats || []).map((stat) => ({
+                                name: stat.name,
+                                value: stat.value,
+                                type: stat.type || 'flat',
+                            })),
+                        },
                     }));
 
                     // Upsert inventory items
@@ -309,57 +323,6 @@ export const syncMigratedDataToSupabase = async (
                         .upsert(inventoryItems, { onConflict: 'id' });
 
                     if (inventoryError) throw inventoryError;
-
-                    // Prepare batch for main stats and sub stats
-                    const allGearStats = batch.flatMap((item) => {
-                        const stats = [];
-
-                        // Add main stat
-                        if (item.mainStat) {
-                            stats.push({
-                                gear_id: item.id,
-                                name: item.mainStat.name,
-                                value: item.mainStat.value,
-                                type: item.mainStat.type || 'flat',
-                                is_main: true,
-                            });
-                        }
-
-                        // Add sub stats
-                        if (item.subStats && item.subStats.length > 0) {
-                            stats.push(
-                                ...item.subStats.map((stat) => ({
-                                    gear_id: item.id,
-                                    name: stat.name,
-                                    value: stat.value,
-                                    type: stat.type || 'flat',
-                                    is_main: false,
-                                }))
-                            );
-                        }
-
-                        return stats;
-                    });
-
-                    // Delete existing stats for this batch of items
-                    if (allGearStats.length > 0) {
-                        const { error: deleteStatsError } = await supabase
-                            .from('gear_stats')
-                            .delete()
-                            .in(
-                                'gear_id',
-                                batch.map((item) => item.id)
-                            );
-
-                        if (deleteStatsError) throw deleteStatsError;
-
-                        // Insert new stats
-                        const { error: gearStatsError } = await supabase
-                            .from('gear_stats')
-                            .insert(allGearStats);
-
-                        if (gearStatsError) throw gearStatsError;
-                    }
                 }
             }
         }
