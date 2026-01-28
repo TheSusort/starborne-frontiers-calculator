@@ -1,22 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { StatList } from '../stats/StatList';
 import { RARITY_ORDER } from '../../constants';
-import {
-    getCalibratedMainStat,
-    getCalibrationBonus,
-    isCalibrationEligible,
-} from '../../utils/gear/calibrationCalculator';
+import { isCalibrationEligible } from '../../utils/gear/calibrationCalculator';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 interface CalibrationModalProps {
     isOpen: boolean;
     onClose: () => void;
     gear: GearPiece | null;
     onConfirm: (gearId: string, shipId: string) => void;
+    initialShipId?: string | null;
 }
 
 export const CalibrationModal: React.FC<CalibrationModalProps> = ({
@@ -24,10 +25,23 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
     onClose,
     gear,
     onConfirm,
+    initialShipId,
 }) => {
     const { ships, getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [search, setSearch] = useState('');
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
+
+    // Pre-select ship from initialShipId when modal opens
+    useEffect(() => {
+        if (isOpen && initialShipId) {
+            const ship = getShipById(initialShipId);
+            if (ship) {
+                setSelectedShip(ship);
+            }
+        }
+    }, [isOpen, initialShipId, getShipById]);
 
     // Get the currently calibrated ship if gear is already calibrated
     const calibratedShip = useMemo(() => {
@@ -36,6 +50,72 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
         }
         return null;
     }, [gear?.calibration?.shipId, getShipById]);
+
+    // Calculate current and potential stats for the selected ship
+    const { currentStats, calibratedStats } = useMemo(() => {
+        if (!selectedShip || !gear) {
+            return { currentStats: null, calibratedStats: null };
+        }
+
+        // Create a gear getter that returns gear WITHOUT calibration for this piece
+        // (to show "before" stats)
+        const getCurrentGearPiece = (id: string) => {
+            if (id === gear.id) {
+                // Return gear without calibration to this ship
+                return {
+                    ...gear,
+                    calibration: undefined,
+                };
+            }
+            return getGearPiece(id);
+        };
+
+        // Create a gear getter that returns gear WITH calibration flag set
+        // (calculateTotalStats will apply the actual stat bonus)
+        const getCalibratedGearPiece = (id: string) => {
+            if (id === gear.id) {
+                // Just set the calibration flag - don't pre-apply stats
+                // calculateTotalStats will handle applying the calibration bonus
+                return {
+                    ...gear,
+                    calibration: { shipId: selectedShip.id },
+                };
+            }
+            return getGearPiece(id);
+        };
+
+        // Build equipment that includes this gear piece in its slot
+        const equipmentWithGear = {
+            ...selectedShip.equipment,
+            [gear.slot]: gear.id,
+        };
+
+        const engineeringStats = getEngineeringStatsForShipType(selectedShip.type);
+
+        // Calculate current stats (without calibration bonus for this gear)
+        const current = calculateTotalStats(
+            selectedShip.baseStats,
+            equipmentWithGear,
+            getCurrentGearPiece,
+            selectedShip.refits,
+            selectedShip.implants,
+            engineeringStats,
+            selectedShip.id
+        );
+
+        // Calculate calibrated stats (with calibration bonus for this gear)
+        const calibrated = calculateTotalStats(
+            selectedShip.baseStats,
+            equipmentWithGear,
+            getCalibratedGearPiece,
+            selectedShip.refits,
+            selectedShip.implants,
+            engineeringStats,
+            selectedShip.id
+        );
+
+        return { currentStats: current.final, calibratedStats: calibrated.final };
+    }, [selectedShip, gear, getGearPiece, getEngineeringStatsForShipType]);
 
     // Filter and sort ships
     const filteredShips: Ship[] = useMemo(() => {
@@ -70,8 +150,6 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
     if (!gear) return null;
 
     const isEligible = isCalibrationEligible(gear);
-    const calibratedMainStat = getCalibratedMainStat(gear);
-    const calibrationBonus = getCalibrationBonus(gear);
 
     return (
         <Modal
@@ -84,9 +162,14 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Gear Preview */}
                     <div className="space-y-2">
-                        <h4 className="text-sm font-medium text-gray-400">Selected Gear</h4>
+                        <h4 className="text-sm font-medium">Selected Gear</h4>
                         <div className="max-w-sm">
-                            <GearPieceDisplay gear={gear} mode="manage" showDetails />
+                            <GearPieceDisplay
+                                gear={gear}
+                                mode="manage"
+                                showDetails
+                                showCalibratedPreview={isEligible}
+                            />
                         </div>
                     </div>
                     <div className="space-y-2">
@@ -103,27 +186,28 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
                             </div>
                         )}
 
-                        {/* Calibration Bonus Preview */}
-                        {isEligible && gear.mainStat && (
-                            <div className="bg-cyan-900/30 border border-cyan-700 p-4 rounded">
-                                <h4 className="text-sm font-medium text-cyan-400 mb-2">
-                                    Calibration Bonus Preview
+                        {/* Potential Stats Preview - shown when ship is selected */}
+                        {isEligible && selectedShip && calibratedStats && currentStats && (
+                            <>
+                                <h4 className="text-sm font-medium mb-2">
+                                    Potential Stats on {selectedShip.name}
                                 </h4>
-                                <div className="flex items-center gap-4 text-sm">
-                                    <span className="text-gray-400">
-                                        {gear.mainStat.name}: {gear.mainStat.value}
-                                        {gear.mainStat.type === 'percentage' ? '%' : ''}
-                                    </span>
-                                    <span className="text-cyan-400">→</span>
-                                    <span className="text-cyan-300 font-medium">
-                                        {calibratedMainStat?.value}
-                                        {calibratedMainStat?.type === 'percentage' ? '%' : ''}
-                                    </span>
-                                    <span className="text-green-400">
-                                        (+{calibrationBonus}
-                                        {gear.mainStat.type === 'percentage' ? 'pp' : ''})
-                                    </span>
+                                <div className="card">
+                                    <StatList
+                                        stats={calibratedStats}
+                                        comparisonStats={currentStats}
+                                        className="text-sm"
+                                    />
                                 </div>
+                            </>
+                        )}
+
+                        {/* Hint to select a ship */}
+                        {isEligible && !selectedShip && (
+                            <div className="bg-gray-800/50 border border-gray-700 p-4 rounded">
+                                <p className="text-sm text-gray-400">
+                                    Select a ship below to see the potential stat improvements.
+                                </p>
                             </div>
                         )}
 

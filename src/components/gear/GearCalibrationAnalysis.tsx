@@ -15,7 +15,7 @@ interface Props {
     inventory: GearPiece[];
     shipRoles: ShipTypeName[];
     onEdit?: (piece: GearPiece) => void;
-    onCalibrate?: (piece: GearPiece) => void;
+    onCalibrate?: (piece: GearPiece, shipId?: string) => void;
     initialShipId?: string | null;
     initialSubTab?: 'candidates' | 'ship' | null;
 }

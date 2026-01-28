@@ -25,6 +25,8 @@ interface Props {
     onCalibrate?: (piece: GearPiece) => void;
     className?: string;
     small?: boolean;
+    /** Show calibrated main stat value even if not actively calibrated */
+    showCalibratedPreview?: boolean;
 }
 
 export const GearPieceDisplay = memo(
@@ -38,6 +40,7 @@ export const GearPieceDisplay = memo(
         onCalibrate,
         className = '',
         small = false,
+        showCalibratedPreview = false,
     }: Props) => {
         const { getShipFromGearId, getShipById, gearToShipMap } = useShips();
         const { getUpgrade } = useGearUpgrades();
@@ -80,14 +83,14 @@ export const GearPieceDisplay = memo(
         }, [gear.calibration?.shipId, getShipById]);
         const canCalibrate = isCalibrationEligible(gear);
 
-        // Get the main stat to display - use calibrated if calibration is active
+        // Get the main stat to display - use calibrated if calibration is active or preview requested
         const displayMainStat = useMemo(() => {
             if (!gear.mainStat) return null;
-            if (isCalibrationActive && isCalibrationEligible(gear)) {
+            if ((isCalibrationActive || showCalibratedPreview) && isCalibrationEligible(gear)) {
                 return getCalibratedMainStat(gear);
             }
             return gear.mainStat;
-        }, [gear, isCalibrationActive]);
+        }, [gear, isCalibrationActive, showCalibratedPreview]);
 
         const handleRemove = useCallback(() => {
             onRemove?.(gear.id);
@@ -257,11 +260,15 @@ export const GearPieceDisplay = memo(
                                 </div>
                                 <div className="space-y-1">
                                     <StatDisplay
-                                        stats={[gear.mainStat as Stat]}
+                                        stats={[displayMainStat as Stat]}
                                         upgradedStats={
-                                            isCalibrationActive && displayMainStat
+                                            isCalibrationActive &&
+                                            !showCalibratedPreview &&
+                                            displayMainStat
                                                 ? [displayMainStat as Stat]
-                                                : upgrade?.mainStat && !isMaxLevel
+                                                : upgrade?.mainStat &&
+                                                    !isMaxLevel &&
+                                                    !showCalibratedPreview
                                                   ? [upgrade.mainStat as Stat]
                                                   : undefined
                                         }

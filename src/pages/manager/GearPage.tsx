@@ -27,6 +27,7 @@ export const GearPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState('inventory');
     const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
     const [calibratingGear, setCalibratingGear] = useState<GearPiece | null>(null);
+    const [calibrationInitialShipId, setCalibrationInitialShipId] = useState<string | null>(null);
     const [initialShipId, setInitialShipId] = useState<string | null>(null);
     const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
     const tabs = [
@@ -102,14 +103,16 @@ export const GearPage: React.FC = () => {
         }
     };
 
-    const handleOpenCalibration = (piece: GearPiece) => {
+    const handleOpenCalibration = (piece: GearPiece, shipId?: string) => {
         setCalibratingGear(piece);
+        setCalibrationInitialShipId(shipId || null);
         setCalibrationModalOpen(true);
     };
 
     const handleCloseCalibration = () => {
         setCalibrationModalOpen(false);
         setCalibratingGear(null);
+        setCalibrationInitialShipId(null);
     };
 
     const handleConfirmCalibration = async (gearId: string, shipId: string) => {
@@ -208,6 +211,7 @@ export const GearPage: React.FC = () => {
                     onClose={handleCloseCalibration}
                     gear={calibratingGear}
                     onConfirm={handleConfirmCalibration}
+                    initialShipId={calibrationInitialShipId}
                 />
             </PageLayout>
         </>

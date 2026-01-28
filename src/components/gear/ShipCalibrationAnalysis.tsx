@@ -3,7 +3,7 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { ShipTypeName, GEAR_SLOTS } from '../../constants';
 import { ShipSelector } from '../ship/ShipSelector';
-import { Select } from '../ui';
+import { RoleSelector } from '../ui';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -14,7 +14,7 @@ import { Button } from '../ui';
 
 interface Props {
     onEdit?: (piece: GearPiece) => void;
-    onCalibrate?: (piece: GearPiece) => void;
+    onCalibrate?: (piece: GearPiece, shipId?: string) => void;
     initialShipId?: string | null;
 }
 
@@ -40,12 +40,12 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialShipId]);
 
-    // Default role to ship's type when ship is selected
+    // Update role to ship's type when ship changes
     useEffect(() => {
-        if (selectedShip && !selectedRole) {
+        if (selectedShip) {
             setSelectedRole(selectedShip.type);
         }
-    }, [selectedShip, selectedRole]);
+    }, [selectedShip]);
 
     // Calculate calibration impact
     const analysis = useMemo(() => {
@@ -60,11 +60,6 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
             getEngineeringStatsForShipType
         );
     }, [selectedShip, selectedRole, getGearPiece, getEngineeringStatsForShipType]);
-
-    const roleOptions = Object.entries(SHIP_TYPES).map(([key, type]) => ({
-        value: key,
-        label: `${type.name} (${type.description})`,
-    }));
 
     return (
         <div className="space-y-6">
@@ -87,12 +82,10 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
 
                 {selectedShip && (
                     <div className="space-y-2">
-                        <label className="block text-sm font-medium">Select Role</label>
-                        <Select
-                            options={roleOptions}
+                        <RoleSelector
                             value={selectedRole || ''}
-                            onChange={(value) => setSelectedRole(value as ShipTypeName)}
-                            defaultOption="Select Role"
+                            onChange={setSelectedRole}
+                            label="Select Role"
                         />
                         <p className="text-xs text-gray-400">
                             Defaults to ship&apos;s type: {SHIP_TYPES[selectedShip.type]?.name}
@@ -195,7 +188,8 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                                                                     fullWidth
                                                                     onClick={() =>
                                                                         onCalibrate(
-                                                                            slotResult.gear!
+                                                                            slotResult.gear!,
+                                                                            selectedShip?.id
                                                                         )
                                                                     }
                                                                 >
