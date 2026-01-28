@@ -6,8 +6,6 @@
     "dependencies": {
         "@cloudinary/react": "^1.13.1",
         "@cloudinary/url-gen": "^1.21.0",
-        "@firebase/auth": "^1.8.2",
-        "@firebase/firestore": "^4.7.6",
         "@google/genai": "^1.34.0",
         "@hotjar/browser": "^1.0.9",
         "@supabase/supabase-js": "^2.49.4",
@@ -21,8 +19,6 @@
         "@types/uuid": "^10.0.0",
         "@vitejs/plugin-react-swc": "^3.7.2",
         "dotenv": "^16.0.3",
-        "firebase": "^11.2.0",
-        "firebase-admin": "^13.3.0",
         "html-to-image": "^1.11.13",
         "lucide-react": "^0.546.0",
         "node-fetch": "^3.3.2",
@@ -51,11 +47,7 @@
         "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
         "prepare": "husky install",
         "lint-staged": "lint-staged",
-        "fetch-ships": "tsx src/utils/dataUpdate/updateShipsData.ts",
-        "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
-        "migrate-ships": "tsx scripts/migrate-ships-to-supabase.ts",
-        "migrate-implants": "tsx scripts/migrate-implants.ts",
-        "migrate-to-supabase": "tsx scripts/migrate-to-supabase.ts"
+        "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts"
     },
     "eslintConfig": {
         "extends": [

@@ -1,18 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { useImplantsData } from '../hooks/useImplantsData';
 import { PageLayout } from '../components/ui';
 import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
 import { usePersistedFilters } from '../hooks/usePersistedFilters';
-import { Loader } from '../components/ui/Loader';
 import { Image } from '../components/ui/Image';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
-import { ImplantData, ImplantVariant } from '../constants/implants';
+import { ImplantData, ImplantVariant, IMPLANTS } from '../constants/implants';
 import { StatDisplay } from '../components/stats/StatDisplay';
 import { RARITIES, RARITY_ORDER } from '../constants/rarities';
+
+const implants: ImplantData[] = Object.values(IMPLANTS);
+
 export const ImplantIndexPage: React.FC = () => {
-    const { implants, loading, error } = useImplantsData();
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const { state, setState, clearFilters } = usePersistedFilters('implant-database-filters');
@@ -51,8 +51,6 @@ export const ImplantIndexPage: React.FC = () => {
     ];
 
     const filteredAndSortedImplants = useMemo(() => {
-        if (!implants) return [];
-
         const filtered = implants.filter((implant: ImplantData) => {
             const matchesType =
                 (state.filters.types?.length ?? 0) === 0 ||
@@ -80,19 +78,7 @@ export const ImplantIndexPage: React.FC = () => {
                         : b.name.localeCompare(a.name);
             }
         });
-    }, [implants, state.filters, state.sort, searchQuery]);
-
-    if (loading) {
-        return <Loader />;
-    }
-
-    if (error) {
-        return (
-            <div className="text-center text-red-500">
-                <p>Error: {error}</p>
-            </div>
-        );
-    }
+    }, [state.filters, state.sort, searchQuery]);
 
     return (
         <>

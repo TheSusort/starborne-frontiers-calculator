@@ -59,12 +59,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 {error && <div className="text-red-500 text-sm">{error}</div>}
 
                 <span className="text-sm text-gray-400">
-                    Login is optional, to be able to easely access your data across devices. The app
-                    works without it. If you login, your master data will be stored in Google
-                    Firebase.
+                    Login is optional, to easily access your data across devices. The app works
+                    without it. If you login, your data will be synced to the cloud.
                     <b>
-                        I recommend backing up your data through the home page, before logging in
-                        for the first time.
+                        {' '}
+                        I recommend backing up your data through the home page before logging in for
+                        the first time.
                     </b>
                 </span>
                 {!showEmailForm ? (

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A gear and ship calculator for Starborne Frontiers game. Users can import their game data (ships, gear, engineering stats), calculate optimal gear loadouts using autogear algorithms, and manage their fleet.
 
-**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Supabase (primary), Firebase (legacy auth fallback)
+**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Supabase
 
 ## Development Commands
 
@@ -57,7 +57,7 @@ npm run migrate-to-supabase # Full migration to Supabase
 - `ShipsContext` - Ship inventory management (CRUD ops)
 - `InventoryProvider` - Gear/implant inventory
 - `EngineeringStatsProvider` - Per-ship-type engineering bonuses
-- `AuthProvider` - User authentication (Supabase primary, Firebase fallback)
+- `AuthProvider` - User authentication (Supabase)
 - `AutogearConfigContext` - Saved autogear configurations
 
 **Data Sync Pattern:**
@@ -306,7 +306,7 @@ src/
 ├── contexts/        # React contexts for global state
 ├── hooks/           # Custom React hooks
 ├── pages/           # Route-level page components
-├── services/        # API layer (Supabase, Firebase, external APIs)
+├── services/        # API layer (Supabase, external APIs)
 ├── utils/           # Pure utility functions
 ├── constants/       # Static data (ship types, factions, gear slots, etc.)
 └── types/           # TypeScript type definitions
@@ -375,10 +375,7 @@ This keeps the in-app documentation synchronized with the actual codebase functi
 
 ## Authentication Flow
 
-**Primary:** Supabase Auth (Google OAuth)
-**Fallback:** Firebase Auth (legacy)
-
-**Toggle:** `VITE_USE_SUPABASE` env var
+**Auth:** Supabase Auth (Google OAuth)
 
 **On Sign-In:**
 

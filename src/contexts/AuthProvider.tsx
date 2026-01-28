@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AuthService, AuthUser } from '../services/auth/types';
-import { FirebaseAuthService } from '../services/auth/firebaseAuth';
+import { AuthUser } from '../services/auth/types';
 import { SupabaseAuthService } from '../services/auth/supabaseAuth';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
@@ -18,11 +17,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Choose which auth service to use
-const authService: AuthService =
-    import.meta.env.VITE_USE_SUPABASE === 'true'
-        ? new SupabaseAuthService()
-        : new FirebaseAuthService();
+const authService = new SupabaseAuthService();
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<AuthUser | null>(null);

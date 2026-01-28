@@ -4,11 +4,16 @@ import { Ship } from '../../../types/ship';
 import { vi } from 'vitest';
 import { SHIP_TYPES } from '../../../constants/shipTypes';
 import { FACTIONS } from '../../../constants/factions';
-import { fetchShipData } from '../../../utils/dataUpdate/shipDataFetcher';
 
-// Mock fetch ship data utility
-vi.mock('../../../utils/dataUpdate/shipDataFetcher', () => ({
-    fetchShipData: vi.fn(),
+// Mock useShipsData hook
+const mockFetchSingleShip = vi.fn();
+vi.mock('../../../hooks/useShipsData', () => ({
+    useShipsData: () => ({
+        ships: [],
+        loading: false,
+        error: null,
+        fetchSingleShip: mockFetchSingleShip,
+    }),
 }));
 
 // Mock notification hook
@@ -93,12 +98,9 @@ describe('ShipForm', () => {
     });
 
     test('fetches ship data', async () => {
-        vi.mocked(fetchShipData).mockResolvedValueOnce({
-            baseStats: mockShip.baseStats,
-            faction: 'TERRAN_COMBINE',
-            type: 'ATTACKER',
-            rarity: 'legendary',
-            affinity: 'CHEMICAL',
+        mockFetchSingleShip.mockResolvedValueOnce({
+            ...mockShip,
+            name: 'Fetched Ship',
         });
 
         render(<ShipForm {...defaultProps} />);
@@ -110,7 +112,7 @@ describe('ShipForm', () => {
         fireEvent.click(screen.getByRole('button', { name: /fetch ship data/i }));
 
         await waitFor(() => {
-            expect(fetchShipData).toHaveBeenCalledWith('Fetched Ship');
+            expect(mockFetchSingleShip).toHaveBeenCalledWith('Fetched Ship');
             expect(screen.getByRole('button', { name: /faction/i })).toHaveTextContent(
                 FACTIONS.TERRAN_COMBINE.name
             );
@@ -157,7 +159,7 @@ describe('ShipForm', () => {
     });
 
     test('shows loading state during fetch', async () => {
-        vi.mocked(fetchShipData).mockImplementationOnce(
+        mockFetchSingleShip.mockImplementationOnce(
             () => new Promise((resolve) => setTimeout(resolve, 100))
         );
 
@@ -177,7 +179,7 @@ describe('ShipForm', () => {
         addNotification.mockClear();
 
         // Mock the fetch to return null (no ship found)
-        vi.mocked(fetchShipData).mockResolvedValueOnce(null);
+        mockFetchSingleShip.mockResolvedValueOnce(null);
 
         render(<ShipForm {...defaultProps} />);
 
@@ -192,9 +194,7 @@ describe('ShipForm', () => {
         // Wait for the error message
         await waitFor(() => {
             expect(
-                screen.getByText(
-                    /Could not find ship data. Please check the ship name and try again./i
-                )
+                screen.getByText(/Could not find ship data. If it's a newer ship/i)
             ).toBeInTheDocument();
         });
     });
@@ -205,7 +205,7 @@ describe('ShipForm', () => {
         addNotification.mockClear();
 
         // Mock the fetch to throw a network error
-        vi.mocked(fetchShipData).mockRejectedValueOnce(new Error('Network error'));
+        mockFetchSingleShip.mockRejectedValueOnce(new Error('Network error'));
 
         render(<ShipForm {...defaultProps} />);
 
@@ -217,10 +217,10 @@ describe('ShipForm', () => {
         // Click and wait for the error to be handled
         await fireEvent.click(screen.getByRole('button', { name: /fetch ship data/i }));
 
-        // Wait for the notification
+        // Wait for the error message
         await waitFor(() => {
             expect(
-                screen.getByText(/Failed to fetch ship data. Please try again later./i)
+                screen.getByText(/Failed to fetch ship data. If it's a newer ship/i)
             ).toBeInTheDocument();
         });
     });
