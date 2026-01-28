@@ -17,6 +17,7 @@ import {
     InfoIcon,
     CopyIcon,
     Tooltip,
+    CalibrationIcon,
 } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -276,6 +277,20 @@ export const ShipDisplay: React.FC<Props> = memo(
                                         <div className="flex items-center gap-2">
                                             <ChartIcon />
                                             <span>Simulate ship</span>
+                                        </div>
+                                    </Dropdown.Item>
+
+                                    <Dropdown.Item
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            navigate(
+                                                `/gear?tab=calibration&subTab=ship&shipId=${ship.id}`
+                                            );
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <CalibrationIcon />
+                                            <span>Calibrate gear</span>
                                         </div>
                                     </Dropdown.Item>
 

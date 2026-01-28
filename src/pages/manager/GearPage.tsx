@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
 import { GearInventory } from '../../components/gear/GearInventory';
@@ -15,6 +16,7 @@ import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
 export const GearPage: React.FC = () => {
+    const [searchParams] = useSearchParams();
     const { inventory, loading, addGear, updateGearPiece, deleteGearPiece } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
@@ -25,12 +27,39 @@ export const GearPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState('inventory');
     const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
     const [calibratingGear, setCalibratingGear] = useState<GearPiece | null>(null);
+    const [initialShipId, setInitialShipId] = useState<string | null>(null);
+    const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
     const tabs = [
         { id: 'inventory', label: 'Inventory' },
         { id: 'calibration', label: 'Calibration' },
         { id: 'analysis', label: 'Upgrade Analysis' },
         { id: 'simulation', label: 'Simulate Upgrades' },
     ];
+
+    // Handle URL params for deep linking (e.g., from ShipCard "Calibrate gear" shortcut)
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        const subTab = searchParams.get('subTab');
+        const shipId = searchParams.get('shipId');
+
+        if (tab && tabs.some((t) => t.id === tab)) {
+            setActiveTab(tab);
+        }
+
+        if (subTab === 'candidates' || subTab === 'ship') {
+            setInitialSubTab(subTab);
+        }
+
+        if (shipId) {
+            setInitialShipId(shipId);
+        }
+
+        // Clear URL params after reading
+        if (tab || subTab || shipId) {
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleRemovePiece = async (id: string) => {
         const piece = inventory.find((p) => p.id === id);
@@ -136,6 +165,8 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         onEdit={handleEditPiece}
                         onCalibrate={handleOpenCalibration}
+                        initialShipId={initialShipId}
+                        initialSubTab={initialSubTab}
                     />
                 )}
                 {activeTab === 'analysis' && (

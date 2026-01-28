@@ -16,6 +16,8 @@ interface Props {
     shipRoles: ShipTypeName[];
     onEdit?: (piece: GearPiece) => void;
     onCalibrate?: (piece: GearPiece) => void;
+    initialShipId?: string | null;
+    initialSubTab?: 'candidates' | 'ship' | null;
 }
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -25,6 +27,8 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
     shipRoles,
     onEdit,
     onCalibrate,
+    initialShipId,
+    initialSubTab,
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [optimizationProgress, setOptimizationProgress] = useState<{
@@ -41,7 +45,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             GearSlotName | 'all'
         >
     );
-    const [activeSubTab, setActiveSubTab] = useState<'candidates' | 'ship'>('candidates');
+    const [activeSubTab, setActiveSubTab] = useState<'candidates' | 'ship'>(
+        initialSubTab || 'candidates'
+    );
 
     // Filter inventory to only calibration-eligible gear
     const eligibleInventory = inventory.filter(isCalibrationEligible);
@@ -186,7 +192,11 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             />
 
             {activeSubTab === 'ship' && (
-                <ShipCalibrationAnalysis onEdit={onEdit} onCalibrate={onCalibrate} />
+                <ShipCalibrationAnalysis
+                    onEdit={onEdit}
+                    onCalibrate={onCalibrate}
+                    initialShipId={initialShipId}
+                />
             )}
 
             {activeSubTab === 'candidates' && (

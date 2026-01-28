@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { ShipTypeName, GEAR_SLOTS } from '../../constants';
@@ -7,6 +7,7 @@ import { Select } from '../ui';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useShips } from '../../contexts/ShipsContext';
 import { analyzeShipCalibrationImpact } from '../../utils/gear/calibrationCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button } from '../ui';
@@ -14,16 +15,33 @@ import { Button } from '../ui';
 interface Props {
     onEdit?: (piece: GearPiece) => void;
     onCalibrate?: (piece: GearPiece) => void;
+    initialShipId?: string | null;
 }
 
-export const ShipCalibrationAnalysis: React.FC<Props> = ({ onEdit, onCalibrate }) => {
+export const ShipCalibrationAnalysis: React.FC<Props> = ({
+    onEdit,
+    onCalibrate,
+    initialShipId,
+}) => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const { getShipById } = useShips();
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
     const [selectedRole, setSelectedRole] = useState<ShipTypeName | null>(null);
 
+    // Pre-select ship from initialShipId (e.g., from URL params)
+    useEffect(() => {
+        if (initialShipId && !selectedShip) {
+            const ship = getShipById(initialShipId);
+            if (ship) {
+                setSelectedShip(ship);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialShipId]);
+
     // Default role to ship's type when ship is selected
-    React.useEffect(() => {
+    useEffect(() => {
         if (selectedShip && !selectedRole) {
             setSelectedRole(selectedShip.type);
         }
