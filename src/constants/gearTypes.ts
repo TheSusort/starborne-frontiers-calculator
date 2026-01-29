@@ -22,7 +22,7 @@ export const GEAR_SLOTS: Record<string, GearSlot> = {
     },
     sensor: {
         label: 'Sensors',
-        availableMainStats: ['hp', 'attack', 'defence', 'crit', 'critDamage', 'healModifier'],
+        availableMainStats: ['hp', 'attack', 'defence', 'crit', 'critDamage'],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
     software: {

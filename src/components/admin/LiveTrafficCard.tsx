@@ -32,9 +32,9 @@ export const LiveTrafficCard: React.FC = () => {
     return (
         <>
             <div className="grid grid-cols-3 gap-4">
-                <StatCard title="Active now" value={traffic?.active_sessions ?? 0} color="green" />
-                <StatCard title="Logged in currently" value={traffic?.authenticated_users ?? 0} />
-                <StatCard title="Anonymous sessions" value={traffic?.anonymous_sessions ?? 0} />
+                <StatCard title="Active" value={traffic?.active_sessions ?? 0} color="green" />
+                <StatCard title="Logged in" value={traffic?.authenticated_users ?? 0} />
+                <StatCard title="Anonymous" value={traffic?.anonymous_sessions ?? 0} />
             </div>
         </>
     );
