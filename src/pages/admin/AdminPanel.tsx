@@ -14,7 +14,9 @@ import {
     isAdmin,
     getDailyUsageStats,
     getTotalUserCount,
+    getLifetimeStats,
     DailyUsageStat,
+    LifetimeStats,
 } from '../../services/adminService';
 import {
     getSystemStats,
@@ -56,15 +58,20 @@ export const AdminPanel: React.FC = () => {
     const [addingTemplate, setAddingTemplate] = useState(false);
     const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
 
+    // Lifetime stats
+    const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null);
+
     const loadData = React.useCallback(async () => {
-        const [statsData, userCount, sysStats, growth, tables, proposals] = await Promise.all([
-            getDailyUsageStats(daysBack),
-            getTotalUserCount(),
-            getSystemStats(),
-            getGrowthStats(daysBack),
-            getTableSizes(),
-            getPendingProposals(),
-        ]);
+        const [statsData, userCount, sysStats, growth, tables, proposals, lifetime] =
+            await Promise.all([
+                getDailyUsageStats(daysBack),
+                getTotalUserCount(),
+                getSystemStats(),
+                getGrowthStats(daysBack),
+                getTableSizes(),
+                getPendingProposals(),
+                getLifetimeStats(),
+            ]);
 
         if (statsData) setDailyStats(statsData);
         setTotalUsers(userCount);
@@ -72,6 +79,7 @@ export const AdminPanel: React.FC = () => {
         if (growth) setGrowthMetrics(growth);
         if (tables) setTableSizes(tables);
         if (proposals) setTemplateProposals(proposals);
+        if (lifetime) setLifetimeStats(lifetime);
     }, [daysBack]);
 
     const handleApproveProposal = async (proposalId: string) => {
@@ -213,7 +221,7 @@ export const AdminPanel: React.FC = () => {
                         {/* Live Traffic */}
                         <LiveTrafficCard />
 
-                        {/* Summary Stats */}
+                        {/* Period Stats */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <StatCard title="Total Users" value={totalUsers.toLocaleString()} />
                             <StatCard
@@ -235,6 +243,48 @@ export const AdminPanel: React.FC = () => {
                             data={dailyStats}
                             title={`Daily Usage (Last ${daysBack} Days)`}
                         />
+
+                        {/* Lifetime Stats */}
+                        {lifetimeStats && (
+                            <div>
+                                <h3 className="text-lg font-semibold mb-3 text-gray-300">
+                                    Lifetime Statistics
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <StatCard
+                                        title="Lifetime Autogear Runs"
+                                        value={lifetimeStats.totalAutogearRuns.toLocaleString()}
+                                        color="blue"
+                                    />
+                                    <StatCard
+                                        title="Lifetime Data Imports"
+                                        value={lifetimeStats.totalDataImports.toLocaleString()}
+                                        color="green"
+                                    />
+                                    <StatCard
+                                        title="Lifetime Total Activity"
+                                        value={lifetimeStats.totalActivity.toLocaleString()}
+                                        color="yellow"
+                                    />
+                                    <StatCard
+                                        title="Active Users"
+                                        value={lifetimeStats.activeUsers.toLocaleString()}
+                                        color="purple"
+                                        subtitle={`${totalUsers > 0 ? Math.round((lifetimeStats.activeUsers / totalUsers) * 100) : 0}% of all users`}
+                                    />
+                                    <StatCard
+                                        title="Avg Autogear / User"
+                                        value={lifetimeStats.avgAutogearPerUser.toFixed(1)}
+                                        color="blue"
+                                    />
+                                    <StatCard
+                                        title="Avg Imports / User"
+                                        value={lifetimeStats.avgImportsPerUser.toFixed(1)}
+                                        color="green"
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {/* All Users Table */}
                         <AllUsersTable />

@@ -43,6 +43,15 @@ export interface AllUsersResponse {
     totalCount: number;
 }
 
+export interface LifetimeStats {
+    totalAutogearRuns: number;
+    totalDataImports: number;
+    totalActivity: number;
+    activeUsers: number;
+    avgAutogearPerUser: number;
+    avgImportsPerUser: number;
+}
+
 /**
  * Check if the current user is an admin
  */
@@ -218,5 +227,50 @@ export async function getAllUsers(params: AllUsersParams = {}): Promise<AllUsers
     } catch (error) {
         console.error('Error fetching all users:', error);
         return { users: [], totalCount: 0 };
+    }
+}
+
+/**
+ * Get lifetime aggregate statistics across all users
+ */
+export async function getLifetimeStats(): Promise<LifetimeStats | null> {
+    try {
+        const { data, error } = await supabase.rpc('get_top_active_users', {
+            limit_count: 10000,
+        });
+
+        if (error) {
+            console.error('Error fetching lifetime stats:', error);
+            return null;
+        }
+
+        if (!data || data.length === 0) {
+            return {
+                totalAutogearRuns: 0,
+                totalDataImports: 0,
+                totalActivity: 0,
+                activeUsers: 0,
+                avgAutogearPerUser: 0,
+                avgImportsPerUser: 0,
+            };
+        }
+
+        const users: TopUser[] = data;
+        const totalAutogearRuns = users.reduce((sum, u) => sum + (u.total_autogear_runs || 0), 0);
+        const totalDataImports = users.reduce((sum, u) => sum + (u.total_data_imports || 0), 0);
+        const activeUsers = users.filter((u) => u.total_activity > 0).length;
+        const totalUsers = users.length;
+
+        return {
+            totalAutogearRuns,
+            totalDataImports,
+            totalActivity: totalAutogearRuns + totalDataImports,
+            activeUsers,
+            avgAutogearPerUser: totalUsers > 0 ? totalAutogearRuns / totalUsers : 0,
+            avgImportsPerUser: totalUsers > 0 ? totalDataImports / totalUsers : 0,
+        };
+    } catch (error) {
+        console.error('Error fetching lifetime stats:', error);
+        return null;
     }
 }
