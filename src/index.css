@@ -138,6 +138,20 @@
         filter: invert(45%) sepia(96%) saturate(6155%) hue-rotate(258deg) brightness(100%)
             contrast(91%);
     }
+
+    /* Skeleton shimmer animation for loading states */
+    .skeleton-shimmer {
+        animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            transform: translateX(-100%);
+        }
+        100% {
+            transform: translateX(100%);
+        }
+    }
 }
 
 @layer components {

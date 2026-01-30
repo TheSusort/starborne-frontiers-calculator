@@ -112,7 +112,7 @@ describe('ShipDisplay', () => {
 
         const stars = screen.getAllByText('★');
         const activeStars = stars.filter((star) => star.className.includes('text-yellow-400'));
-        const inactiveStars = stars.filter((star) => star.className.includes(''));
+        const inactiveStars = stars.filter((star) => star.className.includes('text-gray-500'));
 
         expect(activeStars).toHaveLength(2); // Two refits
         expect(inactiveStars).toHaveLength(4); // Remaining slots
@@ -125,24 +125,30 @@ describe('ShipDisplay', () => {
         expect(screen.queryByTestId('stat-list')).not.toBeInTheDocument();
     });
 
-    test('renders extended variant with implants', () => {
+    test('renders extended variant without implants section when no implants', () => {
         render(<ShipDisplay {...defaultProps} variant="extended" />);
 
-        expect(screen.getByText('Implants:')).toBeInTheDocument();
-        expect(screen.getByText('1')).toBeInTheDocument(); // Number of implants
+        // Implants section should not show when there are no implants
+        expect(screen.queryByText('Implants:')).not.toBeInTheDocument();
     });
 
     test('handles edit button click', () => {
         render(<ShipDisplay {...defaultProps} />);
 
-        fireEvent.click(screen.getByRole('button', { name: /edit ship/i }));
+        // Open the dropdown menu first
+        fireEvent.click(screen.getByRole('button', { name: /ship actions/i }));
+        // Click the edit menu item
+        fireEvent.click(screen.getByText('Edit ship'));
         expect(defaultProps.onEdit).toHaveBeenCalledWith(mockShip);
     });
 
     test('handles remove button click', () => {
         render(<ShipDisplay {...defaultProps} />);
 
-        fireEvent.click(screen.getByRole('button', { name: /remove ship/i }));
+        // Open the dropdown menu first
+        fireEvent.click(screen.getByRole('button', { name: /ship actions/i }));
+        // Click the remove menu item
+        fireEvent.click(screen.getByText('Remove ship'));
         expect(defaultProps.onRemove).toHaveBeenCalledWith('ship1');
     });
 
