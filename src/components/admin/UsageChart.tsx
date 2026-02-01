@@ -10,15 +10,27 @@ interface UsageChartProps {
 
 export const UsageChart: React.FC<UsageChartProps> = ({ data, title }) => {
     // Format data for the chart (reverse to show oldest to newest)
-    const chartData = [...data].reverse().map((stat) => ({
-        date: new Date(stat.date).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-        }),
-        'Autogear Runs': stat.total_autogear_runs,
-        'Data Imports': stat.total_data_imports,
-        'Active Users': stat.unique_active_users,
-    }));
+    const chartData = [...data].reverse().map((stat) => {
+        const dateObj = new Date(stat.date);
+        return {
+            date: dateObj.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+            }),
+            weekday: dateObj.toLocaleDateString('en-US', { weekday: 'long' }),
+            'Autogear Runs': stat.total_autogear_runs,
+            'Data Imports': stat.total_data_imports,
+            'Active Users': stat.unique_active_users,
+        };
+    });
+
+    const labelFormatter = (
+        label: string | number,
+        payload?: Array<{ payload?: Record<string, unknown> }>
+    ) => {
+        const weekday = payload?.[0]?.payload?.weekday;
+        return weekday ? `${weekday}, ${label}` : label;
+    };
 
     return (
         <div className="card">
@@ -28,7 +40,7 @@ export const UsageChart: React.FC<UsageChartProps> = ({ data, title }) => {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="date" stroke="#9CA3AF" />
                     <YAxis stroke="#9CA3AF" />
-                    <Tooltip content={<ChartTooltip />} />
+                    <Tooltip content={<ChartTooltip labelFormatter={labelFormatter} />} />
                     <Legend />
                     <Line
                         type="monotone"

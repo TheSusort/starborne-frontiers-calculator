@@ -11,7 +11,10 @@ interface ChartTooltipProps {
     }>;
     label?: string | number;
     formatter?: (value: number | string, name: string) => React.ReactNode;
-    labelFormatter?: (label: string | number) => React.ReactNode;
+    labelFormatter?: (
+        label: string | number,
+        payload?: ChartTooltipProps['payload']
+    ) => React.ReactNode;
     className?: string;
 }
 
@@ -30,7 +33,9 @@ export const ChartTooltip: React.FC<ChartTooltipProps> = ({
     return (
         <div className={`bg-dark-lighter p-2 border border-dark-border text-white ${className}`}>
             {label !== undefined && (
-                <p className="font-bold mb-2">{labelFormatter ? labelFormatter(label) : label}</p>
+                <p className="font-bold mb-2">
+                    {labelFormatter ? labelFormatter(label, payload) : label}
+                </p>
             )}
             {payload.map((entry, index) => {
                 if (!entry.dataKey && !entry.name) return null;
