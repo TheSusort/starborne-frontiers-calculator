@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.38.0';
+export const CURRENT_VERSION = '1.38.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.38.1',
+        date: '2026-02-03',
+        changes: [
+            'Fixed a bug with asphodel/tormenter r2 crit rate',
+            'Added some more useful numbers in the engineering preview',
+        ],
+    },
     {
         version: '1.38.0',
         date: '2026-01-27',

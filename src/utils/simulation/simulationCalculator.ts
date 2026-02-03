@@ -63,6 +63,8 @@ export function runSimulation(
             return runDefensiveDebufferSimulation(stats);
         case 'DEBUFFER_DEFENSIVE_SECURITY':
             return runDefensiveSecurityDebufferSimulation(stats);
+        case 'DEBUFFER_CORROSION':
+            return runCorrosionDebufferSimulation(stats);
         case 'SUPPORTER':
             return runHealingSimulation(stats);
         case 'SUPPORTER_BUFFER':
@@ -179,12 +181,30 @@ function runDefensiveDebufferSimulation(stats: BaseStats): SimulationSummary {
     // Apply damageReduction stat (from gear/refits) as a separate multiplier
     const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
 
+    // Calculate hack success rate
+    const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
+
+    // Calculate survival rounds
+    const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
+    const shieldPerRound = stats.shield
+        ? Math.min((stats.hp || 0) * (stats.shield / 100), stats.hp || 0)
+        : 0;
+    const healingPerHit = stats.hpRegen ? calculateHealingPerHit(stats) : 0;
+    const healingPerRound = healingPerHit * ENEMY_COUNT;
+    const healingWithShieldPerRound = healingPerRound + shieldPerRound;
+    const survivedRounds =
+        healingWithShieldPerRound >= damagePerRound
+            ? Number.MAX_SAFE_INTEGER
+            : finalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
+
     // Also run damage simulation as secondary output
     const damageSimulation = runDamageSimulation(stats);
 
     return {
+        hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
         hacking: hacking,
         effectiveHP: Math.round(finalEffectiveHP),
+        survivedRounds: survivedRounds,
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,
@@ -200,17 +220,47 @@ function runDefensiveSecurityDebufferSimulation(stats: BaseStats): SimulationSum
     // Apply damageReduction stat (from gear/refits) as a separate multiplier
     const finalEffectiveHP = effectiveHP * (1 + (stats.damageReduction || 0) / 100);
 
+    // Calculate hack success rate
+    const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
+
+    // Calculate survival rounds
+    const damagePerRound = ENEMY_ATTACK * ENEMY_COUNT;
+    const shieldPerRound = stats.shield
+        ? Math.min((stats.hp || 0) * (stats.shield / 100), stats.hp || 0)
+        : 0;
+    const healingPerHit = stats.hpRegen ? calculateHealingPerHit(stats) : 0;
+    const healingPerRound = healingPerHit * ENEMY_COUNT;
+    const healingWithShieldPerRound = healingPerRound + shieldPerRound;
+    const survivedRounds =
+        healingWithShieldPerRound >= damagePerRound
+            ? Number.MAX_SAFE_INTEGER
+            : finalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
+
     // Also run damage simulation as secondary output
     const damageSimulation = runDamageSimulation(stats);
 
     return {
+        hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
         hacking: hacking,
         security: security,
         effectiveHP: Math.round(finalEffectiveHP),
+        survivedRounds: survivedRounds,
         averageDamage: damageSimulation.averageDamage,
         highestHit: damageSimulation.highestHit,
         lowestHit: damageSimulation.lowestHit,
         critRate: damageSimulation.critRate,
+    };
+}
+
+function runCorrosionDebufferSimulation(stats: BaseStats): SimulationSummary {
+    const hacking = stats.hacking || 0;
+
+    // Calculate hack success rate
+    const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
+
+    return {
+        hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
+        hacking: hacking,
     };
 }
 

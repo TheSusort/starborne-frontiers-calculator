@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Ship } from '../../types/ship';
 import { StatName, EngineeringStat, Stat } from '../../types/stats';
 import { ShipTypeName, STATS } from '../../constants';
@@ -17,7 +17,8 @@ import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { runSimulation } from '../../utils/simulation/simulationCalculator';
+import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
+import { calculatePriorityScore } from '../../utils/autogear/scoring';
 
 export const EngineeringPreviewTab: React.FC = () => {
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
@@ -47,14 +48,17 @@ export const EngineeringPreviewTab: React.FC = () => {
     }, [baseRole, getEngineeringStatsForShipType]);
 
     // Helper to get current level of a stat
-    const getStatLevel = (statName: StatName): number => {
-        if (!currentEngineeringStats) return 0;
-        const stat = currentEngineeringStats.stats.find((s) => s.name === statName);
-        if (!stat) return 0;
-        // For flat stats (hacking, security), divide by 2 to get level
-        // For percentage stats, the value IS the level
-        return isEngineeringFlatStat(statName) ? stat.value / 2 : stat.value;
-    };
+    const getStatLevel = useCallback(
+        (statName: StatName): number => {
+            if (!currentEngineeringStats) return 0;
+            const stat = currentEngineeringStats.stats.find((s) => s.name === statName);
+            if (!stat) return 0;
+            // For flat stats (hacking, security), divide by 2 to get level
+            // For percentage stats, the value IS the level
+            return isEngineeringFlatStat(statName) ? stat.value / 2 : stat.value;
+        },
+        [currentEngineeringStats]
+    );
 
     // Create modified engineering stats with +1 level to selected stat
     const previewEngineeringStats = useMemo((): EngineeringStat | undefined => {
@@ -131,10 +135,176 @@ export const EngineeringPreviewTab: React.FC = () => {
         return runSimulation(previewStats.final, selectedRole);
     }, [previewStats, selectedRole, selectedStat]);
 
+    // Calculate set count from current equipment (used for role score calculations)
+    const setCount = useMemo(() => {
+        const counts: Record<string, number> = {};
+        const equipment = selectedShip?.equipment || {};
+        for (const gearId of Object.values(equipment)) {
+            if (!gearId) continue;
+            const gear = getGearPiece(gearId);
+            if (!gear?.setBonus) continue;
+            counts[gear.setBonus] = (counts[gear.setBonus] || 0) + 1;
+        }
+        return counts;
+    }, [selectedShip, getGearPiece]);
+
+    // Calculate current role score (pure role-based scoring)
+    const currentRoleScore = useMemo(() => {
+        if (!currentStats || !selectedRole) return null;
+        return calculatePriorityScore(currentStats.final, [], selectedRole, setCount);
+    }, [currentStats, selectedRole, setCount]);
+
+    // Calculate preview role score (pure role-based scoring)
+    const previewRoleScore = useMemo(() => {
+        if (!previewStats || !selectedRole || !selectedStat) return null;
+        return calculatePriorityScore(previewStats.final, [], selectedRole, setCount);
+    }, [previewStats, selectedRole, selectedStat, setCount]);
+
     // Format large numbers with commas
     const formatNumber = (num: number): string => {
         return Math.round(num).toLocaleString();
     };
+
+    // Calculate efficiency: stat increment per 1000 engineering points
+    const calculateEfficiency = (statName: StatName, cost: number): number => {
+        if (cost === 0) return 0;
+        const increment = getStatIncrement(statName);
+        return (increment / cost) * 1000;
+    };
+
+    // Format efficiency value
+    const formatEfficiency = (efficiency: number, statName: StatName): string => {
+        const isFlat = isEngineeringFlatStat(statName);
+        if (efficiency === 0) return '-';
+        // Show with appropriate precision
+        const formatted = efficiency >= 1 ? efficiency.toFixed(1) : efficiency.toFixed(2);
+        return `${formatted}${isFlat ? '' : '%'}/1k`;
+    };
+
+    // Get primary simulation metrics by role for efficiency calculation
+    const getSimulationEfficiencyMetrics = (
+        current: SimulationSummary,
+        preview: SimulationSummary,
+        role: ShipTypeName,
+        cost: number
+    ): Array<{ label: string; change: number; efficiency: number; unit: string }> => {
+        if (cost === 0) return [];
+        const metrics: Array<{ label: string; change: number; efficiency: number; unit: string }> =
+            [];
+
+        const addMetric = (label: string, currentVal?: number, previewVal?: number, unit = '') => {
+            if (currentVal !== undefined && previewVal !== undefined) {
+                const change = previewVal - currentVal;
+                if (change !== 0) {
+                    metrics.push({
+                        label,
+                        change,
+                        efficiency: (change / cost) * 1000,
+                        unit,
+                    });
+                }
+            }
+        };
+
+        // Role-specific primary metrics
+        if (role.startsWith('ATTACKER')) {
+            addMetric('Avg Damage', current.averageDamage, preview.averageDamage);
+            addMetric('Highest Hit', current.highestHit, preview.highestHit);
+        }
+
+        if (role === 'DEFENDER') {
+            addMetric('Effective HP', current.effectiveHP, preview.effectiveHP);
+            addMetric('Survived Rounds', current.survivedRounds, preview.survivedRounds);
+        }
+
+        if (role === 'DEFENDER_SECURITY') {
+            addMetric('Effective HP', current.effectiveHP, preview.effectiveHP);
+            addMetric('Survived Rounds', current.survivedRounds, preview.survivedRounds);
+            addMetric('Security', current.security, preview.security);
+        }
+
+        if (role === 'DEBUFFER') {
+            addMetric('Hack Success', current.hackSuccessRate, preview.hackSuccessRate, '%');
+            addMetric('Avg Damage', current.averageDamage, preview.averageDamage);
+        }
+
+        if (role === 'DEBUFFER_DEFENSIVE') {
+            addMetric('Hack Success', current.hackSuccessRate, preview.hackSuccessRate, '%');
+            addMetric('Hacking', current.hacking, preview.hacking);
+            addMetric('Effective HP', current.effectiveHP, preview.effectiveHP);
+            addMetric('Survived Rounds', current.survivedRounds, preview.survivedRounds);
+        }
+
+        if (role === 'DEBUFFER_DEFENSIVE_SECURITY') {
+            addMetric('Hack Success', current.hackSuccessRate, preview.hackSuccessRate, '%');
+            addMetric('Hacking', current.hacking, preview.hacking);
+            addMetric('Security', current.security, preview.security);
+            addMetric('Effective HP', current.effectiveHP, preview.effectiveHP);
+            addMetric('Survived Rounds', current.survivedRounds, preview.survivedRounds);
+        }
+
+        if (role === 'DEBUFFER_BOMBER') {
+            addMetric('Avg Damage', current.averageDamage, preview.averageDamage);
+            addMetric('Highest Hit', current.highestHit, preview.highestHit);
+            addMetric('Hacking', current.hacking, preview.hacking);
+        }
+
+        if (role === 'DEBUFFER_CORROSION') {
+            addMetric('Hacking', current.hacking, preview.hacking);
+        }
+
+        if (role === 'SUPPORTER') {
+            addMetric('Avg Healing', current.averageHealing, preview.averageHealing);
+        }
+
+        if (role === 'SUPPORTER_BUFFER') {
+            addMetric('Effective HP', current.effectiveHP, preview.effectiveHP);
+            addMetric('Survived Rounds', current.survivedRounds, preview.survivedRounds);
+            addMetric('Speed', current.speed, preview.speed);
+        }
+
+        if (role === 'SUPPORTER_OFFENSIVE') {
+            addMetric('Attack', current.attack, preview.attack);
+            addMetric('Speed', current.speed, preview.speed);
+        }
+
+        if (role === 'SUPPORTER_SHIELD') {
+            addMetric('HP', current.hp, preview.hp);
+        }
+
+        return metrics;
+    };
+
+    // Calculate simulation efficiency metrics
+    const simulationEfficiency = useMemo(() => {
+        if (!selectedStat || !currentSimulation || !previewSimulation || !selectedRole) return null;
+        const cost = getUpgradeCost(getStatLevel(selectedStat));
+        return getSimulationEfficiencyMetrics(
+            currentSimulation,
+            previewSimulation,
+            selectedRole,
+            cost
+        );
+    }, [selectedStat, currentSimulation, previewSimulation, selectedRole, getStatLevel]);
+
+    // Calculate role score efficiency
+    const roleScoreEfficiency = useMemo(() => {
+        if (!selectedStat || currentRoleScore === null || previewRoleScore === null) return null;
+        const cost = getUpgradeCost(getStatLevel(selectedStat));
+        if (cost === 0) return null;
+        const change = previewRoleScore - currentRoleScore;
+        // Handle edge case where current score is 0 (can't calculate percentage)
+        const percentChange = currentRoleScore !== 0 ? (change / currentRoleScore) * 100 : null;
+        return {
+            currentScore: currentRoleScore,
+            previewScore: previewRoleScore,
+            change,
+            percentChange,
+            efficiencyPercent: percentChange !== null ? (percentChange / cost) * 1000 : null,
+            // Also include absolute efficiency for when percentage isn't available
+            efficiencyAbsolute: (change / cost) * 1000,
+        };
+    }, [selectedStat, currentRoleScore, previewRoleScore, getStatLevel]);
 
     return (
         <div className="space-y-6">
@@ -224,9 +394,19 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                 </span>
                                             </span>
                                         </div>
-                                        <span className="text-gray-400">
-                                            {isMaxLevel ? 'MAX' : `Cost: ${formatNumber(cost)}`}
-                                        </span>
+                                        <div className="flex items-center gap-3 text-sm">
+                                            {!isMaxLevel && (
+                                                <span className="text-green-400">
+                                                    {formatEfficiency(
+                                                        calculateEfficiency(statName, cost),
+                                                        statName
+                                                    )}
+                                                </span>
+                                            )}
+                                            <span className="text-gray-400">
+                                                {isMaxLevel ? 'MAX' : `${formatNumber(cost)} EP`}
+                                            </span>
+                                        </div>
                                     </label>
                                 );
                             })}
@@ -248,7 +428,113 @@ export const EngineeringPreviewTab: React.FC = () => {
                                 suggestedSimulation={previewSimulation}
                                 role={selectedRole}
                                 alwaysColumn
+                                showCurrent={false}
                             />
+                            {/* Role Score Efficiency */}
+                            {roleScoreEfficiency && (
+                                <div className="card">
+                                    <h3 className="text-lg font-semibold mb-3">
+                                        Role Score Efficiency
+                                    </h3>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-gray-400">Role Score</span>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-gray-300">
+                                                    {formatNumber(roleScoreEfficiency.currentScore)}
+                                                </span>
+                                                <span className="text-gray-500">→</span>
+                                                <span className="text-gray-300">
+                                                    {formatNumber(roleScoreEfficiency.previewScore)}
+                                                </span>
+                                                <span
+                                                    className={
+                                                        roleScoreEfficiency.change > 0
+                                                            ? 'text-green-400'
+                                                            : roleScoreEfficiency.change < 0
+                                                              ? 'text-red-400'
+                                                              : 'text-gray-400'
+                                                    }
+                                                >
+                                                    ({roleScoreEfficiency.change > 0 ? '+' : ''}
+                                                    {roleScoreEfficiency.percentChange !== null
+                                                        ? `${roleScoreEfficiency.percentChange.toFixed(2)}%`
+                                                        : formatNumber(roleScoreEfficiency.change)}
+                                                    )
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-gray-400">Score Efficiency</span>
+                                            <span className="text-primary font-medium">
+                                                {roleScoreEfficiency.efficiencyPercent !== null ? (
+                                                    <>
+                                                        {roleScoreEfficiency.efficiencyPercent > 0
+                                                            ? '+'
+                                                            : ''}
+                                                        {roleScoreEfficiency.efficiencyPercent.toFixed(
+                                                            3
+                                                        )}
+                                                        %/1k EP
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {roleScoreEfficiency.efficiencyAbsolute > 0
+                                                            ? '+'
+                                                            : ''}
+                                                        {roleScoreEfficiency.efficiencyAbsolute.toFixed(
+                                                            1
+                                                        )}
+                                                        /1k EP
+                                                    </>
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {/* Simulation Efficiency */}
+                            {simulationEfficiency && simulationEfficiency.length > 0 && (
+                                <div className="card">
+                                    <h3 className="text-lg font-semibold mb-3">
+                                        Upgrade Efficiency (per 1,000 EP)
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {simulationEfficiency.map((metric) => (
+                                            <div
+                                                key={metric.label}
+                                                className="flex items-center justify-between"
+                                            >
+                                                <span className="text-gray-400">
+                                                    {metric.label}
+                                                </span>
+                                                <div className="flex items-center gap-3">
+                                                    <span
+                                                        className={
+                                                            metric.change > 0
+                                                                ? 'text-green-400'
+                                                                : 'text-red-400'
+                                                        }
+                                                    >
+                                                        {metric.change > 0 ? '+' : ''}
+                                                        {metric.change >= 1000
+                                                            ? formatNumber(metric.change)
+                                                            : metric.change.toFixed(1)}
+                                                        {metric.unit}
+                                                    </span>
+                                                    <span className="text-gray-500">→</span>
+                                                    <span className="text-primary font-medium">
+                                                        {metric.efficiency >= 1
+                                                            ? metric.efficiency.toFixed(1)
+                                                            : metric.efficiency.toFixed(3)}
+                                                        {metric.unit}/1k EP
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <div className="card">
                                 <StatList
                                     stats={previewStats.final}

@@ -24,6 +24,7 @@ interface SimulationResultsProps {
     ship?: Ship;
     suggestions?: GearSuggestion[];
     getGearPiece?: (id: string) => GearPiece | undefined;
+    showCurrent?: boolean;
 }
 
 /**
@@ -100,6 +101,7 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
     ship,
     suggestions,
     getGearPiece,
+    showCurrent = true,
 }) => {
     return (
         <div
@@ -107,23 +109,25 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                 suggestedSimulation && !alwaysColumn ? 'md:grid-cols-2' : ''
             } gap-4 mt-4 `}
         >
-            <div>
-                <div className="card space-y-2">
-                    <h3 className="text-lg font-semibold">Current Configuration</h3>
-                    <div className="flex flex-col gap-2">
-                        {renderStats(
-                            currentSimulation,
-                            role,
-                            currentSimulation,
-                            suggestedSimulation,
-                            false,
-                            ship,
-                            suggestions,
-                            getGearPiece
-                        )}
+            {showCurrent && (
+                <div>
+                    <div className="card space-y-2">
+                        <h3 className="text-lg font-semibold">Current Configuration</h3>
+                        <div className="flex flex-col gap-2">
+                            {renderStats(
+                                currentSimulation,
+                                role,
+                                currentSimulation,
+                                suggestedSimulation,
+                                false,
+                                ship,
+                                suggestions,
+                                getGearPiece
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
             {suggestedSimulation && (
                 <div>
                     <div className="card space-y-2">
