@@ -158,7 +158,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
         });
 
         // Add crit to Asphodel or Tormenter if they have more than 2 refits
-        if ((unit.Name === 'Asphodel' || unit.Name === 'Tormenter') && refits.length > 2) {
+        if ((unit.Name === 'Asphodel' || unit.Name === 'Tormenter') && unit.Refit >= 2) {
             refits[0].stats.push(createStat('crit', 100 - baseStats.crit, 'percentage'));
         }
 
