@@ -1,7 +1,8 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useRef } from 'react';
 import { toBlob } from 'html-to-image';
 import { RARITIES } from '../../constants';
 import { Image } from '../ui/Image';
+import { Video, VideoHandle } from '../ui/Video';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -35,22 +36,24 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
+        const videoRef = useRef<VideoHandle>(null);
+
+        const handleMouseEnter = () => {
+            videoRef.current?.play();
+        };
+
+        const handleMouseLeave = () => {
+            videoRef.current?.pause();
+        };
 
         const createAndCopyImage = async () => {
             const shipElement = document.getElementById(`ship-card-${ship.id}`);
             if (!shipElement) return;
 
-            // Save original styles for parent card
-            const originalParentHeight = shipElement.style.height;
-            const originalParentOverflow = shipElement.style.overflow;
-
             // Find the expandable stats panel
             const statsPanel = shipElement.querySelector(
                 '[data-stats-panel]'
             ) as HTMLElement | null;
-            const originalPanelMaxHeight = statsPanel?.style.maxHeight;
-            const originalPanelOverflow = statsPanel?.style.overflow;
-            const originalPanelPosition = statsPanel?.style.position;
 
             try {
                 // Expand parent to fit content
@@ -153,13 +156,26 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                 onClick={onClick}
             >
                 {ship.imageKey && (
-                    <Image
-                        src={`${ship.imageKey}_BigPortrait.jpg`}
-                        alt={ship.name}
-                        className="mx-auto w-full"
-                        imageClassName="mb-[10rem] w-full"
-                        aspectRatio="1/1"
-                    />
+                    <div
+                        className="relative mx-auto w-full mb-[10rem] "
+                        onMouseEnter={handleMouseEnter}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        <Image
+                            src={`${ship.imageKey}_BigPortrait.jpg`}
+                            alt={ship.name}
+                            className="w-full"
+                            imageClassName="w-full"
+                            aspectRatio="1/1"
+                        />
+                        <Video
+                            ref={videoRef}
+                            src={`${ship.imageKey}_Video`}
+                            className="absolute inset-0 w-full pointer-events-none"
+                            videoClassName="w-full object-cover"
+                            aspectRatio="1/1"
+                        />
+                    </div>
                 )}
                 <div
                     data-stats-panel
