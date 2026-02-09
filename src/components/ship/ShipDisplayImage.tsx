@@ -1,9 +1,11 @@
 import React, { memo, useMemo } from 'react';
+import { toBlob } from 'html-to-image';
 import { RARITIES } from '../../constants';
 import { Image } from '../ui/Image';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useNotification } from '../../hooks/useNotification';
 import {
     ShipDisplayProps,
     ShipHeader,
@@ -32,6 +34,74 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
+        const { addNotification } = useNotification();
+
+        const createAndCopyImage = async () => {
+            const shipElement = document.getElementById(`ship-card-${ship.id}`);
+            if (!shipElement) return;
+
+            // Save original styles for parent card
+            const originalParentHeight = shipElement.style.height;
+            const originalParentOverflow = shipElement.style.overflow;
+
+            // Find the expandable stats panel
+            const statsPanel = shipElement.querySelector(
+                '[data-stats-panel]'
+            ) as HTMLElement | null;
+            const originalPanelMaxHeight = statsPanel?.style.maxHeight;
+            const originalPanelOverflow = statsPanel?.style.overflow;
+            const originalPanelPosition = statsPanel?.style.position;
+
+            try {
+                // Expand parent to fit content
+                shipElement.style.height = 'auto';
+                shipElement.style.maxHeight = 'none';
+                shipElement.style.overflow = 'visible';
+
+                // Expand stats panel and make it flow naturally
+                if (statsPanel) {
+                    statsPanel.style.maxHeight = 'none';
+                    statsPanel.style.overflow = 'visible';
+                    statsPanel.style.position = 'relative';
+                    statsPanel.style.marginTop = '-260px';
+                    statsPanel.style.top = 'unset';
+                    statsPanel.style.transitionDuration = '0s';
+                }
+
+                // Wait for reflow
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+
+                const blob = await toBlob(shipElement, {
+                    cacheBust: true,
+                    includeQueryParams: true,
+                    skipFonts: true,
+                    filter: (node: Node) => {
+                        if (node instanceof HTMLElement && node.dataset.hideOnCapture === 'true') {
+                            return false;
+                        }
+                        return true;
+                    },
+                });
+
+                if (!blob) {
+                    throw new Error('Failed to create image blob');
+                }
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({
+                        'image/png': blob,
+                    }),
+                ]);
+                addNotification('success', 'Copied to clipboard!');
+            } catch (error) {
+                console.error('Failed to copy image:', error);
+                addNotification('error', 'Failed to copy image');
+            } finally {
+                // Restore original styles
+                shipElement.removeAttribute('style');
+                statsPanel?.removeAttribute('style');
+            }
+        };
 
         const statsBreakdown = useMemo(
             () =>
@@ -72,6 +142,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
 
         return (
             <div
+                id={`ship-card-${ship.id}`}
                 className={`flex flex-col bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}
@@ -86,11 +157,12 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                         src={`${ship.imageKey}_BigPortrait.jpg`}
                         alt={ship.name}
                         className="mx-auto w-full"
-                        imageClassName="mb-[10rem] w-full pb-[133%]"
+                        imageClassName="mb-[10rem] w-full"
                         aspectRatio="1/1"
                     />
                 )}
                 <div
+                    data-stats-panel
                     className={`bg-dark absolute top-[calc(100%-259px)] left-[-1px] w-[calc(100%+2px)] max-h-[260px] group-hover:max-h-[700px] overflow-hidden z-10 group-hover:z-20 transition-all duration-300 ease-in-out border-x border-b ${RARITIES[ship.rarity || 'common'].borderColor}`}
                 >
                     <div
@@ -98,7 +170,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                     >
                         <ShipHeader ship={ship} />
                         {(onEdit || onRemove || onLockEquipment || onQuickAdd) && (
-                            <div className="flex gap-1">
+                            <div className="flex gap-1" data-hide-on-capture="true">
                                 {onLockEquipment && (
                                     <LockEquipmentButton
                                         ship={ship}
@@ -112,6 +184,8 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                         onRemove={onRemove}
                                         onAddToComparison={onAddToComparison}
                                         isInComparison={isInComparison}
+                                        onCopyAsImage={createAndCopyImage}
+                                        showCalibrateGear
                                     />
                                 )}
                                 {onQuickAdd && (
