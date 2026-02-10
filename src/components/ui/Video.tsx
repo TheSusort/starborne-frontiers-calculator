@@ -6,8 +6,24 @@ const cld = new Cloudinary({
     cloud: { cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME },
 });
 
-// Track videos that failed to load to avoid repeated 404s
-const failedVideos = new Set<string>();
+// Whitelist of video public IDs that exist on Cloudinary
+// Add new entries when uploading videos: `${imageKey}_Video`
+const AVAILABLE_VIDEOS = new Set<string>([
+    'Gelecek_15_Video',
+    'Marauder_15_Video',
+    'MPL_5_Video',
+    'Terran_7_Video',
+    'Tianchao_6_Video',
+    'Tianchao_13_Video',
+    'Tianchao_14_Video',
+    'XAOC_6_Video',
+    'XAOC_8_Video',
+    'XAOC_9_Video',
+    'XAOC_11_Video',
+    'XAOC_13_Video',
+    'XAOC_17_Video',
+    // Add more as you upload them
+]);
 
 interface VideoProps {
     src: string;
@@ -38,19 +54,14 @@ export const Video = memo(
             },
             ref
         ) => {
+            const videoExists = AVAILABLE_VIDEOS.has(src);
             const [shouldLoad, setShouldLoad] = useState(false);
             const [videoReady, setVideoReady] = useState(false);
-            const [videoError, setVideoError] = useState(() => failedVideos.has(src));
             const videoRef = useRef<HTMLVideoElement>(null);
-
-            const handleError = useCallback(() => {
-                failedVideos.add(src);
-                setVideoError(true);
-            }, [src]);
 
             useImperativeHandle(ref, () => ({
                 play: () => {
-                    if (videoError || failedVideos.has(src)) return;
+                    if (!videoExists) return;
 
                     if (!shouldLoad) {
                         setShouldLoad(true);
@@ -76,8 +87,8 @@ export const Video = memo(
 
             const aspectStyle = aspectRatio ? { aspectRatio } : undefined;
 
-            // Don't render anything if no src, error, or not yet triggered
-            if (!src || videoError || !shouldLoad) {
+            // Don't render anything if no src, not in whitelist, or not yet triggered
+            if (!src || !videoExists || !shouldLoad) {
                 return null;
             }
 
@@ -90,7 +101,6 @@ export const Video = memo(
                 >
                     <AdvancedVideo
                         cldVid={myVideo}
-                        onError={handleError}
                         onLoadedData={handleLoadedData}
                         className={`${videoClassName} transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`}
                         loop={loop}
