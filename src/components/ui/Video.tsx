@@ -20,6 +20,7 @@ const AVAILABLE_VIDEOS = new Set<string>([
     'XAOC_8_Video',
     'XAOC_9_Video',
     'XAOC_11_Video',
+    'XAOC_12_Video',
     'XAOC_13_Video',
     'XAOC_17_Video',
     // Add more as you upload them
