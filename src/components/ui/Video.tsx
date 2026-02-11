@@ -10,10 +10,15 @@ const cld = new Cloudinary({
 // Add new entries when uploading videos: `${imageKey}_Video`
 const AVAILABLE_VIDEOS = new Set<string>([
     'Gelecek_15_Video',
+    'Legion_6_Video',
     'Marauder_15_Video',
     'MPL_5_Video',
+    'Terran_6_Video',
     'Terran_7_Video',
+    'Terran_16_Video',
     'Tianchao_6_Video',
+    'Tianchao_7_Video',
+    'Tianchao_11_Video',
     'Tianchao_13_Video',
     'Tianchao_14_Video',
     'XAOC_6_Video',
