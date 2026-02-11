@@ -35,9 +35,12 @@ import { StatList } from '../stats/StatList';
 import { StatBreakdown } from '../stats/StatBreakdown';
 import { CopyIcon } from '../ui';
 
+export type PanelVariant = 'default' | 'compact';
+
 export interface ShipDisplayProps {
     ship: Ship;
     variant?: 'full' | 'compact' | 'extended';
+    panelVariant?: PanelVariant;
     onEdit?: (ship: Ship) => void;
     onRemove?: (id: string) => void;
     selected?: boolean;

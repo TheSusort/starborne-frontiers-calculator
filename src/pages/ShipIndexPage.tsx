@@ -2,9 +2,8 @@ import React, { useMemo, useState, useCallback, useRef } from 'react';
 import { useShipsData } from '../hooks/useShipsData';
 import { useShips } from '../contexts/ShipsContext';
 import { PageLayout } from '../components/ui';
-import { ShipDisplay } from '../components/ship/ShipDisplay';
+import { ShipDisplayImage } from '../components/ship/ShipDisplayImage';
 import { ShipComparisonPanel } from '../components/ship/ShipComparisonPanel';
-import { Image } from '../components/ui/Image';
 import { Loader } from '../components/ui/Loader';
 import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
 import { SortConfig } from '../components/filters/SortPanel';
@@ -300,8 +299,9 @@ export const ShipIndexPage: React.FC = () => {
                         onRemove={removeFromComparison}
                         onClearAll={clearComparison}
                         renderShip={(ship) => (
-                            <ShipDisplay
+                            <ShipDisplayImage
                                 ship={ship}
+                                panelVariant="compact"
                                 onQuickAdd={onQuickAdd}
                                 isAdded={addedShips.has(ship.name)}
                             />
@@ -311,23 +311,17 @@ export const ShipIndexPage: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredAndSortedShips.length > 0 ? (
                             filteredAndSortedShips.map((ship) => (
-                                <ShipDisplay
+                                <ShipDisplayImage
                                     key={ship.name}
                                     ship={ship}
+                                    panelVariant="compact"
                                     onQuickAdd={onQuickAdd}
                                     isAdded={addedShips.has(ship.name)}
                                     onAddToComparison={addToComparison}
                                     isInComparison={isInComparison(ship.id)}
                                 >
                                     <div className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3">
-                                        {ship.imageKey && (
-                                            <Image
-                                                src={`${ship.imageKey}_Portrait.png`}
-                                                alt={ship.name}
-                                                className="max-w-full max-h-full w-[152px] h-[206px]"
-                                            />
-                                        )}
-                                        <div className="mt-2 flex flex-wrap gap-2">
+                                        <div className="flex flex-wrap gap-2 justify-center">
                                             {ship.activeSkillText && (
                                                 <div className="relative">
                                                     <div
@@ -490,7 +484,7 @@ export const ShipIndexPage: React.FC = () => {
                                             )}
                                         </div>
                                     </div>
-                                </ShipDisplay>
+                                </ShipDisplayImage>
                             ))
                         ) : (
                             <div className="col-span-full text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">

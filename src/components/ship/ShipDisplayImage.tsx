@@ -16,12 +16,30 @@ import {
     ImplantsDisplay,
     ShipStatsDisplay,
     ShipCopiesBadge,
+    PanelVariant,
 } from './shipDisplayComponents';
+
+const PANEL_VARIANTS: Record<
+    PanelVariant,
+    { maxHeight: string; top: string; imageMargin: string }
+> = {
+    default: {
+        maxHeight: 'max-h-[260px]',
+        top: 'top-[calc(100%-259px)]',
+        imageMargin: 'mb-[10rem]',
+    },
+    compact: {
+        maxHeight: 'max-h-[120px]',
+        top: 'top-[calc(100%-119px)]',
+        imageMargin: 'mb-[4rem]',
+    },
+};
 
 export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
     ({
         ship,
         variant = 'full',
+        panelVariant = 'default',
         onEdit,
         onRemove,
         selected,
@@ -33,6 +51,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         onAddToComparison,
         isInComparison,
     }) => {
+        const panelStyles = PANEL_VARIANTS[panelVariant];
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
@@ -157,7 +176,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
             >
                 {ship.imageKey && (
                     <div
-                        className="relative mx-auto w-full mb-[10rem] "
+                        className={`relative mx-auto w-full ${panelStyles.imageMargin}`}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
                     >
@@ -179,7 +198,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                 )}
                 <div
                     data-stats-panel
-                    className={`bg-dark absolute top-[calc(100%-259px)] left-[-1px] w-[calc(100%+2px)] max-h-[260px] group-hover:max-h-[700px] overflow-hidden z-10 group-hover:z-20 transition-all duration-300 ease-in-out border-x border-b ${RARITIES[ship.rarity || 'common'].borderColor}`}
+                    className={`bg-dark absolute ${panelStyles.top} left-[-1px] w-[calc(100%+2px)] ${panelStyles.maxHeight} group-hover:max-h-[700px] overflow-hidden z-10 group-hover:z-20 transition-all duration-300 ease-in-out border-x border-b ${RARITIES[ship.rarity || 'common'].borderColor}`}
                 >
                     <div
                         className={`px-4 py-2 ${ship.imageKey ? 'border-y' : 'border-b'} ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center relative`}

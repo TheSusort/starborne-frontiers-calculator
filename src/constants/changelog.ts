@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.38.1';
+export const CURRENT_VERSION = '1.39.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.39.0',
+        date: '2026-02-11',
+        changes: [
+            'Added video to ship cards. Will populate these gradually over time.',
+            'Changed ship index page to use bigger images and collapsed stats.',
+        ],
+    },
     {
         version: '1.38.1',
         date: '2026-02-03',
