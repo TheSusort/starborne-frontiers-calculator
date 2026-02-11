@@ -16,6 +16,7 @@ const AVAILABLE_VIDEOS = new Set<string>([
     'Terran_6_Video',
     'Terran_7_Video',
     'Terran_16_Video',
+    'Terran_17_Video',
     'Tianchao_6_Video',
     'Tianchao_7_Video',
     'Tianchao_11_Video',
