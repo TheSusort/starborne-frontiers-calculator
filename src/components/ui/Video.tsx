@@ -1,6 +1,6 @@
 import { Cloudinary } from '@cloudinary/url-gen';
 import { AdvancedVideo } from '@cloudinary/react';
-import { useState, useRef, useImperativeHandle, forwardRef, memo, useCallback } from 'react';
+import { useState, useRef, useMemo, useImperativeHandle, forwardRef, memo } from 'react';
 
 const cld = new Cloudinary({
     cloud: { cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME },
@@ -86,44 +86,34 @@ export const Video = memo(
             ref
         ) => {
             const videoExists = AVAILABLE_VIDEOS.has(src);
-            const [shouldLoad, setShouldLoad] = useState(false);
-            const [videoReady, setVideoReady] = useState(false);
+            const [isPlaying, setIsPlaying] = useState(false);
             const videoRef = useRef<HTMLVideoElement>(null);
 
             useImperativeHandle(ref, () => ({
                 play: () => {
-                    if (!videoExists) return;
-
-                    if (!shouldLoad) {
-                        setShouldLoad(true);
-                    }
-                    // Play will be triggered by onLoadedData or if already ready
-                    if (videoReady && videoRef.current) {
-                        videoRef.current.play();
-                    }
+                    if (!videoExists || !videoRef.current) return;
+                    setIsPlaying(true);
+                    videoRef.current.play();
                 },
                 pause: () => {
                     if (videoRef.current) {
                         videoRef.current.pause();
                         videoRef.current.currentTime = 0;
                     }
+                    setIsPlaying(false);
                 },
             }));
 
-            const handleLoadedData = useCallback(() => {
-                setVideoReady(true);
-                // Auto-play once loaded since play() was called
-                videoRef.current?.play();
-            }, []);
-
             const aspectStyle = aspectRatio ? { aspectRatio } : undefined;
 
-            // Don't render anything if no src, not in whitelist, or not yet triggered
-            if (!src || !videoExists || !shouldLoad) {
+            const myVideo = useMemo(
+                () => (videoExists ? cld.video(src) : null),
+                [src, videoExists]
+            );
+
+            if (!src || !videoExists || !myVideo) {
                 return null;
             }
-
-            const myVideo = cld.video(src);
 
             return (
                 <div
@@ -132,11 +122,11 @@ export const Video = memo(
                 >
                     <AdvancedVideo
                         cldVid={myVideo}
-                        onLoadedData={handleLoadedData}
-                        className={`${videoClassName} transition-opacity duration-300 ${videoReady ? 'opacity-100' : 'opacity-0'}`}
+                        className={`${videoClassName} transition-opacity duration-300 ${isPlaying ? 'opacity-100' : 'opacity-0'}`}
                         loop={loop}
                         muted={muted}
                         playsInline={playsInline}
+                        preload="auto"
                         innerRef={videoRef}
                     />
                 </div>

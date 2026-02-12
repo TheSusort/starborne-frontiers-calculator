@@ -173,13 +173,11 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                     group
                 `}
                 onClick={onClick}
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
             >
                 {ship.imageKey && (
-                    <div
-                        className={`relative mx-auto w-full ${panelStyles.imageMargin}`}
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                    >
+                    <div className={`relative mx-auto w-full ${panelStyles.imageMargin}`}>
                         <Image
                             src={`${ship.imageKey}_BigPortrait.jpg`}
                             alt={ship.name}
