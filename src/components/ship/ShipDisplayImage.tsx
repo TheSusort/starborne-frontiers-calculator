@@ -185,13 +185,15 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                             imageClassName="w-full"
                             aspectRatio="1/1"
                         />
-                        <Video
-                            ref={videoRef}
-                            src={`${ship.imageKey}_Video`}
-                            className="absolute inset-0 w-full pointer-events-none"
-                            videoClassName="w-full object-cover"
-                            aspectRatio="1/1"
-                        />
+                        {ship.rarity === 'legendary' && (
+                            <Video
+                                ref={videoRef}
+                                src={`${ship.imageKey}_Video`}
+                                className="absolute inset-0 w-full pointer-events-none"
+                                videoClassName="w-full object-cover"
+                                aspectRatio="1/1"
+                            />
+                        )}
                     </div>
                 )}
                 <div
