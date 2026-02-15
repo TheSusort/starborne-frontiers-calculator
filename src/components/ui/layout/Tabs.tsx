@@ -3,6 +3,7 @@ import React from 'react';
 interface Tab {
     id: string;
     label: string;
+    dataTutorial?: string;
 }
 
 interface TabsProps {
@@ -21,6 +22,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
                             aria-label={tab.label}
                             key={tab.id}
                             onClick={() => onChange(tab.id)}
+                            data-tutorial={tab.dataTutorial}
                             className={`
                                 whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm
                                 ${

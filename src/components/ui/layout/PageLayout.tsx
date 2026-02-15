@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Button, InfoIcon, Tooltip } from '../';
 import { Link } from 'react-router-dom';
+import { TutorialReplayButton } from '../../tutorial/TutorialReplayButton';
 
 interface PageLayoutProps {
     title: string;
@@ -10,8 +11,10 @@ interface PageLayoutProps {
         label: string;
         onClick: () => void;
         variant?: 'primary' | 'secondary';
+        dataTutorial?: string;
     };
     helpLink?: string;
+    tutorialGroupId?: string | string[];
 }
 
 export const PageLayout: React.FC<PageLayoutProps> = ({
@@ -20,6 +23,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
     children,
     action,
     helpLink,
+    tutorialGroupId,
 }) => {
     const [pathname, hash] = helpLink?.split('#') || [''];
     const [isTooltipVisible, setIsTooltipVisible] = useState(false);
@@ -35,6 +39,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                             aria-label={action.label}
                             variant={action.variant || 'primary'}
                             onClick={action.onClick}
+                            data-tutorial={action.dataTutorial}
                         >
                             {action.label}
                         </Button>
@@ -43,33 +48,38 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                 {description && (
                     <p className="text-sm text-gray-400 order-2 w-full">{description}</p>
                 )}
-                {helpLink && (
-                    <div
-                        ref={tooltipRef}
-                        onMouseEnter={() => setIsTooltipVisible(true)}
-                        onMouseLeave={() => setIsTooltipVisible(false)}
-                        className="relative w-fit"
-                    >
-                        <Button variant="secondary" size="sm" className="mt-2">
-                            <Link
-                                to={{
-                                    pathname,
-                                    hash,
-                                }}
-                                className="flex items-center gap-2"
+                {(helpLink || tutorialGroupId) && (
+                    <div className="flex gap-2 mt-2">
+                        {helpLink && (
+                            <div
+                                ref={tooltipRef}
+                                onMouseEnter={() => setIsTooltipVisible(true)}
+                                onMouseLeave={() => setIsTooltipVisible(false)}
+                                className="relative w-fit"
                             >
-                                <InfoIcon /> Feeling lost?
-                            </Link>
-                        </Button>
-                        <Tooltip
-                            isVisible={isTooltipVisible}
-                            className="bg-dark border border-dark-lighter p-2 w-48"
-                            targetElement={tooltipRef.current}
-                        >
-                            <p className="text-sm text-gray-300">
-                                Click to view the relevant help section
-                            </p>
-                        </Tooltip>
+                                <Button variant="secondary" size="sm">
+                                    <Link
+                                        to={{
+                                            pathname,
+                                            hash,
+                                        }}
+                                        className="flex items-center gap-2"
+                                    >
+                                        <InfoIcon /> Feeling lost?
+                                    </Link>
+                                </Button>
+                                <Tooltip
+                                    isVisible={isTooltipVisible}
+                                    className="bg-dark border border-dark-lighter p-2 w-48"
+                                    targetElement={tooltipRef.current}
+                                >
+                                    <p className="text-sm text-gray-300">
+                                        Click to view the relevant help section
+                                    </p>
+                                </Tooltip>
+                            </div>
+                        )}
+                        {tutorialGroupId && <TutorialReplayButton groupId={tutorialGroupId} />}
                     </div>
                 )}
             </div>

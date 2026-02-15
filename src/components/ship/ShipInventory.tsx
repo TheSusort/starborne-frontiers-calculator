@@ -317,7 +317,7 @@ export const ShipInventory: React.FC<Props> = ({
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col">
+            <div className="flex flex-col" data-tutorial="ships-filter-panel">
                 {sortedInventory.length > 0 && (
                     <span className="text-sm text-gray-400">
                         Showing {visibleItems.length} of {sortedInventory.length} ships
@@ -371,25 +371,29 @@ export const ShipInventory: React.FC<Props> = ({
             ) : (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {visibleItems.map((ship) => (
-                            <ShipCard
+                        {visibleItems.map((ship, index) => (
+                            <div
                                 key={ship.id}
-                                ship={ship}
-                                allShips={ships}
-                                hoveredGear={hoveredGear}
-                                availableGear={availableGear}
-                                getGearPiece={getGearPiece}
-                                onEdit={onEdit}
-                                onRemove={onRemove}
-                                onLockEquipment={onLockEquipment}
-                                onEquipGear={onEquipGear}
-                                onRemoveGear={onRemoveGear}
-                                onUnequipAll={onUnequipAll}
-                                onHoverGear={setHoveredGear}
-                                viewMode={viewMode}
-                                onAddToComparison={addToComparison}
-                                isInComparison={isInComparison(ship.id)}
-                            />
+                                {...(index === 0 ? { 'data-tutorial': 'ships-first-card' } : {})}
+                            >
+                                <ShipCard
+                                    ship={ship}
+                                    allShips={ships}
+                                    hoveredGear={hoveredGear}
+                                    availableGear={availableGear}
+                                    getGearPiece={getGearPiece}
+                                    onEdit={onEdit}
+                                    onRemove={onRemove}
+                                    onLockEquipment={onLockEquipment}
+                                    onEquipGear={onEquipGear}
+                                    onRemoveGear={onRemoveGear}
+                                    onUnequipAll={onUnequipAll}
+                                    onHoverGear={setHoveredGear}
+                                    viewMode={viewMode}
+                                    onAddToComparison={addToComparison}
+                                    isInComparison={isInComparison(ship.id)}
+                                />
+                            </div>
                         ))}
                     </div>
 

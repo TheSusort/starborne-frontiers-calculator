@@ -10,6 +10,7 @@ import { CommunityActions } from './CommunityActions';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendations';
+import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 
 /**
  * Convert CommunityRecommendation to AIRecommendation format for AlternativeRecommendations
@@ -77,6 +78,8 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         currentConfig,
     });
 
+    useTutorialTrigger('autogear-community');
+
     if (!selectedShip) {
         return null;
     }
@@ -117,7 +120,10 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
     };
 
     return (
-        <div className="mt-4 border border-dark-border overflow-hidden">
+        <div
+            className="mt-4 border border-dark-border overflow-hidden"
+            data-tutorial="autogear-community-recommendations"
+        >
             <RecommendationHeader
                 recommendation={currentRecommendation}
                 loading={loading}

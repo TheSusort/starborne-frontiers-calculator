@@ -70,7 +70,10 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
             <div className="space-y-3">
                 {selectedShips.map((ship, index) => (
                     <div key={index} className="space-y-2">
-                        <div className="flex gap-2 items-start">
+                        <div
+                            className="flex gap-2 items-start"
+                            {...(index === 0 ? { 'data-tutorial': 'autogear-ship-selector' } : {})}
+                        >
                             <div className="flex-1">
                                 <ShipSelector
                                     selected={ship || null}
@@ -96,6 +99,11 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                                 size="sm"
                                                 className="flex gap-2 items-center"
                                                 title="View ship details"
+                                                data-tutorial={
+                                                    index === 0
+                                                        ? 'autogear-ship-info-button'
+                                                        : undefined
+                                                }
                                             >
                                                 <InfoIcon />
                                             </Button>
@@ -105,6 +113,9 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                             onClick={(event) => onOpenSettings(event, index)}
                                             size="sm"
                                             className="flex gap-2 items-center"
+                                            data-tutorial={
+                                                index === 0 ? 'autogear-settings-button' : undefined
+                                            }
                                         >
                                             <GearIcon />
                                         </Button>
@@ -155,6 +166,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                     disabled={selectedShips.length === 0}
                     variant="primary"
                     className="w-full"
+                    data-tutorial="autogear-optimize-button"
                 >
                     Find Optimal Gear
                 </Button>

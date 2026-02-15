@@ -24,6 +24,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import {
+    AUTOGEAR_INITIAL_TUTORIAL,
+    AUTOGEAR_RESULTS_TUTORIAL,
+} from '../../constants/tutorialSteps';
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
@@ -73,6 +78,15 @@ export const AutogearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
     const { user } = useAuth();
+    const { startGroup, hasCompletedGroup } = useTutorial();
+
+    // Auto-start tutorial on first visit
+    React.useEffect(() => {
+        if (!hasCompletedGroup(AUTOGEAR_INITIAL_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(AUTOGEAR_INITIAL_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [startGroup, hasCompletedGroup]);
 
     // useState hooks
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
@@ -195,6 +209,21 @@ export const AutogearPage: React.FC = () => {
             setActiveTab(shipIds[0]);
         }
     }, [shipResults, activeTab]);
+
+    // Trigger tutorial for results when they first appear
+    const hasResults = Object.keys(shipResults).length > 0;
+    const hasTriggeredResultsTutorial = React.useRef(false);
+    useEffect(() => {
+        if (
+            hasResults &&
+            !hasTriggeredResultsTutorial.current &&
+            !hasCompletedGroup('autogear-results')
+        ) {
+            hasTriggeredResultsTutorial.current = true;
+            const timer = setTimeout(() => startGroup('autogear-results'), 800);
+            return () => clearTimeout(timer);
+        }
+    }, [hasResults, startGroup, hasCompletedGroup]);
 
     // Refresh selectedShips when ships array changes (e.g., after lock state changes)
     useEffect(() => {
@@ -687,6 +716,11 @@ export const AutogearPage: React.FC = () => {
                 title="Autogear"
                 description="Find the best gear for your ship. Since the amount of combinations are so high, there's a lot of shortcuts taken to make it faster. The results are not always perfect, as it's based on about 30-40k comparisons, so run it a couple of times to make sure you're getting the best results."
                 helpLink="/documentation#autogear"
+                tutorialGroupId={
+                    hasResults
+                        ? [AUTOGEAR_INITIAL_TUTORIAL.id, AUTOGEAR_RESULTS_TUTORIAL.id]
+                        : AUTOGEAR_INITIAL_TUTORIAL.id
+                }
             >
                 <div className="md:flex gap-4">
                     <div className="flex-1 print:hidden">
@@ -798,18 +832,23 @@ export const AutogearPage: React.FC = () => {
                     <div>
                         {/* Show tabs only when not printing */}
                         {!isPrinting && (
-                            <Tabs
-                                tabs={Object.keys(shipResults)
-                                    .map((shipId) => {
-                                        const ship = selectedShips.find((s) => s?.id === shipId);
-                                        return ship ? { id: shipId, label: ship.name } : null;
-                                    })
-                                    .filter(
-                                        (tab): tab is { id: string; label: string } => tab !== null
-                                    )}
-                                activeTab={activeTab || ''}
-                                onChange={(tabId: string) => setActiveTab(tabId)}
-                            />
+                            <div data-tutorial="autogear-results-tabs">
+                                <Tabs
+                                    tabs={Object.keys(shipResults)
+                                        .map((shipId) => {
+                                            const ship = selectedShips.find(
+                                                (s) => s?.id === shipId
+                                            );
+                                            return ship ? { id: shipId, label: ship.name } : null;
+                                        })
+                                        .filter(
+                                            (tab): tab is { id: string; label: string } =>
+                                                tab !== null
+                                        )}
+                                    activeTab={activeTab || ''}
+                                    onChange={(tabId: string) => setActiveTab(tabId)}
+                                />
+                            </div>
                         )}
 
                         {/* Tab Content */}

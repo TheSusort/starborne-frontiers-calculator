@@ -317,11 +317,13 @@ export const Sidebar: React.FC = () => {
                 </nav>
 
                 <div className="!mt-auto flex flex-col gap-2 pt-2">
-                    <ImportButton
-                        className="w-full text-right"
-                        shareData={shareData}
-                        setShareData={setShareData}
-                    />
+                    <div data-tutorial="sidebar-import-button">
+                        <ImportButton
+                            className="w-full text-right"
+                            shareData={shareData}
+                            setShareData={setShareData}
+                        />
+                    </div>
                     <LoginButton />
                 </div>
             </div>

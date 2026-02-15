@@ -14,6 +14,8 @@ import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { GEAR_TABS_TUTORIAL } from '../../constants/tutorialSteps';
 
 export const GearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -21,6 +23,7 @@ export const GearPage: React.FC = () => {
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
+    const { startGroup, hasCompletedGroup } = useTutorial();
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [pendingDeletePieceEquipped, setPendingDeletePieceEquipped] = useState(false);
@@ -31,10 +34,10 @@ export const GearPage: React.FC = () => {
     const [initialShipId, setInitialShipId] = useState<string | null>(null);
     const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
     const tabs = [
-        { id: 'inventory', label: 'Inventory' },
-        { id: 'calibration', label: 'Calibration' },
-        { id: 'analysis', label: 'Upgrade Analysis' },
-        { id: 'simulation', label: 'Simulate Upgrades' },
+        { id: 'inventory', label: 'Inventory', dataTutorial: 'gear-tab-inventory' },
+        { id: 'calibration', label: 'Calibration', dataTutorial: 'gear-tab-calibration' },
+        { id: 'analysis', label: 'Upgrade Analysis', dataTutorial: 'gear-tab-analysis' },
+        { id: 'simulation', label: 'Simulate Upgrades', dataTutorial: 'gear-tab-simulation' },
     ];
 
     // Handle URL params for deep linking (e.g., from ShipCard "Calibrate gear" shortcut)
@@ -61,6 +64,14 @@ export const GearPage: React.FC = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && !hasCompletedGroup(GEAR_TABS_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(GEAR_TABS_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, startGroup, hasCompletedGroup]);
 
     const handleRemovePiece = async (id: string) => {
         const piece = inventory.find((p) => p.id === id);
@@ -147,6 +158,7 @@ export const GearPage: React.FC = () => {
                     variant: isFormVisible ? 'secondary' : 'primary',
                 }}
                 helpLink="/documentation#gear"
+                tutorialGroupId={GEAR_TABS_TUTORIAL.id}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
                     <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />

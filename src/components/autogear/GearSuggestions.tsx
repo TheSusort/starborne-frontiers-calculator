@@ -54,7 +54,10 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     };
 
     return (
-        <div className={`pt-4 md:pt-0 ${expanded ? 'lg:min-w-[450px] xl:min-w-[650px]' : ''}`}>
+        <div
+            className={`pt-4 md:pt-0 ${expanded ? 'lg:min-w-[450px] xl:min-w-[650px]' : ''}`}
+            data-tutorial="autogear-gear-suggestions"
+        >
             <div className="">
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>

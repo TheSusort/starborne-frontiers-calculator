@@ -4,7 +4,7 @@ import { SortConfig, SortOption, SortPanel } from './SortPanel';
 import { SearchIcon } from '../ui/icons/SearchIcon';
 import { ListIcon } from '../ui/icons/ListIcon';
 import { ImageIcon } from '../ui/icons/ImageIcon';
-import { useAuth } from '../../contexts/AuthProvider';
+
 import { RangeFilter } from './RangeFilter';
 import { StatFilter } from './StatFilter';
 import { StatFilter as StatFilterType } from '../../hooks/usePersistedFilters';
@@ -78,7 +78,6 @@ export const FilterPanel: React.FC<Props> = ({
     viewMode = 'list',
     onViewModeChange,
 }) => {
-    const { user } = useAuth();
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -213,7 +212,7 @@ export const FilterPanel: React.FC<Props> = ({
                     </div>
                 )}
                 <div className="flex gap-2 ml-auto">
-                    {onViewModeChange && user && (
+                    {onViewModeChange && (
                         <div className="flex">
                             {viewMode === 'image' && (
                                 <Button

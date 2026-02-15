@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EngineeringStats, EngineeringStat } from '../../types/stats';
 import { EngineeringStatsForm } from '../../components/engineering/EngineeringStatsForm';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -9,10 +9,12 @@ import { EngineeringPreviewTab } from '../../components/engineering/EngineeringP
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { ENGINEERING_TABS_TUTORIAL } from '../../constants/tutorialSteps';
 
 const TABS = [
-    { id: 'stats', label: 'Engineering Stats' },
-    { id: 'preview', label: 'Preview Upgrade' },
+    { id: 'stats', label: 'Engineering Stats', dataTutorial: 'engineering-tab-stats' },
+    { id: 'preview', label: 'Preview Upgrade', dataTutorial: 'engineering-tab-preview' },
 ];
 
 export const EngineeringStatsPage: React.FC = () => {
@@ -22,6 +24,15 @@ export const EngineeringStatsPage: React.FC = () => {
     const [isFormVisible, setIsFormVisible] = useState(false);
     const [activeTab, setActiveTab] = useState('stats');
     const { addNotification } = useNotification();
+    const { startGroup, hasCompletedGroup } = useTutorial();
+
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && !hasCompletedGroup(ENGINEERING_TABS_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(ENGINEERING_TABS_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, startGroup, hasCompletedGroup]);
 
     const handleSubmit = (stats: EngineeringStat) => {
         const newEngStats: EngineeringStats = {
@@ -73,6 +84,7 @@ export const EngineeringStatsPage: React.FC = () => {
                           }
                         : undefined
                 }
+                tutorialGroupId={ENGINEERING_TABS_TUTORIAL.id}
             >
                 <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 

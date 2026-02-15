@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShipForm } from '../../components/ship/ShipForm';
 import { ShipInventory } from '../../components/ship/ShipInventory';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -9,6 +9,8 @@ import { Ship } from '../../types/ship';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { SHIPS_INITIAL_TUTORIAL } from '../../constants/tutorialSteps';
 
 export const ShipsPage: React.FC = () => {
     const { inventory } = useInventory();
@@ -16,6 +18,8 @@ export const ShipsPage: React.FC = () => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [pendingDeleteShip, setPendingDeleteShip] = useState<Ship | null>(null);
     const { addNotification } = useNotification();
+
+    const { startGroup, hasCompletedGroup } = useTutorial();
 
     const {
         ships,
@@ -89,6 +93,14 @@ export const ShipsPage: React.FC = () => {
         }
     };
 
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && !hasCompletedGroup(SHIPS_INITIAL_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(SHIPS_INITIAL_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, startGroup, hasCompletedGroup]);
+
     if (loading) {
         return <Loader />;
     }
@@ -108,8 +120,10 @@ export const ShipsPage: React.FC = () => {
                         setIsFormVisible(!isFormVisible);
                     },
                     variant: isFormVisible ? 'secondary' : 'primary',
+                    dataTutorial: 'ships-create-button',
                 }}
                 helpLink="/documentation#ships"
+                tutorialGroupId={SHIPS_INITIAL_TUTORIAL.id}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm onSubmit={handleSaveShip} editingShip={editingShip} />

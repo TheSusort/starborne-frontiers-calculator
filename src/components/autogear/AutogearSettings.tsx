@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import { StatBonusForm } from './StatBonusForm';
 import {
@@ -13,6 +13,8 @@ import {
     ChevronDownIcon,
     RoleSelector,
 } from '../ui';
+import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
+import { useTutorial } from '../../contexts/TutorialContext';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
@@ -136,9 +138,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         useState<boolean>(false);
     const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
 
+    useTutorialTrigger('autogear-settings');
+
+    // Auto-expand secondary priorities when the settings tutorial is active
+    const { activeGroup } = useTutorial();
+    useEffect(() => {
+        if (
+            activeGroup?.id === 'autogear-settings' &&
+            selectedShipRole &&
+            !showSecondaryRequirements
+        ) {
+            onToggleSecondaryRequirements(true);
+        }
+    }, [activeGroup, selectedShipRole, showSecondaryRequirements, onToggleSecondaryRequirements]);
+
     return (
         <div className="space-y-4">
-            <div className="card space-y-2">
+            <div className="card space-y-2" data-tutorial="autogear-role-selector">
                 <div className="flex justify-between items-center">
                     <span className="text-sm">Predefined Strategies</span>
                     {selectedShip && (
@@ -209,17 +225,19 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 }
             >
                 <div className="space-y-4">
-                    <StatPriorityForm
-                        onAdd={onAddPriority}
-                        existingPriorities={priorities}
-                        hideWeight={showSecondaryRequirements}
-                    />
+                    <div data-tutorial="autogear-stat-priorities">
+                        <StatPriorityForm
+                            onAdd={onAddPriority}
+                            existingPriorities={priorities}
+                            hideWeight={showSecondaryRequirements}
+                        />
+                    </div>
 
-                    <div className="card space-y-2">
+                    <div className="card space-y-2" data-tutorial="autogear-set-priorities">
                         <SetPriorityForm onAdd={onAddSetPriority} />
                     </div>
 
-                    <div className="card space-y-2">
+                    <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-gray-400">
                             Add stat bonuses that contribute to the role score. These are additive
@@ -239,48 +257,54 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             <div className="card space-y-2">
                 <h3 className="font-semibold">Options</h3>
                 <div className="space-y-2">
-                    <Checkbox
-                        id="ignoreEquipped"
-                        label="Ignore equipped gear on other ships"
-                        checked={ignoreEquipped}
-                        onChange={onIgnoreEquippedChange}
-                        helpLabel="When enabled, the autogear algorithm will ignore equipped gear on other ships. When disabled, it will include already equipped gear, except from ships with locked state, in the search."
-                    />
-                    <Checkbox
-                        id="ignoreUnleveled"
-                        label="Ignore unleveled gear"
-                        checked={ignoreUnleveled}
-                        onChange={onIgnoreUnleveledChange}
-                        helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable if you want to include unleveled gear in the search, this also applies to simulated upgraded gear."
-                    />
-                    <Checkbox
-                        id="useUpgradedStats"
-                        label="Use upgraded stats"
-                        checked={useUpgradedStats}
-                        onChange={onUseUpgradedStatsChange}
-                        helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
-                    />
-                    <Checkbox
-                        id="tryToCompleteSets"
-                        label="Try to complete gear sets"
-                        checked={tryToCompleteSets}
-                        onChange={onTryToCompleteSetsChange}
-                        helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
-                    />
-                    <Checkbox
-                        id="optimizeImplants"
-                        label="Optimize implants (EXPERIMENTAL)"
-                        checked={optimizeImplants}
-                        onChange={onOptimizeImplantsChange}
-                        helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
-                    />
-                    <Checkbox
-                        id="includeCalibratedGear"
-                        label="Include calibrated gear"
-                        checked={includeCalibratedGear}
-                        onChange={onIncludeCalibratedGearChange}
-                        helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
-                    />
+                    <div data-tutorial="autogear-ignore-options">
+                        <Checkbox
+                            id="ignoreEquipped"
+                            label="Ignore equipped gear on other ships"
+                            checked={ignoreEquipped}
+                            onChange={onIgnoreEquippedChange}
+                            helpLabel="When enabled, the autogear algorithm will ignore equipped gear on other ships. When disabled, it will include already equipped gear, except from ships with locked state, in the search."
+                        />
+                        <Checkbox
+                            id="ignoreUnleveled"
+                            label="Ignore unleveled gear"
+                            checked={ignoreUnleveled}
+                            onChange={onIgnoreUnleveledChange}
+                            helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable if you want to include unleveled gear in the search, this also applies to simulated upgraded gear."
+                        />
+                    </div>
+                    <div data-tutorial="autogear-upgrade-options">
+                        <Checkbox
+                            id="useUpgradedStats"
+                            label="Use upgraded stats"
+                            checked={useUpgradedStats}
+                            onChange={onUseUpgradedStatsChange}
+                            helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
+                        />
+                        <Checkbox
+                            id="tryToCompleteSets"
+                            label="Try to complete gear sets"
+                            checked={tryToCompleteSets}
+                            onChange={onTryToCompleteSetsChange}
+                            helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
+                        />
+                    </div>
+                    <div data-tutorial="autogear-extra-options">
+                        <Checkbox
+                            id="optimizeImplants"
+                            label="Optimize implants (EXPERIMENTAL)"
+                            checked={optimizeImplants}
+                            onChange={onOptimizeImplantsChange}
+                            helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
+                        />
+                        <Checkbox
+                            id="includeCalibratedGear"
+                            label="Include calibrated gear"
+                            checked={includeCalibratedGear}
+                            onChange={onIncludeCalibratedGearChange}
+                            helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
+                        />
+                    </div>
                 </div>
             </div>
 
