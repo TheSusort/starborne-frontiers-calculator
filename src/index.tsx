@@ -1,8 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+
+// Register the service worker with auto-update
+registerSW({ immediate: true });
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(

@@ -9,6 +9,7 @@ import { ChevronDownIcon } from '../icons';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
+import { InstallButton } from '../InstallButton';
 import { isAdmin } from '../../../services/adminService';
 
 // Define the type for navigation items
@@ -317,6 +318,7 @@ export const Sidebar: React.FC = () => {
                 </nav>
 
                 <div className="!mt-auto flex flex-col gap-2 pt-2">
+                    <InstallButton />
                     <div data-tutorial="sidebar-import-button">
                         <ImportButton
                             className="w-full text-right"
