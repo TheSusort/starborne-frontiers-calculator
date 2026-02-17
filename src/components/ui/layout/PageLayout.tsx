@@ -79,7 +79,20 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                                 </Tooltip>
                             </div>
                         )}
-                        {tutorialGroupId && <TutorialReplayButton groupId={tutorialGroupId} />}
+                        {tutorialGroupId && (
+                            <>
+                                <TutorialReplayButton groupId={tutorialGroupId} />
+                                <Tooltip
+                                    isVisible={isTooltipVisible}
+                                    className="bg-dark border border-dark-lighter p-2 w-48"
+                                    targetElement={tooltipRef.current}
+                                >
+                                    <p className="text-sm text-gray-300">
+                                        Click to replay the tutorial for this page
+                                    </p>
+                                </Tooltip>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

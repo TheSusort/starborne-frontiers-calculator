@@ -15,6 +15,7 @@ interface InventoryContextType {
     inventory: GearPiece[];
     loading: boolean;
     loadingProgress: number;
+    syncing: boolean;
     getGearPiece: (id: string) => GearPiece | undefined;
     addGear: (newGear: Omit<GearPiece, 'id'>) => Promise<GearPiece>;
     updateGearPiece: (id: string, updates: Partial<GearPiece>) => Promise<void>;
@@ -23,7 +24,7 @@ interface InventoryContextType {
     setData: (data: GearPiece[] | ((prev: GearPiece[]) => GearPiece[])) => Promise<void>;
 }
 
-const BATCH_SIZE = 1000;
+const BATCH_SIZE = 5000;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
@@ -140,9 +141,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [loadingProgress, setLoadingProgress] = useState(0);
+    const [syncing, setSyncing] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
     const [tempInventory, setTempInventory] = useState<GearPiece[]>([]);
     const [localInventory, setLocalInventory] = useState<GearPiece[]>([]);
+    const [cacheLoaded, setCacheLoaded] = useState(false);
 
     // Use useStorage for inventory
     const { data: storageInventory, setData: setStorageInventory } = useStorage<GearPiece[]>({
@@ -151,10 +154,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         useIndexedDB: true,
     });
 
-    // Synchronize local state with storage
+    // Synchronize local state with storage (IndexedDB cache)
     useEffect(() => {
         if (storageInventory) {
             setLocalInventory(storageInventory);
+            if (storageInventory.length > 0) {
+                setCacheLoaded(true);
+            }
         }
     }, [storageInventory]);
 
@@ -224,7 +230,14 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         try {
             if (!user?.id) return;
 
-            setLoading(true);
+            // If we have cached data, use syncing mode instead of full loading
+            const hasCachedData = localInventory.length > 0;
+            if (hasCachedData) {
+                setSyncing(true);
+                setLoading(false);
+            } else {
+                setLoading(true);
+            }
             setLoadingProgress(0);
             let allItems: GearPiece[] = [];
             let lastId: string | null = null;
@@ -252,15 +265,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Update progress
                 setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
-                if (totalLoaded == totalItems) {
-                    addNotification(
-                        totalLoaded == totalItems ? 'success' : 'info',
-                        `Loaded ${totalLoaded} of ${totalItems} items`
-                    );
-                }
 
-                // Update temporary inventory with the latest batch
-                setTempInventory(allItems);
+                // Update temporary inventory with the latest batch (only when not syncing)
+                if (!hasCachedData) {
+                    setTempInventory(allItems);
+                }
 
                 if (items.length < BATCH_SIZE) break;
             }
@@ -274,11 +283,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // Keep existing inventory on error
         } finally {
             setLoading(false);
+            setSyncing(false);
         }
-    }, [user?.id, addNotification, loadBatch, setTempInventory, isMigrating]);
+    }, [
+        user?.id,
+        addNotification,
+        loadBatch,
+        setTempInventory,
+        isMigrating,
+        localInventory.length,
+    ]);
 
-    // Use tempInventory for display while loading
-    const displayInventory = loading ? tempInventory : localInventory;
+    // Use tempInventory for display while doing a fresh load (no cache), otherwise use localInventory
+    const displayInventory = loading && !cacheLoaded ? tempInventory : localInventory;
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -501,6 +518,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 inventory: displayInventory,
                 loading,
                 loadingProgress,
+                syncing,
                 getGearPiece,
                 addGear,
                 updateGearPiece,

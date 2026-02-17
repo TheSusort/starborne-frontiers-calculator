@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
@@ -11,7 +11,6 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { SHIP_TYPES } from '../../constants';
 import { Tabs } from '../../components/ui/layout/Tabs';
-import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useTutorial } from '../../contexts/TutorialContext';
@@ -19,7 +18,15 @@ import { GEAR_TABS_TUTORIAL } from '../../constants/tutorialSteps';
 
 export const GearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
-    const { inventory, loading, addGear, updateGearPiece, deleteGearPiece } = useInventory();
+    const {
+        inventory,
+        loading,
+        loadingProgress,
+        syncing,
+        addGear,
+        updateGearPiece,
+        deleteGearPiece,
+    } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
@@ -64,6 +71,15 @@ export const GearPage: React.FC = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Show notification when syncing gear from Supabase
+    const wasSyncingRef = useRef(false);
+    useEffect(() => {
+        if (syncing && !wasSyncingRef.current) {
+            addNotification('info', 'Syncing gear...');
+        }
+        wasSyncingRef.current = syncing;
+    }, [syncing, addNotification]);
 
     // Auto-start tutorial on first visit
     useEffect(() => {
@@ -137,10 +153,6 @@ export const GearPage: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return <Loader />;
-    }
-
     return (
         <>
             <Seo {...SEO_CONFIG.gear} />
@@ -172,6 +184,8 @@ export const GearPage: React.FC = () => {
                         onEdit={handleEditPiece}
                         onCalibrate={handleOpenCalibration}
                         maxItems={inventory.length}
+                        loading={loading}
+                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'calibration' && (
@@ -182,6 +196,8 @@ export const GearPage: React.FC = () => {
                         onCalibrate={handleOpenCalibration}
                         initialShipId={initialShipId}
                         initialSubTab={initialSubTab}
+                        loading={loading}
+                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'analysis' && (
@@ -190,6 +206,8 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="analysis"
                         onEdit={handleEditPiece}
+                        loading={loading}
+                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'simulation' && (
@@ -198,6 +216,8 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="simulation"
                         onEdit={handleEditPiece}
+                        loading={loading}
+                        loadingProgress={loadingProgress}
                     />
                 )}
 
