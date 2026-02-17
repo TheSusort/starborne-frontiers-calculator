@@ -27,8 +27,6 @@ interface Props {
     shipRoles: ShipTypeName[];
     mode: 'analysis' | 'simulation';
     onEdit?: (piece: GearPiece) => void;
-    loading?: boolean;
-    loadingProgress?: number;
 }
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -39,14 +37,7 @@ const RARITY_OPTIONS = [
     { value: 'legendary', label: 'Legendary', description: 'Legendary only' },
 ] as const;
 
-export const GearUpgradeAnalysis: React.FC<Props> = ({
-    inventory,
-    shipRoles,
-    mode,
-    onEdit,
-    loading: inventoryLoading,
-    loadingProgress,
-}) => {
+export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode, onEdit }) => {
     useTutorialTrigger(mode === 'analysis' ? GEAR_ANALYSIS_TUTORIAL.id : '');
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
@@ -361,19 +352,6 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
     return (
         <div className="space-y-8">
-            {inventoryLoading && (
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-1.5 bg-dark-lighter rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary rounded-full transition-all duration-300"
-                            style={{ width: `${loadingProgress || 0}%` }}
-                        />
-                    </div>
-                    <span className="text-sm text-gray-400 whitespace-nowrap">
-                        Loading gear {loadingProgress || 0}%
-                    </span>
-                </div>
-            )}
             {mode === 'analysis' && (
                 <>
                     <div className="flex justify-between items-center flex-wrap gap-2">

@@ -19,8 +19,6 @@ interface Props {
     onCalibrate?: (piece: GearPiece) => void;
     mode?: 'manage' | 'select';
     maxItems?: number;
-    loading?: boolean;
-    loadingProgress?: number;
 }
 
 export const GearInventory: React.FC<Props> = ({
@@ -31,8 +29,6 @@ export const GearInventory: React.FC<Props> = ({
     onCalibrate,
     mode = 'manage',
     maxItems,
-    loading,
-    loadingProgress,
 }) => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -354,19 +350,6 @@ export const GearInventory: React.FC<Props> = ({
 
     return (
         <div className="space-y-6">
-            {loading && (
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-1.5 bg-dark-lighter rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary rounded-full transition-all duration-300"
-                            style={{ width: `${loadingProgress || 0}%` }}
-                        />
-                    </div>
-                    <span className="text-sm text-gray-400 whitespace-nowrap">
-                        Loading {loadingProgress || 0}%
-                    </span>
-                </div>
-            )}
             <div className="flex flex-col">
                 {sortedInventory.length > 0 && (
                     <span className="text-sm text-gray-400">

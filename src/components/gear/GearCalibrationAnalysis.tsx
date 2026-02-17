@@ -18,8 +18,6 @@ interface Props {
     onCalibrate?: (piece: GearPiece, shipId?: string) => void;
     initialShipId?: string | null;
     initialSubTab?: 'candidates' | 'ship' | null;
-    loading?: boolean;
-    loadingProgress?: number;
 }
 
 const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -31,8 +29,6 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
     onCalibrate,
     initialShipId,
     initialSubTab,
-    loading: inventoryLoading,
-    loadingProgress,
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [optimizationProgress, setOptimizationProgress] = useState<{
@@ -189,19 +185,6 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
 
     return (
         <div className="space-y-8">
-            {inventoryLoading && (
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-1.5 bg-dark-lighter rounded-full overflow-hidden">
-                        <div
-                            className="h-full bg-primary rounded-full transition-all duration-300"
-                            style={{ width: `${loadingProgress || 0}%` }}
-                        />
-                    </div>
-                    <span className="text-sm text-gray-400 whitespace-nowrap">
-                        Loading gear {loadingProgress || 0}%
-                    </span>
-                </div>
-            )}
             <Tabs
                 tabs={subTabs}
                 activeTab={activeSubTab}

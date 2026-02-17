@@ -11,6 +11,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { SHIP_TYPES } from '../../constants';
 import { Tabs } from '../../components/ui/layout/Tabs';
+import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useTutorial } from '../../contexts/TutorialContext';
@@ -72,8 +73,19 @@ export const GearPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Show notification when syncing gear from Supabase
+    // Show notification for loading/syncing gear
+    const wasLoadingRef = useRef(false);
     const wasSyncingRef = useRef(false);
+    useEffect(() => {
+        if (loading && !wasLoadingRef.current) {
+            addNotification('info', `Loading gear... ${loadingProgress}%`);
+        }
+        if (!loading && wasLoadingRef.current) {
+            addNotification('success', `Loaded ${inventory.length} gear pieces`);
+        }
+        wasLoadingRef.current = loading;
+    }, [loading, loadingProgress, addNotification, inventory.length]);
+
     useEffect(() => {
         if (syncing && !wasSyncingRef.current) {
             addNotification('info', 'Syncing gear...');
@@ -153,6 +165,10 @@ export const GearPage: React.FC = () => {
         }
     };
 
+    if (loading && inventory.length === 0) {
+        return <Loader />;
+    }
+
     return (
         <>
             <Seo {...SEO_CONFIG.gear} />
@@ -184,8 +200,6 @@ export const GearPage: React.FC = () => {
                         onEdit={handleEditPiece}
                         onCalibrate={handleOpenCalibration}
                         maxItems={inventory.length}
-                        loading={loading}
-                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'calibration' && (
@@ -196,8 +210,6 @@ export const GearPage: React.FC = () => {
                         onCalibrate={handleOpenCalibration}
                         initialShipId={initialShipId}
                         initialSubTab={initialSubTab}
-                        loading={loading}
-                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'analysis' && (
@@ -206,8 +218,6 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="analysis"
                         onEdit={handleEditPiece}
-                        loading={loading}
-                        loadingProgress={loadingProgress}
                     />
                 )}
                 {activeTab === 'simulation' && (
@@ -216,8 +226,6 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="simulation"
                         onEdit={handleEditPiece}
-                        loading={loading}
-                        loadingProgress={loadingProgress}
                     />
                 )}
 
