@@ -28,7 +28,7 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
                                 ${
                                     activeTab === tab.id
                                         ? 'border-primary text-primary'
-                                        : 'border-transparent text-gray-400 hover: hover:border-gray-300'
+                                        : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-300'
                                 }
                             `}
                             aria-current={activeTab === tab.id ? 'page' : undefined}

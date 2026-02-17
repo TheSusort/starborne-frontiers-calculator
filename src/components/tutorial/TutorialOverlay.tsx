@@ -101,16 +101,16 @@ export const TutorialOverlay: React.FC = () => {
 
         const target = document.querySelector(`[data-tutorial="${activeStep.targetId}"]`);
         if (!target) {
-            // Target not found, skip to next step
-            nextStep();
-            return;
+            // Target not found, skip to next step (defer to avoid cascade)
+            const timer = setTimeout(() => nextStep(), 0);
+            return () => clearTimeout(timer);
         }
 
         // Skip elements that are effectively invisible (e.g., inside collapsed containers)
         const rect = target.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0 || !isEffectivelyVisible(target)) {
-            nextStep();
-            return;
+            const timer = setTimeout(() => nextStep(), 0);
+            return () => clearTimeout(timer);
         }
 
         const isInView =

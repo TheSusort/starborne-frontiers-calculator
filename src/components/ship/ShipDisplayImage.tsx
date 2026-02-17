@@ -19,6 +19,12 @@ import {
     PanelVariant,
 } from './shipDisplayComponents';
 
+// Epic ships with videos (legendary ships all have videos)
+const EPIC_VIDEOS = new Set<string>([
+    // Add imageKeys as you upload them
+    'Atlas_15',
+]);
+
 const PANEL_VARIANTS: Record<
     PanelVariant,
     { maxHeight: string; top: string; imageMargin: string }
@@ -52,6 +58,9 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         isInComparison,
     }) => {
         const panelStyles = PANEL_VARIANTS[panelVariant];
+        const hasVideo =
+            ship.rarity === 'legendary' ||
+            (ship.rarity === 'epic' && !!ship.imageKey && EPIC_VIDEOS.has(ship.imageKey));
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
@@ -185,7 +194,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                             imageClassName="w-full"
                             aspectRatio="1/1"
                         />
-                        {ship.rarity === 'legendary' && (
+                        {hasVideo && (
                             <Video
                                 ref={videoRef}
                                 src={`${ship.imageKey}_Video`}
@@ -228,6 +237,9 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                         ship={ship}
                                         onQuickAdd={onQuickAdd}
                                         isAdded={isAdded}
+                                        onAddToComparison={onAddToComparison}
+                                        isInComparison={isInComparison}
+                                        showLeaderboard
                                     />
                                 )}
                             </div>

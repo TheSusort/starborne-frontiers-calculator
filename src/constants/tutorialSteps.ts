@@ -9,19 +9,6 @@ export interface TutorialGroup {
     steps: TutorialStep[];
 }
 
-// Sidebar tutorial - shown on first visit to any page
-export const SIDEBAR_TUTORIAL: TutorialGroup = {
-    id: 'sidebar-import',
-    steps: [
-        {
-            targetId: 'sidebar-import-button',
-            title: 'Import Game Data',
-            description:
-                'Upload your game data export here to import your ships, gear, and engineering stats.',
-        },
-    ],
-};
-
 // Ships page - initial visible elements
 export const SHIPS_INITIAL_TUTORIAL: TutorialGroup = {
     id: 'ships-initial',
@@ -204,8 +191,32 @@ export const ENGINEERING_TABS_TUTORIAL: TutorialGroup = {
     ],
 };
 
+// Ship Database page
+export const SHIP_DATABASE_TUTORIAL: TutorialGroup = {
+    id: 'ship-database',
+    steps: [
+        {
+            targetId: 'ship-db-filter-panel',
+            title: 'Search & Filter',
+            description:
+                'Search ships by name or skill text. Filter by faction, role, rarity, and affinity. Sort by any stat.',
+        },
+        {
+            targetId: 'ship-db-first-card',
+            title: 'Ship Card',
+            description:
+                'Each card shows the ship at level 60 with base stats. Use the + button to add it to your fleet, the compare icon to view ships side by side, or the trophy to see the leaderboard.',
+        },
+        {
+            targetId: 'ship-db-skill-buttons',
+            title: 'Skill Details',
+            description:
+                'Hover over the skill buttons to see each skill description — active, charge, and passive abilities.',
+        },
+    ],
+};
+
 export const ALL_TUTORIAL_GROUPS: TutorialGroup[] = [
-    SIDEBAR_TUTORIAL,
     SHIPS_INITIAL_TUTORIAL,
     AUTOGEAR_INITIAL_TUTORIAL,
     AUTOGEAR_COMMUNITY_TUTORIAL,
@@ -213,4 +224,5 @@ export const ALL_TUTORIAL_GROUPS: TutorialGroup[] = [
     AUTOGEAR_SETTINGS_TUTORIAL,
     GEAR_TABS_TUTORIAL,
     ENGINEERING_TABS_TUTORIAL,
+    SHIP_DATABASE_TUTORIAL,
 ];

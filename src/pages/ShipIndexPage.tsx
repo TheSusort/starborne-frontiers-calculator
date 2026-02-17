@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useShipsData } from '../hooks/useShipsData';
 import { useShips } from '../contexts/ShipsContext';
 import { PageLayout } from '../components/ui';
@@ -17,6 +17,8 @@ import { Tooltip } from '../components/ui/layout/Tooltip';
 import { SkillTooltip } from '../components/ship/SkillTooltip';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { useTutorial } from '../contexts/TutorialContext';
+import { SHIP_DATABASE_TUTORIAL } from '../constants/tutorialSteps';
 import { STATS } from '../constants/stats';
 import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
@@ -48,6 +50,15 @@ export const ShipIndexPage: React.FC = () => {
     const [passive2Hover, setPassive2Hover] = useState('');
     const [passive3Hover, setPassive3Hover] = useState('');
     const tooltipRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const { startGroup, hasCompletedGroup } = useTutorial();
+
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && !hasCompletedGroup(SHIP_DATABASE_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(SHIP_DATABASE_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, startGroup, hasCompletedGroup]);
 
     const setSelectedFactions = (factions: string[]) => {
         setState((prev) => ({
@@ -267,9 +278,10 @@ export const ShipIndexPage: React.FC = () => {
             <PageLayout
                 title="Ship Database"
                 description="Browse all ships I've bothered to add and their base statistics at level 60, no refits."
+                tutorialGroupId={SHIP_DATABASE_TUTORIAL.id}
             >
                 <div className="space-y-6">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col" data-tutorial="ship-db-filter-panel">
                         {filteredAndSortedShips.length > 0 && (
                             <span className="text-sm text-gray-400">
                                 Showing {filteredAndSortedShips.length} ships
@@ -310,181 +322,202 @@ export const ShipIndexPage: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredAndSortedShips.length > 0 ? (
-                            filteredAndSortedShips.map((ship) => (
-                                <ShipDisplayImage
+                            filteredAndSortedShips.map((ship, index) => (
+                                <div
                                     key={ship.name}
-                                    ship={ship}
-                                    panelVariant="compact"
-                                    onQuickAdd={onQuickAdd}
-                                    isAdded={addedShips.has(ship.name)}
-                                    onAddToComparison={addToComparison}
-                                    isInComparison={isInComparison(ship.id)}
+                                    data-tutorial={index === 0 ? 'ship-db-first-card' : undefined}
                                 >
-                                    <div className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3">
-                                        <div className="flex flex-wrap gap-2 justify-center">
-                                            {ship.activeSkillText && (
-                                                <div className="relative">
-                                                    <div
-                                                        ref={(el) => {
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_active`
-                                                            ] = el;
-                                                        }}
-                                                        onMouseEnter={() =>
-                                                            setActiveHover(ship.name)
-                                                        }
-                                                        onMouseLeave={() => setActiveHover('')}
-                                                    >
-                                                        <Button variant="secondary" size="xs">
-                                                            Active
-                                                        </Button>
+                                    <ShipDisplayImage
+                                        ship={ship}
+                                        panelVariant="compact"
+                                        onQuickAdd={onQuickAdd}
+                                        isAdded={addedShips.has(ship.name)}
+                                        onAddToComparison={addToComparison}
+                                        isInComparison={isInComparison(ship.id)}
+                                    >
+                                        <div
+                                            className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3"
+                                            {...(index === 0
+                                                ? { 'data-tutorial': 'ship-db-skill-buttons' }
+                                                : {})}
+                                        >
+                                            <div className="flex flex-wrap gap-2 justify-center">
+                                                {ship.activeSkillText && (
+                                                    <div className="relative">
+                                                        <div
+                                                            ref={(el) => {
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_active`
+                                                                ] = el;
+                                                            }}
+                                                            onMouseEnter={() =>
+                                                                setActiveHover(ship.name)
+                                                            }
+                                                            onMouseLeave={() => setActiveHover('')}
+                                                        >
+                                                            <Button variant="secondary" size="xs">
+                                                                Active
+                                                            </Button>
+                                                        </div>
+                                                        <Tooltip
+                                                            isVisible={activeHover === ship.name}
+                                                            targetElement={
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_active`
+                                                                ]
+                                                            }
+                                                        >
+                                                            <SkillTooltip
+                                                                skillText={ship.activeSkillText}
+                                                                skillType="Active Skill"
+                                                            />
+                                                        </Tooltip>
                                                     </div>
-                                                    <Tooltip
-                                                        isVisible={activeHover === ship.name}
-                                                        targetElement={
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_active`
-                                                            ]
-                                                        }
-                                                    >
-                                                        <SkillTooltip
-                                                            skillText={ship.activeSkillText}
-                                                            skillType="Active Skill"
-                                                        />
-                                                    </Tooltip>
-                                                </div>
-                                            )}
-                                            {ship.chargeSkillText && (
-                                                <div className="relative">
-                                                    <div
-                                                        ref={(el) => {
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_charge`
-                                                            ] = el;
-                                                        }}
-                                                        onMouseEnter={() =>
-                                                            setChargeHover(ship.name)
-                                                        }
-                                                        onMouseLeave={() => setChargeHover('')}
-                                                    >
-                                                        <Button variant="secondary" size="xs">
-                                                            Charge
-                                                        </Button>
+                                                )}
+                                                {ship.chargeSkillText && (
+                                                    <div className="relative">
+                                                        <div
+                                                            ref={(el) => {
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_charge`
+                                                                ] = el;
+                                                            }}
+                                                            onMouseEnter={() =>
+                                                                setChargeHover(ship.name)
+                                                            }
+                                                            onMouseLeave={() => setChargeHover('')}
+                                                        >
+                                                            <Button variant="secondary" size="xs">
+                                                                Charge
+                                                            </Button>
+                                                        </div>
+                                                        <Tooltip
+                                                            isVisible={chargeHover === ship.name}
+                                                            targetElement={
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_charge`
+                                                                ]
+                                                            }
+                                                        >
+                                                            <SkillTooltip
+                                                                skillText={ship.chargeSkillText}
+                                                                skillType="Charge Skill"
+                                                            />
+                                                        </Tooltip>
                                                     </div>
-                                                    <Tooltip
-                                                        isVisible={chargeHover === ship.name}
-                                                        targetElement={
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_charge`
-                                                            ]
-                                                        }
-                                                    >
-                                                        <SkillTooltip
-                                                            skillText={ship.chargeSkillText}
-                                                            skillType="Charge Skill"
-                                                        />
-                                                    </Tooltip>
-                                                </div>
-                                            )}
-                                            {ship.firstPassiveSkillText && (
-                                                <div className="relative">
-                                                    <div
-                                                        ref={(el) => {
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive1`
-                                                            ] = el;
-                                                        }}
-                                                        onMouseEnter={() =>
-                                                            setPassive1Hover(ship.name)
-                                                        }
-                                                        onMouseLeave={() => setPassive1Hover('')}
-                                                    >
-                                                        <Button variant="secondary" size="xs">
-                                                            Passive
-                                                        </Button>
+                                                )}
+                                                {ship.firstPassiveSkillText && (
+                                                    <div className="relative">
+                                                        <div
+                                                            ref={(el) => {
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive1`
+                                                                ] = el;
+                                                            }}
+                                                            onMouseEnter={() =>
+                                                                setPassive1Hover(ship.name)
+                                                            }
+                                                            onMouseLeave={() =>
+                                                                setPassive1Hover('')
+                                                            }
+                                                        >
+                                                            <Button variant="secondary" size="xs">
+                                                                Passive
+                                                            </Button>
+                                                        </div>
+                                                        <Tooltip
+                                                            isVisible={passive1Hover === ship.name}
+                                                            targetElement={
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive1`
+                                                                ]
+                                                            }
+                                                        >
+                                                            <SkillTooltip
+                                                                skillText={
+                                                                    ship.firstPassiveSkillText
+                                                                }
+                                                                skillType="Passive Skill"
+                                                            />
+                                                        </Tooltip>
                                                     </div>
-                                                    <Tooltip
-                                                        isVisible={passive1Hover === ship.name}
-                                                        targetElement={
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive1`
-                                                            ]
-                                                        }
-                                                    >
-                                                        <SkillTooltip
-                                                            skillText={ship.firstPassiveSkillText}
-                                                            skillType="Passive Skill"
-                                                        />
-                                                    </Tooltip>
-                                                </div>
-                                            )}
-                                            {ship.secondPassiveSkillText && (
-                                                <div className="relative">
-                                                    <div
-                                                        ref={(el) => {
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive2`
-                                                            ] = el;
-                                                        }}
-                                                        onMouseEnter={() =>
-                                                            setPassive2Hover(ship.name)
-                                                        }
-                                                        onMouseLeave={() => setPassive2Hover('')}
-                                                    >
-                                                        <Button variant="secondary" size="xs">
-                                                            Passive R2
-                                                        </Button>
+                                                )}
+                                                {ship.secondPassiveSkillText && (
+                                                    <div className="relative">
+                                                        <div
+                                                            ref={(el) => {
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive2`
+                                                                ] = el;
+                                                            }}
+                                                            onMouseEnter={() =>
+                                                                setPassive2Hover(ship.name)
+                                                            }
+                                                            onMouseLeave={() =>
+                                                                setPassive2Hover('')
+                                                            }
+                                                        >
+                                                            <Button variant="secondary" size="xs">
+                                                                Passive R2
+                                                            </Button>
+                                                        </div>
+                                                        <Tooltip
+                                                            isVisible={passive2Hover === ship.name}
+                                                            targetElement={
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive2`
+                                                                ]
+                                                            }
+                                                        >
+                                                            <SkillTooltip
+                                                                skillText={
+                                                                    ship.secondPassiveSkillText
+                                                                }
+                                                                skillType="Passive Skill R2"
+                                                            />
+                                                        </Tooltip>
                                                     </div>
-                                                    <Tooltip
-                                                        isVisible={passive2Hover === ship.name}
-                                                        targetElement={
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive2`
-                                                            ]
-                                                        }
-                                                    >
-                                                        <SkillTooltip
-                                                            skillText={ship.secondPassiveSkillText}
-                                                            skillType="Passive Skill R2"
-                                                        />
-                                                    </Tooltip>
-                                                </div>
-                                            )}
-                                            {ship.thirdPassiveSkillText && (
-                                                <div className="relative">
-                                                    <div
-                                                        ref={(el) => {
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive3`
-                                                            ] = el;
-                                                        }}
-                                                        onMouseEnter={() =>
-                                                            setPassive3Hover(ship.name)
-                                                        }
-                                                        onMouseLeave={() => setPassive3Hover('')}
-                                                    >
-                                                        <Button variant="secondary" size="xs">
-                                                            Passive R4
-                                                        </Button>
+                                                )}
+                                                {ship.thirdPassiveSkillText && (
+                                                    <div className="relative">
+                                                        <div
+                                                            ref={(el) => {
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive3`
+                                                                ] = el;
+                                                            }}
+                                                            onMouseEnter={() =>
+                                                                setPassive3Hover(ship.name)
+                                                            }
+                                                            onMouseLeave={() =>
+                                                                setPassive3Hover('')
+                                                            }
+                                                        >
+                                                            <Button variant="secondary" size="xs">
+                                                                Passive R4
+                                                            </Button>
+                                                        </div>
+                                                        <Tooltip
+                                                            isVisible={passive3Hover === ship.name}
+                                                            targetElement={
+                                                                tooltipRefs.current[
+                                                                    `${ship.name}_passive3`
+                                                                ]
+                                                            }
+                                                        >
+                                                            <SkillTooltip
+                                                                skillText={
+                                                                    ship.thirdPassiveSkillText
+                                                                }
+                                                                skillType="Passive Skill R4"
+                                                            />
+                                                        </Tooltip>
                                                     </div>
-                                                    <Tooltip
-                                                        isVisible={passive3Hover === ship.name}
-                                                        targetElement={
-                                                            tooltipRefs.current[
-                                                                `${ship.name}_passive3`
-                                                            ]
-                                                        }
-                                                    >
-                                                        <SkillTooltip
-                                                            skillText={ship.thirdPassiveSkillText}
-                                                            skillType="Passive Skill R4"
-                                                        />
-                                                    </Tooltip>
-                                                </div>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                </ShipDisplayImage>
+                                    </ShipDisplayImage>
+                                </div>
                             ))
                         ) : (
                             <div className="col-span-full text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">

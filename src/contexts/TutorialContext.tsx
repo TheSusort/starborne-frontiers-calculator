@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useCallback,
+    useRef,
+    useEffect,
+    useMemo,
+} from 'react';
 import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/tutorialSteps';
 
 const STORAGE_KEY = 'tutorial_completed_groups';
@@ -91,6 +99,11 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 return;
             }
 
+            // Clear stale pending groups when force-starting
+            if (force) {
+                pendingGroupsRef.current = [];
+            }
+
             setActiveGroup(group);
             setActiveStepIndex(0);
         },
@@ -135,15 +148,22 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     }, []);
 
-    const nextStep = useCallback(() => {
-        if (!activeGroup) return;
+    const activeGroupRef = useRef(activeGroup);
+    activeGroupRef.current = activeGroup;
 
-        if (activeStepIndex < activeGroup.steps.length - 1) {
-            setActiveStepIndex((prev) => prev + 1);
-        } else {
-            completeCurrentGroup();
-        }
-    }, [activeGroup, activeStepIndex, completeCurrentGroup]);
+    const nextStep = useCallback(() => {
+        const group = activeGroupRef.current;
+        if (!group) return;
+
+        setActiveStepIndex((prev) => {
+            if (prev < group.steps.length - 1) {
+                return prev + 1;
+            }
+            // Schedule group completion outside the state updater
+            setTimeout(() => completeCurrentGroup(), 0);
+            return prev;
+        });
+    }, [completeCurrentGroup]);
 
     const skipTutorial = useCallback(() => {
         completeCurrentGroup();
@@ -164,25 +184,35 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const activeStep = activeGroup ? (activeGroup.steps[activeStepIndex] ?? null) : null;
 
-    return (
-        <TutorialContext.Provider
-            value={{
-                activeGroup,
-                activeStepIndex,
-                activeStep,
-                isTutorialActive: activeGroup !== null,
-                startGroup,
-                startTour,
-                nextStep,
-                skipTutorial,
-                hasCompletedGroup,
-                resetAll,
-                queueGroup,
-            }}
-        >
-            {children}
-        </TutorialContext.Provider>
+    const contextValue = useMemo(
+        () => ({
+            activeGroup,
+            activeStepIndex,
+            activeStep,
+            isTutorialActive: activeGroup !== null,
+            startGroup,
+            startTour,
+            nextStep,
+            skipTutorial,
+            hasCompletedGroup,
+            resetAll,
+            queueGroup,
+        }),
+        [
+            activeGroup,
+            activeStepIndex,
+            activeStep,
+            startGroup,
+            startTour,
+            nextStep,
+            skipTutorial,
+            hasCompletedGroup,
+            resetAll,
+            queueGroup,
+        ]
     );
+
+    return <TutorialContext.Provider value={contextValue}>{children}</TutorialContext.Provider>;
 };
 
 export const useTutorial = (): TutorialContextValue => {
