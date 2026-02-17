@@ -33,8 +33,17 @@ const mockShip: Ship = {
 
 // Mock ship selector component since it's a complex component with its own tests
 vi.mock('../../ship/ShipSelector', () => ({
-    ShipSelector: ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
-        <button onClick={() => onSelect(mockShip)}>Select Ship</button>
+    ShipSelector: ({
+        onSelect,
+        onClose,
+    }: {
+        onSelect: (ship: Ship) => void;
+        onClose?: () => void;
+    }) => (
+        <div data-testid="ship-selector">
+            <button onClick={() => onSelect(mockShip)}>Select Ship</button>
+            <button onClick={() => onClose?.()}>Close Selector</button>
+        </div>
     ),
 }));
 
@@ -127,7 +136,7 @@ describe('EncounterForm Component', () => {
         fireEvent.click(position!);
 
         // Ship selector should appear
-        expect(screen.getByText(/select ship for position t1/i)).toBeInTheDocument();
+        expect(screen.getByTestId('ship-selector')).toBeInTheDocument();
 
         // Add a ship
         fireEvent.click(screen.getByText('Select Ship'));
@@ -188,7 +197,7 @@ describe('EncounterForm Component', () => {
         const anotherPosition = screen.getByText('M2').parentElement?.parentElement;
         fireEvent.click(anotherPosition!);
 
-        // Ship selector should update to new position
-        expect(screen.getByText(/select ship for position m2/i)).toBeInTheDocument();
+        // Ship selector should still be visible for new position
+        expect(screen.getByTestId('ship-selector')).toBeInTheDocument();
     });
 });

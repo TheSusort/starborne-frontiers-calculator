@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import { ShipCard } from '../../components/ship/ShipCard';
@@ -20,6 +20,8 @@ import { useGearLookup } from '../../hooks/useGear';
 import { StatDistributionChart } from '../../components/stats/StatDistributionChart';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { SHIP_DETAILS_TUTORIAL } from '../../constants/tutorialSteps';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -41,6 +43,7 @@ export const ShipDetailsPage: React.FC = () => {
     } = useShips();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
+    const { startGroup, hasCompletedGroup } = useTutorial();
     const ship = ships.find((s) => s.id === shipId);
     const gearLookup = useGearLookup(ship?.equipment || {}, getGearPiece);
     const orphanSetPieces = useOrphanSetPieces(ship || ({} as Ship), gearLookup);
@@ -61,6 +64,14 @@ export const ShipDetailsPage: React.FC = () => {
     };
 
     const backAction = getBackNavigation();
+
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && ship && !hasCompletedGroup(SHIP_DETAILS_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(SHIP_DETAILS_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, ship, startGroup, hasCompletedGroup]);
 
     if (!ship) {
         const notFoundBackAction = getBackNavigation();
@@ -122,6 +133,7 @@ export const ShipDetailsPage: React.FC = () => {
                     onClick: backAction.onClick,
                     variant: 'secondary',
                 }}
+                tutorialGroupId={SHIP_DETAILS_TUTORIAL.id}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm
@@ -137,48 +149,50 @@ export const ShipDetailsPage: React.FC = () => {
                 </CollapsibleForm>
                 <div className="grid lg:grid-cols-2 gap-6">
                     <div className="space-y-6">
-                        <ShipCard
-                            variant="extended"
-                            ship={ship}
-                            allShips={ships}
-                            hoveredGear={hoveredGear}
-                            availableGear={availableGear}
-                            getGearPiece={getGearPiece}
-                            onRemove={(id) => {
-                                deleteShip(id);
-                                navigate('/ships');
-                            }}
-                            onLockEquipment={async (ship) => {
-                                await toggleEquipmentLock(ship.id);
-                            }}
-                            onEquipGear={(_, slot, gearId) => {
-                                const updatedShip = { ...ship };
-                                updatedShip.equipment[slot] = gearId;
-                                updateShip(updatedShip.id, updatedShip);
-                            }}
-                            onRemoveGear={(_, slot) => {
-                                const updatedShip = { ...ship };
-                                delete updatedShip.equipment[slot];
-                                updateShip(updatedShip.id, updatedShip);
-                            }}
-                            onUnequipAll={() => {
-                                unequipAllEquipment(ship.id);
-                            }}
-                            onHoverGear={setHoveredGear}
-                            onEdit={() => {
-                                setIsFormVisible(true);
-                                setEditingShip(ship);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                            onEquipImplant={(_, slot, gearId) => {
-                                equipImplant(ship.id, slot, gearId);
-                            }}
-                            onRemoveImplant={(_, slot) => {
-                                removeImplant(ship.id, slot);
-                            }}
-                        />
+                        <div data-tutorial="ship-details-card">
+                            <ShipCard
+                                variant="extended"
+                                ship={ship}
+                                allShips={ships}
+                                hoveredGear={hoveredGear}
+                                availableGear={availableGear}
+                                getGearPiece={getGearPiece}
+                                onRemove={(id) => {
+                                    deleteShip(id);
+                                    navigate('/ships');
+                                }}
+                                onLockEquipment={async (ship) => {
+                                    await toggleEquipmentLock(ship.id);
+                                }}
+                                onEquipGear={(_, slot, gearId) => {
+                                    const updatedShip = { ...ship };
+                                    updatedShip.equipment[slot] = gearId;
+                                    updateShip(updatedShip.id, updatedShip);
+                                }}
+                                onRemoveGear={(_, slot) => {
+                                    const updatedShip = { ...ship };
+                                    delete updatedShip.equipment[slot];
+                                    updateShip(updatedShip.id, updatedShip);
+                                }}
+                                onUnequipAll={() => {
+                                    unequipAllEquipment(ship.id);
+                                }}
+                                onHoverGear={setHoveredGear}
+                                onEdit={() => {
+                                    setIsFormVisible(true);
+                                    setEditingShip(ship);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                onEquipImplant={(_, slot, gearId) => {
+                                    equipImplant(ship.id, slot, gearId);
+                                }}
+                                onRemoveImplant={(_, slot) => {
+                                    removeImplant(ship.id, slot);
+                                }}
+                            />
+                        </div>
 
-                        <section className="card">
+                        <section className="card" data-tutorial="ship-details-refits">
                             <h3 className="mb-4">Refits ({ship.refits.length}/6)</h3>
                             {ship.refits.length > 0 ? (
                                 <div className="space-y-2">
@@ -197,15 +211,19 @@ export const ShipDetailsPage: React.FC = () => {
                     </div>
 
                     <div className="space-y-6">
-                        <StatDistributionChart
-                            contributions={analyzeStatDistribution(
-                                ship.equipment,
-                                getGearPiece,
-                                ship,
-                                getEngineeringStatsForShipType
-                            )}
-                        />
-                        <UpgradeSuggestions suggestions={upgradeSuggestions} />
+                        <div data-tutorial="ship-details-stat-distribution">
+                            <StatDistributionChart
+                                contributions={analyzeStatDistribution(
+                                    ship.equipment,
+                                    getGearPiece,
+                                    ship,
+                                    getEngineeringStatsForShipType
+                                )}
+                            />
+                        </div>
+                        <div data-tutorial="ship-details-upgrades">
+                            <UpgradeSuggestions suggestions={upgradeSuggestions} />
+                        </div>
                     </div>
                 </div>
             </PageLayout>

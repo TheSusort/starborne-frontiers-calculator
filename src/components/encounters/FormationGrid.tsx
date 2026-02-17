@@ -82,7 +82,9 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 </div>
             ))}
             {onRemoveShip && (
-                <div className="text-xs text-gray-400 mt-6">Tip: Ctrl+Click to remove a ship</div>
+                <div className="text-xs text-gray-400 mt-10">
+                    Click to select a ship, Ctrl+Click to remove a ship
+                </div>
             )}
         </div>
     );

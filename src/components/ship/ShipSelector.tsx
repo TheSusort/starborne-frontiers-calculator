@@ -12,6 +12,8 @@ interface ShipSelectorProps {
     sortDirection?: 'asc' | 'desc';
     children?: React.ReactNode;
     autoOpen?: boolean;
+    onClose?: () => void;
+    hidden?: boolean;
 }
 
 export const ShipSelector: React.FC<ShipSelectorProps> = ({
@@ -21,6 +23,8 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     sortDirection = 'asc',
     children,
     autoOpen,
+    onClose,
+    hidden = false,
 }) => {
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
@@ -34,7 +38,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
 
     return (
         <div className="space-y-4">
-            {selected ? (
+            {selected && !hidden ? (
                 <ShipDisplay
                     ship={selected}
                     variant={variant}
@@ -42,7 +46,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                 >
                     {children}
                 </ShipDisplay>
-            ) : (
+            ) : hidden ? null : (
                 <Button
                     aria-label="Select a Ship"
                     variant="secondary"
@@ -56,7 +60,10 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
 
             <Modal
                 isOpen={isShipModalOpen}
-                onClose={() => setIsShipModalOpen(false)}
+                onClose={() => {
+                    setIsShipModalOpen(false);
+                    onClose?.();
+                }}
                 title="Select a Ship"
                 fullHeight
             >

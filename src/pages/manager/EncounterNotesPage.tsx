@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EncounterNote, LocalEncounterNote, ShipPosition } from '../../types/encounters';
 import EncounterForm from '../../components/encounters/EncounterForm';
 import EncounterList from '../../components/encounters/EncounterList';
@@ -12,6 +12,8 @@ import { useShips } from '../../contexts/ShipsContext';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useTutorial } from '../../contexts/TutorialContext';
+import { ENCOUNTER_NOTES_TUTORIAL } from '../../constants/tutorialSteps';
 
 const EncounterNotesPage: React.FC = () => {
     const { encounters, addEncounter, updateEncounter, deleteEncounter, loading } =
@@ -19,9 +21,18 @@ const EncounterNotesPage: React.FC = () => {
     const { shareEncounter, unshareEncounter } = useSharedEncounters();
     const { addNotification } = useNotification();
     const { ships } = useShips();
+    const { startGroup, hasCompletedGroup } = useTutorial();
     const [editingEncounter, setEditingEncounter] = useState<EncounterNote | null>(null);
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
     const [isFormVisible, setIsFormVisible] = useState(false);
+
+    // Auto-start tutorial on first visit
+    useEffect(() => {
+        if (!loading && !hasCompletedGroup(ENCOUNTER_NOTES_TUTORIAL.id)) {
+            const timer = setTimeout(() => startGroup(ENCOUNTER_NOTES_TUTORIAL.id), 500);
+            return () => clearTimeout(timer);
+        }
+    }, [loading, startGroup, hasCompletedGroup]);
 
     const handleSubmit = async (encounter: EncounterNote) => {
         if (editingEncounter) {
@@ -124,7 +135,9 @@ const EncounterNotesPage: React.FC = () => {
                         setIsFormVisible(!isFormVisible);
                     },
                     variant: isFormVisible ? 'secondary' : 'primary',
+                    dataTutorial: 'encounters-add-button',
                 }}
+                tutorialGroupId={ENCOUNTER_NOTES_TUTORIAL.id}
             >
                 <CollapsibleForm isVisible={isFormVisible}>
                     <div className="card mb-6">

@@ -91,8 +91,9 @@ export const EncounterList = ({
                 {encounters.length} {encounters.length === 1 ? 'encounter' : 'encounters'}
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
-                {encounters.map((encounter) => {
+                {encounters.map((encounter, index) => {
                     const isShared = 'votes' in encounter;
+                    const isFirst = index === 0;
 
                     return (
                         <div
@@ -100,10 +101,16 @@ export const EncounterList = ({
                             id={`encounter-${encounter.id}`}
                             className="space-y-4 border border-dark-border bg-dark flex flex-col"
                             role="article"
+                            {...(isFirst ? { 'data-tutorial': 'encounters-first-card' } : {})}
                         >
                             <div className="flex justify-between items-start py-2 px-4 border-b border-dark-border">
                                 <h3 className="text-lg font-medium text-white">{encounter.name}</h3>
-                                <div className="flex gap-2">
+                                <div
+                                    className="flex gap-2"
+                                    {...(isFirst
+                                        ? { 'data-tutorial': 'encounters-card-actions' }
+                                        : {})}
+                                >
                                     {showVotes && isShared && (
                                         <div className="flex items-center space-x-1">
                                             <div className="font-semibold text-white pe-3 text-center">

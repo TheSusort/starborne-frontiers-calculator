@@ -170,7 +170,6 @@ export const useEncounterNotes = () => {
 
                 await loadEncounters();
                 addNotification('success', 'Encounter added successfully');
-                return transformEncounterNote(noteData as RawEncounterNote);
             } catch (error) {
                 // Revert optimistic update on error
                 setEncounters((prev) => prev.filter((e) => e.id !== tempId));

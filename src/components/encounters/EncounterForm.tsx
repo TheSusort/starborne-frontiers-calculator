@@ -106,17 +106,15 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                 />
 
                 {selectedPosition && (
-                    <div className="mt-4">
-                        <h3 className="text-white text-sm mb-2">
-                            Select ship for position {selectedPosition}:
-                        </h3>
-                        <ShipSelector
-                            selected={null}
-                            onSelect={handleShipSelect}
-                            variant="compact"
-                            sortDirection="desc"
-                        />
-                    </div>
+                    <ShipSelector
+                        selected={null}
+                        onSelect={handleShipSelect}
+                        variant="compact"
+                        sortDirection="desc"
+                        autoOpen
+                        onClose={() => setSelectedPosition(undefined)}
+                        hidden={true}
+                    />
                 )}
             </div>
         </div>

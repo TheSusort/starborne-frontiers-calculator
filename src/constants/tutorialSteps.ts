@@ -216,6 +216,62 @@ export const SHIP_DATABASE_TUTORIAL: TutorialGroup = {
     ],
 };
 
+// Ship Details page
+export const SHIP_DETAILS_TUTORIAL: TutorialGroup = {
+    id: 'ship-details',
+    steps: [
+        {
+            targetId: 'ship-details-card',
+            title: 'Ship Card',
+            description:
+                'Full ship overview with equipped gear and implants. Click gear slots to equip or swap pieces. Use the menu for edit, delete, lock, and unequip actions.',
+        },
+        {
+            targetId: 'ship-details-refits',
+            title: 'Refits',
+            description:
+                'Shows all installed refits and the stat bonuses they provide. Refits are imported from your game data.',
+        },
+        {
+            targetId: 'ship-details-stat-distribution',
+            title: 'Stat Distribution',
+            description:
+                'Visualizes where your stats come from — base stats, gear, engineering, refits, and implants broken down per stat.',
+        },
+        {
+            targetId: 'ship-details-upgrades',
+            title: 'Upgrade Suggestions',
+            description:
+                'Recommendations for which gear pieces to upgrade next for the biggest stat improvements.',
+        },
+    ],
+};
+
+// Encounter Notes page
+export const ENCOUNTER_NOTES_TUTORIAL: TutorialGroup = {
+    id: 'encounter-notes',
+    steps: [
+        {
+            targetId: 'encounters-add-button',
+            title: 'Add Encounter',
+            description:
+                'Create a new encounter note to record a successful fleet formation. Give it a name, description, and place ships on the grid.',
+        },
+        {
+            targetId: 'encounters-first-card',
+            title: 'Encounter Card',
+            description:
+                'Each card shows the encounter name, description, and the fleet formation grid with ship positions.',
+        },
+        {
+            targetId: 'encounters-card-actions',
+            title: 'Actions',
+            description:
+                'Copy the encounter as an image, edit it, share it with the community, or delete it.',
+        },
+    ],
+};
+
 export const ALL_TUTORIAL_GROUPS: TutorialGroup[] = [
     SHIPS_INITIAL_TUTORIAL,
     AUTOGEAR_INITIAL_TUTORIAL,
@@ -225,4 +281,6 @@ export const ALL_TUTORIAL_GROUPS: TutorialGroup[] = [
     GEAR_TABS_TUTORIAL,
     ENGINEERING_TABS_TUTORIAL,
     SHIP_DATABASE_TUTORIAL,
+    SHIP_DETAILS_TUTORIAL,
+    ENCOUNTER_NOTES_TUTORIAL,
 ];
