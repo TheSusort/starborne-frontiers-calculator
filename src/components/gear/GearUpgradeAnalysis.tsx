@@ -19,6 +19,8 @@ import { StatName, EngineeringStat } from '../../types/stats';
 import { Offcanvas } from '../ui/layout/Offcanvas';
 import { useShips } from '../../contexts/ShipsContext';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
+import { GEAR_ANALYSIS_TUTORIAL } from '../../constants/tutorialSteps';
 
 interface Props {
     inventory: GearPiece[];
@@ -36,6 +38,7 @@ const RARITY_OPTIONS = [
 ] as const;
 
 export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode, onEdit }) => {
+    useTutorialTrigger(mode === 'analysis' ? GEAR_ANALYSIS_TUTORIAL.id : '');
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
     const { ships } = useShips();
@@ -356,7 +359,12 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             Find the best gear pieces to upgrade for maximum stat improvements.
                         </span>
                         <div className="flex gap-2">
-                            <Button variant="primary" onClick={handleAnalyze} disabled={isLoading}>
+                            <Button
+                                variant="primary"
+                                onClick={handleAnalyze}
+                                disabled={isLoading}
+                                data-tutorial="gear-analysis-run-button"
+                            >
                                 {isLoading ? 'Analyzing...' : 'Analyze Gear'}
                             </Button>
                             <Button
@@ -364,6 +372,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                 onClick={() => setIsConfigOpen(true)}
                                 aria-label="Upgrade config"
                                 title="Upgrade config"
+                                data-tutorial="gear-analysis-config-button"
                             >
                                 <GearIcon />
                             </Button>
@@ -487,7 +496,10 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             ))}
                         </div>
                     )}
-                    <div className="text-sm text-gray-400">
+                    <div
+                        className="text-sm text-gray-400"
+                        data-tutorial="gear-analysis-description"
+                    >
                         Click &quot;Analyze Gear&quot; to find the 6 best gear upgrades for each
                         ship role. The analysis simulates upgrading each piece to level 16 multiple
                         times and averages the results (20 runs for rare+, 40 runs for epic+, 80

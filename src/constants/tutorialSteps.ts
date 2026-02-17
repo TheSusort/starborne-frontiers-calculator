@@ -172,6 +172,31 @@ export const GEAR_TABS_TUTORIAL: TutorialGroup = {
     ],
 };
 
+// Gear page - upgrade analysis (deferred, on tab switch)
+export const GEAR_ANALYSIS_TUTORIAL: TutorialGroup = {
+    id: 'gear-analysis',
+    steps: [
+        {
+            targetId: 'gear-analysis-run-button',
+            title: 'Analyze Gear',
+            description:
+                'Run the analysis to find the best gear pieces to upgrade. It simulates upgrading each piece to level 16 multiple times and ranks them by improvement.',
+        },
+        {
+            targetId: 'gear-analysis-config-button',
+            title: 'Config',
+            description:
+                'Open settings to filter by ship, role, rarity, max level, gear sets, and stat priorities. Optionally select a specific ship for more accurate results.',
+        },
+        {
+            targetId: 'gear-analysis-description',
+            title: 'How It Works',
+            description:
+                'The analysis runs multiple simulations per gear piece and averages the results. Higher rarity filters run more simulations for better accuracy. Results are sorted by total improvement to the role score.',
+        },
+    ],
+};
+
 // Engineering page - tab overview
 export const ENGINEERING_TABS_TUTORIAL: TutorialGroup = {
     id: 'engineering-tabs',
@@ -279,6 +304,7 @@ export const ALL_TUTORIAL_GROUPS: TutorialGroup[] = [
     AUTOGEAR_RESULTS_TUTORIAL,
     AUTOGEAR_SETTINGS_TUTORIAL,
     GEAR_TABS_TUTORIAL,
+    GEAR_ANALYSIS_TUTORIAL,
     ENGINEERING_TABS_TUTORIAL,
     SHIP_DATABASE_TUTORIAL,
     SHIP_DETAILS_TUTORIAL,

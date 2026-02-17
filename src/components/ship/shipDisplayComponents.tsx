@@ -22,6 +22,7 @@ import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
 import { ChartIcon } from '../ui/icons/ChartIcon';
+import { TargetIcon } from '../ui/icons/TargetIcon';
 import { CompareIcon } from '../ui/icons/CompareIcon';
 import { CheckIcon } from '../ui/icons/CheckIcon';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
@@ -187,6 +188,18 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
                 <div className="flex items-center gap-2">
                     <ChartIcon />
                     <span>Simulate ship</span>
+                </div>
+            </Dropdown.Item>
+
+            <Dropdown.Item
+                onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/damage?shipId=${ship.id}`);
+                }}
+            >
+                <div className="flex items-center gap-2">
+                    <TargetIcon />
+                    <span>DPS Calculator</span>
                 </div>
             </Dropdown.Item>
 

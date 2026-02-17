@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import { calculateCritMultiplier, calculateDamageReduction } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
@@ -9,6 +9,11 @@ import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useSearchParams } from 'react-router-dom';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 // Calculate DPS with variable enemy defense, buffs, and skill multiplier
 const calculateDPSWithDefense = (
@@ -82,22 +87,79 @@ interface ShipConfig {
 }
 
 const DPSCalculatorPage: React.FC = () => {
-    const [configs, setConfigs] = useState<ShipConfig[]>([
-        {
-            id: '1',
-            name: 'Ship 1',
-            attack: 15000,
-            crit: 100,
-            critDamage: 125,
-            defensePenetration: 0,
-            skillMultiplier: 100,
-        },
-    ]);
-    const [nextId, setNextId] = useState(2);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const shipInitialized = useRef(false);
+
+    const getInitialConfig = (): { configs: ShipConfig[]; nextId: number } => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const engineeringStats = ship.type
+                    ? getEngineeringStatsForShipType(ship.type)
+                    : undefined;
+                const statsBreakdown = calculateTotalStats(
+                    ship.baseStats,
+                    ship.equipment || {},
+                    getGearPiece,
+                    ship.refits,
+                    ship.implants,
+                    engineeringStats,
+                    ship.id
+                );
+                const final = statsBreakdown.final;
+                return {
+                    configs: [
+                        {
+                            id: '1',
+                            name: ship.name,
+                            attack: Math.round(final.attack),
+                            crit: Math.round(final.crit),
+                            critDamage: Math.round(final.critDamage),
+                            defensePenetration: Math.round(final.defensePenetration || 0),
+                            skillMultiplier: 100,
+                        },
+                    ],
+                    nextId: 2,
+                };
+            }
+        }
+        return {
+            configs: [
+                {
+                    id: '1',
+                    name: 'Ship 1',
+                    attack: 15000,
+                    crit: 100,
+                    critDamage: 125,
+                    defensePenetration: 0,
+                    skillMultiplier: 100,
+                },
+            ],
+            nextId: 2,
+        };
+    };
+
+    const initial = getInitialConfig();
+    const [configs, setConfigs] = useState<ShipConfig[]>(initial.configs);
+    const [nextId, setNextId] = useState(initial.nextId);
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [buffs, setBuffs] = useState<Buff[]>([]);
     const [nextBuffId, setNextBuffId] = useState(1);
+
+    // Clear shipId from URL after initialization to avoid re-triggering
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     // Calculate DPS for all configs on initial render
     useEffect(() => {
