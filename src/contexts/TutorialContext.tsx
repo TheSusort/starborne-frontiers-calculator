@@ -8,6 +8,8 @@ import React, {
     useMemo,
 } from 'react';
 import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/tutorialSteps';
+import { useAuth } from './AuthProvider';
+import { supabase } from '../config/supabase';
 
 const STORAGE_KEY = 'tutorial_completed_groups';
 
@@ -43,20 +45,95 @@ function saveCompletedGroups(groups: Set<string>) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify([...groups]));
 }
 
+async function loadCompletedGroupsFromSupabase(userId: string): Promise<string[]> {
+    const { data, error } = await supabase
+        .from('users')
+        .select('tutorial_completed_groups')
+        .eq('id', userId)
+        .single();
+
+    if (error || !data?.tutorial_completed_groups) return [];
+    return data.tutorial_completed_groups;
+}
+
+async function saveCompletedGroupsToSupabase(userId: string, groups: Set<string>) {
+    const { error } = await supabase
+        .from('users')
+        .update({ tutorial_completed_groups: [...groups] })
+        .eq('id', userId);
+
+    if (error) {
+        console.error('Error saving tutorial completed groups to Supabase:', error);
+    }
+}
+
 function findGroup(groupId: string): TutorialGroup | undefined {
     return ALL_TUTORIAL_GROUPS.find((g) => g.id === groupId);
 }
 
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const { user } = useAuth();
     const [completedGroups, setCompletedGroups] = useState<Set<string>>(loadCompletedGroups);
     const [activeGroup, setActiveGroup] = useState<TutorialGroup | null>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(0);
     const pendingGroupsRef = useRef<string[]>([]);
+    const [isMigrating, setIsMigrating] = useState(false);
+    const supabaseLoadedRef = useRef(false);
 
-    // Persist completed groups to localStorage
+    // Listen for migration start/end events
+    useEffect(() => {
+        const handleMigrationStart = () => setIsMigrating(true);
+        const handleMigrationEnd = () => setIsMigrating(false);
+
+        window.addEventListener('app:migration:start', handleMigrationStart);
+        window.addEventListener('app:migration:end', handleMigrationEnd);
+
+        return () => {
+            window.removeEventListener('app:migration:start', handleMigrationStart);
+            window.removeEventListener('app:migration:end', handleMigrationEnd);
+        };
+    }, []);
+
+    // Load from Supabase on sign-in and merge with localStorage
+    useEffect(() => {
+        if (!user?.id || isMigrating) {
+            supabaseLoadedRef.current = false;
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadAndMerge = async () => {
+            const remoteGroups = await loadCompletedGroupsFromSupabase(user.id);
+            if (cancelled) return;
+
+            setCompletedGroups((prev) => {
+                const merged = new Set([...prev, ...remoteGroups]);
+                // If Supabase had fewer, push the merged set back
+                if (merged.size > remoteGroups.length) {
+                    saveCompletedGroupsToSupabase(user.id, merged);
+                }
+                saveCompletedGroups(merged);
+                return merged;
+            });
+            supabaseLoadedRef.current = true;
+        };
+
+        loadAndMerge();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.id, isMigrating]);
+
+    // Persist completed groups to localStorage + Supabase
     useEffect(() => {
         saveCompletedGroups(completedGroups);
-    }, [completedGroups]);
+
+        if (user?.id && supabaseLoadedRef.current && completedGroups.size > 0) {
+            saveCompletedGroupsToSupabase(user.id, completedGroups);
+        }
+    }, [completedGroups, user?.id]);
 
     const completeCurrentGroup = useCallback(() => {
         if (activeGroup) {
@@ -180,7 +257,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveStepIndex(0);
         pendingGroupsRef.current = [];
         localStorage.removeItem(STORAGE_KEY);
-    }, []);
+        if (user?.id) {
+            saveCompletedGroupsToSupabase(user.id, new Set());
+        }
+    }, [user?.id]);
 
     const activeStep = activeGroup ? (activeGroup.steps[activeStepIndex] ?? null) : null;
 

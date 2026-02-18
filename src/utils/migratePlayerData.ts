@@ -798,7 +798,33 @@ export const syncMigratedDataToSupabase = async (
             }
         }
 
-        // Step 6: Upload engineering stats
+        // Step 6: Upload tutorial completed groups
+        try {
+            const tutorialStored = localStorage.getItem('tutorial_completed_groups');
+            if (tutorialStored) {
+                const tutorialGroups: string[] = JSON.parse(tutorialStored);
+                if (tutorialGroups.length > 0) {
+                    // Merge with any existing Supabase data (union)
+                    const { data: userData } = await supabase
+                        .from('users')
+                        .select('tutorial_completed_groups')
+                        .eq('id', userId)
+                        .single();
+
+                    const remoteGroups: string[] = userData?.tutorial_completed_groups || [];
+                    const merged = [...new Set([...remoteGroups, ...tutorialGroups])];
+
+                    await supabase
+                        .from('users')
+                        .update({ tutorial_completed_groups: merged })
+                        .eq('id', userId);
+                }
+            }
+        } catch (error) {
+            console.error('Error migrating tutorial completed groups:', error);
+        }
+
+        // Step 7: Upload engineering stats
         if (engineeringStats?.stats && engineeringStats.stats.length > 0) {
             try {
                 // Format and validate engineering stats more carefully
