@@ -23,6 +23,9 @@ import {
 const EPIC_VIDEOS = new Set<string>([
     // Add imageKeys as you upload them
     'Atlas_15',
+    'XAOC_16',
+    'Marauder_14',
+    'Marauder_5',
 ]);
 
 const PANEL_VARIANTS: Record<
