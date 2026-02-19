@@ -26,10 +26,12 @@ const EPIC_VIDEOS = new Set<string>([
     'XAOC_16',
     'Marauder_14',
     'Marauder_5',
+    'Marauder_9',
     'MPL_10',
     'Binderburg_8',
     'Everliving_4',
     'Everliving_11',
+    'Tianchao_5',
 ]);
 
 const PANEL_VARIANTS: Record<
