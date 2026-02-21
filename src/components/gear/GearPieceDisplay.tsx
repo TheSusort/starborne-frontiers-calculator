@@ -328,8 +328,8 @@ export const GearPieceDisplay = memo(
                                 {onLockShip && equippedOnShipId && (
                                     <button
                                         className="text-yellow-400 hover:text-yellow-300 p-0.5"
-                                        title={`Lock ${shipName}'s equipment`}
-                                        aria-label={`Lock ${shipName}'s equipment`}
+                                        title={`Lock ${shipName}'s equipment and re-run autogear`}
+                                        aria-label={`Lock ${shipName}'s equipment and re-run autogear`}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onLockShip(equippedOnShipId);
