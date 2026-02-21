@@ -17,6 +17,7 @@ interface GearSuggestionsProps {
     onLockEquipment: (ship: Ship) => Promise<void>;
     ship?: Ship;
     useUpgradedStats: boolean;
+    onLockShip?: (shipId: string) => void;
     isPrinting?: boolean;
     optimizeImplants?: boolean;
 }
@@ -30,6 +31,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onLockEquipment,
     ship,
     useUpgradedStats,
+    onLockShip,
     isPrinting = false,
     optimizeImplants = false,
 }) => {
@@ -81,6 +83,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             }
                                             hoveredGear={hoveredGear}
                                             onHover={onHover}
+                                            onLockShip={onLockShip}
                                         />
                                     </div>
                                 );
@@ -96,7 +99,11 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                 if (!gear) return null;
                                 return (
                                     <div key={slotName} className="flex justify-center">
-                                        <GearPieceDisplay gear={gear} small />
+                                        <GearPieceDisplay
+                                            gear={gear}
+                                            small
+                                            onLockShip={onLockShip}
+                                        />
                                     </div>
                                 );
                             })}
@@ -141,6 +148,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                                 gear={gear}
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
+                                                                onLockShip={onLockShip}
                                                             />
                                                         ) : null}
                                                     </div>
@@ -176,6 +184,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                                 gear={gear}
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
+                                                                onLockShip={onLockShip}
                                                             />
                                                         ) : null}
                                                     </div>
@@ -207,7 +216,11 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 if (!gear) return null;
                                                 return (
                                                     <div key={slot} className="flex justify-center">
-                                                        <GearPieceDisplay gear={gear} small />
+                                                        <GearPieceDisplay
+                                                            gear={gear}
+                                                            small
+                                                            onLockShip={onLockShip}
+                                                        />
                                                     </div>
                                                 );
                                             })}
@@ -234,7 +247,11 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 if (!gear) return null;
                                                 return (
                                                     <div key={slot} className="flex justify-center">
-                                                        <GearPieceDisplay gear={gear} small />
+                                                        <GearPieceDisplay
+                                                            gear={gear}
+                                                            small
+                                                            onLockShip={onLockShip}
+                                                        />
                                                     </div>
                                                 );
                                             })}
