@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.40.0';
+export const CURRENT_VERSION = '1.41.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.41.0',
+        date: '2026-02-21',
+        changes: [
+            "Added lock icon to already equipped gear pieces in autogear results. Clicking it will lock the gear to the ship it's equipped on and re-run autogear.",
+        ],
+    },
     {
         version: '1.40.0',
         date: '2026-02-17',

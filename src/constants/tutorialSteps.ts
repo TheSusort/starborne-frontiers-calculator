@@ -82,7 +82,7 @@ export const AUTOGEAR_RESULTS_TUTORIAL: TutorialGroup = {
             targetId: 'autogear-gear-suggestions',
             title: 'Gear Suggestions',
             description:
-                "These are the suggested gear pieces. Click 'Equip All' to apply them, 'Lock' to lock the gear to the ship, and 'Expand' to show the gear pieces as gear cards.",
+                "These are the suggested gear pieces. Click 'Equip All' to apply them, 'Lock' to lock the gear to the ship, and 'Expand' to show the gear pieces as gear cards. Click on the lock icon next to an equipped gear piece to lock the gear to the ship it's equipped on and re-run autogear.",
         },
         {
             targetId: 'autogear-results-tabs',
