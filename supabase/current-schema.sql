@@ -1,21 +1,30 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
-CREATE TABLE public.ai_recommendation_votes (
+CREATE TABLE public.autogear_configs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  ship_id text NOT NULL,
+  config jsonb NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT autogear_configs_pkey PRIMARY KEY (id),
+  CONSTRAINT autogear_configs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.community_recommendation_votes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   recommendation_id uuid NOT NULL,
   user_id uuid NOT NULL,
   vote_type text NOT NULL CHECK (vote_type = ANY (ARRAY['upvote'::text, 'downvote'::text])),
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
-  CONSTRAINT ai_recommendation_votes_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_recommendation_votes_recommendation_id_fkey FOREIGN KEY (recommendation_id) REFERENCES public.ai_recommendations(id),
-  CONSTRAINT ai_recommendation_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  CONSTRAINT community_recommendation_votes_pkey PRIMARY KEY (id),
+  CONSTRAINT community_recommendation_votes_recommendation_id_fkey FOREIGN KEY (recommendation_id) REFERENCES public.community_recommendations(id),
+  CONSTRAINT community_recommendation_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
-CREATE TABLE public.ai_recommendations (
+CREATE TABLE public.community_recommendations (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   ship_name text NOT NULL,
   ship_refit_level integer NOT NULL DEFAULT 0,
-  ship_implants jsonb DEFAULT '{}'::jsonb,
   ship_role text NOT NULL,
   stat_priorities jsonb DEFAULT '[]'::jsonb,
   stat_bonuses jsonb DEFAULT '[]'::jsonb,
@@ -32,18 +41,12 @@ END,
   created_by uuid,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
-  CONSTRAINT ai_recommendations_pkey PRIMARY KEY (id),
-  CONSTRAINT ai_recommendations_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
-);
-CREATE TABLE public.autogear_configs (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  user_id uuid NOT NULL,
-  ship_id text NOT NULL,
-  config jsonb NOT NULL,
-  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  CONSTRAINT autogear_configs_pkey PRIMARY KEY (id),
-  CONSTRAINT autogear_configs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  title text NOT NULL,
+  description text,
+  is_implant_specific boolean DEFAULT false,
+  ultimate_implant text,
+  CONSTRAINT community_recommendations_pkey PRIMARY KEY (id),
+  CONSTRAINT community_recommendations_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.daily_usage_stats (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -59,6 +62,7 @@ CREATE TABLE public.encounter_formations (
   note_id uuid NOT NULL,
   position text NOT NULL,
   ship_id uuid,
+  ship_name text,
   CONSTRAINT encounter_formations_pkey PRIMARY KEY (note_id, position),
   CONSTRAINT encounter_formations_note_id_fkey FOREIGN KEY (note_id) REFERENCES public.encounter_notes(id),
   CONSTRAINT encounter_formations_new_ship_id_fkey FOREIGN KEY (ship_id) REFERENCES public.ships(id)
@@ -71,8 +75,19 @@ CREATE TABLE public.encounter_notes (
   is_public boolean DEFAULT false,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  votes integer DEFAULT 0,
+  user_name text,
   CONSTRAINT encounter_notes_pkey PRIMARY KEY (id),
   CONSTRAINT encounter_notes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.encounter_votes (
+  encounter_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  vote integer NOT NULL CHECK (vote = ANY (ARRAY['-1'::integer, 1])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT encounter_votes_pkey PRIMARY KEY (encounter_id, user_id),
+  CONSTRAINT encounter_votes_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES public.encounter_notes(id),
+  CONSTRAINT encounter_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
 CREATE TABLE public.engineering_stats (
   user_id uuid NOT NULL,
@@ -84,22 +99,12 @@ CREATE TABLE public.engineering_stats (
   CONSTRAINT engineering_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
 CREATE TABLE public.heartbeats (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
   session_id text NOT NULL,
   user_id uuid,
-  created_at timestamptz DEFAULT now(),
-  CONSTRAINT heartbeats_pkey PRIMARY KEY (id),
-  CONSTRAINT heartbeats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
-);
-CREATE TABLE public.gear_stats (
-  gear_id uuid NOT NULL,
-  name text NOT NULL,
-  value numeric NOT NULL,
-  type text NOT NULL,
-  is_main boolean NOT NULL,
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  CONSTRAINT gear_stats_pkey PRIMARY KEY (id),
-  CONSTRAINT gear_stats_gear_id_fkey FOREIGN KEY (gear_id) REFERENCES public.inventory_items(id)
+  date date NOT NULL DEFAULT CURRENT_DATE,
+  last_seen timestamp with time zone DEFAULT now(),
+  CONSTRAINT heartbeats_pkey PRIMARY KEY (session_id, date),
+  CONSTRAINT heartbeats_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 CREATE TABLE public.inventory_items (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -111,8 +116,8 @@ CREATE TABLE public.inventory_items (
   set_bonus text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
-  firebase_id text UNIQUE,
   calibration_ship_id uuid,
+  stats jsonb NOT NULL DEFAULT '{"mainStat": null, "subStats": []}'::jsonb,
   CONSTRAINT inventory_items_pkey PRIMARY KEY (id),
   CONSTRAINT inventory_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT inventory_items_calibration_ship_id_fkey FOREIGN KEY (calibration_ship_id) REFERENCES public.ships(id)
@@ -327,6 +332,7 @@ CREATE TABLE public.users (
   username text UNIQUE CHECK (username IS NULL OR length(username) >= 3 AND length(username) <= 20 AND username ~ '^[a-zA-Z0-9]+$'::text),
   is_public boolean DEFAULT false,
   in_game_id text,
+  tutorial_completed_groups ARRAY DEFAULT '{}'::text[],
   CONSTRAINT users_pkey PRIMARY KEY (id),
   CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
