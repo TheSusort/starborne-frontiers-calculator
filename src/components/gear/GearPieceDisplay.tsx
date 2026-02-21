@@ -2,7 +2,7 @@ import React, { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
-import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon } from '../ui';
+import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon, UnlockedLockIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
 import { ImplantName } from '../../constants/implants';
@@ -23,6 +23,7 @@ interface Props {
     onEdit?: (piece: GearPiece) => void;
     onEquip?: (piece: GearPiece) => void;
     onCalibrate?: (piece: GearPiece) => void;
+    onLockShip?: (shipId: string) => void;
     className?: string;
     small?: boolean;
     /** Show calibrated main stat value even if not actively calibrated */
@@ -38,6 +39,7 @@ export const GearPieceDisplay = memo(
         onEdit,
         onEquip,
         onCalibrate,
+        onLockShip,
         className = '',
         small = false,
         showCalibratedPreview = false,
@@ -46,13 +48,13 @@ export const GearPieceDisplay = memo(
         const { getUpgrade } = useGearUpgrades();
 
         // Use memoized map for O(1) lookup instead of searching through all ships
-        const shipName = useMemo(() => {
-            const shipId = gearToShipMap.get(gear.id);
-            if (shipId) {
+        const { equippedShipId: equippedOnShipId, shipName } = useMemo(() => {
+            const id = gearToShipMap.get(gear.id);
+            if (id) {
                 const ship = getShipFromGearId(gear.id);
-                return ship?.name;
+                return { equippedShipId: id, shipName: ship?.name };
             }
-            return undefined;
+            return { equippedShipId: undefined, shipName: undefined };
         }, [gear.id, gearToShipMap, getShipFromGearId]);
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
@@ -71,9 +73,8 @@ export const GearPieceDisplay = memo(
 
         // Calibration-related computed values
         const isCalibrated = !!gear.calibration?.shipId;
-        const equippedShipId = gearToShipMap.get(gear.id);
         const isCalibrationActive =
-            isCalibrated && equippedShipId && gear.calibration?.shipId === equippedShipId;
+            isCalibrated && equippedOnShipId && gear.calibration?.shipId === equippedOnShipId;
         const calibratedShipName = useMemo(() => {
             if (gear.calibration?.shipId) {
                 const ship = getShipById(gear.calibration.shipId);
@@ -322,7 +323,22 @@ export const GearPieceDisplay = memo(
                         )}
 
                         {shipName && mode !== 'subcompact' && (
-                            <span className="text-xs !mt-auto pt-2"> Equipped by: {shipName}</span>
+                            <div className="text-xs !mt-auto pt-2 flex items-center gap-1">
+                                <span>Equipped by: {shipName}</span>
+                                {onLockShip && equippedOnShipId && (
+                                    <button
+                                        className="text-yellow-400 hover:text-yellow-300 p-0.5"
+                                        title={`Lock ${shipName}'s equipment`}
+                                        aria-label={`Lock ${shipName}'s equipment`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onLockShip(equippedOnShipId);
+                                        }}
+                                    >
+                                        <UnlockedLockIcon className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
                         )}
 
                         {/* Calibration info */}
