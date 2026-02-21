@@ -159,6 +159,10 @@ export const ShipInventory: React.FC<Props> = ({
                     return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
                         : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+                case 'level':
+                    return state.sort.direction === 'asc'
+                        ? (a.level || 0) - (b.level || 0)
+                        : (b.level || 0) - (a.level || 0);
                 case 'gearCount': {
                     const aCount = Object.values(a.equipment).filter(Boolean).length;
                     const bCount = Object.values(b.equipment).filter(Boolean).length;
@@ -295,6 +299,7 @@ export const ShipInventory: React.FC<Props> = ({
     const sortOptions = [
         { value: 'id', label: 'Date Added' },
         { value: 'name', label: 'Name' },
+        { value: 'level', label: 'Level' },
         { value: 'type', label: 'Type' },
         { value: 'faction', label: 'Faction' },
         { value: 'rarity', label: 'Rarity' },

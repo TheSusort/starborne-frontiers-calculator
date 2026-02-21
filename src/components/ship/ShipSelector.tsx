@@ -1,15 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from './ShipDisplay';
-import { RARITY_ORDER } from '../../constants';
+import { RARITY_ORDER, SHIP_TYPES, FACTIONS } from '../../constants';
 
 interface ShipSelectorProps {
     selected: Ship | null;
     onSelect: (ship: Ship) => void;
     variant?: 'compact' | 'full' | 'extended';
-    sortDirection?: 'asc' | 'desc';
     children?: React.ReactNode;
     autoOpen?: boolean;
     onClose?: () => void;
@@ -20,7 +19,6 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     selected,
     onSelect,
     variant = 'compact',
-    sortDirection = 'asc',
     children,
     autoOpen,
     onClose,
@@ -29,6 +27,21 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const { ships } = useShips();
     const [search, setSearch] = useState('');
+
+    const sortConfig = useMemo(() => {
+        try {
+            const saved = localStorage.getItem('ship-inventory-filters');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed.sort?.field && parsed.sort?.direction) {
+                    return parsed.sort as { field: string; direction: 'asc' | 'desc' };
+                }
+            }
+        } catch {
+            // ignore parse errors
+        }
+        return { field: 'name', direction: 'asc' as const };
+    }, [isShipModalOpen]); // re-read when modal opens
 
     useEffect(() => {
         if (autoOpen) {
@@ -79,15 +92,48 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                     {ships
                         .filter((ship) => ship.name.toLowerCase().includes(search.toLowerCase()))
                         .sort((a, b) => {
-                            // First sort by rarity
-                            const rarityComparison =
-                                RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
-                            if (rarityComparison !== 0) return rarityComparison;
-
-                            // If rarities are equal, sort by equipment length
-                            const aLength = Object.keys(a.equipment ?? {}).length;
-                            const bLength = Object.keys(b.equipment ?? {}).length;
-                            return sortDirection === 'asc' ? aLength - bLength : bLength - aLength;
+                            const dir = sortConfig.direction === 'asc' ? 1 : -1;
+                            switch (sortConfig.field) {
+                                case 'name':
+                                    return dir * (a.name || '').localeCompare(b.name || '');
+                                case 'level':
+                                    return dir * ((a.level || 0) - (b.level || 0));
+                                case 'type':
+                                    return (
+                                        dir *
+                                        (SHIP_TYPES[a.type]?.name || '').localeCompare(
+                                            SHIP_TYPES[b.type]?.name || ''
+                                        )
+                                    );
+                                case 'faction':
+                                    return (
+                                        dir *
+                                        (FACTIONS[a.faction]?.name || '').localeCompare(
+                                            FACTIONS[b.faction]?.name || ''
+                                        )
+                                    );
+                                case 'rarity':
+                                    return (
+                                        dir *
+                                        (RARITY_ORDER.indexOf(b.rarity) -
+                                            RARITY_ORDER.indexOf(a.rarity))
+                                    );
+                                case 'gearCount': {
+                                    const aCount = Object.values(a.equipment).filter(
+                                        Boolean
+                                    ).length;
+                                    const bCount = Object.values(b.equipment).filter(
+                                        Boolean
+                                    ).length;
+                                    return dir * (aCount - bCount);
+                                }
+                                default: {
+                                    // Fall back to level desc, then refits desc
+                                    const levelDiff = (b.level || 0) - (a.level || 0);
+                                    if (levelDiff !== 0) return levelDiff;
+                                    return (b.refits?.length || 0) - (a.refits?.length || 0);
+                                }
+                            }
                         })
                         .map((ship) => (
                             <ShipDisplay

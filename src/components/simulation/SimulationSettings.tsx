@@ -21,12 +21,7 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
     return (
         <div className="space-y-4">
             <h3 className="text-xl font-bold ">Settings</h3>
-            <ShipSelector
-                onSelect={onShipSelect}
-                selected={selectedShip}
-                variant="compact"
-                sortDirection="desc"
-            />
+            <ShipSelector onSelect={onShipSelect} selected={selectedShip} variant="compact" />
 
             <div className="card space-y-2">
                 <RoleSelector
