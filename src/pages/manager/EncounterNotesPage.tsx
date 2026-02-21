@@ -26,13 +26,13 @@ const EncounterNotesPage: React.FC = () => {
     const [deletingEncounterId, setDeletingEncounterId] = useState<string | null>(null);
     const [isFormVisible, setIsFormVisible] = useState(false);
 
-    // Auto-start tutorial on first visit
+    // Auto-start tutorial on first visit (only when encounters exist)
     useEffect(() => {
-        if (!loading && !hasCompletedGroup(ENCOUNTER_NOTES_TUTORIAL.id)) {
+        if (!loading && encounters.length > 0 && !hasCompletedGroup(ENCOUNTER_NOTES_TUTORIAL.id)) {
             const timer = setTimeout(() => startGroup(ENCOUNTER_NOTES_TUTORIAL.id), 500);
             return () => clearTimeout(timer);
         }
-    }, [loading, startGroup, hasCompletedGroup]);
+    }, [loading, encounters.length, startGroup, hasCompletedGroup]);
 
     const handleSubmit = async (encounter: EncounterNote) => {
         if (editingEncounter) {
@@ -137,7 +137,7 @@ const EncounterNotesPage: React.FC = () => {
                     variant: isFormVisible ? 'secondary' : 'primary',
                     dataTutorial: 'encounters-add-button',
                 }}
-                tutorialGroupId={ENCOUNTER_NOTES_TUTORIAL.id}
+                tutorialGroupId={encounters.length > 0 ? ENCOUNTER_NOTES_TUTORIAL.id : undefined}
             >
                 <CollapsibleForm isVisible={isFormVisible}>
                     <div className="card mb-6">

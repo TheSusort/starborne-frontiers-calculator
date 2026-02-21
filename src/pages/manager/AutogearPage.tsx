@@ -80,13 +80,13 @@ export const AutogearPage: React.FC = () => {
     const { user } = useAuth();
     const { startGroup, hasCompletedGroup } = useTutorial();
 
-    // Auto-start tutorial on first visit
+    // Auto-start tutorial on first visit (only when ships exist)
     React.useEffect(() => {
-        if (!hasCompletedGroup(AUTOGEAR_INITIAL_TUTORIAL.id)) {
+        if (ships.length > 0 && !hasCompletedGroup(AUTOGEAR_INITIAL_TUTORIAL.id)) {
             const timer = setTimeout(() => startGroup(AUTOGEAR_INITIAL_TUTORIAL.id), 500);
             return () => clearTimeout(timer);
         }
-    }, [startGroup, hasCompletedGroup]);
+    }, [ships.length, startGroup, hasCompletedGroup]);
 
     // useState hooks
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
@@ -717,9 +717,11 @@ export const AutogearPage: React.FC = () => {
                 description="Find the best gear for your ship. Since the amount of combinations are so high, there's a lot of shortcuts taken to make it faster. The results are not always perfect, as it's based on about 30-40k comparisons, so run it a couple of times to make sure you're getting the best results."
                 helpLink="/documentation#autogear"
                 tutorialGroupId={
-                    hasResults
-                        ? [AUTOGEAR_INITIAL_TUTORIAL.id, AUTOGEAR_RESULTS_TUTORIAL.id]
-                        : AUTOGEAR_INITIAL_TUTORIAL.id
+                    ships.length > 0
+                        ? hasResults
+                            ? [AUTOGEAR_INITIAL_TUTORIAL.id, AUTOGEAR_RESULTS_TUTORIAL.id]
+                            : AUTOGEAR_INITIAL_TUTORIAL.id
+                        : undefined
                 }
             >
                 <div className="md:flex gap-4">

@@ -93,13 +93,13 @@ export const ShipsPage: React.FC = () => {
         }
     };
 
-    // Auto-start tutorial on first visit
+    // Auto-start tutorial on first visit (only when ships exist)
     useEffect(() => {
-        if (!loading && !hasCompletedGroup(SHIPS_INITIAL_TUTORIAL.id)) {
+        if (!loading && ships.length > 0 && !hasCompletedGroup(SHIPS_INITIAL_TUTORIAL.id)) {
             const timer = setTimeout(() => startGroup(SHIPS_INITIAL_TUTORIAL.id), 500);
             return () => clearTimeout(timer);
         }
-    }, [loading, startGroup, hasCompletedGroup]);
+    }, [loading, ships.length, startGroup, hasCompletedGroup]);
 
     if (loading) {
         return <Loader />;
@@ -123,7 +123,7 @@ export const ShipsPage: React.FC = () => {
                     dataTutorial: 'ships-create-button',
                 }}
                 helpLink="/documentation#ships"
-                tutorialGroupId={SHIPS_INITIAL_TUTORIAL.id}
+                tutorialGroupId={ships.length > 0 ? SHIPS_INITIAL_TUTORIAL.id : undefined}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm onSubmit={handleSaveShip} editingShip={editingShip} />

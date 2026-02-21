@@ -26,13 +26,17 @@ export const EngineeringStatsPage: React.FC = () => {
     const { addNotification } = useNotification();
     const { startGroup, hasCompletedGroup } = useTutorial();
 
-    // Auto-start tutorial on first visit
+    // Auto-start tutorial on first visit (only when engineering stats exist)
     useEffect(() => {
-        if (!loading && !hasCompletedGroup(ENGINEERING_TABS_TUTORIAL.id)) {
+        if (
+            !loading &&
+            engineeringStats.stats.length > 0 &&
+            !hasCompletedGroup(ENGINEERING_TABS_TUTORIAL.id)
+        ) {
             const timer = setTimeout(() => startGroup(ENGINEERING_TABS_TUTORIAL.id), 500);
             return () => clearTimeout(timer);
         }
-    }, [loading, startGroup, hasCompletedGroup]);
+    }, [loading, engineeringStats.stats.length, startGroup, hasCompletedGroup]);
 
     const handleSubmit = (stats: EngineeringStat) => {
         const newEngStats: EngineeringStats = {
@@ -84,7 +88,9 @@ export const EngineeringStatsPage: React.FC = () => {
                           }
                         : undefined
                 }
-                tutorialGroupId={ENGINEERING_TABS_TUTORIAL.id}
+                tutorialGroupId={
+                    engineeringStats.stats.length > 0 ? ENGINEERING_TABS_TUTORIAL.id : undefined
+                }
             >
                 <Tabs tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
 

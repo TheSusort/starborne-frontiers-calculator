@@ -93,13 +93,13 @@ export const GearPage: React.FC = () => {
         wasSyncingRef.current = syncing;
     }, [syncing, addNotification]);
 
-    // Auto-start tutorial on first visit
+    // Auto-start tutorial on first visit (only when gear exists)
     useEffect(() => {
-        if (!loading && !hasCompletedGroup(GEAR_TABS_TUTORIAL.id)) {
+        if (!loading && inventory.length > 0 && !hasCompletedGroup(GEAR_TABS_TUTORIAL.id)) {
             const timer = setTimeout(() => startGroup(GEAR_TABS_TUTORIAL.id), 500);
             return () => clearTimeout(timer);
         }
-    }, [loading, startGroup, hasCompletedGroup]);
+    }, [loading, inventory.length, startGroup, hasCompletedGroup]);
 
     const handleRemovePiece = async (id: string) => {
         const piece = inventory.find((p) => p.id === id);
@@ -186,7 +186,7 @@ export const GearPage: React.FC = () => {
                     variant: isFormVisible ? 'secondary' : 'primary',
                 }}
                 helpLink="/documentation#gear"
-                tutorialGroupId={GEAR_TABS_TUTORIAL.id}
+                tutorialGroupId={inventory.length > 0 ? GEAR_TABS_TUTORIAL.id : undefined}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
                     <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
