@@ -137,6 +137,7 @@ export const AutogearPage: React.FC = () => {
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
     const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
+    const [rerunAfterLock, setRerunAfterLock] = useState(false);
     const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
@@ -234,12 +235,34 @@ export const AutogearPage: React.FC = () => {
         );
     }, [ships, getShipById]);
 
+    // Re-run autogear after lock state has propagated through React state
+    useEffect(() => {
+        if (rerunAfterLock) {
+            setRerunAfterLock(false);
+            handleAutogear();
+        }
+    }, [rerunAfterLock]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleLockEquipment = async (ship: Ship) => {
         await lockEquipment(ship.id, !ship.equipmentLocked);
         addNotification(
             'success',
             `Equipment ${ship.equipmentLocked ? 'unlocked' : 'locked'} for ${ship.name}`
         );
+    };
+
+    const handleLockShipAndRerun = async (shipId: string) => {
+        try {
+            await lockEquipment(shipId, true);
+        } catch {
+            return;
+        }
+        const ship = getShipById(shipId);
+        addNotification(
+            'success',
+            `Equipment locked for ${ship?.name ?? 'ship'}. Re-running autogear...`
+        );
+        setRerunAfterLock(true);
     };
 
     const handleAutogear = async () => {
@@ -776,6 +799,7 @@ export const AutogearPage: React.FC = () => {
                                                         handleEquipSuggestionsForShip(shipId)
                                                     }
                                                     onLockEquipment={handleLockEquipment}
+                                                    onLockShip={handleLockShipAndRerun}
                                                     ship={ship}
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
                                                     isPrinting={isPrinting}
