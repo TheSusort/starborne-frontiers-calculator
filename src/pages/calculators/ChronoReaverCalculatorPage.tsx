@@ -146,7 +146,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                         }}
                                     />
                                     <Select
-                                        label="CR Rarity"
+                                        label="Chrono Rarity"
                                         options={CR_RARITY_OPTIONS}
                                         value={config.crRarity}
                                         onChange={(val) => updateConfig(config.id, 'crRarity', val)}
@@ -206,7 +206,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                         color="blue"
                                     />
                                     <StatCard
-                                        title="Wasted CR Procs"
+                                        title="Wasted Chrono Procs"
                                         value={
                                             config.crRarity === 'none'
                                                 ? 'N/A'
@@ -215,7 +215,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                         color={result.summary.wastedProcs > 0 ? 'red' : 'green'}
                                     />
                                     <StatCard
-                                        title="DPS Increase vs No CR"
+                                        title="DPS Increase vs No Chrono"
                                         value={
                                             config.crRarity === 'none'
                                                 ? 'Baseline'
@@ -237,8 +237,8 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                                 <th className="px-2 py-1 text-left">Round</th>
                                                 <th className="px-2 py-1 text-left">Charges</th>
                                                 <th className="px-2 py-1 text-left">Action</th>
-                                                <th className="px-2 py-1 text-left">CR</th>
-                                                <th className="px-2 py-1 text-left">End</th>
+                                                <th className="px-2 py-1 text-left">Chrono Proc</th>
+                                                <th className="px-2 py-1 text-left">End of Turn</th>
                                                 <th className="px-2 py-1 text-right">Damage</th>
                                                 <th className="px-2 py-1 text-right">Total</th>
                                             </tr>
