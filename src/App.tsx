@@ -50,6 +50,9 @@ const RecruitmentCalculatorPage = lazy(
     () => import('./pages/calculators/RecruitmentCalculatorPage')
 );
 const SpeedCalculatorPage = lazy(() => import('./pages/calculators/SpeedCalculatorPage'));
+const ChronoReaverCalculatorPage = lazy(
+    () => import('./pages/calculators/ChronoReaverCalculatorPage')
+);
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 
 // init hotjar
@@ -216,6 +219,12 @@ const App: React.FC = () => {
                                                                             path="/speed"
                                                                             element={
                                                                                 <SpeedCalculatorPage />
+                                                                            }
+                                                                        />
+                                                                        <Route
+                                                                            path="/chrono-reaver"
+                                                                            element={
+                                                                                <ChronoReaverCalculatorPage />
                                                                             }
                                                                         />
                                                                         <Route

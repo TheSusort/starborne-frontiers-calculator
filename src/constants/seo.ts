@@ -118,4 +118,11 @@ export const SEO_CONFIG = {
         keywords:
             'speed calculator, ship speed, speed buffs, speed debuffs, speed modifiers, starborne frontiers',
     },
+    chronoReaver: {
+        title: 'Chrono Reaver Calculator',
+        description:
+            'Simulate Chrono Reaver implant charge mechanics in Starborne Frontiers. Compare Epic vs Legendary efficiency, wasted procs, and DPS impact across different ships.',
+        keywords:
+            'chrono reaver, implant calculator, charge mechanics, ultimate implant, starborne frontiers',
+    },
 } as const;
