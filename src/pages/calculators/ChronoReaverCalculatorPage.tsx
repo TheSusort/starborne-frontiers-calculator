@@ -139,8 +139,8 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                         value={config.chargesRequired}
                                         onChange={(e) => {
                                             const val = Math.min(
-                                                4,
-                                                Math.max(2, parseInt(e.target.value) || 2)
+                                                20,
+                                                Math.max(1, parseInt(e.target.value) || 1)
                                             );
                                             updateConfig(config.id, 'chargesRequired', val);
                                         }}
