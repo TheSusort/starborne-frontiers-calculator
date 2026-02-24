@@ -96,15 +96,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const dataToSubmit = {
-            ...formData,
-            // Only auto-generate definitionId for new templates
-            definitionId:
-                mode === 'add'
-                    ? formData.name.toUpperCase().replace(/\s+/g, '_')
-                    : formData.definitionId,
-        };
-        await onSubmit(dataToSubmit);
+        await onSubmit(formData);
         if (mode === 'add') {
             setFormData(DEFAULT_FORM_DATA);
         }
