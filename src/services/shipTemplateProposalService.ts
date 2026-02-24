@@ -251,8 +251,8 @@ export const addShipTemplate = async (
             .replace(/\(/g, '_')
             .replace(/\)/g, '');
 
-        // Generate a unique ID based on faction_type_rarity pattern
-        const id = `${templateData.faction.toLowerCase().replace(/\s+/g, '_')}_${templateData.type.toLowerCase().replace(/\s+/g, '_')}_${templateData.rarity}_${templateData.name.toLowerCase().replace(/\s+/g, '_')}`;
+        // Generate ID from ship name: uppercase, spaces replaced with underscores
+        const id = templateData.name.toUpperCase().replace(/\s+/g, '_');
 
         const { error } = await supabase.from('ship_templates').insert({
             id,
