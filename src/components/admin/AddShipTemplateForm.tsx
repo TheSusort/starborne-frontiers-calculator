@@ -49,46 +49,48 @@ const AFFINITY_OPTIONS = [
     { value: 'antimatter', label: 'Antimatter' },
 ];
 
+const DEFAULT_FORM_DATA: ShipTemplateFormData = {
+    name: '',
+    affinity: 'chemical',
+    rarity: 'common',
+    faction: 'Atlas Syndicate',
+    type: 'Attacker',
+    hp: 0,
+    attack: 0,
+    defence: 0,
+    hacking: 0,
+    security: 0,
+    critRate: 0,
+    critDamage: 0,
+    speed: 0,
+    hpRegen: 0,
+    shield: 0,
+    shieldPenetration: 0,
+    defensePenetration: 0,
+    imageKey: '',
+    activeSkillText: '',
+    chargeSkillText: '',
+    firstPassiveSkillText: '',
+    secondPassiveSkillText: '',
+    thirdPassiveSkillText: '',
+    definitionId: '',
+};
+
 export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
     onSubmit,
     loading,
     mode = 'add',
     initialData,
 }) => {
-    const defaultFormData: ShipTemplateFormData = {
-        name: '',
-        affinity: 'chemical',
-        rarity: 'common',
-        faction: 'Atlas Syndicate',
-        type: 'Attacker',
-        hp: 0,
-        attack: 0,
-        defence: 0,
-        hacking: 0,
-        security: 0,
-        critRate: 0,
-        critDamage: 0,
-        speed: 0,
-        hpRegen: 0,
-        shield: 0,
-        shieldPenetration: 0,
-        defensePenetration: 0,
-        imageKey: '',
-        activeSkillText: '',
-        chargeSkillText: '',
-        firstPassiveSkillText: '',
-        secondPassiveSkillText: '',
-        thirdPassiveSkillText: '',
-        definitionId: '',
-    };
-
-    const [formData, setFormData] = useState<ShipTemplateFormData>(initialData || defaultFormData);
+    const [formData, setFormData] = useState<ShipTemplateFormData>(
+        initialData || DEFAULT_FORM_DATA
+    );
 
     useEffect(() => {
         if (initialData) {
             setFormData(initialData);
         } else {
-            setFormData(defaultFormData);
+            setFormData(DEFAULT_FORM_DATA);
         }
     }, [initialData]);
 
@@ -101,7 +103,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
         };
         await onSubmit(dataToSubmit);
         if (mode === 'add') {
-            setFormData(defaultFormData);
+            setFormData(DEFAULT_FORM_DATA);
         }
     };
 
