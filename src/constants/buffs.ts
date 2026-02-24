@@ -802,4 +802,9 @@ export const BUFFS: Buff[] = [
             "Deals Damage equal to 15/30/45% of this units's attack, ignores defense and shield.",
         type: 'debuff',
     },
+    {
+        name: 'Defense Shred',
+        description: 'Decreases defense by 2%, stackable up to 20 times.',
+        type: 'debuff',
+    },
 ];
