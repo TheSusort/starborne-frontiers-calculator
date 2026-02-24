@@ -96,10 +96,13 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const generatedDefinitionId = formData.name.toUpperCase().replace(/\s+/g, '_');
         const dataToSubmit = {
             ...formData,
-            definitionId: generatedDefinitionId,
+            // In add mode, auto-generate definitionId from name; in edit mode, preserve existing
+            definitionId:
+                mode === 'add'
+                    ? formData.name.toUpperCase().replace(/\s+/g, '_')
+                    : formData.definitionId,
         };
         await onSubmit(dataToSubmit);
         if (mode === 'add') {
@@ -204,17 +207,19 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
-                            Definition ID
-                        </label>
-                        <Input
-                            type="text"
-                            value={formData.definitionId}
-                            onChange={(e) => updateField('definitionId', e.target.value)}
-                            placeholder="e.g., Legion_Attacker_Rare_1"
-                        />
-                    </div>
+                    {mode === 'add' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Definition ID
+                            </label>
+                            <Input
+                                type="text"
+                                value={formData.definitionId}
+                                onChange={(e) => updateField('definitionId', e.target.value)}
+                                placeholder="Auto-generated from name if empty"
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Stats Section */}
