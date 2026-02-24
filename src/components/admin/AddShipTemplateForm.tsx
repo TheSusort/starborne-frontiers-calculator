@@ -98,7 +98,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
         e.preventDefault();
         const dataToSubmit = {
             ...formData,
-            // In add mode, auto-generate definitionId from name; in edit mode, preserve existing
+            // Only auto-generate definitionId for new templates
             definitionId:
                 mode === 'add'
                     ? formData.name.toUpperCase().replace(/\s+/g, '_')
@@ -207,19 +207,17 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         />
                     </div>
 
-                    {mode === 'add' && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
-                                Definition ID
-                            </label>
-                            <Input
-                                type="text"
-                                value={formData.definitionId}
-                                onChange={(e) => updateField('definitionId', e.target.value)}
-                                placeholder="Auto-generated from name if empty"
-                            />
-                        </div>
-                    )}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Definition ID
+                        </label>
+                        <Input
+                            type="text"
+                            value={formData.definitionId}
+                            onChange={(e) => updateField('definitionId', e.target.value)}
+                            placeholder="e.g., Legion_Attacker_Rare_1"
+                        />
+                    </div>
                 </div>
 
                 {/* Stats Section */}
