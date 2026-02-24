@@ -29,6 +29,7 @@ export interface ShipTemplateFormData {
     imageKey: string;
     activeSkillText: string;
     chargeSkillText: string;
+    chargeSkillCharge: number;
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
     thirdPassiveSkillText: string;
@@ -70,6 +71,7 @@ const DEFAULT_FORM_DATA: ShipTemplateFormData = {
     imageKey: '',
     activeSkillText: '',
     chargeSkillText: '',
+    chargeSkillCharge: 0,
     firstPassiveSkillText: '',
     secondPassiveSkillText: '',
     thirdPassiveSkillText: '',
@@ -401,6 +403,20 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                                 value={formData.chargeSkillText}
                                 onChange={(e) => updateField('chargeSkillText', e.target.value)}
                                 placeholder="Describe the charge skill..."
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Charge Skill Charge
+                            </label>
+                            <Input
+                                type="number"
+                                value={formData.chargeSkillCharge}
+                                onChange={(e) =>
+                                    updateField('chargeSkillCharge', Number(e.target.value))
+                                }
+                                min={0}
                             />
                         </div>
 

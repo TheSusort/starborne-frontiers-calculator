@@ -238,6 +238,7 @@ export const AdminPanel: React.FC = () => {
             imageKey: template.image_key || '',
             activeSkillText: template.active_skill_text || '',
             chargeSkillText: template.charge_skill_text || '',
+            chargeSkillCharge: template.charge_skill_charge || 0,
             firstPassiveSkillText: template.first_passive_skill_text || '',
             secondPassiveSkillText: template.second_passive_skill_text || '',
             thirdPassiveSkillText: template.third_passive_skill_text || '',

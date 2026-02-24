@@ -29,6 +29,7 @@ export interface ShipTemplate {
     image_key: string | null;
     active_skill_text: string | null;
     charge_skill_text: string | null;
+    charge_skill_charge: number | null;
     first_passive_skill_text: string | null;
     second_passive_skill_text: string | null;
     third_passive_skill_text: string | null;
@@ -229,6 +230,7 @@ export interface NewShipTemplateData {
     imageKey: string;
     activeSkillText: string;
     chargeSkillText: string;
+    chargeSkillCharge: number;
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
     thirdPassiveSkillText: string;
@@ -264,6 +266,7 @@ export const addShipTemplate = async (
             image_key: templateData.imageKey || null,
             active_skill_text: templateData.activeSkillText || null,
             charge_skill_text: templateData.chargeSkillText || null,
+            charge_skill_charge: templateData.chargeSkillCharge || null,
             first_passive_skill_text: templateData.firstPassiveSkillText || null,
             second_passive_skill_text: templateData.secondPassiveSkillText || null,
             third_passive_skill_text: templateData.thirdPassiveSkillText || null,
@@ -322,6 +325,7 @@ export const updateShipTemplate = async (
                 image_key: templateData.imageKey || null,
                 active_skill_text: templateData.activeSkillText || null,
                 charge_skill_text: templateData.chargeSkillText || null,
+                charge_skill_charge: templateData.chargeSkillCharge || null,
                 first_passive_skill_text: templateData.firstPassiveSkillText || null,
                 second_passive_skill_text: templateData.secondPassiveSkillText || null,
                 third_passive_skill_text: templateData.thirdPassiveSkillText || null,
