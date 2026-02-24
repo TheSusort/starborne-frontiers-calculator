@@ -487,7 +487,7 @@ export const AdminPanel: React.FC = () => {
                                         placeholder="Search templates by name (min 2 characters)..."
                                     />
                                     {filteredTemplates.length > 0 && !selectedTemplate && (
-                                        <div className="absolute z-10 w-full mt-1 bg-dark-800 border border-dark-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                        <div className="absolute z-10 w-full mt-1 card shadow-lg max-h-60 overflow-y-auto">
                                             {filteredTemplates.map((template) => (
                                                 <button
                                                     key={template.id}
