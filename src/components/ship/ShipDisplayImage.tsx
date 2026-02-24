@@ -32,6 +32,8 @@ const EPIC_VIDEOS = new Set<string>([
     'Everliving_4',
     'Everliving_11',
     'Tianchao_5',
+    'Gelecek_14',
+    'Legion_14',
 ]);
 
 const PANEL_VARIANTS: Record<
