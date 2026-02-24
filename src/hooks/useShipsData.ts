@@ -16,6 +16,7 @@ interface ShipTemplate {
     image_key: string;
     active_skill_text?: string;
     charge_skill_text?: string;
+    charge_skill_charge?: number;
     first_passive_skill_text?: string;
     second_passive_skill_text?: string;
     third_passive_skill_text?: string;
@@ -62,6 +63,7 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
     imageKey: template.image_key,
     activeSkillText: template.active_skill_text,
     chargeSkillText: template.charge_skill_text,
+    chargeSkillCharge: template.charge_skill_charge,
     firstPassiveSkillText: template.first_passive_skill_text,
     secondPassiveSkillText: template.second_passive_skill_text,
     thirdPassiveSkillText: template.third_passive_skill_text,

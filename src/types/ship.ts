@@ -21,6 +21,7 @@ export interface Ship {
     imageKey?: string;
     activeSkillText?: string;
     chargeSkillText?: string;
+    chargeSkillCharge?: number;
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
     thirdPassiveSkillText?: string;

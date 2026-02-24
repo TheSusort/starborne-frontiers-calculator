@@ -12,13 +12,13 @@ const API_BASE = 'https://frontiers.cubedweb.net';
 const DELAY_MS = 150; // 150ms delay between API calls
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
-// Initialize Supabase client
+// Initialize Supabase client with service role key (bypasses RLS)
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
     console.error('ERROR: Missing Supabase environment variables');
-    console.error('Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY');
+    console.error('Please set VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
     process.exit(1);
 }
 
@@ -93,27 +93,30 @@ async function fetchSkillTexts(definitionId: string, phpsessid: string): Promise
  * - Passive: There is only ONE passive slot per ship
  *   - firstPassiveSkillText = rank 1 description
  *   - secondPassiveSkillText = rank 2 description
+ *   - thirdPassiveSkillText = rank 3 description
  */
 function extractSkillTexts(skills: SkillData[]): {
     activeSkillText: string | null;
     chargeSkillText: string | null;
+    chargeSkillCharge: number | null;
     firstPassiveSkillText: string | null;
     secondPassiveSkillText: string | null;
+    thirdPassiveSkillText: string | null;
 } {
     // Get highest rank active and charged skills
     const activeSkills = skills.filter(s => s.typeId === 1).sort((a, b) => b.rank - a.rank);
     const chargedSkills = skills.filter(s => s.typeId === 2).sort((a, b) => b.rank - a.rank);
 
-    // For passives: all ships have one passive slot with rank 1 and rank 2
-    const passiveSkills = skills.filter(s => s.typeId === 3);
-    const rank1Passive = passiveSkills.find(s => s.rank === 1);
-    const rank2Passive = passiveSkills.find(s => s.rank === 2);
+    // For passives: all ships have one passive slot with increasing ranks (e.g. 1, 2, 4)
+    const passiveSkills = skills.filter(s => s.typeId === 3).sort((a, b) => a.rank - b.rank);
 
     return {
         activeSkillText: activeSkills[0]?.description || null,
         chargeSkillText: chargedSkills[0]?.description || null,
-        firstPassiveSkillText: rank1Passive?.description || null,
-        secondPassiveSkillText: rank2Passive?.description || null,
+        chargeSkillCharge: chargedSkills[0]?.charge ?? null,
+        firstPassiveSkillText: passiveSkills[0]?.description || null,
+        secondPassiveSkillText: passiveSkills[1]?.description || null,
+        thirdPassiveSkillText: passiveSkills[2]?.description || null,
     };
 }
 
@@ -126,7 +129,7 @@ async function updateShipTemplate(
     skillTexts: ReturnType<typeof extractSkillTexts>
 ): Promise<void> {
     // Build update object with only non-null/non-empty values
-    const updates: Record<string, string> = {};
+    const updates: Record<string, string | number> = {};
 
     if (skillTexts.activeSkillText) {
         updates.active_skill_text = skillTexts.activeSkillText;
@@ -139,6 +142,12 @@ async function updateShipTemplate(
     }
     if (skillTexts.secondPassiveSkillText) {
         updates.second_passive_skill_text = skillTexts.secondPassiveSkillText;
+    }
+    if (skillTexts.thirdPassiveSkillText) {
+        updates.third_passive_skill_text = skillTexts.thirdPassiveSkillText;
+    }
+    if (skillTexts.chargeSkillCharge !== null) {
+        updates.charge_skill_charge = skillTexts.chargeSkillCharge;
     }
 
     // Only update if we have at least one field to update
@@ -202,6 +211,7 @@ async function main() {
         charge: [] as string[],
         passive1: [] as string[],
         passive2: [] as string[],
+        passive3: [] as string[],
     };
 
     // Process each ship
@@ -226,15 +236,17 @@ async function main() {
 
             console.log(`  📝 Found skills:`);
             console.log(`     Active: ${skillTexts.activeSkillText ? '✓' : '✗'}`);
-            console.log(`     Charge: ${skillTexts.chargeSkillText ? '✓' : '✗'}`);
+            console.log(`     Charge: ${skillTexts.chargeSkillText ? '✓' : '✗'}${skillTexts.chargeSkillCharge !== null ? ` (charge: ${skillTexts.chargeSkillCharge})` : ''}`);
             console.log(`     Passive 1: ${skillTexts.firstPassiveSkillText ? '✓' : '✗'}`);
             console.log(`     Passive 2: ${skillTexts.secondPassiveSkillText ? '✓' : '✗'}`);
+            console.log(`     Passive 3: ${skillTexts.thirdPassiveSkillText ? '✓' : '✗'}`);
 
             // Track missing skills
             if (!skillTexts.activeSkillText) missingSkills.active.push(ship.name);
             if (!skillTexts.chargeSkillText) missingSkills.charge.push(ship.name);
             if (!skillTexts.firstPassiveSkillText) missingSkills.passive1.push(ship.name);
             if (!skillTexts.secondPassiveSkillText) missingSkills.passive2.push(ship.name);
+            if (!skillTexts.thirdPassiveSkillText) missingSkills.passive3.push(ship.name);
 
             // In dry run mode, show the actual skill texts
             if (DRY_RUN) {
@@ -243,13 +255,16 @@ async function main() {
                     console.log(`     Active: ${skillTexts.activeSkillText}`);
                 }
                 if (skillTexts.chargeSkillText) {
-                    console.log(`     Charge: ${skillTexts.chargeSkillText}`);
+                    console.log(`     Charge: ${skillTexts.chargeSkillText} (charge: ${skillTexts.chargeSkillCharge})`);
                 }
                 if (skillTexts.firstPassiveSkillText) {
                     console.log(`     Passive 1: ${skillTexts.firstPassiveSkillText}`);
                 }
                 if (skillTexts.secondPassiveSkillText) {
                     console.log(`     Passive 2: ${skillTexts.secondPassiveSkillText}`);
+                }
+                if (skillTexts.thirdPassiveSkillText) {
+                    console.log(`     Passive 3: ${skillTexts.thirdPassiveSkillText}`);
                 }
                 console.log(`  ℹ️  DRY RUN - would update in database`);
             } else {
@@ -289,7 +304,8 @@ async function main() {
 
     // Show missing skills summary
     const totalMissing = missingSkills.active.length + missingSkills.charge.length +
-                         missingSkills.passive1.length + missingSkills.passive2.length;
+                         missingSkills.passive1.length + missingSkills.passive2.length +
+                         missingSkills.passive3.length;
 
     if (totalMissing > 0) {
         console.log('\n' + '='.repeat(60));
@@ -314,6 +330,11 @@ async function main() {
         if (missingSkills.passive2.length > 0) {
             console.log(`\nMissing Second Passive (${missingSkills.passive2.length} ships):`);
             missingSkills.passive2.forEach(name => console.log(`  - ${name}`));
+        }
+
+        if (missingSkills.passive3.length > 0) {
+            console.log(`\nMissing Third Passive (${missingSkills.passive3.length} ships):`);
+            missingSkills.passive3.forEach(name => console.log(`  - ${name}`));
         }
 
         console.log('='.repeat(60));

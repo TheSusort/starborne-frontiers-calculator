@@ -4,6 +4,7 @@ export * from './ChartIcon';
 export * from './CompareIcon';
 export * from './CheckIcon';
 export * from './ChevronIcons';
+export * from './ClockIcon';
 export * from './CloseIcon';
 export * from './CopyIcon';
 export * from './EditIcon';

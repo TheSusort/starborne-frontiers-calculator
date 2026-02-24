@@ -402,6 +402,7 @@ export const ShipIndexPage: React.FC = () => {
                                                             <SkillTooltip
                                                                 skillText={ship.chargeSkillText}
                                                                 skillType="Charge Skill"
+                                                                charge={ship.chargeSkillCharge}
                                                             />
                                                         </Tooltip>
                                                     </div>

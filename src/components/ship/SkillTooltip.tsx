@@ -1,13 +1,15 @@
 import React from 'react';
 import { parseSkillText, extractSkillNames } from '../../utils/skillTextParser';
 import { BuffTooltip } from './BuffTooltip';
+import { ClockIcon } from '../ui/icons';
 
 interface SkillTooltipProps {
     skillText: string;
     skillType: string;
+    charge?: number;
 }
 
-export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType }) => {
+export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType, charge }) => {
     const segments = parseSkillText(skillText);
     const skillNames = extractSkillNames(skillText);
 
@@ -25,7 +27,15 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType
     return (
         <>
             <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-gray-600">
-                <div className="font-semibold text-primary">{skillType}</div>
+                <div className="flex items-center gap-2">
+                    <span className="font-semibold text-primary">{skillType}</span>
+                    {charge !== undefined && (
+                        <span className="flex items-center gap-1 font-medium">
+                            <ClockIcon className="w-3.5 h-3.5" />
+                            {charge}
+                        </span>
+                    )}
+                </div>
                 <div className="text-sm text-gray-300 mb-2">
                     {segments.map((segment, index) => {
                         if (segment.type === 'text') {
