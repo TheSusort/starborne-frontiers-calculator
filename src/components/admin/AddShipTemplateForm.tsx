@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
@@ -8,7 +8,7 @@ import { RARITIES } from '../../constants/rarities';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { AffinityName } from '../../types/ship';
 
-interface ShipTemplateFormData {
+export interface ShipTemplateFormData {
     name: string;
     affinity: AffinityName;
     rarity: string;
@@ -38,6 +38,8 @@ interface ShipTemplateFormData {
 interface AddShipTemplateFormProps {
     onSubmit: (data: ShipTemplateFormData) => Promise<void>;
     loading: boolean;
+    mode?: 'add' | 'edit';
+    initialData?: ShipTemplateFormData | null;
 }
 
 const AFFINITY_OPTIONS = [
@@ -47,8 +49,13 @@ const AFFINITY_OPTIONS = [
     { value: 'antimatter', label: 'Antimatter' },
 ];
 
-export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubmit, loading }) => {
-    const [formData, setFormData] = useState<ShipTemplateFormData>({
+export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
+    onSubmit,
+    loading,
+    mode = 'add',
+    initialData,
+}) => {
+    const defaultFormData: ShipTemplateFormData = {
         name: '',
         affinity: 'chemical',
         rarity: 'common',
@@ -73,44 +80,29 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
         secondPassiveSkillText: '',
         thirdPassiveSkillText: '',
         definitionId: '',
-    });
+    };
+
+    const [formData, setFormData] = useState<ShipTemplateFormData>(initialData || defaultFormData);
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData(initialData);
+        } else {
+            setFormData(defaultFormData);
+        }
+    }, [initialData]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Generate definitionId from name: uppercase and replace spaces with underscores
         const generatedDefinitionId = formData.name.toUpperCase().replace(/\s+/g, '_');
         const dataToSubmit = {
             ...formData,
             definitionId: generatedDefinitionId,
         };
         await onSubmit(dataToSubmit);
-        // Reset form
-        setFormData({
-            name: '',
-            affinity: 'chemical',
-            rarity: 'common',
-            faction: 'Atlas Syndicate',
-            type: 'Attacker',
-            hp: 0,
-            attack: 0,
-            defence: 0,
-            hacking: 0,
-            security: 0,
-            critRate: 0,
-            critDamage: 0,
-            speed: 0,
-            hpRegen: 0,
-            shield: 0,
-            shieldPenetration: 0,
-            defensePenetration: 0,
-            imageKey: '',
-            activeSkillText: '',
-            chargeSkillText: '',
-            firstPassiveSkillText: '',
-            secondPassiveSkillText: '',
-            thirdPassiveSkillText: '',
-            definitionId: '',
-        });
+        if (mode === 'add') {
+            setFormData(defaultFormData);
+        }
     };
 
     const updateField = (field: keyof ShipTemplateFormData, value: string | number) => {
@@ -134,7 +126,9 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
 
     return (
         <form onSubmit={handleSubmit} className="card">
-            <h3 className="text-xl font-semibold mb-4">Add New Ship Template</h3>
+            <h3 className="text-xl font-semibold mb-4">
+                {mode === 'edit' ? 'Edit Ship Template' : 'Add New Ship Template'}
+            </h3>
 
             <div className="space-y-4">
                 {/* Basic Info Section */}
@@ -454,7 +448,13 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({ onSubm
                 {/* Submit Button */}
                 <div className="flex justify-end pt-4">
                     <Button type="submit" variant="primary" disabled={loading}>
-                        {loading ? 'Adding Ship...' : 'Add Ship Template'}
+                        {loading
+                            ? mode === 'edit'
+                                ? 'Updating...'
+                                : 'Adding Ship...'
+                            : mode === 'edit'
+                              ? 'Update Template'
+                              : 'Add Ship Template'}
                     </Button>
                 </div>
             </div>
