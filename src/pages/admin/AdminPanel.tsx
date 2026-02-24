@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
-import { PageLayout, Select, Tabs, CollapsibleForm, Button } from '../../components/ui';
+import { PageLayout, Select, Tabs, CollapsibleForm, Button, Input } from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
 import { AllUsersTable } from '../../components/admin/AllUsersTable';
 import { StatCard } from '../../components/ui';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';
-import { AddShipTemplateForm } from '../../components/admin/AddShipTemplateForm';
+import {
+    AddShipTemplateForm,
+    ShipTemplateFormData,
+} from '../../components/admin/AddShipTemplateForm';
 import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
 import {
     isAdmin,
@@ -31,11 +34,16 @@ import {
     approveProposal,
     rejectProposal,
     addShipTemplate,
+    getAllShipTemplates,
+    updateShipTemplate,
     TemplateProposalRecord,
     NewShipTemplateData,
+    ShipTemplate,
 } from '../../services/shipTemplateProposalService';
 import { Loader } from '../../components/ui/Loader';
 import { useNotification } from '../../hooks/useNotification';
+import { FACTIONS } from '../../constants/factions';
+import { SHIP_TYPES } from '../../constants/shipTypes';
 
 export const AdminPanel: React.FC = () => {
     const { user } = useAuth();
@@ -58,11 +66,18 @@ export const AdminPanel: React.FC = () => {
     const [addingTemplate, setAddingTemplate] = useState(false);
     const [showAddTemplateForm, setShowAddTemplateForm] = useState(false);
 
+    // Edit template states
+    const [allTemplates, setAllTemplates] = useState<ShipTemplate[]>([]);
+    const [templateSearchQuery, setTemplateSearchQuery] = useState('');
+    const [selectedTemplate, setSelectedTemplate] = useState<ShipTemplate | null>(null);
+    const [showEditTemplateForm, setShowEditTemplateForm] = useState(false);
+    const [updatingTemplate, setUpdatingTemplate] = useState(false);
+
     // Lifetime stats
     const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null);
 
     const loadData = React.useCallback(async () => {
-        const [statsData, userCount, sysStats, growth, tables, proposals, lifetime] =
+        const [statsData, userCount, sysStats, growth, tables, proposals, lifetime, templates] =
             await Promise.all([
                 getDailyUsageStats(daysBack),
                 getTotalUserCount(),
@@ -71,6 +86,7 @@ export const AdminPanel: React.FC = () => {
                 getTableSizes(),
                 getPendingProposals(),
                 getLifetimeStats(),
+                getAllShipTemplates(),
             ]);
 
         if (statsData) setDailyStats(statsData);
@@ -80,6 +96,7 @@ export const AdminPanel: React.FC = () => {
         if (tables) setTableSizes(tables);
         if (proposals) setTemplateProposals(proposals);
         if (lifetime) setLifetimeStats(lifetime);
+        if (templates) setAllTemplates(templates);
     }, [daysBack]);
 
     const handleApproveProposal = async (proposalId: string) => {
@@ -130,6 +147,30 @@ export const AdminPanel: React.FC = () => {
         }
     };
 
+    const handleUpdateTemplate = async (data: NewShipTemplateData) => {
+        if (!selectedTemplate) return;
+        setUpdatingTemplate(true);
+        try {
+            const result = await updateShipTemplate(selectedTemplate.id, data);
+            if (result.success) {
+                addNotification('success', `Ship template "${data.name}" updated successfully!`);
+                const templates = await getAllShipTemplates();
+                if (templates) setAllTemplates(templates);
+                const updated = templates.find((t) => t.id === selectedTemplate.id);
+                if (updated) setSelectedTemplate(updated);
+            } else {
+                addNotification('error', `Failed to update ship template: ${result.error}`);
+            }
+        } catch (error) {
+            addNotification(
+                'error',
+                `Error updating ship template: ${error instanceof Error ? error.message : 'Unknown error'}`
+            );
+        } finally {
+            setUpdatingTemplate(false);
+        }
+    };
+
     useEffect(() => {
         const checkAdminAndLoadData = async () => {
             if (!user) {
@@ -165,6 +206,57 @@ export const AdminPanel: React.FC = () => {
     if (!isUserAdmin) {
         return null;
     }
+
+    const convertTemplateToFormData = (template: ShipTemplate): ShipTemplateFormData => {
+        const factionEntry = Object.values(FACTIONS).find(
+            (f) => f.name.toUpperCase().replace(/\s+/g, '_') === template.faction
+        );
+        const typeEntry = Object.values(SHIP_TYPES).find(
+            (t) =>
+                t.name.toUpperCase().replace(/\s+/g, '_').replace(/\(/g, '_').replace(/\)/g, '') ===
+                template.type
+        );
+
+        return {
+            name: template.name,
+            affinity: (template.affinity || 'chemical') as ShipTemplateFormData['affinity'],
+            rarity: template.rarity,
+            faction: factionEntry?.name || template.faction,
+            type: typeEntry?.name || template.type,
+            hp: template.base_stats.hp,
+            attack: template.base_stats.attack,
+            defence: template.base_stats.defence,
+            hacking: template.base_stats.hacking,
+            security: template.base_stats.security,
+            critRate: template.base_stats.crit_rate,
+            critDamage: template.base_stats.crit_damage,
+            speed: template.base_stats.speed,
+            hpRegen: template.base_stats.hp_regen || 0,
+            shield: template.base_stats.shield || 0,
+            shieldPenetration: template.base_stats.shield_penetration || 0,
+            defensePenetration: template.base_stats.defense_penetration || 0,
+            imageKey: template.image_key || '',
+            activeSkillText: template.active_skill_text || '',
+            chargeSkillText: template.charge_skill_text || '',
+            firstPassiveSkillText: template.first_passive_skill_text || '',
+            secondPassiveSkillText: template.second_passive_skill_text || '',
+            thirdPassiveSkillText: template.third_passive_skill_text || '',
+            definitionId: template.definition_id || '',
+        };
+    };
+
+    const filteredTemplates =
+        templateSearchQuery.length >= 2
+            ? allTemplates.filter((t) =>
+                  t.name.toLowerCase().includes(templateSearchQuery.toLowerCase())
+              )
+            : [];
+
+    const handleSelectTemplate = (template: ShipTemplate) => {
+        setSelectedTemplate(template);
+        setTemplateSearchQuery(template.name);
+        setShowEditTemplateForm(true);
+    };
 
     // Calculate summary stats from daily data
     const totalAutogearRuns = dailyStats.reduce((sum, stat) => sum + stat.total_autogear_runs, 0);
@@ -352,17 +444,89 @@ export const AdminPanel: React.FC = () => {
                 {/* Template Proposals Tab */}
                 {activeTab === 'template-proposals' && (
                     <div className="space-y-6">
-                        {/* Toggle Button */}
-                        <div className="flex justify-end">
+                        {/* Toggle Buttons */}
+                        <div className="flex justify-end gap-2">
                             <Button
-                                onClick={() => setShowAddTemplateForm(!showAddTemplateForm)}
+                                onClick={() => {
+                                    setShowEditTemplateForm(!showEditTemplateForm);
+                                    if (showAddTemplateForm) setShowAddTemplateForm(false);
+                                }}
+                                variant={showEditTemplateForm ? 'secondary' : 'primary'}
+                            >
+                                {showEditTemplateForm ? 'Hide Edit Form' : 'Edit Existing Template'}
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    setShowAddTemplateForm(!showAddTemplateForm);
+                                    if (showEditTemplateForm) setShowEditTemplateForm(false);
+                                }}
                                 variant={showAddTemplateForm ? 'secondary' : 'primary'}
                             >
-                                {showAddTemplateForm ? 'Hide Form' : 'Add New Ship Template'}
+                                {showAddTemplateForm ? 'Hide Add Form' : 'Add New Ship Template'}
                             </Button>
                         </div>
 
-                        {/* Collapsible Form */}
+                        {/* Edit Template Section */}
+                        <CollapsibleForm isVisible={showEditTemplateForm}>
+                            <div className="card space-y-4">
+                                <h3 className="text-xl font-semibold">Edit Existing Template</h3>
+                                <div className="relative">
+                                    <Input
+                                        type="text"
+                                        value={templateSearchQuery}
+                                        onChange={(e) => {
+                                            setTemplateSearchQuery(e.target.value);
+                                            if (
+                                                selectedTemplate &&
+                                                e.target.value !== selectedTemplate.name
+                                            ) {
+                                                setSelectedTemplate(null);
+                                            }
+                                        }}
+                                        placeholder="Search templates by name (min 2 characters)..."
+                                    />
+                                    {filteredTemplates.length > 0 && !selectedTemplate && (
+                                        <div className="absolute z-10 w-full mt-1 bg-dark-800 border border-dark-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {filteredTemplates.map((template) => (
+                                                <button
+                                                    key={template.id}
+                                                    type="button"
+                                                    className="w-full text-left px-4 py-2 hover:bg-dark-700 text-sm transition-colors"
+                                                    onClick={() => handleSelectTemplate(template)}
+                                                >
+                                                    <span className="font-medium">
+                                                        {template.name}
+                                                    </span>
+                                                    <span className="text-gray-400 ml-2">
+                                                        {template.faction} · {template.type} ·{' '}
+                                                        {template.rarity}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {templateSearchQuery.length >= 2 &&
+                                        filteredTemplates.length === 0 &&
+                                        !selectedTemplate && (
+                                            <div className="absolute z-10 w-full mt-1 bg-dark-800 border border-dark-600 rounded-lg shadow-lg px-4 py-2 text-gray-400 text-sm">
+                                                No templates found
+                                            </div>
+                                        )}
+                                </div>
+                            </div>
+                            {selectedTemplate && (
+                                <div className="mt-4">
+                                    <AddShipTemplateForm
+                                        onSubmit={handleUpdateTemplate}
+                                        loading={updatingTemplate}
+                                        mode="edit"
+                                        initialData={convertTemplateToFormData(selectedTemplate)}
+                                    />
+                                </div>
+                            )}
+                        </CollapsibleForm>
+
+                        {/* Add Template Form */}
                         <CollapsibleForm isVisible={showAddTemplateForm}>
                             <AddShipTemplateForm
                                 onSubmit={handleAddTemplate}
