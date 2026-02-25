@@ -15,7 +15,9 @@ const implants: ImplantData[] = Object.values(IMPLANTS);
 export const ImplantIndexPage: React.FC = () => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const { state, setState, clearFilters } = usePersistedFilters('implant-database-filters');
+    const { state, setState, clearFilters } = usePersistedFilters('implant-database-filters', {
+        sort: { field: 'name', direction: 'asc' },
+    });
     const hasActiveFilters = (state.filters.types?.length ?? 0) > 0 || searchQuery.length > 0;
 
     const setSelectedTypes = (types: string[]) => {

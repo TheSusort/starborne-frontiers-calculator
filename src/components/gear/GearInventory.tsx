@@ -61,7 +61,9 @@ export const GearInventory: React.FC<Props> = ({
         return shipNames;
     }, [gearToShipMap, getShipFromGearId]);
 
-    const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters');
+    const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters', {
+        sort: { field: 'id', direction: 'asc' },
+    });
 
     const hasActiveFilters =
         (state.filters.sets?.length ?? 0) > 0 ||

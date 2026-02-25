@@ -29,7 +29,9 @@ export const ShipIndexPage: React.FC = () => {
     const { addNotification } = useNotification();
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const { state, setState, clearFilters } = usePersistedFilters('ship-database-filters');
+    const { state, setState, clearFilters } = usePersistedFilters('ship-database-filters', {
+        sort: { field: 'name', direction: 'asc' },
+    });
     const hasActiveFilters =
         (state.filters.factions?.length ?? 0) > 0 ||
         (state.filters.shipTypes?.length ?? 0) > 0 ||

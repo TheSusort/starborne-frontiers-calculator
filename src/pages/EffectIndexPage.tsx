@@ -22,7 +22,9 @@ const getTypeBadgeClasses = (type: Buff['type']) => {
 export const EffectIndexPage: React.FC = () => {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const { state, setState, clearFilters } = usePersistedFilters('effect-index-filters');
+    const { state, setState, clearFilters } = usePersistedFilters('effect-index-filters', {
+        sort: { field: 'name', direction: 'asc' },
+    });
     const hasActiveFilters = (state.filters.types?.length ?? 0) > 0 || searchQuery.length > 0;
 
     const setSelectedTypes = (types: string[]) => {
