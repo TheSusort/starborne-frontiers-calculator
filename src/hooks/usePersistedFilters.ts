@@ -48,10 +48,18 @@ const DEFAULT_STATE: FilterState = {
     },
 };
 
-export function usePersistedFilters(key: string) {
+export function usePersistedFilters(key: string, defaultState?: Partial<FilterState>) {
+    const mergedDefault = defaultState
+        ? {
+              ...DEFAULT_STATE,
+              ...defaultState,
+              filters: { ...DEFAULT_STATE.filters, ...defaultState.filters },
+          }
+        : DEFAULT_STATE;
+
     const [state, setState] = useState<FilterState>(() => {
         const saved = localStorage.getItem(key);
-        return saved ? JSON.parse(saved) : DEFAULT_STATE;
+        return saved ? JSON.parse(saved) : mergedDefault;
     });
 
     useEffect(() => {
@@ -59,7 +67,7 @@ export function usePersistedFilters(key: string) {
     }, [state, key]);
 
     const clearFilters = () => {
-        setState(DEFAULT_STATE);
+        setState(mergedDefault);
         localStorage.removeItem(key);
     };
 

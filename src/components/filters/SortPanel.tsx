@@ -4,6 +4,7 @@ import { Button, Select, ChevronUpIcon, ChevronDownIcon } from '../ui';
 export type SortOption = {
     value: string;
     label: string;
+    group?: string;
 };
 
 export type SortConfig = {

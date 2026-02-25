@@ -11,6 +11,19 @@ import { useShips } from '../../contexts/ShipsContext';
 
 const ITEMS_PER_PAGE = 48;
 
+const getGearStatValue = (piece: GearPiece, statName: string, statType: string): number => {
+    let total = 0;
+    if (piece.mainStat?.name === statName && piece.mainStat?.type === statType) {
+        total += piece.mainStat.value;
+    }
+    for (const sub of piece.subStats) {
+        if (sub.name === statName && sub.type === statType) {
+            total += sub.value;
+        }
+    }
+    return total;
+};
+
 interface Props {
     inventory: GearPiece[];
     onRemove: (id: string) => void;
@@ -151,19 +164,25 @@ export const GearInventory: React.FC<Props> = ({
 
     const sortedInventory = useMemo(() => {
         return [...filteredInventory].sort((a, b) => {
-            switch (state.sort.field) {
+            const { field, direction } = state.sort;
+            const dir = direction === 'asc' ? 1 : -1;
+
+            if (field.startsWith('stat:')) {
+                const [, statName, statType] = field.split(':');
+                const aVal = getGearStatValue(a, statName, statType);
+                const bVal = getGearStatValue(b, statName, statType);
+                return (aVal - bVal) * dir;
+            }
+
+            switch (field) {
                 case 'level':
-                    return state.sort.direction === 'asc' ? a.level - b.level : b.level - a.level;
+                    return (a.level - b.level) * dir;
                 case 'stars':
-                    return state.sort.direction === 'asc' ? a.stars - b.stars : b.stars - a.stars;
+                    return (a.stars - b.stars) * dir;
                 case 'rarity':
-                    return state.sort.direction === 'asc'
-                        ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
-                        : RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+                    return (RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)) * dir;
                 default:
-                    return state.sort.direction === 'asc'
-                        ? a.id.localeCompare(b.id)
-                        : b.id.localeCompare(a.id);
+                    return a.id.localeCompare(b.id) * dir;
             }
         });
     }, [filteredInventory, state.sort]);
@@ -308,6 +327,15 @@ export const GearInventory: React.FC<Props> = ({
         { value: 'level', label: 'Level' },
         { value: 'stars', label: 'Stars' },
         { value: 'rarity', label: 'Rarity' },
+        { value: 'stat:hp:flat', label: 'HP (flat)', group: 'Stats' },
+        { value: 'stat:hp:percentage', label: 'HP (%)', group: 'Stats' },
+        { value: 'stat:attack:flat', label: 'ATK (flat)', group: 'Stats' },
+        { value: 'stat:attack:percentage', label: 'ATK (%)', group: 'Stats' },
+        { value: 'stat:defence:flat', label: 'DEF (flat)', group: 'Stats' },
+        { value: 'stat:defence:percentage', label: 'DEF (%)', group: 'Stats' },
+        { value: 'stat:hacking:flat', label: 'Hacking', group: 'Stats' },
+        { value: 'stat:security:flat', label: 'Security', group: 'Stats' },
+        { value: 'stat:speed:flat', label: 'Speed', group: 'Stats' },
     ];
 
     const handlePageChange = (page: number) => {

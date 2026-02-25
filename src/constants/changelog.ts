@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.41.0';
+export const CURRENT_VERSION = '1.42.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.42.0',
+        date: '2026-02-25',
+        changes: [
+            'Added Chrono Reaver calculator page',
+            'Added charge skill charge to skill tooltip',
+            'Added gear sorting by stat type to gear inventory',
+            'Added ship sorting based on ship power to ship inventory',
+        ],
+    },
     {
         version: '1.41.0',
         date: '2026-02-21',

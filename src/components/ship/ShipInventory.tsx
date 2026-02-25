@@ -25,6 +25,24 @@ import { StatName } from '../../types/stats';
 
 const ITEMS_PER_PAGE = 48;
 
+const RARITY_POWER: Record<string, number> = {
+    common: 1,
+    uncommon: 1.5,
+    rare: 2,
+    epic: 3,
+    legendary: 5,
+};
+
+const getShipPower = (ship: Ship): number => {
+    const level = ship.level || 0;
+    const gearCount = Object.values(ship.equipment).filter(Boolean).length;
+    const implantCount = Object.values(ship.implants).filter(Boolean).length;
+    const base = level + gearCount * 8 + implantCount * 4;
+    const refitMult = 1 + ship.refits.length * 0.15;
+    const rarityMult = RARITY_POWER[ship.rarity] || 1;
+    return base * refitMult * rarityMult;
+};
+
 interface Props {
     ships: Ship[];
     onRemove: (id: string) => void;
@@ -59,7 +77,9 @@ export const ShipInventory: React.FC<Props> = ({
         isInComparison,
     } = useShipComparison(ships);
 
-    const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters');
+    const { state, setState, clearFilters } = usePersistedFilters('ship-inventory-filters', {
+        sort: { field: 'power', direction: 'desc' },
+    });
     const { getGearPiece } = useInventory();
 
     const hasActiveFilters =
@@ -147,6 +167,11 @@ export const ShipInventory: React.FC<Props> = ({
         return [...filtered].sort((a, b) => {
             if (!a || !b) return 0;
             switch (state.sort.field) {
+                case 'power': {
+                    const aPower = getShipPower(a);
+                    const bPower = getShipPower(b);
+                    return state.sort.direction === 'asc' ? aPower - bPower : bPower - aPower;
+                }
                 case 'type':
                     return state.sort.direction === 'asc'
                         ? SHIP_TYPES[a.type]?.name.localeCompare(SHIP_TYPES[b.type]?.name)
@@ -297,6 +322,7 @@ export const ShipInventory: React.FC<Props> = ({
     ];
 
     const sortOptions = [
+        { value: 'power', label: 'Power' },
         { value: 'id', label: 'Date Added' },
         { value: 'name', label: 'Name' },
         { value: 'level', label: 'Level' },
@@ -308,6 +334,7 @@ export const ShipInventory: React.FC<Props> = ({
         ...ALL_STAT_NAMES.map((stat) => ({
             value: stat,
             label: STATS[stat].label,
+            group: 'Stats',
         })),
     ];
 

@@ -6,7 +6,7 @@ import { Tooltip } from './layout/Tooltip';
 interface Props {
     label?: string;
     error?: string;
-    options: { value: string; label: string }[];
+    options: { value: string; label: string; group?: string }[];
     className?: string;
     noDefaultSelection?: boolean;
     defaultOption?: string;
@@ -189,28 +189,38 @@ export const Select: React.FC<Props> = ({
                             {defaultOption}
                         </div>
                     )}
-                    {options.map((option) => (
-                        <div
-                            key={option.value}
-                            role="option"
-                            aria-selected={option.value === value}
-                            onClick={() => {
-                                onChange(option.value);
-                                setIsOpen(false);
-                            }}
-                            className={`
-                                px-4 py-2 cursor-pointer
-                                transition-colors duration-150
-                                ${
-                                    option.value === value
-                                        ? 'bg-primary text-dark'
-                                        : ' hover:bg-primary hover:text-dark'
-                                }
-                            `}
-                        >
-                            {option.label}
-                        </div>
-                    ))}
+                    {options.map((option, index) => {
+                        const prevGroup = index > 0 ? options[index - 1].group : undefined;
+                        const showGroupHeader = option.group && option.group !== prevGroup;
+                        return (
+                            <React.Fragment key={option.value}>
+                                {showGroupHeader && (
+                                    <div className="px-4 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-dark border-t border-dark-border">
+                                        {option.group}
+                                    </div>
+                                )}
+                                <div
+                                    role="option"
+                                    aria-selected={option.value === value}
+                                    onClick={() => {
+                                        onChange(option.value);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`
+                                        px-4 py-2 cursor-pointer
+                                        transition-colors duration-150
+                                        ${
+                                            option.value === value
+                                                ? 'bg-primary text-dark'
+                                                : ' hover:bg-primary hover:text-dark'
+                                        }
+                                    `}
+                                >
+                                    {option.label}
+                                </div>
+                            </React.Fragment>
+                        );
+                    })}
                 </div>
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
