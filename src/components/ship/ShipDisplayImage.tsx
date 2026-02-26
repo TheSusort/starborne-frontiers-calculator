@@ -4,6 +4,7 @@ import { RARITIES } from '../../constants';
 import { Image } from '../ui/Image';
 import { Video, VideoHandle } from '../ui/Video';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { hasShipVideo } from '../../utils/ship/hasVideo';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useNotification } from '../../hooks/useNotification';
@@ -18,23 +19,6 @@ import {
     ShipCopiesBadge,
     PanelVariant,
 } from './shipDisplayComponents';
-
-// Epic ships with videos (legendary ships all have videos)
-const EPIC_VIDEOS = new Set<string>([
-    // Add imageKeys as you upload them
-    'Atlas_15',
-    'XAOC_16',
-    'Marauder_14',
-    'Marauder_5',
-    'Marauder_9',
-    'MPL_10',
-    'Binderburg_8',
-    'Everliving_4',
-    'Everliving_11',
-    'Tianchao_5',
-    'Gelecek_14',
-    'Legion_14',
-]);
 
 const PANEL_VARIANTS: Record<
     PanelVariant,
@@ -69,9 +53,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         isInComparison,
     }) => {
         const panelStyles = PANEL_VARIANTS[panelVariant];
-        const hasVideo =
-            ship.rarity === 'legendary' ||
-            (ship.rarity === 'epic' && !!ship.imageKey && EPIC_VIDEOS.has(ship.imageKey));
+        const hasVideo = hasShipVideo(ship.rarity, ship.imageKey);
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
