@@ -23,7 +23,7 @@ export const ShipShowcase: React.FC<ShipShowcaseProps> = ({ ship }) => {
     }
 
     return (
-        <section className="card overflow-hidden">
+        <section className="hidden lg:block card overflow-hidden">
             <div className="relative w-full" style={{ aspectRatio: '1/1' }}>
                 <Image
                     src={`${ship.imageKey}_BigPortrait.jpg`}
