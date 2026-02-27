@@ -84,6 +84,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             hoveredGear={hoveredGear}
                                             onHover={onHover}
                                             onLockShip={onLockShip}
+                                            excludeLockShipId={ship?.id}
                                         />
                                     </div>
                                 );
@@ -103,6 +104,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             gear={gear}
                                             small
                                             onLockShip={onLockShip}
+                                            excludeLockShipId={ship?.id}
                                         />
                                     </div>
                                 );
@@ -149,6 +151,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
                                                                 onLockShip={onLockShip}
+                                                                excludeLockShipId={ship?.id}
                                                             />
                                                         ) : null}
                                                     </div>
@@ -185,6 +188,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
                                                                 onLockShip={onLockShip}
+                                                                excludeLockShipId={ship?.id}
                                                             />
                                                         ) : null}
                                                     </div>
@@ -220,6 +224,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                             gear={gear}
                                                             small
                                                             onLockShip={onLockShip}
+                                                            excludeLockShipId={ship?.id}
                                                         />
                                                     </div>
                                                 );
@@ -251,6 +256,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                             gear={gear}
                                                             small
                                                             onLockShip={onLockShip}
+                                                            excludeLockShipId={ship?.id}
                                                         />
                                                     </div>
                                                 );

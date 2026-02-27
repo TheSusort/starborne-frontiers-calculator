@@ -21,10 +21,20 @@ interface GearSlotProps {
     onRemove?: (slot: GearSlotName | ImplantSlotName) => void;
     onHover: (gear: GearPiece | null) => void;
     onLockShip?: (shipId: string) => void;
+    excludeLockShipId?: string;
 }
 
 export const GearSlot: React.FC<GearSlotProps> = memo(
-    ({ slotKey, gear, hoveredGear, onSelect, onRemove, onHover, onLockShip }) => {
+    ({
+        slotKey,
+        gear,
+        hoveredGear,
+        onSelect,
+        onRemove,
+        onHover,
+        onLockShip,
+        excludeLockShipId,
+    }) => {
         const isImplant = gear?.slot.startsWith('implant_');
         const tooltipRef = useRef<HTMLDivElement>(null);
         if (gear) {
@@ -93,6 +103,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                             className="w-48"
                             small
                             onLockShip={onLockShip}
+                            excludeLockShipId={excludeLockShipId}
                         />
                     </Tooltip>
                 </div>

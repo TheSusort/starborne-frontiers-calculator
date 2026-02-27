@@ -24,6 +24,8 @@ interface Props {
     onEquip?: (piece: GearPiece) => void;
     onCalibrate?: (piece: GearPiece) => void;
     onLockShip?: (shipId: string) => void;
+    /** Hide lock button for this ship (the ship being optimized) */
+    excludeLockShipId?: string;
     className?: string;
     small?: boolean;
     /** Show calibrated main stat value even if not actively calibrated */
@@ -40,6 +42,7 @@ export const GearPieceDisplay = memo(
         onEquip,
         onCalibrate,
         onLockShip,
+        excludeLockShipId,
         className = '',
         small = false,
         showCalibratedPreview = false,
@@ -325,19 +328,21 @@ export const GearPieceDisplay = memo(
                         {shipName && mode !== 'subcompact' && (
                             <div className="text-xs !mt-auto pt-2 flex items-center gap-1">
                                 <span>Equipped by: {shipName}</span>
-                                {onLockShip && equippedOnShipId && (
-                                    <button
-                                        className="text-yellow-400 hover:text-yellow-300 p-0.5"
-                                        title={`Lock ${shipName}'s equipment and re-run autogear`}
-                                        aria-label={`Lock ${shipName}'s equipment and re-run autogear`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onLockShip(equippedOnShipId);
-                                        }}
-                                    >
-                                        <UnlockedLockIcon className="w-3 h-3" />
-                                    </button>
-                                )}
+                                {onLockShip &&
+                                    equippedOnShipId &&
+                                    equippedOnShipId !== excludeLockShipId && (
+                                        <button
+                                            className="text-yellow-400 hover:text-yellow-300 p-0.5"
+                                            title={`Lock ${shipName}'s equipment and re-run autogear`}
+                                            aria-label={`Lock ${shipName}'s equipment and re-run autogear`}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onLockShip(equippedOnShipId);
+                                            }}
+                                        >
+                                            <UnlockedLockIcon className="w-3 h-3" />
+                                        </button>
+                                    )}
                             </div>
                         )}
 
