@@ -42,10 +42,18 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     const getShipForPosition = (pos: Position): Ship | { name: string } | null => {
         const shipPosition = formation.find((ship) => ship.position === pos);
         if (!shipPosition) return null;
-        if ('shipId' in shipPosition) {
-            return ships.find((ship) => ship.id === shipPosition.shipId) || null;
+
+        // Try to find the full ship in the user's local inventory
+        const fullShip = ships.find((ship) => ship.id === shipPosition.shipId);
+        if (fullShip) return fullShip;
+
+        // For shared encounters, fall back to the ship name from the database
+        const shared = shipPosition as SharedShipPosition;
+        if (shared.shipName) {
+            return { name: shared.shipName };
         }
-        return { name: (shipPosition as SharedShipPosition).shipName };
+
+        return null;
     };
 
     const isFullShip = (ship: Ship | { name: string }): ship is Ship => {
