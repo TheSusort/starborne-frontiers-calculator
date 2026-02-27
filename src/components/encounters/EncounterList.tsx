@@ -6,6 +6,36 @@ import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons';
 
+const FONT_URL =
+    'https://fonts.googleapis.com/css2?family=Electrolize:wght@400;500;600;700&display=swap';
+
+let cachedFontCSS: string | null = null;
+
+async function getEmbeddedFontCSS(): Promise<string> {
+    if (cachedFontCSS) return cachedFontCSS;
+    try {
+        const cssResponse = await fetch(FONT_URL);
+        let css = await cssResponse.text();
+
+        const urlMatches = [...css.matchAll(/url\((https:\/\/[^)]+)\)/g)];
+        for (const match of urlMatches) {
+            const fontResponse = await fetch(match[1]);
+            const blob = await fontResponse.blob();
+            const dataUri = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+            css = css.replace(match[0], `url(${dataUri})`);
+        }
+
+        cachedFontCSS = css;
+        return css;
+    } catch {
+        return '';
+    }
+}
+
 interface EncounterListProps {
     encounters: EncounterNote[];
     onEdit?: (encounter: EncounterNote) => void;
@@ -32,10 +62,12 @@ export const EncounterList = ({
         if (!encounterElement) return;
 
         try {
+            const fontEmbedCSS = await getEmbeddedFontCSS();
             const blob = await toBlob(encounterElement, {
                 cacheBust: true,
                 includeQueryParams: true,
                 skipFonts: true,
+                fontEmbedCSS,
                 filter: (node: Node) => {
                     if (node instanceof HTMLElement && node.dataset.hideOnCapture === 'true') {
                         return false;

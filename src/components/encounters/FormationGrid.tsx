@@ -98,7 +98,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                 className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-6 px-1 ${affinity ? 'pb-6' : 'pb-1 mb-1'}`}
                                             >
                                                 <div className="flex flex-col items-center">
-                                                    <span className="text-white text-xs font-bold leading-tight truncate max-w-full px-1">
+                                                    <span className="text-white text-xs font-bold leading-tight text-center max-w-full px-1">
                                                         {ship.name}
                                                     </span>
                                                     {fullShip && (
@@ -120,7 +120,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                             </div>
                                         ) : (
                                             <div className="flex flex-col items-center">
-                                                <span className="text-white text-xs mt-1 px-1 truncate max-w-full">
+                                                <span className="text-white text-xs mt-1 px-1 text-center max-w-full">
                                                     {ship.name}
                                                 </span>
                                                 {'refits' in ship && (
