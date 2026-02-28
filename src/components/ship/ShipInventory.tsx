@@ -37,7 +37,7 @@ const getShipPower = (ship: Ship): number => {
     const level = ship.level || 0;
     const gearCount = Object.values(ship.equipment).filter(Boolean).length;
     const implantCount = Object.values(ship.implants).filter(Boolean).length;
-    const base = level + gearCount * 8 + implantCount * 4;
+    const base = level + gearCount * 12 + implantCount * 4;
     const refitMult = 1 + ship.refits.length * 0.15;
     const rarityMult = RARITY_POWER[ship.rarity] || 1;
     return base * refitMult * rarityMult;

@@ -16,6 +16,7 @@ const convertToShipPosition = (position: ShipPosition | SharedShipPosition): Shi
     return {
         position: (position as SharedShipPosition).position,
         shipId: (position as SharedShipPosition).shipName,
+        sortOrder: (position as SharedShipPosition).sortOrder,
     };
 };
 
@@ -73,6 +74,17 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
         setSelectedPosition(undefined);
     };
 
+    const handleSetSortOrder = (position: Position, order: number | undefined) => {
+        setFormation((prev) => {
+            // Clear this order number from any other position
+            const cleared = prev.map((s) =>
+                s.sortOrder === order && order !== undefined ? { ...s, sortOrder: undefined } : s
+            );
+            // Set (or clear) the order on the target position
+            return cleared.map((s) => (s.position === position ? { ...s, sortOrder: order } : s));
+        });
+    };
+
     return (
         <div className="space-y-4">
             <form onSubmit={handleSubmit} className="bg-dark-light space-y-4">
@@ -103,6 +115,7 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
                     onPositionSelect={setSelectedPosition}
                     selectedPosition={selectedPosition}
                     onRemoveShip={handleRemoveShip}
+                    onSetSortOrder={handleSetSortOrder}
                 />
 
                 {selectedPosition && (

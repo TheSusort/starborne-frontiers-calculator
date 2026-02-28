@@ -24,6 +24,7 @@ interface HexButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     affinity?: AffinityName;
     rarity?: string;
     roleIconUrl?: string;
+    sortOrder?: number;
     children: React.ReactNode;
 }
 
@@ -34,6 +35,7 @@ export const HexButton: React.FC<HexButtonProps> = ({
     affinity,
     rarity,
     roleIconUrl,
+    sortOrder,
     children,
     className = '',
     ...props
@@ -55,6 +57,11 @@ export const HexButton: React.FC<HexButtonProps> = ({
             `}
             {...props}
         >
+            {sortOrder != null && (
+                <div className="absolute top-[20%] left-[10%] w-5 h-5 rounded-full bg-yellow-500 text-black text-xs font-bold flex items-center justify-center z-30 shadow-md ring-1 ring-black/30">
+                    {sortOrder}
+                </div>
+            )}
             <div
                 className={`
                     absolute inset-0

@@ -15,12 +15,14 @@ export type Position =
 export interface ShipPosition {
     shipId: string;
     position: Position;
+    sortOrder?: number;
 }
 
 export interface SharedShipPosition {
     shipId: string;
     shipName: string;
     position: Position;
+    sortOrder?: number;
 }
 
 export interface BaseEncounterNote {

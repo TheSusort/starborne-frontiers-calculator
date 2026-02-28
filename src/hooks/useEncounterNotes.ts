@@ -17,6 +17,7 @@ interface RawEncounterFormation {
     note_id: string;
     position: string;
     ship_id: string;
+    sort_order: number | null;
 }
 
 interface RawEncounterNote {
@@ -39,6 +40,7 @@ const transformEncounterNote = (data: RawEncounterNote): LocalEncounterNote => {
         formation: data.encounter_formations.map((f) => ({
             shipId: f.ship_id,
             position: f.position as Position,
+            ...(f.sort_order != null ? { sortOrder: f.sort_order } : {}),
         })),
         createdAt: new Date(data.created_at).getTime(),
     };
@@ -143,6 +145,7 @@ export const useEncounterNotes = () => {
                                 note_id: noteData.id,
                                 position: pos.position,
                                 ship_id: pos.shipId,
+                                sort_order: pos.sortOrder ?? null,
                             };
                         } else {
                             const ship = ships.find(
@@ -157,6 +160,7 @@ export const useEncounterNotes = () => {
                                 note_id: noteData.id,
                                 position: (pos as SharedShipPosition).position,
                                 ship_id: ship.id,
+                                sort_order: (pos as SharedShipPosition).sortOrder ?? null,
                             };
                         }
                     }
@@ -224,6 +228,7 @@ export const useEncounterNotes = () => {
                         note_id: encounter.id,
                         position: pos.position,
                         ship_id: pos.shipId,
+                        sort_order: pos.sortOrder ?? null,
                     };
                 });
 

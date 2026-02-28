@@ -10,6 +10,7 @@ interface RawEncounterFormation {
     position: string;
     ship_id: string | null;
     ship_name: string | null;
+    sort_order: number | null;
 }
 
 interface RawEncounterNote {
@@ -66,6 +67,7 @@ export const useSharedEncounters = () => {
                     shipId: f.ship_id || '',
                     shipName: f.ship_name || '',
                     position: f.position as Position,
+                    ...(f.sort_order != null ? { sortOrder: f.sort_order } : {}),
                 })),
                 userId: note.user_id,
                 userName: note.user_name || 'Anonymous',
