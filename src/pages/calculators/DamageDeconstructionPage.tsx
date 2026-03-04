@@ -4,6 +4,7 @@ import { Input } from '../../components/ui/Input';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { calculateDamageReduction } from '../../utils/autogear/scoring';
 
 interface BuffDebuff {
     value: number;
@@ -39,7 +40,9 @@ const DamageDeconstructionPage: React.FC = () => {
 
     const [results, setResults] = useState<{
         damageReduction: number;
+        baseDamageReduction: number;
         enemyDefense: number;
+        hasModifiers: boolean;
     } | null>(null);
 
     const addBuffDebuff = (
@@ -148,9 +151,14 @@ const DamageDeconstructionPage: React.FC = () => {
         console.log('11. Final base defense:', baseDefense);
         /* eslint-enable no-console */
 
+        const hasModifiers = form.defensePenetration > 0 || defenseDebuffSum !== 0;
+        const baseDamageReduction = calculateDamageReduction(baseDefense);
+
         setResults({
             damageReduction,
+            baseDamageReduction,
             enemyDefense: baseDefense,
+            hasModifiers,
         });
     };
 
@@ -308,9 +316,22 @@ const DamageDeconstructionPage: React.FC = () => {
                     <div className="mb-6 card">
                         <h2 className="text-xl font-bold mb-4">Results</h2>
                         <div className="space-y-2">
-                            <p>Damage Reduction: {results.damageReduction.toFixed(2)}%</p>
+                            <p>Actual Damage Reduction: {results.damageReduction.toFixed(2)}%</p>
+                            {results.hasModifiers && (
+                                <p>
+                                    Base Damage Reduction: {results.baseDamageReduction.toFixed(2)}%
+                                </p>
+                            )}
                             <p>Enemy Defense Estimation: {Math.round(results.enemyDefense)}</p>
 
+                            {results.hasModifiers && (
+                                <p className="text-sm text-gray-500">
+                                    <span className="font-bold">Note:</span> Damage Reduction is the
+                                    effective reduction after defense penetration and defense
+                                    buffs/debuffs are applied. Base Damage Reduction is the
+                                    reduction from the estimated base defense stat alone.
+                                </p>
+                            )}
                             <p className="text-sm text-gray-500">
                                 <span className="font-bold">Note:</span> This is an estimation based
                                 on an approximation of the damage reduction, and most likely not
