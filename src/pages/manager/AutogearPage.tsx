@@ -1031,8 +1031,17 @@ export const AutogearPage: React.FC = () => {
                     onAddPriority={(priority) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
+                            const existingIndex = config.statPriorities.findIndex(
+                                (p) => p.stat === priority.stat
+                            );
+                            const updatedPriorities =
+                                existingIndex >= 0
+                                    ? config.statPriorities.map((p, i) =>
+                                          i === existingIndex ? priority : p
+                                      )
+                                    : [...config.statPriorities, priority];
                             updateShipConfig(shipSettings.id, {
-                                statPriorities: [...config.statPriorities, priority],
+                                statPriorities: updatedPriorities,
                             });
                         }
                     }}
