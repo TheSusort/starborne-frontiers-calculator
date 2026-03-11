@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import { Modal } from './layout/Modal';
 import { Button } from './Button';
 
@@ -9,6 +10,34 @@ interface Props {
 }
 
 export const MilestoneModal: React.FC<Props> = ({ isOpen, onClose, milestoneCount }) => {
+    useEffect(() => {
+        if (isOpen) {
+            const duration = 2000;
+            const end = Date.now() + duration;
+
+            const frame = () => {
+                confetti({
+                    particleCount: 3,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0, y: 0.6 },
+                });
+                confetti({
+                    particleCount: 3,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1, y: 0.6 },
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            };
+
+            frame();
+        }
+    }, [isOpen]);
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Milestone Reached!">
             <div className="space-y-4 text-center">
