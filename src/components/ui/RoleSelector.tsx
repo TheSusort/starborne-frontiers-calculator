@@ -10,6 +10,7 @@ interface RoleSelectorProps {
     disabled?: boolean;
     noDefaultSelection?: boolean;
     defaultOption?: string;
+    baseRolesOnly?: boolean;
 }
 
 // Group roles by base role with subtypes indented
@@ -35,6 +36,13 @@ const ROLE_OPTIONS: { value: ShipTypeName; label: string }[] = [
     { value: 'SUPPORTER_SHIELD', label: `  └ ${SHIP_TYPES.SUPPORTER_SHIELD.name}` },
 ];
 
+const BASE_ROLE_OPTIONS: { value: ShipTypeName; label: string }[] = [
+    { value: 'ATTACKER', label: SHIP_TYPES.ATTACKER.name },
+    { value: 'DEFENDER', label: SHIP_TYPES.DEFENDER.name },
+    { value: 'DEBUFFER', label: SHIP_TYPES.DEBUFFER.name },
+    { value: 'SUPPORTER', label: SHIP_TYPES.SUPPORTER.name },
+];
+
 export const RoleSelector: React.FC<RoleSelectorProps> = ({
     value,
     onChange,
@@ -43,13 +51,14 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({
     disabled = false,
     noDefaultSelection = true,
     defaultOption = 'Select Role',
+    baseRolesOnly = false,
 }) => {
     return (
         <Select
             label={label}
             value={value}
             onChange={(val) => onChange(val as ShipTypeName)}
-            options={ROLE_OPTIONS}
+            options={baseRolesOnly ? BASE_ROLE_OPTIONS : ROLE_OPTIONS}
             className={className}
             disabled={disabled}
             noDefaultSelection={noDefaultSelection}

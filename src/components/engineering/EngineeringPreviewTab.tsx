@@ -23,6 +23,7 @@ import { calculatePriorityScore } from '../../utils/autogear/scoring';
 export const EngineeringPreviewTab: React.FC = () => {
     const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
     const [selectedRole, setSelectedRole] = useState<ShipTypeName | ''>('');
+    const [scoringRole, setScoringRole] = useState<ShipTypeName | ''>('');
     const [selectedStat, setSelectedStat] = useState<StatName | null>(null);
 
     const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -123,17 +124,17 @@ export const EngineeringPreviewTab: React.FC = () => {
         );
     }, [selectedShip, baseRole, selectedStat, previewEngineeringStats, getGearPiece]);
 
-    // Run simulation for current stats
+    // Run simulation for current stats (uses scoring role)
     const currentSimulation = useMemo(() => {
-        if (!currentStats || !selectedRole) return null;
-        return runSimulation(currentStats.final, selectedRole);
-    }, [currentStats, selectedRole]);
+        if (!currentStats || !scoringRole) return null;
+        return runSimulation(currentStats.final, scoringRole);
+    }, [currentStats, scoringRole]);
 
-    // Run simulation for preview stats
+    // Run simulation for preview stats (uses scoring role)
     const previewSimulation = useMemo(() => {
-        if (!previewStats || !selectedRole || !selectedStat) return null;
-        return runSimulation(previewStats.final, selectedRole);
-    }, [previewStats, selectedRole, selectedStat]);
+        if (!previewStats || !scoringRole || !selectedStat) return null;
+        return runSimulation(previewStats.final, scoringRole);
+    }, [previewStats, scoringRole, selectedStat]);
 
     // Calculate set count from current equipment (used for role score calculations)
     const setCount = useMemo(() => {
@@ -148,17 +149,17 @@ export const EngineeringPreviewTab: React.FC = () => {
         return counts;
     }, [selectedShip, getGearPiece]);
 
-    // Calculate current role score (pure role-based scoring)
+    // Calculate current role score (uses scoring role)
     const currentRoleScore = useMemo(() => {
-        if (!currentStats || !selectedRole) return null;
-        return calculatePriorityScore(currentStats.final, [], selectedRole, setCount);
-    }, [currentStats, selectedRole, setCount]);
+        if (!currentStats || !scoringRole) return null;
+        return calculatePriorityScore(currentStats.final, [], scoringRole, setCount);
+    }, [currentStats, scoringRole, setCount]);
 
-    // Calculate preview role score (pure role-based scoring)
+    // Calculate preview role score (uses scoring role)
     const previewRoleScore = useMemo(() => {
-        if (!previewStats || !selectedRole || !selectedStat) return null;
-        return calculatePriorityScore(previewStats.final, [], selectedRole, setCount);
-    }, [previewStats, selectedRole, selectedStat, setCount]);
+        if (!previewStats || !scoringRole || !selectedStat) return null;
+        return calculatePriorityScore(previewStats.final, [], scoringRole, setCount);
+    }, [previewStats, scoringRole, selectedStat, setCount]);
 
     // Format large numbers with commas
     const formatNumber = (num: number): string => {
@@ -275,17 +276,17 @@ export const EngineeringPreviewTab: React.FC = () => {
         return metrics;
     };
 
-    // Calculate simulation efficiency metrics
+    // Calculate simulation efficiency metrics (uses scoring role)
     const simulationEfficiency = useMemo(() => {
-        if (!selectedStat || !currentSimulation || !previewSimulation || !selectedRole) return null;
+        if (!selectedStat || !currentSimulation || !previewSimulation || !scoringRole) return null;
         const cost = getUpgradeCost(getStatLevel(selectedStat));
         return getSimulationEfficiencyMetrics(
             currentSimulation,
             previewSimulation,
-            selectedRole,
+            scoringRole,
             cost
         );
-    }, [selectedStat, currentSimulation, previewSimulation, selectedRole, getStatLevel]);
+    }, [selectedStat, currentSimulation, previewSimulation, scoringRole, getStatLevel]);
 
     // Calculate role score efficiency
     const roleScoreEfficiency = useMemo(() => {
@@ -317,10 +318,12 @@ export const EngineeringPreviewTab: React.FC = () => {
                         onSelect={(ship) => {
                             setSelectedShip(ship);
                             setSelectedStat(null);
-                            // Auto-select the ship's saved role from autogear config
+                            // Auto-select roles from autogear config
                             const savedConfig = getConfig(ship.id);
                             if (savedConfig?.shipRole) {
-                                setSelectedRole(savedConfig.shipRole);
+                                const configRole = savedConfig.shipRole;
+                                setSelectedRole(getBaseRole(configRole) as ShipTypeName);
+                                setScoringRole(configRole);
                             }
                         }}
                         variant="compact"
@@ -331,7 +334,15 @@ export const EngineeringPreviewTab: React.FC = () => {
                             setSelectedRole(role);
                             setSelectedStat(null);
                         }}
-                        label="Role"
+                        label="Engineering Role"
+                        baseRolesOnly
+                    />
+                    <RoleSelector
+                        value={scoringRole}
+                        onChange={(role) => {
+                            setScoringRole(role);
+                        }}
+                        label="Scoring Role"
                     />
                 </div>
             </div>
@@ -345,7 +356,13 @@ export const EngineeringPreviewTab: React.FC = () => {
 
             {selectedShip && !selectedRole && (
                 <div className="text-center text-gray-400 py-8">
-                    Select a role to see available upgrades
+                    Select an engineering role to see available upgrades
+                </div>
+            )}
+
+            {selectedShip && selectedRole && !scoringRole && (
+                <div className="text-center text-gray-400 py-8">
+                    Select a scoring role to evaluate upgrades
                 </div>
             )}
 
@@ -417,6 +434,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                 {/* Preview Panel - Simulation Results and Stat List */}
                 {selectedShip &&
                     selectedRole &&
+                    scoringRole &&
                     selectedStat &&
                     currentStats &&
                     previewStats &&
@@ -426,7 +444,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                             <SimulationResults
                                 currentSimulation={currentSimulation}
                                 suggestedSimulation={previewSimulation}
-                                role={selectedRole}
+                                role={scoringRole}
                                 alwaysColumn
                                 showCurrent={false}
                             />
