@@ -1221,6 +1221,37 @@ const DocumentationPage: React.FC = () => {
                                         </li>
                                     </ul>
                                 </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold">Arena Season Modifiers</h4>
+                                    <p className="text-gray-300">
+                                        PVP arena seasons apply temporary stat modifiers to ships
+                                        based on conditions like faction, rarity, or role (e.g.,
+                                        &quot;all epic defenders get +150% HP and +150% DEF&quot;).
+                                        When an active arena season exists, you can enable the
+                                        &quot;Apply arena modifiers&quot; checkbox to have the
+                                        autogear algorithm account for these modifiers when scoring
+                                        gear loadouts.
+                                    </p>
+                                    <ul className="text-gray-300 list-disc pl-4 space-y-1 mt-2">
+                                        <li>
+                                            Modifiers are applied to total stats before scoring —
+                                            they shift which gear the algorithm considers optimal.
+                                        </li>
+                                        <li>
+                                            Multiple rules can stack: if a ship matches several
+                                            rules, their modifiers are summed per stat.
+                                        </li>
+                                        <li>
+                                            The modified stats are only used for scoring — your
+                                            ship&apos;s displayed stats remain unchanged.
+                                        </li>
+                                        <li>
+                                            Arena seasons are managed by admins and expire
+                                            automatically when their end date passes.
+                                        </li>
+                                    </ul>
+                                </div>
                             </div>
 
                             <h3 className="text-xl font-semibold mt-6 mb-2">
