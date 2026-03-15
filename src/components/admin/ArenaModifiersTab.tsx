@@ -11,6 +11,7 @@ import {
     updateSeason,
     updateSeasonEndDate,
     createRule,
+    updateRule,
     deleteRule,
 } from '../../services/arenaModifierService';
 import { useNotification } from '../../hooks/useNotification';
@@ -117,19 +118,30 @@ const CheckboxGroup: React.FC<CheckboxGroupProps> = ({ label, options, selected,
     );
 };
 
-// ─── Add Rule Form ────────────────────────────────────────────────────────────
+// ─── Rule Form (Add / Edit) ───────────────────────────────────────────────────
 
-interface AddRuleFormProps {
+interface RuleFormProps {
     seasonId: string;
-    onRuleAdded: () => void;
+    existingRule?: ArenaSeasonRule;
+    onSaved: () => void;
+    onCancel?: () => void;
 }
 
-const AddRuleForm: React.FC<AddRuleFormProps> = ({ seasonId, onRuleAdded }) => {
+const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, onCancel }) => {
     const { addNotification } = useNotification();
-    const [factions, setFactions] = useState<string[]>([]);
-    const [rarities, setRarities] = useState<string[]>([]);
-    const [shipTypes, setShipTypes] = useState<string[]>([]);
-    const [modifierPairs, setModifierPairs] = useState<ModifierPair[]>([{ stat: '', value: 0 }]);
+    const isEdit = !!existingRule;
+
+    const [factions, setFactions] = useState<string[]>(existingRule?.factions ?? []);
+    const [rarities, setRarities] = useState<string[]>(existingRule?.rarities ?? []);
+    const [shipTypes, setShipTypes] = useState<string[]>(existingRule?.ship_types ?? []);
+    const [modifierPairs, setModifierPairs] = useState<ModifierPair[]>(
+        existingRule
+            ? Object.entries(existingRule.modifiers).map(([stat, value]) => ({
+                  stat: stat as StatName,
+                  value,
+              }))
+            : [{ stat: '', value: 0 }]
+    );
     const [saving, setSaving] = useState(false);
 
     const factionOptions = Object.keys(FACTIONS).map((key) => ({
@@ -175,22 +187,32 @@ const AddRuleForm: React.FC<AddRuleFormProps> = ({ seasonId, onRuleAdded }) => {
             modifiers[pair.stat] = pair.value;
         }
 
+        const ruleInput = {
+            factions: factions.length > 0 ? factions : null,
+            rarities: rarities.length > 0 ? rarities : null,
+            ship_types: shipTypes.length > 0 ? shipTypes : null,
+            modifiers,
+        };
+
         setSaving(true);
         try {
-            await createRule(seasonId, {
-                factions: factions.length > 0 ? factions : null,
-                rarities: rarities.length > 0 ? rarities : null,
-                ship_types: shipTypes.length > 0 ? shipTypes : null,
-                modifiers,
-            });
-            addNotification('success', 'Rule added.');
-            setFactions([]);
-            setRarities([]);
-            setShipTypes([]);
-            setModifierPairs([{ stat: '', value: 0 }]);
-            onRuleAdded();
+            if (isEdit) {
+                await updateRule(existingRule.id, ruleInput);
+                addNotification('success', 'Rule updated.');
+            } else {
+                await createRule(seasonId, ruleInput);
+                addNotification('success', 'Rule added.');
+                setFactions([]);
+                setRarities([]);
+                setShipTypes([]);
+                setModifierPairs([{ stat: '', value: 0 }]);
+            }
+            onSaved();
         } catch (err) {
-            addNotification('error', `Failed to add rule: ${(err as Error).message}`);
+            addNotification(
+                'error',
+                `Failed to ${isEdit ? 'update' : 'add'} rule: ${(err as Error).message}`
+            );
         } finally {
             setSaving(false);
         }
@@ -198,7 +220,9 @@ const AddRuleForm: React.FC<AddRuleFormProps> = ({ seasonId, onRuleAdded }) => {
 
     return (
         <div className="bg-dark p-4 rounded border border-dark-lighter space-y-4">
-            <div className="text-sm font-medium text-gray-300">Add Rule</div>
+            <div className="text-sm font-medium text-gray-300">
+                {isEdit ? 'Edit Rule' : 'Add Rule'}
+            </div>
 
             <CheckboxGroup
                 label="Factions (empty = all)"
@@ -266,9 +290,14 @@ const AddRuleForm: React.FC<AddRuleFormProps> = ({ seasonId, onRuleAdded }) => {
                 </button>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+                {onCancel && (
+                    <Button variant="secondary" size="sm" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                )}
                 <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-                    {saving ? 'Saving...' : 'Save Rule'}
+                    {saving ? 'Saving...' : isEdit ? 'Update Rule' : 'Save Rule'}
                 </Button>
             </div>
         </div>
@@ -288,6 +317,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     const [savingName, setSavingName] = useState(false);
     const [editEndDate, setEditEndDate] = useState(toDateValue(season.ends_at));
     const [savingEndDate, setSavingEndDate] = useState(false);
+    const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
 
     const handleSaveName = async () => {
         if (!editName.trim()) return;
@@ -403,34 +433,56 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                     <p className="text-gray-500 text-sm">No rules yet.</p>
                 ) : (
                     <div className="space-y-2">
-                        {season.rules.map((rule) => (
-                            <div
-                                key={rule.id}
-                                className="flex items-start justify-between gap-4 bg-dark p-3 rounded border border-dark-lighter"
-                            >
-                                <div className="space-y-0.5 min-w-0">
-                                    <div className="text-sm text-gray-300">
-                                        {buildFilterSummary(rule)}
+                        {season.rules.map((rule) =>
+                            editingRuleId === rule.id ? (
+                                <RuleForm
+                                    key={rule.id}
+                                    seasonId={season.id}
+                                    existingRule={rule}
+                                    onSaved={() => {
+                                        setEditingRuleId(null);
+                                        onChanged();
+                                    }}
+                                    onCancel={() => setEditingRuleId(null)}
+                                />
+                            ) : (
+                                <div
+                                    key={rule.id}
+                                    className="flex items-start justify-between gap-4 bg-dark p-3 rounded border border-dark-lighter"
+                                >
+                                    <div className="space-y-0.5 min-w-0">
+                                        <div className="text-sm text-gray-300">
+                                            {buildFilterSummary(rule)}
+                                        </div>
+                                        <div className="text-xs text-primary">
+                                            {buildModifierSummary(rule.modifiers)}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-primary">
-                                        {buildModifierSummary(rule.modifiers)}
+                                    <div className="flex gap-2">
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => setEditingRuleId(rule.id)}
+                                        >
+                                            Edit
+                                        </Button>
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => handleDeleteRule(rule)}
+                                        >
+                                            Delete
+                                        </Button>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="danger"
-                                    size="sm"
-                                    onClick={() => handleDeleteRule(rule)}
-                                >
-                                    Delete
-                                </Button>
-                            </div>
-                        ))}
+                            )
+                        )}
                     </div>
                 )}
             </div>
 
             {/* Add rule form */}
-            <AddRuleForm seasonId={season.id} onRuleAdded={onChanged} />
+            <RuleForm seasonId={season.id} onSaved={onChanged} />
         </div>
     );
 };
