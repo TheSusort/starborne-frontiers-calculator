@@ -41,6 +41,7 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
             // ignore parse errors
         }
         return { field: 'name', direction: 'asc' as const };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isShipModalOpen]); // re-read when modal opens
 
     useEffect(() => {

@@ -36,6 +36,9 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
+import { ArenaSeason } from '../../types/arena';
+import { getActiveSeason } from '../../services/arenaModifierService';
+import { getMatchingModifiers } from '../../utils/autogear/arenaModifiers';
 
 interface UnmetPriority {
     stat: string;
@@ -106,6 +109,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: boolean;
                 optimizeImplants: boolean;
                 includeCalibratedGear: boolean;
+                useArenaModifiers: boolean;
             }
         >
     >({});
@@ -142,6 +146,7 @@ export const AutogearPage: React.FC = () => {
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
+    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -162,6 +167,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: false,
                 optimizeImplants: false,
                 includeCalibratedGear: false,
+                useArenaModifiers: false,
             }
         );
     };
@@ -176,6 +182,10 @@ export const AutogearPage: React.FC = () => {
             },
         }));
     };
+
+    useEffect(() => {
+        getActiveSeason().then(setActiveSeason);
+    }, []);
 
     // useEffect hooks
     useEffect(() => {
@@ -317,6 +327,17 @@ export const AutogearPage: React.FC = () => {
             const ship = validShips[i];
             const shipConfig = getShipConfig(ship.id);
 
+            // Pre-compute arena modifiers for this ship
+            const arenaModifiers =
+                shipConfig.useArenaModifiers && activeSeason?.rules
+                    ? getMatchingModifiers(
+                          activeSeason.rules,
+                          ship.faction || '',
+                          ship.rarity || '',
+                          shipConfig.shipRole || ship.type || ''
+                      )
+                    : null;
+
             // Save current configuration before running optimization
             performanceTracker.startTimer('SaveConfig');
             const config = {
@@ -332,6 +353,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: shipConfig.tryToCompleteSets,
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
+                useArenaModifiers: shipConfig.useArenaModifiers,
             };
             saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
@@ -464,7 +486,8 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.shipRole || undefined,
                     shipConfig.setPriorities,
                     shipConfig.statBonuses,
-                    shipConfig.tryToCompleteSets
+                    shipConfig.tryToCompleteSets,
+                    arenaModifiers
                 )
             );
             performanceTracker.endTimer('FindOptimalGear');
