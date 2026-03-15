@@ -94,7 +94,8 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                         {statBonuses.map((bonus, index) => (
                             <span key={index}>
                                 {STATS[bonus.stat as StatName]?.label}{' '}
-                                {bonus.mode === 'multiplier' ? '×' : '+'}{bonus.percentage}%
+                                {bonus.mode === 'multiplier' ? '×' : '+'}
+                                {bonus.percentage}%
                             </span>
                         ))}
                     </>

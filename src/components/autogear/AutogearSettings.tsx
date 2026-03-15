@@ -243,8 +243,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             Add stat bonuses that contribute to the role score.
                             <strong> Additive</strong> adds stat × % directly (e.g., defense@80% for
                             a skill dealing 80% of defense as damage).
-                            <strong> Multiplier</strong> multiplies the role score by stat × % (e.g.,
-                            hacking@50% makes DPS scale with hacking).
+                            <strong> Multiplier</strong> multiplies the role score by stat × %
+                            (e.g., hacking@50% makes DPS scale with hacking).
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}
