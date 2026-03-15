@@ -23,6 +23,7 @@ export interface GearSuggestion {
 export interface StatBonus {
     stat: string;
     percentage: number;
+    mode?: 'additive' | 'multiplier';
 }
 
 export interface SavedAutogearConfig {
