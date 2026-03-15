@@ -151,4 +151,11 @@ describe('applyArenaModifiers', () => {
         const result = applyArenaModifiers(baseStats, { hp: 0 });
         expect(result.hp).toBe(50000);
     });
+
+    it('ignores modifiers for stats not in BaseStats', () => {
+        const result = applyArenaModifiers(baseStats, {
+            nonexistent: 100,
+        } as unknown as Record<string, number>);
+        expect(result).toEqual(baseStats);
+    });
 });

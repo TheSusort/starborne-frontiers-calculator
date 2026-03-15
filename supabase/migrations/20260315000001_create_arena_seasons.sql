@@ -49,11 +49,13 @@ CREATE POLICY "Admins insert arena seasons" ON public.arena_seasons
   FOR INSERT
   WITH CHECK (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins update arena seasons" ON public.arena_seasons
+DROP POLICY IF EXISTS "Admins update arena seasons" ON public.arena_seasons;
+CREATE POLICY "Admins update arena seasons" ON public.arena_seasons
   FOR UPDATE
   USING (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins delete arena seasons" ON public.arena_seasons
+DROP POLICY IF EXISTS "Admins delete arena seasons" ON public.arena_seasons;
+CREATE POLICY "Admins delete arena seasons" ON public.arena_seasons
   FOR DELETE
   USING (public.is_admin());
 
@@ -73,11 +75,13 @@ CREATE POLICY "Admins insert arena season rules" ON public.arena_season_rules
   FOR INSERT
   WITH CHECK (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins update arena season rules" ON public.arena_season_rules
+DROP POLICY IF EXISTS "Admins update arena season rules" ON public.arena_season_rules;
+CREATE POLICY "Admins update arena season rules" ON public.arena_season_rules
   FOR UPDATE
   USING (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins delete arena season rules" ON public.arena_season_rules
+DROP POLICY IF EXISTS "Admins delete arena season rules" ON public.arena_season_rules;
+CREATE POLICY "Admins delete arena season rules" ON public.arena_season_rules
   FOR DELETE
   USING (public.is_admin());
 
@@ -89,6 +93,9 @@ CREATE OR REPLACE FUNCTION public.activate_arena_season(p_season_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized: admin access required';
+  END IF;
   UPDATE arena_seasons SET active = false, updated_at = now() WHERE active = true;
   UPDATE arena_seasons SET active = true, updated_at = now() WHERE id = p_season_id;
 END;
@@ -98,6 +105,9 @@ CREATE OR REPLACE FUNCTION public.deactivate_all_arena_seasons()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized: admin access required';
+  END IF;
   UPDATE arena_seasons SET active = false, updated_at = now() WHERE active = true;
 END;
 $$;
