@@ -240,10 +240,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-gray-400">
-                            Add stat bonuses that contribute to the role score. These are additive
-                            adjustments (typically &lt;5% of total score) for hybrid builds or
-                            skill-specific scaling. Example: Defender with hacking @ 80% for debuff
-                            capability, or attacker with HP @ 5% for HP-scaling skills.
+                            Add stat bonuses that contribute to the role score.
+                            <strong> Additive</strong> adds stat × % directly (e.g., defense@80% for
+                            a skill dealing 80% of defense as damage).
+                            <strong> Multiplier</strong> multiplies the role score by stat × % (e.g.,
+                            hacking@50% makes DPS scale with hacking).
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}
@@ -316,7 +317,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             {statBonuses.map((bonus, index) => (
                                 <div key={index} className="flex items-center text-sm">
                                     <span>
-                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
+                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%){' '}
+                                        <span className="text-xs text-gray-500">
+                                            {bonus.mode === 'multiplier' ? '×' : '+'}
+                                        </span>
                                     </span>
                                     <Button
                                         aria-label="Remove bonus"
