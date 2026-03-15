@@ -8,6 +8,7 @@ import { EngineeringStat } from '../../types/stats';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import { performanceTracker } from './performanceTimer';
 import { RarityName } from '../../constants/rarities';
+import { applyArenaModifiers } from './arenaModifiers';
 
 // Simple cache for gear combinations
 const scoreCache = new Map<string, number>();
@@ -564,7 +565,8 @@ export function calculateTotalScore(
     shipRole?: ShipTypeName,
     setPriorities?: SetPriority[],
     statBonuses?: StatBonus[],
-    tryToCompleteSets?: boolean
+    tryToCompleteSets?: boolean,
+    arenaModifiers?: Record<string, number> | null
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -608,7 +610,13 @@ export function calculateTotalScore(
     const bonusesKey = statBonuses?.length
         ? statBonuses.map((b) => `${b.stat}:${b.percentage}:${b.mode || 'a'}`).join(',')
         : 'none';
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}`;
+    const arenaKey = arenaModifiers
+        ? Object.entries(arenaModifiers)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([s, v]) => `${s}:${v}`)
+              .join(',')
+        : 'none';
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -650,9 +658,15 @@ export function calculateTotalScore(
     const arcaneSiegeMultiplier = calculateArcaneSiegeMultiplier(ship, setCount, getGearPiece);
     performanceTracker.endTimer('CalculateArcaneSiege');
 
+    // Apply arena modifiers to stats for scoring (does not affect displayed stats)
+    const statsForScoring =
+        arenaModifiers && Object.keys(arenaModifiers).length > 0
+            ? applyArenaModifiers(totalStats.final, arenaModifiers)
+            : totalStats.final;
+
     performanceTracker.startTimer('CalculatePriorityScore');
     const score = calculatePriorityScore(
-        totalStats.final,
+        statsForScoring,
         priorities,
         shipRole,
         setCount,
