@@ -16,7 +16,8 @@ export interface AutogearStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean
+        tryToCompleteSets?: boolean,
+        arenaModifiers?: Record<string, number> | null
     ): Promise<GearSuggestion[]> | GearSuggestion[];
     setProgressCallback(
         callback: (progress: { current: number; total: number; percentage: number }) => void
