@@ -37,7 +37,7 @@ const STAT_OPTIONS = (Object.keys(STATS) as StatName[]).map((key) => ({
 
 function formatEndDate(endsAt: string | null): string {
     if (!endsAt) return 'No expiry';
-    return new Date(endsAt).toLocaleString();
+    return new Date(endsAt).toLocaleDateString();
 }
 
 function isExpired(endsAt: string | null): boolean {
@@ -45,12 +45,10 @@ function isExpired(endsAt: string | null): boolean {
     return new Date(endsAt) < new Date();
 }
 
-function toDatetimeLocalValue(isoString: string | null): string {
+function toDateValue(isoString: string | null): string {
     if (!isoString) return '';
-    // Convert ISO string to datetime-local input format (YYYY-MM-DDTHH:mm)
-    const date = new Date(isoString);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    // Convert ISO string to date input format (YYYY-MM-DD) in UTC
+    return isoString.slice(0, 10);
 }
 
 function buildFilterSummary(rule: ArenaSeasonRule): string {
@@ -288,7 +286,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     const { addNotification } = useNotification();
     const [editName, setEditName] = useState(season.name);
     const [savingName, setSavingName] = useState(false);
-    const [editEndDate, setEditEndDate] = useState(toDatetimeLocalValue(season.ends_at));
+    const [editEndDate, setEditEndDate] = useState(toDateValue(season.ends_at));
     const [savingEndDate, setSavingEndDate] = useState(false);
 
     const handleSaveName = async () => {
@@ -306,7 +304,8 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     };
 
     const handleSaveEndDate = async () => {
-        const iso = editEndDate ? new Date(editEndDate).toISOString() : null;
+        // Server resets at 01:00 UTC, so always set end time to 01:00 UTC on the selected date
+        const iso = editEndDate ? `${editEndDate}T01:00:00Z` : null;
         setSavingEndDate(true);
         try {
             await updateSeasonEndDate(season.id, iso);
@@ -372,7 +371,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                 <div className="text-xs font-medium text-gray-400 mb-1">End Date</div>
                 <div className="flex gap-2 flex-wrap">
                     <Input
-                        type="datetime-local"
+                        type="date"
                         value={editEndDate}
                         onChange={(e) => setEditEndDate(e.target.value)}
                     />
