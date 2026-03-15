@@ -53,6 +53,26 @@ export const ShipIndexPage: React.FC = () => {
     const [passive3Hover, setPassive3Hover] = useState('');
     const tooltipRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { startGroup, hasCompletedGroup } = useTutorial();
+    const [copiedSkill, setCopiedSkill] = useState('');
+
+    const stripSkillTags = (text: string) =>
+        text.replace(/<\/?(?:unit-skill|unit-damage|unit-aid)>/g, '');
+
+    const copySkillText = useCallback(
+        async (shipName: string, skillType: string, skillText: string) => {
+            const plain = stripSkillTags(skillText);
+            try {
+                await navigator.clipboard.writeText(plain);
+                const key = `${shipName}_${skillType}`;
+                setCopiedSkill(key);
+                addNotification('success', `Copied ${skillType} skill text`);
+                setTimeout(() => setCopiedSkill((prev) => (prev === key ? '' : prev)), 1500);
+            } catch {
+                addNotification('error', 'Failed to copy to clipboard');
+            }
+        },
+        [addNotification]
+    );
 
     // Auto-start tutorial on first visit
     useEffect(() => {
@@ -357,8 +377,21 @@ export const ShipIndexPage: React.FC = () => {
                                                             }
                                                             onMouseLeave={() => setActiveHover('')}
                                                         >
-                                                            <Button variant="secondary" size="xs">
-                                                                Active
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    copySkillText(
+                                                                        ship.name,
+                                                                        'Active',
+                                                                        ship.activeSkillText!
+                                                                    )
+                                                                }
+                                                            >
+                                                                {copiedSkill ===
+                                                                `${ship.name}_Active`
+                                                                    ? 'Copied!'
+                                                                    : 'Active'}
                                                             </Button>
                                                         </div>
                                                         <Tooltip
@@ -389,8 +422,21 @@ export const ShipIndexPage: React.FC = () => {
                                                             }
                                                             onMouseLeave={() => setChargeHover('')}
                                                         >
-                                                            <Button variant="secondary" size="xs">
-                                                                Charge
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    copySkillText(
+                                                                        ship.name,
+                                                                        'Charge',
+                                                                        ship.chargeSkillText!
+                                                                    )
+                                                                }
+                                                            >
+                                                                {copiedSkill ===
+                                                                `${ship.name}_Charge`
+                                                                    ? 'Copied!'
+                                                                    : 'Charge'}
                                                             </Button>
                                                         </div>
                                                         <Tooltip
@@ -424,8 +470,21 @@ export const ShipIndexPage: React.FC = () => {
                                                                 setPassive1Hover('')
                                                             }
                                                         >
-                                                            <Button variant="secondary" size="xs">
-                                                                Passive
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    copySkillText(
+                                                                        ship.name,
+                                                                        'Passive',
+                                                                        ship.firstPassiveSkillText!
+                                                                    )
+                                                                }
+                                                            >
+                                                                {copiedSkill ===
+                                                                `${ship.name}_Passive`
+                                                                    ? 'Copied!'
+                                                                    : 'Passive'}
                                                             </Button>
                                                         </div>
                                                         <Tooltip
@@ -460,8 +519,21 @@ export const ShipIndexPage: React.FC = () => {
                                                                 setPassive2Hover('')
                                                             }
                                                         >
-                                                            <Button variant="secondary" size="xs">
-                                                                Passive R2
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    copySkillText(
+                                                                        ship.name,
+                                                                        'Passive R2',
+                                                                        ship.secondPassiveSkillText!
+                                                                    )
+                                                                }
+                                                            >
+                                                                {copiedSkill ===
+                                                                `${ship.name}_Passive R2`
+                                                                    ? 'Copied!'
+                                                                    : 'Passive R2'}
                                                             </Button>
                                                         </div>
                                                         <Tooltip
@@ -496,8 +568,21 @@ export const ShipIndexPage: React.FC = () => {
                                                                 setPassive3Hover('')
                                                             }
                                                         >
-                                                            <Button variant="secondary" size="xs">
-                                                                Passive R4
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    copySkillText(
+                                                                        ship.name,
+                                                                        'Passive R4',
+                                                                        ship.thirdPassiveSkillText!
+                                                                    )
+                                                                }
+                                                            >
+                                                                {copiedSkill ===
+                                                                `${ship.name}_Passive R4`
+                                                                    ? 'Copied!'
+                                                                    : 'Passive R4'}
                                                             </Button>
                                                         </div>
                                                         <Tooltip
