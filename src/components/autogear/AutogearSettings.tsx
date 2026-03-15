@@ -21,6 +21,20 @@ import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName, STATS } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { StatName } from '../../types/stats';
+import { ArenaSeason } from '../../types/arena';
+
+function formatRuleSummary(rule: {
+    factions: string[] | null;
+    rarities: string[] | null;
+    ship_types: string[] | null;
+}): string {
+    const parts: string[] = [];
+    if (rule.rarities?.length) parts.push(rule.rarities.join('/'));
+    if (rule.ship_types?.length)
+        parts.push(rule.ship_types.map((t) => t.toLowerCase().replace(/_/g, ' ')).join('/'));
+    if (rule.factions?.length) parts.push(`from ${rule.factions.join('/')}`);
+    return parts.length > 0 ? parts.join(' ') : 'All units';
+}
 
 interface AutogearSettingsProps {
     selectedShip: Ship | null;
@@ -54,6 +68,9 @@ interface AutogearSettingsProps {
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
     onResetConfig: () => void;
+    activeSeason?: ArenaSeason | null;
+    useArenaModifiers?: boolean;
+    onUseArenaModifiersChange?: (value: boolean) => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -133,6 +150,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onOptimizeImplantsChange,
     onIncludeCalibratedGearChange,
     onResetConfig,
+    activeSeason,
+    useArenaModifiers,
+    onUseArenaModifiersChange,
 }) => {
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
@@ -305,6 +325,45 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             onChange={onIncludeCalibratedGearChange}
                             helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
                         />
+                        {activeSeason && (
+                            <div className="space-y-2">
+                                <Checkbox
+                                    id="useArenaModifiers"
+                                    label="Apply arena modifiers"
+                                    checked={useArenaModifiers || false}
+                                    onChange={() => onUseArenaModifiersChange?.(!useArenaModifiers)}
+                                    helpLabel="Apply the active arena season's stat modifiers to scoring."
+                                />
+                                {useArenaModifiers && (
+                                    <div className="ml-6 text-xs text-slate-400 space-y-1">
+                                        <div className="font-medium text-slate-300">
+                                            {activeSeason.name}
+                                            {activeSeason.ends_at && (
+                                                <span className="text-slate-500">
+                                                    {' '}
+                                                    (ends{' '}
+                                                    {new Date(
+                                                        activeSeason.ends_at
+                                                    ).toLocaleDateString()}
+                                                    )
+                                                </span>
+                                            )}
+                                        </div>
+                                        {activeSeason.rules.map((rule) => (
+                                            <div key={rule.id} className="text-slate-500">
+                                                {formatRuleSummary(rule)}:{' '}
+                                                {Object.entries(rule.modifiers)
+                                                    .map(
+                                                        ([stat, val]) =>
+                                                            `${stat} ${val > 0 ? '+' : ''}${val}%`
+                                                    )
+                                                    .join(', ')}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

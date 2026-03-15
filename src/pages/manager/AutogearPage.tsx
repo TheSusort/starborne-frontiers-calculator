@@ -1153,6 +1153,15 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { includeCalibratedGear });
                         }
                     }}
+                    activeSeason={activeSeason}
+                    useArenaModifiers={
+                        shipSettings ? getShipConfig(shipSettings.id).useArenaModifiers : false
+                    }
+                    onUseArenaModifiersChange={(useArenaModifiers) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { useArenaModifiers });
+                        }
+                    }}
                     onResetConfig={() => {
                         if (shipSettings) {
                             resetConfig(shipSettings.id);
@@ -1169,6 +1178,7 @@ export const AutogearPage: React.FC = () => {
                                 showSecondaryRequirements: false,
                                 optimizeImplants: false,
                                 includeCalibratedGear: false,
+                                useArenaModifiers: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }
