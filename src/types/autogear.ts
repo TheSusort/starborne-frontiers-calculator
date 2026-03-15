@@ -39,4 +39,5 @@ export interface SavedAutogearConfig {
     algorithm: AutogearAlgorithm;
     optimizeImplants?: boolean;
     includeCalibratedGear?: boolean;
+    useArenaModifiers?: boolean;
 }
