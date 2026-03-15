@@ -1,3 +1,4 @@
+/** @deprecated Use GeneticStrategy instead */
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';

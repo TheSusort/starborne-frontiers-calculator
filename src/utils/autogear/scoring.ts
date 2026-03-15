@@ -322,13 +322,33 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
     }, 0);
 }
 
+// Normalizers for multiplier mode so that 50% means roughly
+// "this stat weighs about as much as the base role score"
+// regardless of the stat's raw value range.
+const MULTIPLIER_NORMALIZERS: Partial<Record<keyof BaseStats, number>> = {
+    hp: 50000,
+    attack: 10000,
+    defence: 7000,
+    hacking: 200,
+    security: 75,
+    crit: 80,
+    critDamage: 130,
+    speed: 130,
+};
+
+// Returns the normalized multiplier sum from multiplier bonuses.
+// Returns 0 when no multiplier bonuses exist.
+// Used as: (baseScore + additiveBonus) * (1 + multiplierFactor)
+// The (1 + ...) ensures the percentage controls the trade-off:
+//   low % → base role score dominates; high % → stat weighs heavily
 export function calculateMultiplierFactor(stats: BaseStats, statBonuses?: StatBonus[]): number {
-    if (!statBonuses || statBonuses.length === 0) return 1;
+    if (!statBonuses || statBonuses.length === 0) return 0;
     const multiplierBonuses = statBonuses.filter((b) => b.mode === 'multiplier');
-    if (multiplierBonuses.length === 0) return 1;
+    if (multiplierBonuses.length === 0) return 0;
     return multiplierBonuses.reduce((total, bonus) => {
         const statValue = stats[bonus.stat as keyof BaseStats] || 0;
-        return total + statValue * (bonus.percentage / 100);
+        const normalizer = MULTIPLIER_NORMALIZERS[bonus.stat as keyof BaseStats] || 1;
+        return total + (statValue / normalizer) * (bonus.percentage / 100);
     }, 0);
 }
 
@@ -341,7 +361,7 @@ function calculateAttackerScore(
 
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
-    return (baseDPS + additiveBonus) * multiplierFactor;
+    return (baseDPS + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateDefenderScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
@@ -368,13 +388,13 @@ function calculateDefenderScore(stats: BaseStats, statBonuses?: StatBonus[]): nu
     // Calculate survival rounds
     if (healingWithShieldPerRound >= damagePerRound) {
         return Math.min(
-            (Number.MAX_SAFE_INTEGER + additiveBonus) * multiplierFactor,
+            (Number.MAX_SAFE_INTEGER + additiveBonus) * (1 + multiplierFactor),
             Number.MAX_SAFE_INTEGER
         );
     }
 
     const survivalRounds = totalEffectiveHP / (damagePerRound - healingWithShieldPerRound);
-    return Math.max((survivalRounds * 1000 + additiveBonus) * multiplierFactor, 0);
+    return Math.max((survivalRounds * 1000 + additiveBonus) * (1 + multiplierFactor), 0);
 }
 
 function calculateDefenderSecurityScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
@@ -394,7 +414,7 @@ function calculateDebufferScore(
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
-    return (hacking * dps + additiveBonus) * multiplierFactor;
+    return (hacking * dps + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
@@ -406,7 +426,7 @@ function calculateDefensiveDebufferScore(stats: BaseStats, statBonuses?: StatBon
     );
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
-    return (hacking * effectiveHP + additiveBonus) * multiplierFactor;
+    return (hacking * effectiveHP + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateDefensiveSecurityDebufferScore(
@@ -422,7 +442,7 @@ function calculateDefensiveSecurityDebufferScore(
     );
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
-    return (hacking * security + effectiveHP + additiveBonus) * multiplierFactor;
+    return (hacking * security + effectiveHP + additiveBonus) * (1 + multiplierFactor);
 }
 function calculateBomberDebufferScore(
     stats: BaseStats,
@@ -437,7 +457,7 @@ function calculateBomberDebufferScore(
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
-    return (hacking * attackWithMultiplier + additiveBonus) * multiplierFactor;
+    return (hacking * attackWithMultiplier + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateCorrosionDebufferScore(
@@ -456,7 +476,7 @@ function calculateCorrosionDebufferScore(
     const decimationMultiplier = decimation * 0.1; // 10% per piece
     const totalDamage = hacking * (1 + decimationMultiplier);
 
-    return (totalDamage + additiveBonus) * multiplierFactor;
+    return (totalDamage + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateHealerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
@@ -471,7 +491,8 @@ function calculateHealerScore(stats: BaseStats, statBonuses?: StatBonus[]): numb
     const healModifier = stats.healModifier || 0;
 
     return (
-        (baseHealing * critMultiplier * (1 + healModifier / 100) + additiveBonus) * multiplierFactor
+        (baseHealing * critMultiplier * (1 + healModifier / 100) + additiveBonus) *
+        (1 + multiplierFactor)
     );
 }
 
@@ -499,7 +520,7 @@ function calculateBufferScore(
     // Scale it down to not overshadow primary stats
     const ehpScore = Math.sqrt(effectiveHP) * 2;
 
-    return (speedScore + boostScore + ehpScore + additiveBonus) * multiplierFactor;
+    return (speedScore + boostScore + ehpScore + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateOffensiveSupporterScore(
@@ -518,7 +539,7 @@ function calculateOffensiveSupporterScore(
         boostScore = 45000; // Major bonus for complete set
     }
 
-    return (speed * 10 + attack + boostScore + additiveBonus) * multiplierFactor;
+    return (speed * 10 + attack + boostScore + additiveBonus) * (1 + multiplierFactor);
 }
 
 function calculateShieldSupporterScore(
@@ -530,7 +551,7 @@ function calculateShieldSupporterScore(
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
-    return (hp + additiveBonus) * multiplierFactor;
+    return (hp + additiveBonus) * (1 + multiplierFactor);
 }
 
 // Update calculateTotalScore to include shipRole and setPriorities
@@ -583,8 +604,11 @@ export function calculateTotalScore(
         implantsKeyCache.set(shipImplantsKey, implantsKey);
     }
 
-    // Include implants in cache key to properly differentiate configurations
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}`;
+    // Include implants and stat bonuses in cache key to properly differentiate configurations
+    const bonusesKey = statBonuses?.length
+        ? statBonuses.map((b) => `${b.stat}:${b.percentage}:${b.mode || 'a'}`).join(',')
+        : 'none';
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first

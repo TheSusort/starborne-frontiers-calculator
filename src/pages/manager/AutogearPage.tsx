@@ -1088,8 +1088,17 @@ export const AutogearPage: React.FC = () => {
                     onAddStatBonus={(bonus) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
+                            const existingIndex = config.statBonuses.findIndex(
+                                (b) => b.stat === bonus.stat
+                            );
+                            const updatedBonuses =
+                                existingIndex >= 0
+                                    ? config.statBonuses.map((b, i) =>
+                                          i === existingIndex ? bonus : b
+                                      )
+                                    : [...config.statBonuses, bonus];
                             updateShipConfig(shipSettings.id, {
-                                statBonuses: [...config.statBonuses, bonus],
+                                statBonuses: updatedBonuses,
                             });
                         }
                     }}

@@ -1,8 +1,27 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.42.0';
+export const CURRENT_VERSION = '1.44.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.44.0',
+        date: '2026-03-15',
+        changes: [
+            'Added multiplier mode to autogear stat bonuses. Multiplier mode scales the role score by the stat value, useful for builds that want a stat to scale proportionally with the role (e.g., hacking on an attacker).',
+            'Added click-to-copy on ship database skill buttons',
+        ],
+    },
+    {
+        version: '1.43.0',
+        date: '2026-03-01',
+        changes: [
+            'Added video/image showcase to ship details page',
+            'Added visual improvements to encounter pages',
+            'Separated engineering and scoring roles in preview upgrade',
+            'Fixed autogear lock button showing on gear already belonging to the ship being optimized',
+            'Fixed overwriting existing stat priority instead of adding duplicates',
+        ],
+    },
     {
         version: '1.42.0',
         date: '2026-02-25',

@@ -317,9 +317,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             {statBonuses.map((bonus, index) => (
                                 <div key={index} className="flex items-center text-sm">
                                     <span>
-                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%){' '}
+                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
+                                        {' — '}
                                         <span className="text-xs text-gray-500">
-                                            {bonus.mode === 'multiplier' ? '×' : '+'}
+                                            {bonus.mode === 'multiplier'
+                                                ? 'Multiplier'
+                                                : 'Additive'}
                                         </span>
                                     </span>
                                     <Button

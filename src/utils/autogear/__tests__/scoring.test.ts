@@ -53,36 +53,36 @@ describe('applyAdditiveBonuses', () => {
 });
 
 describe('calculateMultiplierFactor', () => {
-    it('returns 1 for no bonuses', () => {
-        expect(calculateMultiplierFactor(baseStats)).toBe(1);
-        expect(calculateMultiplierFactor(baseStats, [])).toBe(1);
+    it('returns 0 for no bonuses (1 + 0 = no-op multiplier)', () => {
+        expect(calculateMultiplierFactor(baseStats)).toBe(0);
+        expect(calculateMultiplierFactor(baseStats, [])).toBe(0);
     });
 
-    it('returns 1 for only additive bonuses', () => {
+    it('returns 0 for only additive bonuses', () => {
         const bonuses: StatBonus[] = [
             { stat: 'attack', percentage: 10 },
             { stat: 'hp', percentage: 20, mode: 'additive' },
         ];
-        expect(calculateMultiplierFactor(baseStats, bonuses)).toBe(1);
+        expect(calculateMultiplierFactor(baseStats, bonuses)).toBe(0);
     });
 
-    it('calculates multiplier factor from a single multiplier bonus', () => {
+    it('calculates normalized multiplier factor from a single multiplier bonus', () => {
         const bonuses: StatBonus[] = [{ stat: 'speed', percentage: 100, mode: 'multiplier' }];
-        // 100% of 300 = 300
-        expect(calculateMultiplierFactor(baseStats, bonuses)).toBe(300);
+        // speed=300, normalizer=130 → (300/130) * (100/100) ≈ 2.3077
+        expect(calculateMultiplierFactor(baseStats, bonuses)).toBeCloseTo(300 / 130, 4);
     });
 
-    it('sums multiple multiplier bonuses', () => {
+    it('sums multiple normalized multiplier bonuses', () => {
         const bonuses: StatBonus[] = [
-            { stat: 'attack', percentage: 10, mode: 'multiplier' }, // 10% of 10000 = 1000
-            { stat: 'hp', percentage: 2, mode: 'multiplier' }, // 2% of 50000 = 1000
+            { stat: 'attack', percentage: 50, mode: 'multiplier' }, // (10000/10000) * 0.5 = 0.5
+            { stat: 'hacking', percentage: 50, mode: 'multiplier' }, // (5000/200) * 0.5 = 12.5
         ];
-        expect(calculateMultiplierFactor(baseStats, bonuses)).toBe(2000);
+        expect(calculateMultiplierFactor(baseStats, bonuses)).toBeCloseTo(0.5 + 12.5, 4);
     });
 
     it('returns 0 when multiplier stat value is 0', () => {
         const bonuses: StatBonus[] = [{ stat: 'shield', percentage: 50, mode: 'multiplier' }];
-        // shield is 0 in baseStats, so 50% of 0 = 0
+        // shield=0, normalizer=1 (fallback) → (0/1) * 0.5 = 0
         expect(calculateMultiplierFactor(baseStats, bonuses)).toBe(0);
     });
 });

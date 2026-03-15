@@ -24,7 +24,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
         }
     };
 
-    const percentageHelpLabel =
+    const helpText =
         mode === 'additive'
             ? 'Adds stat × % directly to role score. Use for skills that scale off a stat (e.g., defense@80% for a skill dealing 80% of defense as damage).'
             : 'Multiplies role score by stat × %. Use when a stat should scale proportionally with the role (e.g., hacking@50% makes DPS scale with hacking).';
@@ -43,7 +43,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                         value={selectedStat}
                         onChange={(value) => setSelectedStat(value as StatName)}
                         noDefaultSelection
-                        helpLabel="Select a stat to contribute to the role score. Formula: bonusScore = statValue × (percentage / 100)"
+                        helpLabel={helpText}
                     />
                     <div className="w-32">
                         <Input
@@ -53,36 +53,19 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                             step="1"
                             value={percentage}
                             onChange={(e) => setPercentage(parseFloat(e.target.value))}
-                            helpLabel={percentageHelpLabel}
+                            helpLabel={helpText}
                         />
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <span className="text-xs text-gray-400">Mode</span>
-                        <div className="flex">
-                            <button
-                                type="button"
-                                onClick={() => setMode('additive')}
-                                className={`px-2 py-1 text-xs border rounded-l ${
-                                    mode === 'additive'
-                                        ? 'bg-blue-600 border-blue-500 text-white'
-                                        : 'bg-dark-lighter border-dark-lighter text-gray-400 hover:text-white'
-                                }`}
-                            >
-                                Additive
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setMode('multiplier')}
-                                className={`px-2 py-1 text-xs border rounded-r ${
-                                    mode === 'multiplier'
-                                        ? 'bg-blue-600 border-blue-500 text-white'
-                                        : 'bg-dark-lighter border-dark-lighter text-gray-400 hover:text-white'
-                                }`}
-                            >
-                                Multiplier
-                            </button>
-                        </div>
-                    </div>
+                    <Select
+                        label="Mode"
+                        options={[
+                            { value: 'additive', label: 'Additive' },
+                            { value: 'multiplier', label: 'Multiplier' },
+                        ]}
+                        value={mode}
+                        onChange={(value) => setMode(value as 'additive' | 'multiplier')}
+                        helpLabel={helpText}
+                    />
                     <Button type="submit" disabled={!selectedStat} variant="secondary">
                         Add
                     </Button>
