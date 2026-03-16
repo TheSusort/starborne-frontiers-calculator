@@ -120,6 +120,7 @@ export const AutogearPage: React.FC = () => {
                 suggestions: GearSuggestion[];
                 currentSimulation: SimulationSummary | null;
                 suggestedSimulation: SimulationSummary | null;
+                arenaSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
                 arenaModifiers: Record<string, number> | null;
@@ -303,6 +304,7 @@ export const AutogearPage: React.FC = () => {
                 suggestions: GearSuggestion[];
                 currentSimulation: SimulationSummary | null;
                 suggestedSimulation: SimulationSummary | null;
+                arenaSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
                 arenaModifiers: Record<string, number> | null;
@@ -571,10 +573,26 @@ export const AutogearPage: React.FC = () => {
                     })
                 );
 
+                // Run arena-modified simulation if modifiers are active
+                const arenaSimulation =
+                    arenaModifiers && Object.keys(arenaModifiers).length > 0
+                        ? runSimulation(
+                              applyArenaModifiers(suggestedStats.final, arenaModifiers),
+                              shipConfig.shipRole,
+                              Object.entries(suggestedSets).flatMap(([setName, count]) => {
+                                  const completeSets = Math.floor(
+                                      count / (GEAR_SETS[setName]?.minPieces || 2)
+                                  );
+                                  return Array(completeSets).fill(setName);
+                              })
+                          )
+                        : null;
+
                 allResults[ship.id] = {
                     suggestions: newSuggestions,
                     currentSimulation,
                     suggestedSimulation,
+                    arenaSimulation,
                     currentStats,
                     suggestedStats,
                     arenaModifiers,
@@ -950,6 +968,7 @@ export const AutogearPage: React.FC = () => {
                                                         suggestedSimulation={
                                                             results.suggestedSimulation
                                                         }
+                                                        arenaSimulation={results.arenaSimulation}
                                                         role={shipConfig.shipRole}
                                                         ship={ship}
                                                         suggestions={results.suggestions}
