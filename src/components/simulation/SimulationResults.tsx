@@ -149,7 +149,7 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                     </div>
                 </div>
             )}
-            {arenaSimulation && (
+            {arenaSimulation && suggestedSimulation && (
                 <div>
                     <div className="card space-y-2">
                         <h3 className="text-lg font-semibold">With Arena Modifiers</h3>
@@ -157,8 +157,8 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                             {renderStats(
                                 arenaSimulation,
                                 role,
-                                currentSimulation,
                                 suggestedSimulation,
+                                arenaSimulation,
                                 true,
                                 ship,
                                 suggestions,
