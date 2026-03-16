@@ -116,6 +116,55 @@ export default defineConfig({
                 renderAfterTime: 3000,
             }),
             postProcess(renderedRoute) {
+                // Strip dynamic overlays from prerendered HTML to prevent hydration mismatch
+                // (changelog modal, tutorial overlay open due to empty localStorage)
+                function stripElement(html: string, startMarker: string): string {
+                    const start = html.indexOf(startMarker);
+                    if (start === -1) return html;
+                    const tagEnd = html.indexOf('>', start);
+                    let depth = 1;
+                    let pos = tagEnd + 1;
+                    while (depth > 0 && pos < html.length) {
+                        const nextOpen = html.indexOf('<div', pos);
+                        const nextClose = html.indexOf('</div>', pos);
+                        if (nextClose === -1) break;
+                        if (nextOpen !== -1 && nextOpen < nextClose) {
+                            depth++;
+                            pos = nextOpen + 4;
+                        } else {
+                            depth--;
+                            pos = nextClose + 6;
+                        }
+                    }
+                    return html.slice(0, tagEnd + 1) + '</div>' + html.slice(pos);
+                }
+
+                // Strip modal-root contents (changelog modal)
+                renderedRoute.html = stripElement(renderedRoute.html, '<div id="modal-root"');
+
+                // Remove tutorial overlay entirely (not nested in a container we want to keep)
+                const tutorialStart = renderedRoute.html.indexOf('<div class="fixed inset-0 z-[100]');
+                if (tutorialStart !== -1) {
+                    const tagEnd = renderedRoute.html.indexOf('>', tutorialStart);
+                    let depth = 1;
+                    let pos = tagEnd + 1;
+                    while (depth > 0 && pos < renderedRoute.html.length) {
+                        const nextOpen = renderedRoute.html.indexOf('<div', pos);
+                        const nextClose = renderedRoute.html.indexOf('</div>', pos);
+                        if (nextClose === -1) break;
+                        if (nextOpen !== -1 && nextOpen < nextClose) {
+                            depth++;
+                            pos = nextOpen + 4;
+                        } else {
+                            depth--;
+                            pos = nextClose + 6;
+                        }
+                    }
+                    renderedRoute.html =
+                        renderedRoute.html.slice(0, tutorialStart) +
+                        renderedRoute.html.slice(pos);
+                }
+
                 // Post-process: ensure Helmet meta tags are in the <head>
                 // react-helmet-async sometimes fails to flush <head> in headless Puppeteer
                 const seoMap: Record<string, { title: string; description: string; keywords: string }> = {
