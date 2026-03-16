@@ -48,7 +48,6 @@ function isExpired(endsAt: string | null): boolean {
 
 function toDateValue(isoString: string | null): string {
     if (!isoString) return '';
-    // Convert ISO string to date input format (YYYY-MM-DD) in UTC
     return isoString.slice(0, 10);
 }
 
@@ -77,16 +76,16 @@ function buildModifierSummary(modifiers: Record<string, number>): string {
         .join(', ');
 }
 
-// ─── Multi-select checkbox group ─────────────────────────────────────────────
+// ─── Chip Select ─────────────────────────────────────────────────────────────
 
-interface CheckboxGroupProps {
+interface ChipSelectProps {
     label: string;
     options: { key: string; label: string }[];
     selected: string[];
     onChange: (selected: string[]) => void;
 }
 
-const CheckboxGroup: React.FC<CheckboxGroupProps> = ({ label, options, selected, onChange }) => {
+const ChipSelect: React.FC<ChipSelectProps> = ({ label, options, selected, onChange }) => {
     const toggle = (key: string) => {
         if (selected.includes(key)) {
             onChange(selected.filter((k) => k !== key));
@@ -97,17 +96,17 @@ const CheckboxGroup: React.FC<CheckboxGroupProps> = ({ label, options, selected,
 
     return (
         <div>
-            <div className="text-xs font-medium text-gray-400 mb-1">{label}</div>
+            <div className="text-xs text-gray-500 mb-1">{label}</div>
             <div className="flex flex-wrap gap-1">
                 {options.map(({ key, label: optLabel }) => (
                     <button
                         key={key}
                         type="button"
                         onClick={() => toggle(key)}
-                        className={`px-2 py-0.5 rounded text-xs border transition-colors ${
+                        className={`px-2 py-0.5 rounded text-xs transition-colors ${
                             selected.includes(key)
-                                ? 'bg-primary text-white border-primary'
-                                : 'bg-transparent text-gray-400 border-dark-lighter hover:border-gray-500'
+                                ? 'bg-primary/20 text-primary border border-primary/40'
+                                : 'text-gray-500 border border-dark-lighter hover:border-gray-500 hover:text-gray-400'
                         }`}
                     >
                         {optLabel}
@@ -118,13 +117,13 @@ const CheckboxGroup: React.FC<CheckboxGroupProps> = ({ label, options, selected,
     );
 };
 
-// ─── Rule Form (Add / Edit) ───────────────────────────────────────────────────
+// ─── Rule Form (Add / Edit) ──────────────────────────────────────────────────
 
 interface RuleFormProps {
     seasonId: string;
     existingRule?: ArenaSeasonRule;
     onSaved: () => void;
-    onCancel?: () => void;
+    onCancel: () => void;
 }
 
 const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, onCancel }) => {
@@ -157,24 +156,6 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
         label: SHIP_TYPES[key].name,
     }));
 
-    const updatePairStat = (index: number, stat: string) => {
-        setModifierPairs((prev) =>
-            prev.map((p, i) => (i === index ? { ...p, stat: stat as StatName } : p))
-        );
-    };
-
-    const updatePairValue = (index: number, value: number) => {
-        setModifierPairs((prev) => prev.map((p, i) => (i === index ? { ...p, value } : p)));
-    };
-
-    const removePair = (index: number) => {
-        setModifierPairs((prev) => prev.filter((_, i) => i !== index));
-    };
-
-    const addPair = () => {
-        setModifierPairs((prev) => [...prev, { stat: '', value: 0 }]);
-    };
-
     const handleSave = async () => {
         const validPairs = modifierPairs.filter((p) => p.stat !== '');
         if (validPairs.length === 0) {
@@ -187,25 +168,24 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
             modifiers[pair.stat] = pair.value;
         }
 
-        const ruleInput = {
-            factions: factions.length > 0 ? factions : null,
-            rarities: rarities.length > 0 ? rarities : null,
-            ship_types: shipTypes.length > 0 ? shipTypes : null,
-            modifiers,
-        };
-
         setSaving(true);
         try {
             if (isEdit) {
-                await updateRule(existingRule.id, ruleInput);
+                await updateRule(existingRule.id, {
+                    factions: factions.length > 0 ? factions : null,
+                    rarities: rarities.length > 0 ? rarities : null,
+                    ship_types: shipTypes.length > 0 ? shipTypes : null,
+                    modifiers,
+                });
                 addNotification('success', 'Rule updated.');
             } else {
-                await createRule(seasonId, ruleInput);
+                await createRule(seasonId, {
+                    factions: factions.length > 0 ? factions : null,
+                    rarities: rarities.length > 0 ? rarities : null,
+                    ship_types: shipTypes.length > 0 ? shipTypes : null,
+                    modifiers,
+                });
                 addNotification('success', 'Rule added.');
-                setFactions([]);
-                setRarities([]);
-                setShipTypes([]);
-                setModifierPairs([{ stat: '', value: 0 }]);
             }
             onSaved();
         } catch (err) {
@@ -219,61 +199,82 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
     };
 
     return (
-        <div className="bg-dark p-4 rounded border border-dark-lighter space-y-4">
-            <div className="text-sm font-medium text-gray-300">
-                {isEdit ? 'Edit Rule' : 'Add Rule'}
+        <div className="border border-dark-lighter rounded p-4 space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-300">
+                    {isEdit ? 'Edit Rule' : 'New Rule'}
+                </span>
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    className="text-gray-500 hover:text-gray-300 text-xs"
+                >
+                    Cancel
+                </button>
             </div>
 
-            <CheckboxGroup
-                label="Factions (empty = all)"
-                options={factionOptions}
-                selected={factions}
-                onChange={setFactions}
-            />
-
-            <CheckboxGroup
-                label="Rarities (empty = all)"
-                options={rarityOptions}
-                selected={rarities}
-                onChange={setRarities}
-            />
-
-            <CheckboxGroup
-                label="Ship Types (empty = all)"
-                options={shipTypeOptions}
-                selected={shipTypes}
-                onChange={setShipTypes}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <ChipSelect
+                    label="Factions (empty = all)"
+                    options={factionOptions}
+                    selected={factions}
+                    onChange={setFactions}
+                />
+                <ChipSelect
+                    label="Rarities (empty = all)"
+                    options={rarityOptions}
+                    selected={rarities}
+                    onChange={setRarities}
+                />
+                <ChipSelect
+                    label="Ship Types (empty = all)"
+                    options={shipTypeOptions}
+                    selected={shipTypes}
+                    onChange={setShipTypes}
+                />
+            </div>
 
             <div>
-                <div className="text-xs font-medium text-gray-400 mb-2">Modifiers (%)</div>
-                <div className="space-y-2">
+                <div className="text-xs text-gray-500 mb-1">Modifiers (%)</div>
+                <div className="space-y-1">
                     {modifierPairs.map((pair, index) => (
                         <div key={index} className="flex items-center gap-2">
-                            <div className="flex-1">
-                                <Select
-                                    value={pair.stat}
-                                    onChange={(val) => updatePairStat(index, val)}
-                                    options={[
-                                        { value: '', label: 'Select stat...' },
-                                        ...STAT_OPTIONS,
-                                    ]}
-                                />
-                            </div>
-                            <div className="w-28">
-                                <Input
-                                    type="number"
-                                    value={pair.value}
-                                    onChange={(e) => updatePairValue(index, Number(e.target.value))}
-                                    placeholder="e.g. 150"
-                                />
-                            </div>
+                            <Select
+                                value={pair.stat}
+                                onChange={(val) =>
+                                    setModifierPairs((prev) =>
+                                        prev.map((p, i) =>
+                                            i === index ? { ...p, stat: val as StatName } : p
+                                        )
+                                    )
+                                }
+                                options={[{ value: '', label: 'Select stat...' }, ...STAT_OPTIONS]}
+                                className="w-48"
+                            />
+                            <Input
+                                type="number"
+                                value={pair.value}
+                                onChange={(e) =>
+                                    setModifierPairs((prev) =>
+                                        prev.map((p, i) =>
+                                            i === index
+                                                ? { ...p, value: Number(e.target.value) }
+                                                : p
+                                        )
+                                    )
+                                }
+                                placeholder="e.g. 150"
+                                className="w-24"
+                            />
                             {modifierPairs.length > 1 && (
                                 <button
                                     type="button"
-                                    onClick={() => removePair(index)}
-                                    className="text-gray-500 hover:text-red-400 transition-colors text-sm px-1"
-                                    aria-label="Remove modifier"
+                                    onClick={() =>
+                                        setModifierPairs((prev) =>
+                                            prev.filter((_, i) => i !== index)
+                                        )
+                                    }
+                                    className="text-gray-500 hover:text-red-400 text-xs px-1"
                                 >
                                     ✕
                                 </button>
@@ -283,19 +284,14 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
                 </div>
                 <button
                     type="button"
-                    onClick={addPair}
-                    className="mt-2 text-xs text-primary hover:text-primary/80 transition-colors"
+                    onClick={() => setModifierPairs((prev) => [...prev, { stat: '', value: 0 }])}
+                    className="mt-1 text-xs text-primary hover:text-primary/80"
                 >
                     + Add modifier
                 </button>
             </div>
 
-            <div className="flex justify-end gap-2">
-                {onCancel && (
-                    <Button variant="secondary" size="sm" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                )}
+            <div className="flex justify-end">
                 <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
                     {saving ? 'Saving...' : isEdit ? 'Update Rule' : 'Save Rule'}
                 </Button>
@@ -304,7 +300,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
     );
 };
 
-// ─── Season Detail ────────────────────────────────────────────────────────────
+// ─── Season Detail ───────────────────────────────────────────────────────────
 
 interface SeasonDetailProps {
     season: ArenaSeason;
@@ -318,6 +314,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     const [editEndDate, setEditEndDate] = useState(toDateValue(season.ends_at));
     const [savingEndDate, setSavingEndDate] = useState(false);
     const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+    const [showAddRule, setShowAddRule] = useState(false);
 
     const handleSaveName = async () => {
         if (!editName.trim()) return;
@@ -334,7 +331,6 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     };
 
     const handleSaveEndDate = async () => {
-        // Server resets at 01:00 UTC, so always set end time to 01:00 UTC on the selected date
         const iso = editEndDate ? `${editEndDate}T01:00:00Z` : null;
         setSavingEndDate(true);
         try {
@@ -374,62 +370,69 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
     };
 
     return (
-        <div className="space-y-6 pt-2">
-            {/* Edit name */}
-            <div>
-                <div className="text-xs font-medium text-gray-400 mb-1">Season Name</div>
-                <div className="flex gap-2">
-                    <Input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Season name"
-                    />
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleSaveName}
-                        disabled={savingName || !editName.trim()}
-                    >
-                        {savingName ? 'Saving...' : 'Save'}
-                    </Button>
+        <div className="space-y-4 pt-2">
+            {/* Season settings - compact inline */}
+            <div className="flex flex-wrap gap-4 items-end">
+                <div className="flex-1 min-w-[200px]">
+                    <div className="text-xs text-gray-500 mb-1">Season Name</div>
+                    <div className="flex gap-2">
+                        <Input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                        />
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleSaveName}
+                            disabled={savingName || !editName.trim()}
+                        >
+                            {savingName ? '...' : 'Save'}
+                        </Button>
+                    </div>
                 </div>
-            </div>
-
-            {/* Edit end date */}
-            <div>
-                <div className="text-xs font-medium text-gray-400 mb-1">End Date</div>
-                <div className="flex gap-2 flex-wrap">
-                    <Input
-                        type="date"
-                        value={editEndDate}
-                        onChange={(e) => setEditEndDate(e.target.value)}
-                    />
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={handleSaveEndDate}
-                        disabled={savingEndDate}
-                    >
-                        {savingEndDate ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={handleClearEndDate}
-                        disabled={savingEndDate}
-                    >
-                        Clear
-                    </Button>
+                <div>
+                    <div className="text-xs text-gray-500 mb-1">End Date (01:00 UTC)</div>
+                    <div className="flex gap-2">
+                        <Input
+                            type="date"
+                            value={editEndDate}
+                            onChange={(e) => setEditEndDate(e.target.value)}
+                        />
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleSaveEndDate}
+                            disabled={savingEndDate}
+                        >
+                            {savingEndDate ? '...' : 'Save'}
+                        </Button>
+                        <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={handleClearEndDate}
+                            disabled={savingEndDate}
+                        >
+                            Clear
+                        </Button>
+                    </div>
                 </div>
             </div>
 
             {/* Rules */}
             <div>
-                <div className="text-sm font-medium text-gray-300 mb-2">
-                    Rules ({season.rules.length})
+                <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-300">
+                        Rules ({season.rules.length})
+                    </span>
+                    {!showAddRule && (
+                        <Button variant="primary" size="sm" onClick={() => setShowAddRule(true)}>
+                            + Add Rule
+                        </Button>
+                    )}
                 </div>
-                {season.rules.length === 0 ? (
+
+                {season.rules.length === 0 && !showAddRule ? (
                     <p className="text-gray-500 text-sm">No rules yet.</p>
                 ) : (
                     <div className="space-y-2">
@@ -448,17 +451,18 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                             ) : (
                                 <div
                                     key={rule.id}
-                                    className="flex items-start justify-between gap-4 bg-dark p-3 rounded border border-dark-lighter"
+                                    className="flex items-center justify-between gap-4 p-2 rounded border border-dark-lighter hover:border-gray-600 transition-colors"
                                 >
-                                    <div className="space-y-0.5 min-w-0">
-                                        <div className="text-sm text-gray-300">
+                                    <div className="min-w-0">
+                                        <span className="text-sm text-gray-300">
                                             {buildFilterSummary(rule)}
-                                        </div>
-                                        <div className="text-xs text-primary">
+                                        </span>
+                                        <span className="text-gray-600 mx-2">|</span>
+                                        <span className="text-sm text-primary">
                                             {buildModifierSummary(rule.modifiers)}
-                                        </div>
+                                        </span>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-1 shrink-0">
                                         <Button
                                             variant="secondary"
                                             size="sm"
@@ -479,15 +483,25 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                         )}
                     </div>
                 )}
-            </div>
 
-            {/* Add rule form */}
-            <RuleForm seasonId={season.id} onSaved={onChanged} />
+                {showAddRule && (
+                    <div className="mt-2">
+                        <RuleForm
+                            seasonId={season.id}
+                            onSaved={() => {
+                                setShowAddRule(false);
+                                onChanged();
+                            }}
+                            onCancel={() => setShowAddRule(false)}
+                        />
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
 
-// ─── Main Tab ─────────────────────────────────────────────────────────────────
+// ─── Main Tab ────────────────────────────────────────────────────────────────
 
 export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
     seasons,
@@ -567,28 +581,39 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
     };
 
     const getStatusBadge = (season: ArenaSeason) => {
-        if (season.active) {
-            if (isExpired(season.ends_at)) {
-                return (
-                    <span className="px-2 py-0.5 rounded text-xs bg-red-700 text-white">
-                        Expired
-                    </span>
-                );
-            }
+        if (season.active && isExpired(season.ends_at)) {
             return (
-                <span className="px-2 py-0.5 rounded text-xs bg-green-600 text-white">Active</span>
+                <span className="px-2 py-0.5 rounded text-xs bg-red-700/30 text-red-400 border border-red-700/50">
+                    Expired
+                </span>
+            );
+        }
+        if (season.active) {
+            return (
+                <span className="px-2 py-0.5 rounded text-xs bg-green-600/20 text-green-400 border border-green-600/40">
+                    Active
+                </span>
             );
         }
         return (
-            <span className="px-2 py-0.5 rounded text-xs bg-gray-600 text-gray-300">Inactive</span>
+            <span className="px-2 py-0.5 rounded text-xs bg-gray-700/30 text-gray-500 border border-gray-700/50">
+                Inactive
+            </span>
         );
     };
 
     return (
         <div className="space-y-6">
-            {/* Create season form */}
+            {/* Create + deactivate row */}
             <div className="card">
-                <h3 className="text-lg font-semibold mb-4">Arena Season Modifiers</h3>
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold">Arena Season Modifiers</h3>
+                    {hasActive && (
+                        <Button variant="danger" size="sm" onClick={handleDeactivateAll}>
+                            Deactivate All
+                        </Button>
+                    )}
+                </div>
                 <div className="flex gap-2">
                     <Input
                         type="text"
@@ -604,19 +629,10 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                         onClick={handleCreateSeason}
                         disabled={creating || !newSeasonName.trim()}
                     >
-                        {creating ? 'Creating...' : 'Create Season'}
+                        {creating ? 'Creating...' : 'Create'}
                     </Button>
                 </div>
             </div>
-
-            {/* Deactivate all button */}
-            {hasActive && (
-                <div className="flex justify-end">
-                    <Button variant="danger" size="sm" onClick={handleDeactivateAll}>
-                        Deactivate All Seasons
-                    </Button>
-                </div>
-            )}
 
             {/* Seasons list */}
             {seasons.length === 0 ? (
@@ -627,19 +643,19 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                 <div className="card">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="text-left text-gray-400">
-                                <th className="pb-2">Name</th>
-                                <th className="pb-2">Status</th>
-                                <th className="pb-2">Ends</th>
-                                <th className="pb-2">Rules</th>
-                                <th className="pb-2 text-right">Actions</th>
+                            <tr className="border-b border-dark-border">
+                                <th className="text-left p-3 text-gray-400">Name</th>
+                                <th className="text-left p-3 text-gray-400">Status</th>
+                                <th className="text-left p-3 text-gray-400">Ends</th>
+                                <th className="text-left p-3 text-gray-400">Rules</th>
+                                <th className="text-right p-3 text-gray-400">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {seasons.map((season) => (
                                 <React.Fragment key={season.id}>
-                                    <tr className="border-t border-dark-lighter">
-                                        <td className="py-2 pr-4">
+                                    <tr className="border-b border-gray-800 hover:bg-dark transition-colors">
+                                        <td className="p-3">
                                             <button
                                                 type="button"
                                                 onClick={() =>
@@ -650,54 +666,51 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                                                 className="text-left hover:text-primary transition-colors font-medium"
                                             >
                                                 {season.name}
-                                                <span className="ml-1 text-gray-500 text-xs">
+                                                <span className="ml-1 text-gray-600 text-xs">
                                                     {expandedId === season.id ? '▲' : '▼'}
                                                 </span>
                                             </button>
                                         </td>
-                                        <td className="py-2 pr-4">{getStatusBadge(season)}</td>
-                                        <td className="py-2 pr-4 text-gray-400 text-xs">
+                                        <td className="p-3">{getStatusBadge(season)}</td>
+                                        <td className="p-3 text-gray-400 text-xs">
                                             {formatEndDate(season.ends_at)}
                                         </td>
-                                        <td className="py-2 pr-4 text-gray-400">
-                                            {season.rules.length}
-                                        </td>
-                                        <td className="py-2 text-right space-x-2">
-                                            {season.active ? (
+                                        <td className="p-3 text-gray-400">{season.rules.length}</td>
+                                        <td className="p-3 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {season.active ? (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => handleDeactivate(season)}
+                                                        disabled={actionLoading === season.id}
+                                                    >
+                                                        Deactivate
+                                                    </Button>
+                                                ) : (
+                                                    <Button
+                                                        variant="primary"
+                                                        size="sm"
+                                                        onClick={() => handleActivate(season)}
+                                                        disabled={actionLoading === season.id}
+                                                    >
+                                                        Activate
+                                                    </Button>
+                                                )}
                                                 <Button
-                                                    variant="secondary"
+                                                    variant="danger"
                                                     size="sm"
-                                                    onClick={() => handleDeactivate(season)}
+                                                    onClick={() => handleDelete(season)}
                                                     disabled={actionLoading === season.id}
                                                 >
-                                                    Deactivate
+                                                    Delete
                                                 </Button>
-                                            ) : (
-                                                <Button
-                                                    variant="primary"
-                                                    size="sm"
-                                                    onClick={() => handleActivate(season)}
-                                                    disabled={actionLoading === season.id}
-                                                >
-                                                    Activate
-                                                </Button>
-                                            )}
-                                            <Button
-                                                variant="danger"
-                                                size="sm"
-                                                onClick={() => handleDelete(season)}
-                                                disabled={actionLoading === season.id}
-                                            >
-                                                Delete
-                                            </Button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {expandedId === season.id && (
                                         <tr>
-                                            <td
-                                                colSpan={5}
-                                                className="pb-4 pt-2 px-2 bg-dark-lighter/30"
-                                            >
+                                            <td colSpan={5} className="p-4 bg-dark-lighter/20">
                                                 <SeasonDetail
                                                     season={season}
                                                     onChanged={onSeasonsChange}
