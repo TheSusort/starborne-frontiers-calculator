@@ -38,7 +38,7 @@ import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
-import { getMatchingModifiers } from '../../utils/autogear/arenaModifiers';
+import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
 
 interface UnmetPriority {
     stat: string;
@@ -122,6 +122,7 @@ export const AutogearPage: React.FC = () => {
                 suggestedSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
+                arenaModifiers: Record<string, number> | null;
             }
         >
     >({});
@@ -304,6 +305,7 @@ export const AutogearPage: React.FC = () => {
                 suggestedSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
+                arenaModifiers: Record<string, number> | null;
             }
         > = {};
 
@@ -575,6 +577,7 @@ export const AutogearPage: React.FC = () => {
                     suggestedSimulation,
                     currentStats,
                     suggestedStats,
+                    arenaModifiers,
                 };
             }
             performanceTracker.endTimer('PostProcessing');
@@ -965,7 +968,15 @@ export const AutogearPage: React.FC = () => {
                                                 <h4 className="text-lg font-semibold mb-4">
                                                     Stat Comparison
                                                 </h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div
+                                                    className={`grid grid-cols-1 gap-4 ${
+                                                        results.arenaModifiers &&
+                                                        Object.keys(results.arenaModifiers).length >
+                                                            0
+                                                            ? 'md:grid-cols-3'
+                                                            : 'md:grid-cols-2'
+                                                    }`}
+                                                >
                                                     <div className="card">
                                                         <StatList
                                                             stats={results.currentStats.final}
@@ -981,6 +992,23 @@ export const AutogearPage: React.FC = () => {
                                                             title="Stats with Suggested Gear"
                                                         />
                                                     </div>
+                                                    {results.arenaModifiers &&
+                                                        Object.keys(results.arenaModifiers).length >
+                                                            0 && (
+                                                            <div className="card">
+                                                                <StatList
+                                                                    stats={applyArenaModifiers(
+                                                                        results.suggestedStats
+                                                                            .final,
+                                                                        results.arenaModifiers
+                                                                    )}
+                                                                    comparisonStats={
+                                                                        results.suggestedStats.final
+                                                                    }
+                                                                    title="With Arena Modifiers"
+                                                                />
+                                                            </div>
+                                                        )}
                                                 </div>
                                             </div>
                                         )}
