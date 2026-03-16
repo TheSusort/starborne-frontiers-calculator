@@ -47,7 +47,7 @@ const HomePage: React.FC = () => {
                                 <>
                                     <Link
                                         to="/documentation#getting-started"
-                                        className="text-primary hover:text-primary-hover"
+                                        className="text-primary hover:text-primary-hover underline"
                                     >
                                         Export your game data
                                     </Link>{' '}
@@ -68,14 +68,14 @@ const HomePage: React.FC = () => {
                                     Browse your fleet in{' '}
                                     <Link
                                         to="/ships"
-                                        className="text-primary hover:text-primary-hover"
+                                        className="text-primary hover:text-primary-hover underline"
                                     >
                                         Ships
                                     </Link>{' '}
                                     and manage your inventory in{' '}
                                     <Link
                                         to="/gear"
-                                        className="text-primary hover:text-primary-hover"
+                                        className="text-primary hover:text-primary-hover underline"
                                     >
                                         Gear
                                     </Link>
@@ -94,7 +94,7 @@ const HomePage: React.FC = () => {
                                     Use the{' '}
                                     <Link
                                         to="/autogear"
-                                        className="text-primary hover:text-primary-hover"
+                                        className="text-primary hover:text-primary-hover underline"
                                     >
                                         Autogear Tool
                                     </Link>{' '}
