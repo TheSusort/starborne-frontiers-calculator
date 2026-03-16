@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.44.0';
+export const CURRENT_VERSION = '1.45.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.45.0',
+        date: '2026-03-16',
+        changes: [
+            'Added arena season modifiers. Admins can create seasons with stackable stat modifier rules (filtered by faction, rarity, or role). Users can enable "Apply arena modifiers" in autogear settings to have the algorithm account for active arena season buffs when scoring gear.',
+            'Autogear results show a 3rd column for stats and simulation with arena modifiers applied when enabled.',
+        ],
+    },
     {
         version: '1.44.0',
         date: '2026-03-15',
