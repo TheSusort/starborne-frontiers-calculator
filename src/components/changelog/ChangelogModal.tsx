@@ -56,7 +56,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
                                                 className={`ml-2 text-xs px-2 py-1 ${
                                                     entry.version === '1.0.0'
                                                         ? 'animate-ping bg-dark text-white'
-                                                        : 'bg-blue-500 text-white'
+                                                        : 'bg-blue-700 text-white'
                                                 }`}
                                             >
                                                 New
