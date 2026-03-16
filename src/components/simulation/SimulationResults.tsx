@@ -19,6 +19,7 @@ import { GearPiece } from '../../types/gear';
 interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
     suggestedSimulation?: SimulationSummary;
+    arenaSimulation?: SimulationSummary | null;
     role: ShipTypeName | null;
     alwaysColumn?: boolean;
     ship?: Ship;
@@ -96,6 +97,7 @@ const renderStats = (
 export const SimulationResults: React.FC<SimulationResultsProps> = ({
     currentSimulation,
     suggestedSimulation,
+    arenaSimulation,
     role,
     alwaysColumn = false,
     ship,
@@ -103,12 +105,12 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
     getGearPiece,
     showCurrent = true,
 }) => {
+    const columnCount = arenaSimulation ? 3 : suggestedSimulation && !alwaysColumn ? 2 : 1;
+    const gridClass =
+        columnCount === 3 ? 'md:grid-cols-3' : columnCount === 2 ? 'md:grid-cols-2' : '';
+
     return (
-        <div
-            className={`grid grid-cols-1 ${
-                suggestedSimulation && !alwaysColumn ? 'md:grid-cols-2' : ''
-            } gap-4 mt-4 `}
-        >
+        <div className={`grid grid-cols-1 ${gridClass} gap-4 mt-4`}>
             {showCurrent && (
                 <div>
                     <div className="card space-y-2">
@@ -138,6 +140,25 @@ export const SimulationResults: React.FC<SimulationResultsProps> = ({
                                 role,
                                 currentSimulation,
                                 suggestedSimulation,
+                                true,
+                                ship,
+                                suggestions,
+                                getGearPiece
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {arenaSimulation && suggestedSimulation && (
+                <div>
+                    <div className="card space-y-2">
+                        <h3 className="text-lg font-semibold">With Arena Modifiers</h3>
+                        <div className="flex flex-col gap-2">
+                            {renderStats(
+                                arenaSimulation,
+                                role,
+                                suggestedSimulation,
+                                arenaSimulation,
                                 true,
                                 ship,
                                 suggestions,

@@ -5,6 +5,7 @@ import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
+import { ArenaSeason } from '../../types/arena';
 
 interface AutogearSettingsModalProps {
     isOpen: boolean;
@@ -40,6 +41,9 @@ interface AutogearSettingsModalProps {
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
     onResetConfig: () => void;
+    activeSeason?: ArenaSeason | null;
+    useArenaModifiers?: boolean;
+    onUseArenaModifiersChange?: (value: boolean) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({

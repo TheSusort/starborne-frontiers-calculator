@@ -36,6 +36,9 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
+import { ArenaSeason } from '../../types/arena';
+import { getActiveSeason } from '../../services/arenaModifierService';
+import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
 
 interface UnmetPriority {
     stat: string;
@@ -106,6 +109,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: boolean;
                 optimizeImplants: boolean;
                 includeCalibratedGear: boolean;
+                useArenaModifiers: boolean;
             }
         >
     >({});
@@ -116,8 +120,10 @@ export const AutogearPage: React.FC = () => {
                 suggestions: GearSuggestion[];
                 currentSimulation: SimulationSummary | null;
                 suggestedSimulation: SimulationSummary | null;
+                arenaSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
+                arenaModifiers: Record<string, number> | null;
             }
         >
     >({});
@@ -142,6 +148,7 @@ export const AutogearPage: React.FC = () => {
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
+    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -162,6 +169,7 @@ export const AutogearPage: React.FC = () => {
                 showSecondaryRequirements: false,
                 optimizeImplants: false,
                 includeCalibratedGear: false,
+                useArenaModifiers: false,
             }
         );
     };
@@ -176,6 +184,10 @@ export const AutogearPage: React.FC = () => {
             },
         }));
     };
+
+    useEffect(() => {
+        getActiveSeason().then(setActiveSeason);
+    }, []);
 
     // useEffect hooks
     useEffect(() => {
@@ -292,8 +304,10 @@ export const AutogearPage: React.FC = () => {
                 suggestions: GearSuggestion[];
                 currentSimulation: SimulationSummary | null;
                 suggestedSimulation: SimulationSummary | null;
+                arenaSimulation: SimulationSummary | null;
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
+                arenaModifiers: Record<string, number> | null;
             }
         > = {};
 
@@ -317,6 +331,17 @@ export const AutogearPage: React.FC = () => {
             const ship = validShips[i];
             const shipConfig = getShipConfig(ship.id);
 
+            // Pre-compute arena modifiers for this ship
+            const arenaModifiers =
+                shipConfig.useArenaModifiers && activeSeason?.rules
+                    ? getMatchingModifiers(
+                          activeSeason.rules,
+                          ship.faction || '',
+                          ship.rarity || '',
+                          shipConfig.shipRole || ship.type || ''
+                      )
+                    : null;
+
             // Save current configuration before running optimization
             performanceTracker.startTimer('SaveConfig');
             const config = {
@@ -332,6 +357,7 @@ export const AutogearPage: React.FC = () => {
                 tryToCompleteSets: shipConfig.tryToCompleteSets,
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
+                useArenaModifiers: shipConfig.useArenaModifiers,
             };
             saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
@@ -464,7 +490,8 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.shipRole || undefined,
                     shipConfig.setPriorities,
                     shipConfig.statBonuses,
-                    shipConfig.tryToCompleteSets
+                    shipConfig.tryToCompleteSets,
+                    arenaModifiers
                 )
             );
             performanceTracker.endTimer('FindOptimalGear');
@@ -546,12 +573,29 @@ export const AutogearPage: React.FC = () => {
                     })
                 );
 
+                // Run arena-modified simulation if modifiers are active
+                const arenaSimulation =
+                    arenaModifiers && Object.keys(arenaModifiers).length > 0
+                        ? runSimulation(
+                              applyArenaModifiers(suggestedStats.final, arenaModifiers),
+                              shipConfig.shipRole,
+                              Object.entries(suggestedSets).flatMap(([setName, count]) => {
+                                  const completeSets = Math.floor(
+                                      count / (GEAR_SETS[setName]?.minPieces || 2)
+                                  );
+                                  return Array(completeSets).fill(setName);
+                              })
+                          )
+                        : null;
+
                 allResults[ship.id] = {
                     suggestions: newSuggestions,
                     currentSimulation,
                     suggestedSimulation,
+                    arenaSimulation,
                     currentStats,
                     suggestedStats,
+                    arenaModifiers,
                 };
             }
             performanceTracker.endTimer('PostProcessing');
@@ -924,6 +968,7 @@ export const AutogearPage: React.FC = () => {
                                                         suggestedSimulation={
                                                             results.suggestedSimulation
                                                         }
+                                                        arenaSimulation={results.arenaSimulation}
                                                         role={shipConfig.shipRole}
                                                         ship={ship}
                                                         suggestions={results.suggestions}
@@ -942,7 +987,15 @@ export const AutogearPage: React.FC = () => {
                                                 <h4 className="text-lg font-semibold mb-4">
                                                     Stat Comparison
                                                 </h4>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div
+                                                    className={`grid grid-cols-1 gap-4 ${
+                                                        results.arenaModifiers &&
+                                                        Object.keys(results.arenaModifiers).length >
+                                                            0
+                                                            ? 'md:grid-cols-3'
+                                                            : 'md:grid-cols-2'
+                                                    }`}
+                                                >
                                                     <div className="card">
                                                         <StatList
                                                             stats={results.currentStats.final}
@@ -958,6 +1011,23 @@ export const AutogearPage: React.FC = () => {
                                                             title="Stats with Suggested Gear"
                                                         />
                                                     </div>
+                                                    {results.arenaModifiers &&
+                                                        Object.keys(results.arenaModifiers).length >
+                                                            0 && (
+                                                            <div className="card">
+                                                                <StatList
+                                                                    stats={applyArenaModifiers(
+                                                                        results.suggestedStats
+                                                                            .final,
+                                                                        results.arenaModifiers
+                                                                    )}
+                                                                    comparisonStats={
+                                                                        results.suggestedStats.final
+                                                                    }
+                                                                    title="With Arena Modifiers"
+                                                                />
+                                                            </div>
+                                                        )}
                                                 </div>
                                             </div>
                                         )}
@@ -1130,6 +1200,15 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, { includeCalibratedGear });
                         }
                     }}
+                    activeSeason={activeSeason}
+                    useArenaModifiers={
+                        shipSettings ? getShipConfig(shipSettings.id).useArenaModifiers : false
+                    }
+                    onUseArenaModifiersChange={(useArenaModifiers) => {
+                        if (shipSettings) {
+                            updateShipConfig(shipSettings.id, { useArenaModifiers });
+                        }
+                    }}
                     onResetConfig={() => {
                         if (shipSettings) {
                             resetConfig(shipSettings.id);
@@ -1146,6 +1225,7 @@ export const AutogearPage: React.FC = () => {
                                 showSecondaryRequirements: false,
                                 optimizeImplants: false,
                                 includeCalibratedGear: false,
+                                useArenaModifiers: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }

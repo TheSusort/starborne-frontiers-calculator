@@ -80,7 +80,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean
+        tryToCompleteSets?: boolean,
+        arenaModifiers?: Record<string, number> | null
     ): Promise<GearSuggestion[]> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
@@ -127,7 +128,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             shipRole,
             setPriorities,
             statBonuses,
-            tryToCompleteSets
+            tryToCompleteSets,
+            arenaModifiers
         );
         performanceTracker.endTimer('InitialEvaluation');
 
@@ -163,7 +165,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 shipRole,
                 setPriorities,
                 statBonuses,
-                tryToCompleteSets
+                tryToCompleteSets,
+                arenaModifiers
             );
             performanceTracker.endTimer('Evaluation');
 
@@ -237,7 +240,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean
+        tryToCompleteSets?: boolean,
+        arenaModifiers?: Record<string, number> | null
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
 
@@ -252,7 +256,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     shipRole,
                     setPriorities,
                     statBonuses,
-                    tryToCompleteSets
+                    tryToCompleteSets,
+                    arenaModifiers
                 );
 
                 return {
@@ -275,7 +280,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean
+        tryToCompleteSets?: boolean,
+        arenaModifiers?: Record<string, number> | null
     ): number {
         performanceTracker.startTimer('CalculateFitness');
 
@@ -310,7 +316,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             shipRole,
             setPriorities,
             statBonuses,
-            tryToCompleteSets
+            tryToCompleteSets,
+            arenaModifiers
         );
         performanceTracker.endTimer('CalculateFitness');
         return result;

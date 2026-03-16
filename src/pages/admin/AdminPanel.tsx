@@ -13,6 +13,9 @@ import {
     ShipTemplateFormData,
 } from '../../components/admin/AddShipTemplateForm';
 import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
+import { ArenaModifiersTab } from '../../components/admin/ArenaModifiersTab';
+import { getAllSeasons } from '../../services/arenaModifierService';
+import { ArenaSeason } from '../../types/arena';
 import {
     isAdmin,
     getDailyUsageStats,
@@ -76,18 +79,31 @@ export const AdminPanel: React.FC = () => {
     // Lifetime stats
     const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null);
 
+    // Arena seasons state
+    const [arenaSeasons, setArenaSeasons] = useState<ArenaSeason[]>([]);
+
     const loadData = React.useCallback(async () => {
-        const [statsData, userCount, sysStats, growth, tables, proposals, lifetime, templates] =
-            await Promise.all([
-                getDailyUsageStats(daysBack),
-                getTotalUserCount(),
-                getSystemStats(),
-                getGrowthStats(daysBack),
-                getTableSizes(),
-                getPendingProposals(),
-                getLifetimeStats(),
-                getAllShipTemplates(),
-            ]);
+        const [
+            statsData,
+            userCount,
+            sysStats,
+            growth,
+            tables,
+            proposals,
+            lifetime,
+            templates,
+            seasons,
+        ] = await Promise.all([
+            getDailyUsageStats(daysBack),
+            getTotalUserCount(),
+            getSystemStats(),
+            getGrowthStats(daysBack),
+            getTableSizes(),
+            getPendingProposals(),
+            getLifetimeStats(),
+            getAllShipTemplates(),
+            getAllSeasons(),
+        ]);
 
         if (statsData) setDailyStats(statsData);
         setTotalUsers(userCount);
@@ -97,6 +113,7 @@ export const AdminPanel: React.FC = () => {
         if (proposals) setTemplateProposals(proposals);
         if (lifetime) setLifetimeStats(lifetime);
         if (templates) setAllTemplates(templates);
+        if (seasons) setArenaSeasons(seasons);
     }, [daysBack]);
 
     const handleApproveProposal = async (proposalId: string) => {
@@ -303,6 +320,7 @@ export const AdminPanel: React.FC = () => {
                             id: 'template-proposals',
                             label: `Templates ${templateProposals.length > 0 ? `(${templateProposals.length})` : ''}`,
                         },
+                        { id: 'arena', label: 'Arena' },
                     ]}
                     activeTab={activeTab}
                     onChange={setActiveTab}
@@ -541,6 +559,14 @@ export const AdminPanel: React.FC = () => {
                             onReject={handleRejectProposal}
                         />
                     </div>
+                )}
+
+                {/* Arena Tab */}
+                {activeTab === 'arena' && (
+                    <ArenaModifiersTab
+                        seasons={arenaSeasons}
+                        onSeasonsChange={() => getAllSeasons().then(setArenaSeasons)}
+                    />
                 )}
             </div>
         </PageLayout>
