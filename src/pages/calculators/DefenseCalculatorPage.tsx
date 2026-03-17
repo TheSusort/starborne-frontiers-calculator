@@ -136,7 +136,7 @@ const DefenseCalculatorPage: React.FC = () => {
                         {configs.map((config) => (
                             <div
                                 key={config.id}
-                                className={`p-4 bg-dark border border-dark-border relative ${
+                                className={`card relative ${
                                     bestShip && bestShip.id === config.id ? 'border-primary' : ''
                                 }`}
                             >

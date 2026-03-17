@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
 
@@ -91,20 +92,12 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
             </div>
 
             <div className="space-y-1">
-                <label className="flex items-center gap-2">
-                    <input
-                        type="checkbox"
-                        checked={isImplantSpecific}
-                        onChange={(e) => setIsImplantSpecific(e.target.checked)}
-                        disabled={!ultimateImplantName || isSubmitting}
-                        className="w-4 h-4 rounded border-dark-600 bg-dark-700 text-primary focus:ring-primary focus:ring-offset-0"
-                    />
-                    <span
-                        className={`text-sm ${!ultimateImplantName ? 'text-gray-500' : 'text-gray-300'}`}
-                    >
-                        Only show to users with {ultimateImplantName || 'the same ultimate implant'}
-                    </span>
-                </label>
+                <Checkbox
+                    label={`Only show to users with ${ultimateImplantName || 'the same ultimate implant'}`}
+                    checked={isImplantSpecific}
+                    onChange={setIsImplantSpecific}
+                    disabled={!ultimateImplantName || isSubmitting}
+                />
                 {!ultimateImplantName && (
                     <p className="text-xs text-gray-500 ml-6">
                         Equip an ultimate implant to enable this option

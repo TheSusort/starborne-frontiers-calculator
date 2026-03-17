@@ -319,7 +319,7 @@ const HealingCalculatorPage: React.FC = () => {
                         {configs.map((config) => (
                             <div
                                 key={config.id}
-                                className={`p-4 bg-dark border border-dark-border relative ${
+                                className={`card relative ${
                                     bestHealer && bestHealer.id === config.id
                                         ? 'border-primary'
                                         : ''

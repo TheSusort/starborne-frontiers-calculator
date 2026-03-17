@@ -111,7 +111,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                         return (
                             <div
                                 key={config.id}
-                                className={`p-4 bg-dark border ${isBest ? 'border-primary' : 'border-dark-border'}`}
+                                className={`card ${isBest ? 'border-primary' : ''}`}
                             >
                                 {/* Header */}
                                 <div className="flex justify-between items-center mb-4">

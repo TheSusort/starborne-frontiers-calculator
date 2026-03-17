@@ -297,7 +297,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     )}
 
                     {/* Specialist Beacon Settings */}
-                    <div className="bg-dark border border-dark-border">
+                    <div className="card p-0">
                         <div className="flex justify-between items-center p-4">
                             <button
                                 type="button"

@@ -333,6 +333,45 @@ src/
 - Custom colors in `tailwind.config.js`
 - Avoid inline styles unless dynamic
 
+### UI Components
+
+**IMPORTANT:** Always use existing UI components from `src/components/ui/` instead of writing raw HTML elements with inline Tailwind classes. This keeps the codebase consistent and maintainable.
+
+**Containers & Layout:**
+- Use the `card` CSS class (`bg-dark border border-dark-border p-4`) for any boxed/grouped content — never hand-roll card styles
+- `Modal` / `ConfirmModal` for dialogs — never build custom modal markup
+- `Offcanvas` for sliding panels
+- `CollapsibleForm` / `CollapsibleAccordion` for expandable sections
+- `Tabs` for tab navigation
+- `PageLayout` for page-level structure
+- `Tooltip` for hover info (portal-based, auto-repositioning)
+
+**Form Controls:**
+- `Button` (variants: `primary` | `secondary` | `danger` | `link`, sizes: `xs` | `sm` | `md` | `lg`)
+- `Input` / `Textarea` / `Select` / `Checkbox` / `CheckboxGroup` — all support `label`, `error`, and `helpLabel` props
+- `SearchInput` for search fields
+- `RoleSelector` for ship role dropdowns (wraps `Select`)
+
+**Data Display:**
+- `StatCard` for metric cards (with color variants)
+- `DataTable` for tabular data
+- `BaseChart` / `ChartTooltip` for Recharts visualizations
+- `Pagination` for paged lists
+- `Loader` / `ProgressBar` for loading states
+
+**Other:**
+- `Dropdown` / `DropdownItem` for action menus
+- `IconBadge` for icon badges
+- `SectionHeader` for section titles
+- Icons live in `src/components/ui/icons/` — check there before adding new icon markup
+
+**Rules:**
+1. Never use raw `<button>` for standard actions — use `Button` with the appropriate variant and size. Exceptions: accordion/collapsible headers (full-width toggle areas), toggle chips/selection grids with custom visual states, autocomplete dropdown items, and non-interactive elements that only respond to hover (use `<span>` instead)
+2. Never hand-roll card/box containers — use the `card` class
+3. Never build custom modals/dialogs — use `Modal` or `ConfirmModal`
+4. Never build custom form inputs — use `Input`, `Select`, `Checkbox`, etc. Exception: `<input type="file">` (no shared component for file inputs)
+5. If a UI primitive doesn't exist yet, add it to `src/components/ui/` rather than inlining styles in a feature component
+
 ### Documentation Updates
 
 **IMPORTANT:** Documentation must stay synchronized with the codebase. Check for updates needed when:

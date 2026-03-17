@@ -204,13 +204,9 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
                 <span className="text-sm font-medium text-gray-300">
                     {isEdit ? 'Edit Rule' : 'New Rule'}
                 </span>
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="text-gray-500 hover:text-gray-300 text-xs"
-                >
+                <Button variant="link" size="xs" onClick={onCancel}>
                     Cancel
-                </button>
+                </Button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -267,28 +263,30 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
                                 className="w-24"
                             />
                             {modifierPairs.length > 1 && (
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="link"
+                                    size="xs"
                                     onClick={() =>
                                         setModifierPairs((prev) =>
                                             prev.filter((_, i) => i !== index)
                                         )
                                     }
-                                    className="text-gray-500 hover:text-red-400 text-xs px-1"
+                                    className="text-gray-500 hover:text-red-400"
                                 >
                                     ✕
-                                </button>
+                                </Button>
                             )}
                         </div>
                     ))}
                 </div>
-                <button
-                    type="button"
+                <Button
+                    variant="link"
+                    size="xs"
                     onClick={() => setModifierPairs((prev) => [...prev, { stat: '', value: 0 }])}
-                    className="mt-1 text-xs text-primary hover:text-primary/80"
+                    className="mt-1 text-primary hover:text-primary/80"
                 >
                     + Add modifier
-                </button>
+                </Button>
             </div>
 
             <div className="flex justify-end">

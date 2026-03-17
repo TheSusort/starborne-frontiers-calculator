@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/Button';
+import { Checkbox } from '../../components/ui/Checkbox';
 import { Input } from '../../components/ui/Input';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import Seo from '../../components/seo/Seo';
@@ -260,17 +261,14 @@ const DamageDeconstructionPage: React.FC = () => {
                         />
 
                         <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-2 mt-5">
-                                <input
-                                    type="checkbox"
-                                    checked={form.isCrit}
-                                    onChange={(e) =>
-                                        setForm((prev) => ({ ...prev, isCrit: e.target.checked }))
-                                    }
-                                    className="w-4 h-4 text-primary border-dark-border focus:ring-primary"
-                                />
-                                Critical Hit
-                            </label>
+                            <Checkbox
+                                label="Critical Hit"
+                                checked={form.isCrit}
+                                onChange={(checked) =>
+                                    setForm((prev) => ({ ...prev, isCrit: checked }))
+                                }
+                                className="mt-5"
+                            />
                             {form.isCrit && (
                                 <Input
                                     label="Critical Damage %"

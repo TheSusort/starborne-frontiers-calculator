@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Checkbox } from '../components/ui/Checkbox';
 import { Loader } from '../components/ui/Loader';
+import { StatCard } from '../components/ui/StatCard';
 import {
     getUserProfile,
     updateUserProfile,
@@ -222,7 +223,7 @@ export const ProfilePage: React.FC = () => {
             <PageLayout title="Profile" description="Manage your profile and view your statistics">
                 <div className="space-y-8">
                     {/* Profile Settings */}
-                    <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg space-y-4">
+                    <div className="card space-y-4">
                         <h2 className="text-xl font-semibold">Profile Settings</h2>
 
                         <div className="space-y-4">
@@ -266,66 +267,50 @@ export const ProfilePage: React.FC = () => {
 
                     {/* Statistics */}
                     {stats && (
-                        <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg">
+                        <div>
                             <h2 className="text-xl font-semibold mb-4">Statistics</h2>
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                <div>
-                                    <div className="text-sm text-gray-400">Ships</div>
-                                    <div className="text-2xl font-bold">{stats.shipCount}</div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Gear Pieces</div>
-                                    <div className="text-2xl font-bold">{stats.gearCount}</div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Implants</div>
-                                    <div className="text-2xl font-bold">{stats.implantCount}</div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Engineering Points</div>
-                                    <div className="text-2xl font-bold">
-                                        {stats.engineeringPoints.toLocaleString()}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Tokens Spent</div>
-                                    <div className="text-2xl font-bold">
-                                        {stats.engineeringTokens.toLocaleString()}
-                                    </div>
-                                </div>
+                                <StatCard title="Ships" value={stats.shipCount} />
+                                <StatCard title="Gear Pieces" value={stats.gearCount} />
+                                <StatCard title="Implants" value={stats.implantCount} />
+                                <StatCard
+                                    title="Engineering Points"
+                                    value={stats.engineeringPoints.toLocaleString()}
+                                />
+                                <StatCard
+                                    title="Tokens Spent"
+                                    value={stats.engineeringTokens.toLocaleString()}
+                                />
                             </div>
                         </div>
                     )}
 
                     {/* Usage Statistics */}
                     {usageStats && (
-                        <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg">
+                        <div>
                             <h2 className="text-xl font-semibold mb-4">Usage Statistics</h2>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <div className="text-sm text-gray-400">Autogear Runs</div>
-                                    <div className="text-2xl font-bold text-blue-400">
-                                        {usageStats.total_autogear_runs.toLocaleString()}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Data Imports</div>
-                                    <div className="text-2xl font-bold text-green-400">
-                                        {usageStats.total_data_imports.toLocaleString()}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-sm text-gray-400">Total Activity</div>
-                                    <div className="text-2xl font-bold text-yellow-400">
-                                        {usageStats.total_activity.toLocaleString()}
-                                    </div>
-                                </div>
+                                <StatCard
+                                    title="Autogear Runs"
+                                    value={usageStats.total_autogear_runs.toLocaleString()}
+                                    color="blue"
+                                />
+                                <StatCard
+                                    title="Data Imports"
+                                    value={usageStats.total_data_imports.toLocaleString()}
+                                    color="green"
+                                />
+                                <StatCard
+                                    title="Total Activity"
+                                    value={usageStats.total_activity.toLocaleString()}
+                                    color="yellow"
+                                />
                             </div>
                         </div>
                     )}
 
                     {/* Engineering Leaderboards */}
-                    <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg">
+                    <div className="card">
                         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                             <TrophyIcon className="w-6 h-6" />
                             Engineering Leaderboards
@@ -334,7 +319,7 @@ export const ProfilePage: React.FC = () => {
                     </div>
 
                     {/* Top Ship Rankings */}
-                    <div className="bg-dark-lighter border border-dark-border p-6 rounded-lg">
+                    <div className="card">
                         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
                             <TrophyIcon className="w-6 h-6" />
                             Top Ship Rankings
@@ -348,7 +333,7 @@ export const ProfilePage: React.FC = () => {
                                 {topShips.map((ship, index) => (
                                     <div
                                         key={`${ship.shipName}-${index}`}
-                                        className="flex justify-between items-center p-3 rounded bg-dark border border-dark-border"
+                                        className="flex justify-between items-center p-3 border border-dark-border"
                                     >
                                         <div>
                                             <div className="font-semibold">{ship.shipName}</div>

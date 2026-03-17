@@ -264,7 +264,7 @@ const HomePage: React.FC = () => {
                 </section>
 
                 {/* Backup & Restore */}
-                <section className="bg-dark p-8 border border-dark-border">
+                <section className="card p-8">
                     <div className="max-w-3xl mx-auto text-center">
                         <div className="flex justify-center mb-4">
                             <IconBadge

@@ -11,6 +11,7 @@ import {
 } from '../../constants/engineeringStats';
 import { ShipSelector } from '../ship/ShipSelector';
 import { RoleSelector } from '../ui/RoleSelector';
+import { Button } from '../ui/Button';
 import { SimulationResults } from '../simulation/SimulationResults';
 import { StatList } from '../stats/StatList';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -26,7 +27,8 @@ export const EngineeringPreviewTab: React.FC = () => {
     const [scoringRole, setScoringRole] = useState<ShipTypeName | ''>('');
     const [selectedStat, setSelectedStat] = useState<StatName | null>(null);
 
-    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const { getEngineeringStatsForShipType, engineeringStats, saveEngineeringStats } =
+        useEngineeringStats();
     const { getGearPiece } = useInventory();
     const { getConfig } = useAutogearConfig();
 
@@ -160,6 +162,42 @@ export const EngineeringPreviewTab: React.FC = () => {
         if (!previewStats || !scoringRole || !selectedStat) return null;
         return calculatePriorityScore(previewStats.final, [], scoringRole, setCount);
     }, [previewStats, scoringRole, selectedStat, setCount]);
+
+    // Level up a stat by 1
+    const handleLevelUp = useCallback(
+        async (statName: StatName) => {
+            if (!baseRole) return;
+            const currentLevel = getStatLevel(statName);
+            if (currentLevel >= 20) return;
+
+            const increment = getStatIncrement(statName);
+            const statType = isEngineeringFlatStat(statName) ? 'flat' : 'percentage';
+
+            // Find or create the engineering stat entry for this role
+            const existingEntry = engineeringStats.stats.find((s) => s.shipType === baseRole);
+            const currentStats = existingEntry?.stats || [];
+            const existingStatIndex = currentStats.findIndex((s) => s.name === statName);
+
+            let newStats: Stat[];
+            if (existingStatIndex >= 0) {
+                newStats = currentStats.map((s, idx) =>
+                    idx === existingStatIndex ? { ...s, value: s.value + increment } : s
+                );
+            } else {
+                newStats = [
+                    ...currentStats,
+                    { name: statName, value: increment, type: statType } as Stat,
+                ];
+            }
+
+            const updatedEntry = { shipType: baseRole as ShipTypeName, stats: newStats };
+
+            // Replace or add the entry in the full engineering stats
+            const otherEntries = engineeringStats.stats.filter((s) => s.shipType !== baseRole);
+            await saveEngineeringStats({ stats: [...otherEntries, updatedEntry] });
+        },
+        [baseRole, engineeringStats, saveEngineeringStats, getStatLevel]
+    );
 
     // Format large numbers with commas
     const formatNumber = (num: number): string => {
@@ -423,6 +461,19 @@ export const EngineeringPreviewTab: React.FC = () => {
                                             <span className="text-gray-400">
                                                 {isMaxLevel ? 'MAX' : `${formatNumber(cost)} EP`}
                                             </span>
+                                            {!isMaxLevel && (
+                                                <Button
+                                                    variant="secondary"
+                                                    size="xs"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        handleLevelUp(statName);
+                                                    }}
+                                                    title={`Level up ${STATS[statName].label}`}
+                                                >
+                                                    Level Up
+                                                </Button>
+                                            )}
                                         </div>
                                     </label>
                                 );

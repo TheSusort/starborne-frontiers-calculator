@@ -1,6 +1,7 @@
 import React from 'react';
 import { Notification } from '../../types/notification';
 import { CloseIcon } from '../ui';
+import { Button } from '../ui/Button';
 
 interface NotificationItemProps {
     notification: Notification;
@@ -19,13 +20,15 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({ notification
     return (
         <div className={`${baseClasses} ${typeClasses[notification.type]}`}>
             <span className="flex-grow">{notification.message}</span>
-            <button
+            <Button
+                variant="link"
+                size="xs"
                 onClick={() => onClose(notification.id)}
                 aria-label="Close notification"
-                className="ml-4 text-white hover:"
+                className="ml-4 text-white"
             >
                 <CloseIcon />
-            </button>
+            </Button>
         </div>
     );
 };
