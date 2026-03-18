@@ -20,6 +20,7 @@ interface ShipTemplate {
     first_passive_skill_text?: string;
     second_passive_skill_text?: string;
     third_passive_skill_text?: string;
+    bio?: string;
     base_stats: {
         hp: number;
         attack: number;
@@ -67,6 +68,7 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
     firstPassiveSkillText: template.first_passive_skill_text,
     secondPassiveSkillText: template.second_passive_skill_text,
     thirdPassiveSkillText: template.third_passive_skill_text,
+    bio: template.bio,
 });
 
 export const useShipsData = () => {

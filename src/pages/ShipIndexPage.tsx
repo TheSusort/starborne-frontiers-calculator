@@ -22,6 +22,7 @@ import { SHIP_DATABASE_TUTORIAL } from '../constants/tutorialSteps';
 import { STATS } from '../constants/stats';
 import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
+import { Modal } from '../components/ui/layout/Modal';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -54,6 +55,7 @@ export const ShipIndexPage: React.FC = () => {
     const tooltipRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const { startGroup, hasCompletedGroup } = useTutorial();
     const [copiedSkill, setCopiedSkill] = useState('');
+    const [bioShipName, setBioShipName] = useState<string | null>(null);
 
     const stripSkillTags = (text: string) =>
         text.replace(/<\/?(?:unit-skill|unit-damage|unit-aid)>/g, '');
@@ -356,6 +358,7 @@ export const ShipIndexPage: React.FC = () => {
                                         isAdded={addedShips.has(ship.name)}
                                         onAddToComparison={addToComparison}
                                         isInComparison={isInComparison(ship.id)}
+                                        onBioClick={setBioShipName}
                                     >
                                         <div
                                             className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3"
@@ -615,6 +618,20 @@ export const ShipIndexPage: React.FC = () => {
                     </div>
                 </div>
             </PageLayout>
+
+            <Modal
+                isOpen={bioShipName !== null}
+                onClose={() => setBioShipName(null)}
+                title={`${bioShipName ?? ''} — Bio`}
+            >
+                <div
+                    className="text-gray-300 leading-relaxed [&>h4]:text-white [&>h4]:font-semibold [&>h4]:text-lg [&>h4]:mt-4 [&>h4:first-child]:mt-0"
+                    dangerouslySetInnerHTML={{
+                        __html:
+                            filteredAndSortedShips.find((s) => s.name === bioShipName)?.bio ?? '',
+                    }}
+                />
+            </Modal>
         </>
     );
 };

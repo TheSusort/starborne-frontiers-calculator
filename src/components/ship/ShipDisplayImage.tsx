@@ -51,6 +51,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         isAdded,
         onAddToComparison,
         isInComparison,
+        onBioClick,
     }) => {
         const panelStyles = PANEL_VARIANTS[panelVariant];
         const hasVideo = hasShipVideo(ship.rarity, ship.imageKey);
@@ -233,6 +234,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                         onAddToComparison={onAddToComparison}
                                         isInComparison={isInComparison}
                                         showLeaderboard
+                                        onBioClick={onBioClick}
                                     />
                                 )}
                             </div>

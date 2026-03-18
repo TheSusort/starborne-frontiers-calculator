@@ -53,6 +53,7 @@ export interface ShipDisplayProps {
     contentClassName?: string;
     onAddToComparison?: (shipId: string) => void;
     isInComparison?: boolean;
+    onBioClick?: (shipName: string) => void;
 }
 
 export const ShipIcon = memo(
@@ -309,6 +310,7 @@ interface QuickAddButtonsProps {
     onAddToComparison?: (shipId: string) => void;
     isInComparison?: boolean;
     showLeaderboard?: boolean;
+    onBioClick?: (shipName: string) => void;
 }
 
 export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
@@ -318,12 +320,86 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
     onAddToComparison,
     isInComparison,
     showLeaderboard = false,
+    onBioClick,
 }) => {
     const navigate = useNavigate();
 
     const handleLeaderboardClick = (shipName: string) => {
         navigate(`/ships/leaderboard/${encodeURIComponent(shipName)}`);
     };
+
+    if (onBioClick || showLeaderboard) {
+        return (
+            <Dropdown
+                trigger={
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label="Ship actions"
+                        title="Ship actions"
+                    >
+                        <MenuIcon />
+                    </Button>
+                }
+            >
+                {onAddToComparison && !isInComparison && (
+                    <Dropdown.Item
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToComparison(ship.id);
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <CompareIcon />
+                            <span>Add to comparison</span>
+                        </div>
+                    </Dropdown.Item>
+                )}
+                {showLeaderboard && (
+                    <Dropdown.Item
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleLeaderboardClick(ship.name);
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <TrophyIcon />
+                            <span>Leaderboard</span>
+                        </div>
+                    </Dropdown.Item>
+                )}
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isAdded) onQuickAdd(ship);
+                    }}
+                    className={isAdded ? 'text-gray-500' : ''}
+                >
+                    <div className="flex items-center gap-2">
+                        {isAdded ? (
+                            <CheckIcon />
+                        ) : (
+                            <div className="w-4 h-4 flex items-center justify-center">+</div>
+                        )}
+                        <span>{isAdded ? 'Already in fleet' : 'Add to fleet'}</span>
+                    </div>
+                </Dropdown.Item>
+                {onBioClick && ship.bio && (
+                    <Dropdown.Item
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onBioClick(ship.name);
+                        }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <InfoIcon />
+                            <span>Read bio</span>
+                        </div>
+                    </Dropdown.Item>
+                )}
+            </Dropdown>
+        );
+    }
 
     return (
         <>
@@ -338,16 +414,6 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
                     title="Add to comparison"
                 >
                     <CompareIcon />
-                </Button>
-            )}
-            {showLeaderboard && (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleLeaderboardClick(ship.name)}
-                    title="View leaderboard"
-                >
-                    <TrophyIcon />
                 </Button>
             )}
             <Button
