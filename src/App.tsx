@@ -32,6 +32,7 @@ const EncounterNotesPage = lazy(() => import('./pages/manager/EncounterNotesPage
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
 const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
+const ShipLorePage = lazy(() => import('./pages/ShipLorePage'));
 const ImplantIndexPage = lazy(() => import('./pages/ImplantIndexPage'));
 const EffectIndexPage = lazy(() => import('./pages/EffectIndexPage'));
 const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
@@ -171,6 +172,12 @@ const App: React.FC = () => {
                                                                             path="/ships/index"
                                                                             element={
                                                                                 <ShipIndexPage />
+                                                                            }
+                                                                        />
+                                                                        <Route
+                                                                            path="/ships/lore"
+                                                                            element={
+                                                                                <ShipLorePage />
                                                                             }
                                                                         />
                                                                         <Route

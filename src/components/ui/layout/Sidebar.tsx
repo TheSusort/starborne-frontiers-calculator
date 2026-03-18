@@ -268,9 +268,16 @@ export const Sidebar: React.FC = () => {
                     { path: '/chrono-reaver', label: 'Chrono Reaver' },
                 ],
             },
-            { path: '/ships/index', label: 'Ship Database' },
-            { path: '/implants', label: 'Implants' },
-            { path: '/buffs', label: 'Effects' },
+            {
+                path: '/database',
+                label: 'Database',
+                children: [
+                    { path: '/ships/index', label: 'Ships' },
+                    { path: '/ships/lore', label: 'Lore' },
+                    { path: '/implants', label: 'Implants' },
+                    { path: '/buffs', label: 'Effects' },
+                ],
+            },
             { path: '/shared-encounters', label: 'Shared Encounters' },
             { path: '/documentation', label: 'Help' },
         ];
