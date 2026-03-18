@@ -40,7 +40,7 @@ const splitParagraphs = (text: string): string[] => {
     return text.split(/<br\s*\/?>\s*<br\s*\/?>/).filter((p) => p.trim());
 };
 
-const HighlightedText: React.FC<{ text: string; query?: string }> = ({ text, query }) => {
+export const HighlightedText: React.FC<{ text: string; query?: string }> = ({ text, query }) => {
     if (!query || query.length < 2) return <>{text}</>;
 
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -10,7 +10,12 @@ import { ShipIcon, getAffinityClass } from '../components/ship/shipDisplayCompon
 import { ChevronDownIcon } from '../components/ui/icons/ChevronIcons';
 import { Tabs } from '../components/ui/layout/Tabs';
 import { WEBSITE_LORE, LoreArticle } from '../constants/websiteLore';
-import { BioContent, PlainTextContent, SnippetText } from '../components/ship/BioContent';
+import {
+    BioContent,
+    PlainTextContent,
+    SnippetText,
+    HighlightedText,
+} from '../components/ship/BioContent';
 import Seo from '../components/seo/Seo';
 
 const getMatchSnippet = (text: string, query: string): string | null => {
@@ -64,10 +69,12 @@ const ExpandableCard: React.FC<{
                 <div className="mt-3 pt-3 border-t border-dark-border">
                     {quote && (
                         <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-gray-400 font-primary">
-                            <p>{quote}</p>
+                            <p>
+                                <HighlightedText text={quote} query={searchQuery} />
+                            </p>
                             {quoteAuthor && (
                                 <footer className="mt-1 text-sm not-italic text-gray-500">
-                                    — {quoteAuthor}
+                                    — <HighlightedText text={quoteAuthor} query={searchQuery} />
                                 </footer>
                             )}
                         </blockquote>
