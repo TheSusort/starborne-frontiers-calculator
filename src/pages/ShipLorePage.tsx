@@ -87,10 +87,13 @@ const ExpandableCard: React.FC<{
 };
 
 const ShipBioCard: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, searchQuery }) => {
-    const snippet = useMemo(
-        () => getMatchSnippet(ship.bio ?? '', searchQuery),
-        [ship.bio, searchQuery]
-    );
+    const snippet = useMemo(() => {
+        if (!searchQuery || searchQuery.length < 2) return null;
+        const query = searchQuery.toLowerCase();
+        if (ship.quote?.toLowerCase().includes(query)) return ship.quote;
+        if (ship.quoteAuthor?.toLowerCase().includes(query)) return ship.quoteAuthor;
+        return getMatchSnippet(ship.bio ?? '', searchQuery);
+    }, [ship.bio, ship.quote, ship.quoteAuthor, searchQuery]);
 
     return (
         <ExpandableCard
