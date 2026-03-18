@@ -57,6 +57,14 @@ const ExpandableCard: React.FC<{
                         />
                     </div>
                     {!expanded && snippet && <SnippetText text={snippet} query={searchQuery} />}
+                    {!expanded && !snippet && quote && (
+                        <p className="text-sm text-gray-400 mt-1 line-clamp-2 font-primary italic">
+                            {quote}
+                            {quoteAuthor && (
+                                <span className="not-italic text-gray-500"> — {quoteAuthor}</span>
+                            )}
+                        </p>
+                    )}
                 </div>
             </div>
             <div
