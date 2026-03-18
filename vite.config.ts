@@ -111,6 +111,7 @@ export default defineConfig({
                 '/encounters',
                 '/statistics',
                 '/documentation',
+                '/ships/lore',
             ],
             renderer: new PuppeteerRenderer({
                 renderAfterTime: 3000,
@@ -190,6 +191,7 @@ export default defineConfig({
                     '/speed': { title: 'Speed Calculator', description: 'Calculate ship speed with buffs and debuffs in Starborne Frontiers.', keywords: 'speed calculator, ship speed, speed buffs, speed debuffs' },
                     '/chrono-reaver': { title: 'Chrono Reaver Calculator', description: 'Simulate Chrono Reaver implant charge mechanics in Starborne Frontiers.', keywords: 'chrono reaver, implant calculator, charge mechanics' },
                     '/statistics': { title: 'Statistics', description: 'View comprehensive analytics for your fleet in Starborne Frontiers.', keywords: 'statistics, analytics, fleet stats' },
+                    '/ships/lore': { title: 'Ship Lore', description: 'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.', keywords: 'ship lore, ship bios, starborne frontiers lore, ship backstories' },
                 };
 
                 const seo = seoMap[renderedRoute.route];

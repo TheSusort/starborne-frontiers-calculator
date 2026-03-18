@@ -113,6 +113,13 @@
     <priority>0.5</priority>
   </url>
 
+  <!-- Lore -->
+  <url>
+    <loc>https://starborneplanner.com/ships/lore</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
   <!-- Documentation -->
   <url>
     <loc>https://starborneplanner.com/documentation</loc>

@@ -5,6 +5,7 @@ import { Loader } from '../components/ui/Loader';
 import { SearchInput } from '../components/ui/SearchInput';
 import { Image } from '../components/ui/Image';
 import { RARITIES, FACTIONS, SHIP_TYPES } from '../constants';
+import { SEO_CONFIG } from '../constants/seo';
 import { Ship } from '../types/ship';
 import { ShipIcon, getAffinityClass } from '../components/ship/shipDisplayComponents';
 import { ChevronDownIcon } from '../components/ui/icons/ChevronIcons';
@@ -245,10 +246,7 @@ export const ShipLorePage: React.FC = () => {
 
     return (
         <>
-            <Seo
-                title="Lore"
-                description="Browse ship bios, diaries, and world lore from Starborne Frontiers"
-            />
+            <Seo {...SEO_CONFIG.shipLore} />
             <PageLayout
                 title="Lore"
                 description="Browse and search through ship bios, diaries, and world lore. Look for easter eggs, cross-references, and hidden connections."

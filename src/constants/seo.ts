@@ -125,4 +125,10 @@ export const SEO_CONFIG = {
         keywords:
             'chrono reaver, implant calculator, charge mechanics, ultimate implant, starborne frontiers',
     },
+    shipLore: {
+        title: 'Ship Lore',
+        description:
+            'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.',
+        keywords: 'ship lore, ship bios, starborne frontiers lore, ship backstories, ship quotes',
+    },
 } as const;
