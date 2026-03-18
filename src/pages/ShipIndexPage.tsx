@@ -23,6 +23,7 @@ import { STATS } from '../constants/stats';
 import { StatName } from '../types/stats';
 import { calculateTotalStats } from '../utils/ship/statsCalculator';
 import { Modal } from '../components/ui/layout/Modal';
+import { BioContent } from '../components/ship/BioContent';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -624,13 +625,27 @@ export const ShipIndexPage: React.FC = () => {
                 onClose={() => setBioShipName(null)}
                 title={`${bioShipName ?? ''} — Bio`}
             >
-                <div
-                    className="text-gray-300 leading-relaxed [&>h4]:text-white [&>h4]:font-semibold [&>h4]:text-lg [&>h4]:mt-4 [&>h4:first-child]:mt-0"
-                    dangerouslySetInnerHTML={{
-                        __html:
-                            filteredAndSortedShips.find((s) => s.name === bioShipName)?.bio ?? '',
-                    }}
-                />
+                {(() => {
+                    const bioShip = filteredAndSortedShips.find((s) => s.name === bioShipName);
+                    return (
+                        <>
+                            {bioShip?.quote && (
+                                <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-gray-400">
+                                    <p>{bioShip.quote}</p>
+                                    {bioShip.quoteAuthor && (
+                                        <footer className="mt-1 text-sm not-italic text-gray-500">
+                                            — {bioShip.quoteAuthor}
+                                        </footer>
+                                    )}
+                                </blockquote>
+                            )}
+                            <BioContent
+                                bio={bioShip?.bio ?? ''}
+                                className="text-gray-300 leading-relaxed"
+                            />
+                        </>
+                    );
+                })()}
             </Modal>
         </>
     );

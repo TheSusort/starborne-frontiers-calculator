@@ -10,26 +10,8 @@ import { ShipIcon, getAffinityClass } from '../components/ship/shipDisplayCompon
 import { ChevronDownIcon } from '../components/ui/icons/ChevronIcons';
 import { Tabs } from '../components/ui/layout/Tabs';
 import { WEBSITE_LORE, LoreArticle } from '../constants/websiteLore';
+import { BioContent, PlainTextContent, SnippetText } from '../components/ship/BioContent';
 import Seo from '../components/seo/Seo';
-
-const highlightText = (text: string, query: string): string => {
-    if (!query || query.length < 2) return text;
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return text.replace(
-        new RegExp(`(${escaped})`, 'gi'),
-        '<mark class="bg-yellow-500/30 text-white">$1</mark>'
-    );
-};
-
-const highlightHtml = (html: string, query: string): string => {
-    if (!query || query.length < 2) return html;
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return html.replace(
-        new RegExp(`(?<=>)([^<]*?)(${escaped})([^<]*?)(?=<)`, 'gi'),
-        (_, before, match, after) =>
-            `${before}<mark class="bg-yellow-500/30 text-white">${match}</mark>${after}`
-    );
-};
 
 const getMatchSnippet = (text: string, query: string): string | null => {
     if (!query || query.length < 2 || !text) return null;
@@ -46,11 +28,13 @@ const getMatchSnippet = (text: string, query: string): string | null => {
 const ExpandableCard: React.FC<{
     title: React.ReactNode;
     snippet: string | null;
-    contentHtml: string;
     searchQuery: string;
+    quote?: string;
+    quoteAuthor?: string;
     className?: string;
     children?: React.ReactNode;
-}> = ({ title, snippet, contentHtml, searchQuery, className = '', children }) => {
+    content: React.ReactNode;
+}> = ({ title, snippet, searchQuery, quote, quoteAuthor, className = '', children, content }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -67,14 +51,7 @@ const ExpandableCard: React.FC<{
                             className={`w-5 h-5 text-gray-500 ml-auto flex-shrink-0 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}
                         />
                     </div>
-                    {!expanded && snippet && (
-                        <p
-                            className="text-sm text-gray-400 mt-1 line-clamp-2 font-primary"
-                            dangerouslySetInnerHTML={{
-                                __html: `...${highlightText(snippet, searchQuery)}...`,
-                            }}
-                        />
-                    )}
+                    {!expanded && snippet && <SnippetText text={snippet} query={searchQuery} />}
                 </div>
             </div>
             <div
@@ -84,20 +61,25 @@ const ExpandableCard: React.FC<{
                     opacity: expanded ? 1 : 0,
                 }}
             >
-                <div
-                    className="mt-3 pt-3 border-t border-dark-border text-gray-300 leading-relaxed font-primary [&>h4]:text-white [&>h4]:font-secondary [&>h4]:font-semibold [&>h4]:text-base [&>h4]:mt-4 [&>h4:first-child]:mt-0"
-                    dangerouslySetInnerHTML={{ __html: contentHtml }}
-                />
+                <div className="mt-3 pt-3 border-t border-dark-border">
+                    {quote && (
+                        <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-gray-400 font-primary">
+                            <p>{quote}</p>
+                            {quoteAuthor && (
+                                <footer className="mt-1 text-sm not-italic text-gray-500">
+                                    — {quoteAuthor}
+                                </footer>
+                            )}
+                        </blockquote>
+                    )}
+                    {content}
+                </div>
             </div>
         </button>
     );
 };
 
 const ShipBioCard: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, searchQuery }) => {
-    const bioHtml = useMemo(
-        () => highlightHtml(ship.bio ?? '', searchQuery),
-        [ship.bio, searchQuery]
-    );
     const snippet = useMemo(
         () => getMatchSnippet(ship.bio ?? '', searchQuery),
         [ship.bio, searchQuery]
@@ -129,8 +111,16 @@ const ShipBioCard: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, sear
                 </>
             }
             snippet={snippet}
-            contentHtml={bioHtml}
             searchQuery={searchQuery}
+            quote={ship.quote}
+            quoteAuthor={ship.quoteAuthor}
+            content={
+                <BioContent
+                    bio={ship.bio ?? ''}
+                    searchQuery={searchQuery}
+                    className="text-gray-300 leading-relaxed font-sans"
+                />
+            }
         >
             {ship.imageKey && (
                 <div className="w-20 h-20 flex-shrink-0">
@@ -151,15 +141,6 @@ const LoreArticleCard: React.FC<{ article: LoreArticle; searchQuery: string }> =
     article,
     searchQuery,
 }) => {
-    const bodyHtml = useMemo(() => {
-        const html = article.body
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n\n/g, '<br /><br />');
-        return highlightHtml(`<p>${html}</p>`, searchQuery);
-    }, [article.body, searchQuery]);
-
     const snippet = useMemo(
         () => getMatchSnippet(article.body, searchQuery),
         [article.body, searchQuery]
@@ -169,8 +150,14 @@ const LoreArticleCard: React.FC<{ article: LoreArticle; searchQuery: string }> =
         <ExpandableCard
             title={<span className="font-secondary text-lg text-white">{article.title}</span>}
             snippet={snippet}
-            contentHtml={bodyHtml}
             searchQuery={searchQuery}
+            content={
+                <PlainTextContent
+                    text={article.body}
+                    searchQuery={searchQuery}
+                    className="text-gray-300 leading-relaxed font-primary"
+                />
+            }
         />
     );
 };
@@ -199,7 +186,10 @@ export const ShipLorePage: React.FC = () => {
         const query = searchQuery.toLowerCase();
         return shipsWithBios.filter(
             (ship) =>
-                ship.name.toLowerCase().includes(query) || ship.bio?.toLowerCase().includes(query)
+                ship.name.toLowerCase().includes(query) ||
+                ship.bio?.toLowerCase().includes(query) ||
+                ship.quote?.toLowerCase().includes(query) ||
+                ship.quoteAuthor?.toLowerCase().includes(query)
         );
     }, [shipsWithBios, searchQuery, isSearching]);
 

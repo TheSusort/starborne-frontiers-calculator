@@ -26,6 +26,8 @@ export interface Ship {
     secondPassiveSkillText?: string;
     thirdPassiveSkillText?: string;
     bio?: string;
+    quote?: string;
+    quoteAuthor?: string;
     level?: number;
     rank?: number;
     copies?: number;
@@ -73,4 +75,6 @@ export interface ShipData {
     secondPassiveSkillText?: string;
     thirdPassiveSkillText?: string;
     bio?: string;
+    quote?: string;
+    quoteAuthor?: string;
 }
