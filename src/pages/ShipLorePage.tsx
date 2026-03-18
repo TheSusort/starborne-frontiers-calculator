@@ -69,7 +69,7 @@ const ExpandableCard: React.FC<{
                     </div>
                     {!expanded && snippet && (
                         <p
-                            className="text-sm text-gray-400 mt-1 line-clamp-2"
+                            className="text-sm text-gray-400 mt-1 line-clamp-2 font-primary"
                             dangerouslySetInnerHTML={{
                                 __html: `...${highlightText(snippet, searchQuery)}...`,
                             }}
@@ -85,7 +85,7 @@ const ExpandableCard: React.FC<{
                 }}
             >
                 <div
-                    className="mt-3 pt-3 border-t border-dark-border text-gray-300 leading-relaxed [&>h4]:text-white [&>h4]:font-semibold [&>h4]:text-base [&>h4]:mt-4 [&>h4:first-child]:mt-0"
+                    className="mt-3 pt-3 border-t border-dark-border text-gray-300 leading-relaxed font-primary [&>h4]:text-white [&>h4]:font-secondary [&>h4]:font-semibold [&>h4]:text-base [&>h4]:mt-4 [&>h4:first-child]:mt-0"
                     dangerouslySetInnerHTML={{ __html: contentHtml }}
                 />
             </div>
