@@ -163,9 +163,14 @@ const DamageDeconstructionPage: React.FC = () => {
         });
     };
 
-    const renderBuffDebuffSection = (title: string, type: keyof DamageDeconstructionForm) => (
+    const renderBuffDebuffSection = (
+        title: string,
+        type: keyof DamageDeconstructionForm,
+        helpText?: string
+    ) => (
         <div>
             <label className="block text-sm font-medium mb-1">{title}</label>
+            {helpText && <p className="text-xs text-gray-500 mb-2">{helpText}</p>}
             {(form[type] as BuffDebuff[]).map((buff, index) => (
                 <div key={index} className="flex gap-2 mb-2">
                     <Input
@@ -297,11 +302,13 @@ const DamageDeconstructionPage: React.FC = () => {
                         <h4 className="text-lg font-bold">Defender</h4>
                         {renderBuffDebuffSection(
                             'Enemy Defense Buffs/Debuffs %',
-                            'enemyDefenseBuffs'
+                            'enemyDefenseBuffs',
+                            'Positive = defense buff, negative = defense debuff (e.g. Defense Down 2 = -20)'
                         )}
                         {renderBuffDebuffSection(
                             'Enemy Incoming Damage Buffs/Debuffs %',
-                            'enemyIncomingDamageBuffs'
+                            'enemyIncomingDamageBuffs',
+                            'Negative = damage reduction (e.g. -45% incoming damage = -45), positive = damage amplification'
                         )}
 
                         <Button onClick={calculateDamage} variant="primary" fullWidth>

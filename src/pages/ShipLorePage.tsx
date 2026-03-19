@@ -44,11 +44,19 @@ const ExpandableCard: React.FC<{
     const [expanded, setExpanded] = useState(false);
 
     return (
-        <button
-            className={`card w-full text-left cursor-pointer hover:bg-dark-lighter transition-colors ${className}`}
-            onClick={() => setExpanded(!expanded)}
-        >
-            <div className="flex items-start gap-3">
+        <div className={`card ${className}`}>
+            <div
+                className="flex items-start gap-3 cursor-pointer"
+                onClick={() => setExpanded(!expanded)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpanded(!expanded);
+                    }
+                }}
+            >
                 {children}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -91,7 +99,7 @@ const ExpandableCard: React.FC<{
                     {content}
                 </div>
             </div>
-        </button>
+        </div>
     );
 };
 
