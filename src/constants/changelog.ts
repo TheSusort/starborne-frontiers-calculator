@@ -1,8 +1,20 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.45.0';
+export const CURRENT_VERSION = '1.46.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.46.0',
+        date: '2026-03-19',
+        changes: [
+            'Added Lore page with two tabs: Ship Bios (149 ships with searchable bios, quotes, and authors) and World Lore (30 articles from starborne.com)',
+            'Ship database cards now have a dropdown menu with compare, leaderboard, add to fleet, and read bio actions',
+            'Ship bios replaced with official data from the developers, including character quotes and authors',
+            'Cross-tab search on the lore page — search results from the other tab appear below with a section header',
+            'Added help text to hit deconstruction calculator explaining defender buff sign conventions',
+            'Reorganized sidebar: Ships, Lore, Implants, and Effects grouped under Database',
+        ],
+    },
     {
         version: '1.45.0',
         date: '2026-03-16',
