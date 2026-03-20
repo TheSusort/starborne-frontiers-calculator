@@ -18,7 +18,6 @@ import { FactionName } from '../constants/factions';
 import { AffinityName } from '../types/ship';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
-import { getCalibratedMainStat, isCalibrationEligible } from './gear/calibrationCalculator';
 
 interface ImportResult {
     success: boolean;
@@ -220,43 +219,24 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 shipId: item.EquippedOnUnit || undefined,
             };
 
-            // Detect calibration: if main stat value doesn't match expected base value
-            // but matches calibrated value, and gear is equipped, mark as calibrated
-            if (gearPiece.mainStat && isCalibrationEligible(gearPiece) && item.EquippedOnUnit) {
-                const expectedBaseValue = calculateMainStatValue(
-                    gearPiece.mainStat.name,
-                    gearPiece.mainStat.type,
-                    gearPiece.stars,
-                    gearPiece.level
-                );
-
-                // If actual value doesn't match base, check if it matches calibrated
-                if (Math.abs(gearPiece.mainStat.value - expectedBaseValue) > 0.1) {
-                    // Create a temporary gear piece with base stat to calculate calibrated value
-                    const baseGearPiece: GearPiece = {
-                        ...gearPiece,
-                        mainStat: {
-                            ...gearPiece.mainStat,
-                            value: expectedBaseValue,
-                        },
+            // Detect calibration from export data (nil UUID means not calibrated)
+            const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+            if (item.CalibratedForUnitId && item.CalibratedForUnitId !== NIL_UUID) {
+                gearPiece.calibration = {
+                    shipId: item.CalibratedForUnitId,
+                };
+                // Store base (uncalibrated) main stat value
+                if (gearPiece.mainStat) {
+                    const baseValue = calculateMainStatValue(
+                        gearPiece.mainStat.name,
+                        gearPiece.mainStat.type,
+                        gearPiece.stars,
+                        gearPiece.level
+                    );
+                    gearPiece.mainStat = {
+                        ...gearPiece.mainStat,
+                        value: baseValue,
                     };
-
-                    // Check if actual value matches what calibrated would be
-                    const calibratedStat = getCalibratedMainStat(baseGearPiece);
-                    if (
-                        calibratedStat &&
-                        Math.abs(gearPiece.mainStat.value - calibratedStat.value) < 0.1
-                    ) {
-                        // This gear appears to be calibrated - mark it as calibrated to the equipped ship
-                        gearPiece.calibration = {
-                            shipId: item.EquippedOnUnit,
-                        };
-                        // Also update mainStat to base value for storage
-                        gearPiece.mainStat = {
-                            ...gearPiece.mainStat,
-                            value: expectedBaseValue,
-                        };
-                    }
                 }
             }
 

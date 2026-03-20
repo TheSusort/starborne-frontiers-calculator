@@ -39,6 +39,14 @@ npm run migrate-implants    # Migrate implants to Supabase
 npm run migrate-to-supabase # Full migration to Supabase
 ```
 
+### Admin Scripts
+
+```bash
+npm run admin:import -- --file <path> --email <user@email.com>  # Import game data on behalf of a user
+```
+
+Uses service role key (`SUPABASE_SERVICE_ROLE_KEY` in `.env`) to bypass RLS. Runs the same import pipeline as the normal user flow: `importPlayerData()` → `syncMigratedDataToSupabase()`.
+
 ### SQL Scripts (Run in Supabase SQL Editor)
 
 - `scripts/sync-user-emails.sql` - Syncs user emails from auth.users to public.users and creates trigger for future users
@@ -275,6 +283,8 @@ Defined in `src/constants/storage.ts`:
 - `Manipulation` → `hacking`
 - `CritChance` → `crit` (multiply by 100)
 - `ShieldPoints` → Ignored (not implemented in game)
+- `CalibratedForUnitId` → `calibration.shipId` (nil UUID `00000000-...` treated as uncalibrated)
+- `CalibrationLevel` → Available but not yet used
 
 ### Component Patterns
 

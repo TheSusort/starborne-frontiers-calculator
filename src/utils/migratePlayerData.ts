@@ -302,7 +302,7 @@ export const syncMigratedDataToSupabase = async (
                         stars: item.stars,
                         rarity: item.rarity,
                         set_bonus: item.setBonus,
-                        calibration_ship_id: item.calibration?.shipId || null,
+                        calibration_ship_id: null, // Set after ships are inserted (FK dependency)
                         stats: {
                             mainStat: item.mainStat
                                 ? {
@@ -540,6 +540,29 @@ export const syncMigratedDataToSupabase = async (
                             .insert(batch);
 
                         if (equipmentError) throw equipmentError;
+                    }
+                }
+            }
+        }
+
+        // Step 2b: Update calibration_ship_id on inventory items (deferred from Step 1 due to FK dependency on ships)
+        if (inventory.length > 0) {
+            const calibratedItems = inventory.filter(
+                (item) => !!item.id && !!item.calibration?.shipId
+            );
+            for (let i = 0; i < calibratedItems.length; i += BATCH_SIZE) {
+                const batch = calibratedItems.slice(i, i + BATCH_SIZE);
+                for (const item of batch) {
+                    const { error: calibrationError } = await supabase
+                        .from('inventory_items')
+                        .update({ calibration_ship_id: item.calibration!.shipId })
+                        .eq('id', item.id);
+                    if (calibrationError) {
+                        console.error(
+                            'Error updating calibration_ship_id:',
+                            calibrationError,
+                            item.id
+                        );
                     }
                 }
             }
