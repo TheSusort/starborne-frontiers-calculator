@@ -48,7 +48,8 @@
         "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
         "prepare": "husky install",
         "lint-staged": "lint-staged",
-        "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts"
+        "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
+        "admin:import": "tsx scripts/admin-import.ts"
     },
     "eslintConfig": {
         "extends": [
