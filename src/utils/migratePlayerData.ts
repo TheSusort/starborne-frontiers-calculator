@@ -1,3 +1,4 @@
+import { SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageKey } from '../constants/storage';
 import { Ship } from '../types/ship';
@@ -221,10 +222,11 @@ export const migratePlayerData = (): MigrationResult => {
  */
 export const syncMigratedDataToSupabase = async (
     userId: string,
-    migrationResult: MigrationResult
+    migrationResult: MigrationResult,
+    client?: SupabaseClient
 ) => {
-    // Import supabase here to avoid circular dependencies
-    const { supabase } = await import('../config/supabase');
+    // Use provided client or import default (avoids circular dependencies)
+    const supabase = client ?? (await import('../config/supabase')).supabase;
     const { ships, inventory, encounters, loadouts, teamLoadouts, engineeringStats } =
         migrationResult;
 
@@ -800,24 +802,28 @@ export const syncMigratedDataToSupabase = async (
 
         // Step 6: Upload tutorial completed groups
         try {
-            const tutorialStored = localStorage.getItem('tutorial_completed_groups');
-            if (tutorialStored) {
-                const tutorialGroups: string[] = JSON.parse(tutorialStored);
-                if (tutorialGroups.length > 0) {
-                    // Merge with any existing Supabase data (union)
-                    const { data: userData } = await supabase
-                        .from('users')
-                        .select('tutorial_completed_groups')
-                        .eq('id', userId)
-                        .single();
+            if (typeof localStorage === 'undefined') {
+                // Skip tutorial migration in Node.js (CLI scripts)
+            } else {
+                const tutorialStored = localStorage.getItem('tutorial_completed_groups');
+                if (tutorialStored) {
+                    const tutorialGroups: string[] = JSON.parse(tutorialStored);
+                    if (tutorialGroups.length > 0) {
+                        // Merge with any existing Supabase data (union)
+                        const { data: userData } = await supabase
+                            .from('users')
+                            .select('tutorial_completed_groups')
+                            .eq('id', userId)
+                            .single();
 
-                    const remoteGroups: string[] = userData?.tutorial_completed_groups || [];
-                    const merged = [...new Set([...remoteGroups, ...tutorialGroups])];
+                        const remoteGroups: string[] = userData?.tutorial_completed_groups || [];
+                        const merged = [...new Set([...remoteGroups, ...tutorialGroups])];
 
-                    await supabase
-                        .from('users')
-                        .update({ tutorial_completed_groups: merged })
-                        .eq('id', userId);
+                        await supabase
+                            .from('users')
+                            .update({ tutorial_completed_groups: merged })
+                            .eq('id', userId);
+                    }
                 }
             }
         } catch (error) {
