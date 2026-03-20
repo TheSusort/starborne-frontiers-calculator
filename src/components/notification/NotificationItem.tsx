@@ -25,7 +25,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({ notification
                 size="xs"
                 onClick={() => onClose(notification.id)}
                 aria-label="Close notification"
-                className="ml-4 text-white"
+                className="ml-4 text-white bg-transparent"
             >
                 <CloseIcon />
             </Button>

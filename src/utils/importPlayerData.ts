@@ -69,21 +69,8 @@ const transformEngineeringStats = (data: ExportedPlayData['Engineering']): Engin
  * Generates a unique key for a ship based on its properties (excluding ID)
  */
 const generateShipKey = (unit: ExportedPlayData['Units'][0]): string => {
-    return JSON.stringify({
-        name: unit.Name,
-        rarity: unit.Rarity,
-        faction: unit.Faction,
-        type: unit.ShipType,
-        affinity: unit.Affinity,
-        rank: unit.Rank,
-        level: unit.Level,
-        refit: unit.Refit,
-        attributes: {
-            base: unit.Attributes.BaseWithLevelAndRank,
-            refit: unit.Attributes.Refit,
-            engineering: unit.Attributes.Engineering,
-        },
-    });
+    const base = unit.Attributes.BaseWithLevelAndRank;
+    return `${unit.Name}|${unit.Rarity}|${unit.Faction}|${unit.ShipType}|${unit.Affinity}|${unit.Rank}|${unit.Level}|${unit.Refit}|${base.HullPoints}|${base.Power}|${base.Defense}|${base.Manipulation}|${base.Security}|${base.CritChance}|${base.CritBoost}|${base.Initiative}`;
 };
 
 /**
@@ -312,18 +299,46 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
         const { gear, implants } = transformInventory(data.Equipment);
         const ships = transformShips(data.Units);
 
-        // Update equipment references in ships
-        ships.forEach((ship) => {
-            const shipEquipment = gear.filter((gear) => gear.shipId === ship.id);
-            shipEquipment.forEach((gear) => {
-                ship.equipment[gear.slot] = gear.id;
-            });
+        // Build lookup maps for O(1) per-ship equipment assignment
+        const gearByShip = new Map<string, GearPiece[]>();
+        for (const g of gear) {
+            if (g.shipId) {
+                let list = gearByShip.get(g.shipId);
+                if (!list) {
+                    list = [];
+                    gearByShip.set(g.shipId, list);
+                }
+                list.push(g);
+            }
+        }
 
-            const shipImplants = implants.filter((implant) => implant.shipId === ship.id);
-            shipImplants.forEach((implant) => {
-                ship.implants[implant.slot] = implant.id;
-            });
-        });
+        const implantsByShip = new Map<string, GearPiece[]>();
+        for (const imp of implants) {
+            if (imp.shipId) {
+                let list = implantsByShip.get(imp.shipId);
+                if (!list) {
+                    list = [];
+                    implantsByShip.set(imp.shipId, list);
+                }
+                list.push(imp);
+            }
+        }
+
+        // Update equipment references in ships using map lookups
+        for (const ship of ships) {
+            const shipGear = gearByShip.get(ship.id);
+            if (shipGear) {
+                for (const g of shipGear) {
+                    ship.equipment[g.slot] = g.id;
+                }
+            }
+            const shipImplants = implantsByShip.get(ship.id);
+            if (shipImplants) {
+                for (const imp of shipImplants) {
+                    ship.implants[imp.slot] = imp.id;
+                }
+            }
+        }
 
         return {
             success: true,

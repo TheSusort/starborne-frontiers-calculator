@@ -117,10 +117,12 @@ export const ImportButton: React.FC<{
                 const text = await file.text();
                 const data = JSON.parse(text) as ExportedPlayData;
 
+                addNotification('info', 'Processing game data...', 10000);
                 const result = await importPlayerData(data);
 
                 if (result.success && result.data) {
                     // Update all states with the imported data
+                    addNotification('info', 'Saving data locally...', 10000);
                     await setShips(result.data.ships);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
@@ -158,6 +160,7 @@ export const ImportButton: React.FC<{
 
                     // sync to supabase if user is logged in
                     if (user) {
+                        addNotification('info', 'Syncing to cloud...', 30000);
                         const syncResult = await syncMigratedDataToSupabase(user.id, {
                             ships: result.data.ships,
                             inventory: result.data.inventory,
