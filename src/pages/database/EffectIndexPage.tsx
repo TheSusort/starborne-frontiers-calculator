@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { BUFFS, Buff } from '../constants/buffs';
-import { PageLayout } from '../components/ui';
-import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
-import { SortConfig } from '../components/filters/SortPanel';
-import { usePersistedFilters } from '../hooks/usePersistedFilters';
-import { Image } from '../components/ui/Image';
-import Seo from '../components/seo/Seo';
-import { SEO_CONFIG } from '../constants/seo';
+import { BUFFS, Buff } from '../../constants/buffs';
+import { PageLayout } from '../../components/ui';
+import { FilterPanel, FilterConfig } from '../../components/filters/FilterPanel';
+import { SortConfig } from '../../components/filters/SortPanel';
+import { usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { Image } from '../../components/ui/Image';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
 
 const getTypeBadgeClasses = (type: Buff['type']) => {
     switch (type) {

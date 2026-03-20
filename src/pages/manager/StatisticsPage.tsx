@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { PageLayout, Tabs } from '../components/ui';
-import { useShips } from '../contexts/ShipsContext';
-import { useInventory } from '../contexts/InventoryProvider';
-import { useEngineeringStats } from '../contexts/EngineeringStatsProvider';
-import { ShipsStatsTab } from '../components/statistics/ShipsStatsTab';
-import { GearStatsTab } from '../components/statistics/GearStatsTab';
-import { ImplantsStatsTab } from '../components/statistics/ImplantsStatsTab';
-import { EngineeringStatsTab } from '../components/statistics/EngineeringStatsTab';
+import { PageLayout, Tabs } from '../../components/ui';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../contexts/EngineeringStatsProvider';
+import { ShipsStatsTab } from '../../components/statistics/ShipsStatsTab';
+import { GearStatsTab } from '../../components/statistics/GearStatsTab';
+import { ImplantsStatsTab } from '../../components/statistics/ImplantsStatsTab';
+import { EngineeringStatsTab } from '../../components/statistics/EngineeringStatsTab';
 import { Link } from 'react-router-dom';
 
 export const StatisticsPage: React.FC = () => {

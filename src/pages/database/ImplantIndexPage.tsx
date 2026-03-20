@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { PageLayout } from '../components/ui';
-import { FilterPanel, FilterConfig } from '../components/filters/FilterPanel';
-import { SortConfig } from '../components/filters/SortPanel';
-import { usePersistedFilters } from '../hooks/usePersistedFilters';
-import { Image } from '../components/ui/Image';
-import Seo from '../components/seo/Seo';
-import { SEO_CONFIG } from '../constants/seo';
-import { ImplantData, ImplantVariant, IMPLANTS } from '../constants/implants';
-import { StatDisplay } from '../components/stats/StatDisplay';
-import { RARITIES, RARITY_ORDER } from '../constants/rarities';
+import { PageLayout } from '../../components/ui';
+import { FilterPanel, FilterConfig } from '../../components/filters/FilterPanel';
+import { SortConfig } from '../../components/filters/SortPanel';
+import { usePersistedFilters } from '../../hooks/usePersistedFilters';
+import { Image } from '../../components/ui/Image';
+import Seo from '../../components/seo/Seo';
+import { SEO_CONFIG } from '../../constants/seo';
+import { ImplantData, ImplantVariant, IMPLANTS } from '../../constants/implants';
+import { StatDisplay } from '../../components/stats/StatDisplay';
+import { RARITIES, RARITY_ORDER } from '../../constants/rarities';
 
 const implants: ImplantData[] = Object.values(IMPLANTS);
 

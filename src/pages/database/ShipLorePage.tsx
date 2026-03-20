@@ -1,23 +1,23 @@
 import React, { useMemo, useState } from 'react';
-import { useShipsData } from '../hooks/useShipsData';
-import { PageLayout } from '../components/ui';
-import { Loader } from '../components/ui/Loader';
-import { SearchInput } from '../components/ui/SearchInput';
-import { Image } from '../components/ui/Image';
-import { RARITIES, FACTIONS, SHIP_TYPES } from '../constants';
-import { SEO_CONFIG } from '../constants/seo';
-import { Ship } from '../types/ship';
-import { ShipIcon, getAffinityClass } from '../components/ship/shipDisplayComponents';
-import { ChevronDownIcon } from '../components/ui/icons/ChevronIcons';
-import { Tabs } from '../components/ui/layout/Tabs';
-import { WEBSITE_LORE, LoreArticle } from '../constants/websiteLore';
+import { useShipsData } from '../../hooks/useShipsData';
+import { PageLayout } from '../../components/ui';
+import { Loader } from '../../components/ui/Loader';
+import { SearchInput } from '../../components/ui/SearchInput';
+import { Image } from '../../components/ui/Image';
+import { RARITIES, FACTIONS, SHIP_TYPES } from '../../constants';
+import { SEO_CONFIG } from '../../constants/seo';
+import { Ship } from '../../types/ship';
+import { ShipIcon, getAffinityClass } from '../../components/ship/shipDisplayComponents';
+import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
+import { Tabs } from '../../components/ui/layout/Tabs';
+import { WEBSITE_LORE, LoreArticle } from '../../constants/websiteLore';
 import {
     BioContent,
     PlainTextContent,
     SnippetText,
     HighlightedText,
-} from '../components/ship/BioContent';
-import Seo from '../components/seo/Seo';
+} from '../../components/ship/BioContent';
+import Seo from '../../components/seo/Seo';
 
 const getMatchSnippet = (text: string, query: string): string | null => {
     if (!query || query.length < 2 || !text) return null;

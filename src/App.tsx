@@ -31,15 +31,17 @@ const LoadoutsPage = lazy(() => import('./pages/manager/LoadoutsPage'));
 const EncounterNotesPage = lazy(() => import('./pages/manager/EncounterNotesPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
-const ShipIndexPage = lazy(() => import('./pages/ShipIndexPage'));
-const ShipLorePage = lazy(() => import('./pages/ShipLorePage'));
-const ImplantIndexPage = lazy(() => import('./pages/ImplantIndexPage'));
-const EffectIndexPage = lazy(() => import('./pages/EffectIndexPage'));
 const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
-const LeaderboardPage = lazy(() => import('./pages/ships/LeaderboardPage'));
-const StatisticsPage = lazy(() => import('./pages/StatisticsPage'));
+const StatisticsPage = lazy(() => import('./pages/manager/StatisticsPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+
+// Database pages
+const ShipIndexPage = lazy(() => import('./pages/database/ShipIndexPage'));
+const ShipLorePage = lazy(() => import('./pages/database/ShipLorePage'));
+const ImplantIndexPage = lazy(() => import('./pages/database/ImplantIndexPage'));
+const EffectIndexPage = lazy(() => import('./pages/database/EffectIndexPage'));
+const LeaderboardPage = lazy(() => import('./pages/database/LeaderboardPage'));
 
 // Calculator pages
 const DefenseCalculatorPage = lazy(() => import('./pages/calculators/DefenseCalculatorPage'));
