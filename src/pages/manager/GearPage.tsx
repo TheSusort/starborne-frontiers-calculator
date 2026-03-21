@@ -202,6 +202,14 @@ export const GearPage: React.FC = () => {
                         maxItems={inventory.length}
                     />
                 )}
+                {activeTab === 'analysis' && (
+                    <GearUpgradeAnalysis
+                        inventory={inventory}
+                        shipRoles={Object.keys(SHIP_TYPES)}
+                        mode="analysis"
+                        onEdit={handleEditPiece}
+                    />
+                )}
                 {activeTab === 'calibration' && (
                     <GearCalibrationAnalysis
                         inventory={inventory}
@@ -210,14 +218,6 @@ export const GearPage: React.FC = () => {
                         onCalibrate={handleOpenCalibration}
                         initialShipId={initialShipId}
                         initialSubTab={initialSubTab}
-                    />
-                )}
-                {activeTab === 'analysis' && (
-                    <GearUpgradeAnalysis
-                        inventory={inventory}
-                        shipRoles={Object.keys(SHIP_TYPES)}
-                        mode="analysis"
-                        onEdit={handleEditPiece}
                     />
                 )}
                 {activeTab === 'simulation' && (
