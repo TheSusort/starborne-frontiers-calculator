@@ -15,6 +15,7 @@ import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
 import Seo from './components/seo/Seo';
 import { AutogearConfigProvider } from './contexts/AutogearConfigContext';
 import { TutorialProvider } from './contexts/TutorialContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 import { Loader } from './components/ui/Loader';
 import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
@@ -101,226 +102,238 @@ const App: React.FC = () => {
 
     return (
         <HelmetProvider>
-            <NotificationProvider>
-                <AuthProvider>
-                    <InventoryProvider>
-                        <ShipsProvider>
-                            <AutogearConfigProvider>
-                                <EngineeringStatsProvider>
-                                    <Router>
-                                        <TutorialProvider>
-                                            <Seo
-                                                title=""
-                                                description="Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations."
-                                                keywords="starborne, frontiers, calculator, ships, gear, simulation"
-                                            />
-                                            <main className="flex">
-                                                <Sidebar />
-                                                <div className="flex-1 lg:pl-64 max-w-full">
-                                                    <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
-                                                        <div className="max-w-7xl mx-auto w-full flex-grow">
-                                                            <ChunkErrorBoundary>
-                                                                <Suspense fallback={<Loader />}>
-                                                                    <Routes>
-                                                                        <Route
-                                                                            path="/ships"
-                                                                            element={<ShipsPage />}
-                                                                        />
-                                                                        <Route
-                                                                            path="/gear"
-                                                                            element={<GearPage />}
-                                                                        />
-                                                                        <Route
-                                                                            path="/simulation"
-                                                                            element={
-                                                                                <SimulationPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/autogear"
-                                                                            element={
-                                                                                <AutogearPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/engineering"
-                                                                            element={
-                                                                                <EngineeringStatsPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/loadouts"
-                                                                            element={
-                                                                                <LoadoutsPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/encounters"
-                                                                            element={
-                                                                                <EncounterNotesPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/"
-                                                                            element={<HomePage />}
-                                                                        />
-                                                                        <Route
-                                                                            path="/ships/:shipId"
-                                                                            element={
-                                                                                <ShipDetailsPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/ships/index"
-                                                                            element={
-                                                                                <ShipIndexPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/ships/lore"
-                                                                            element={
-                                                                                <ShipLorePage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/ships/leaderboard/:shipName"
-                                                                            element={
-                                                                                <LeaderboardPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/defense"
-                                                                            element={
-                                                                                <DefenseCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/damage"
-                                                                            element={
-                                                                                <DPSCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/healing"
-                                                                            element={
-                                                                                <HealingCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/damage-deconstruction"
-                                                                            element={
-                                                                                <DamageDeconstructionPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/json-diff"
-                                                                            element={
-                                                                                <JsonDiffCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/recruitment"
-                                                                            element={
-                                                                                <RecruitmentCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/speed"
-                                                                            element={
-                                                                                <SpeedCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/chrono-reaver"
-                                                                            element={
-                                                                                <ChronoReaverCalculatorPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/shared-encounters"
-                                                                            element={
-                                                                                <SharedEncountersPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/implants"
-                                                                            element={
-                                                                                <ImplantIndexPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/buffs"
-                                                                            element={
-                                                                                <EffectIndexPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/documentation"
-                                                                            element={
-                                                                                <DocumentationPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/statistics"
-                                                                            element={
-                                                                                <StatisticsPage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/profile"
-                                                                            element={
-                                                                                <ProfilePage />
-                                                                            }
-                                                                        />
-                                                                        <Route
-                                                                            path="/admin"
-                                                                            element={<AdminPanel />}
-                                                                        />
-                                                                    </Routes>
-                                                                </Suspense>
-                                                            </ChunkErrorBoundary>
-                                                        </div>
-
-                                                        <JokeCorner />
-                                                        <footer className="text-center text-xs mt-auto pt-5">
-                                                            Made with ❤️ by {AUTHOR} (
-                                                            <a
-                                                                href={`mailto:${AUTHOR_EMAIL}`}
-                                                                className="hover:underline"
-                                                            >
-                                                                {AUTHOR_EMAIL}
-                                                            </a>
-                                                            )
-                                                            <br />
-                                                            <br />
-                                                            <a
-                                                                href="https://www.buymeacoffee.com/starborneplanner"
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="hover:underline"
-                                                            >
-                                                                Buy me a coffee to keep me going! ☕
-                                                            </a>
-                                                        </footer>
-                                                    </div>
-                                                </div>
-                                                <ChangelogModal
-                                                    isOpen={showChangelog}
-                                                    onClose={handleCloseChangelog}
-                                                    entries={CHANGELOG}
-                                                    lastSeenVersion={lastSeenVersion}
+            <ThemeProvider>
+                <NotificationProvider>
+                    <AuthProvider>
+                        <InventoryProvider>
+                            <ShipsProvider>
+                                <AutogearConfigProvider>
+                                    <EngineeringStatsProvider>
+                                        <Router>
+                                            <TutorialProvider>
+                                                <Seo
+                                                    title=""
+                                                    description="Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations."
+                                                    keywords="starborne, frontiers, calculator, ships, gear, simulation"
                                                 />
-                                                <NotificationContainer />
-                                                <TutorialOverlay />
-                                            </main>
-                                        </TutorialProvider>
-                                    </Router>
-                                </EngineeringStatsProvider>
-                            </AutogearConfigProvider>
-                        </ShipsProvider>
-                    </InventoryProvider>
-                </AuthProvider>
-            </NotificationProvider>
+                                                <main className="flex">
+                                                    <div className="twinkle-stars" />
+                                                    <Sidebar />
+                                                    <div className="flex-1 lg:pl-64 max-w-full">
+                                                        <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">
+                                                            <div className="max-w-7xl mx-auto w-full flex-grow">
+                                                                <ChunkErrorBoundary>
+                                                                    <Suspense fallback={<Loader />}>
+                                                                        <Routes>
+                                                                            <Route
+                                                                                path="/ships"
+                                                                                element={
+                                                                                    <ShipsPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/gear"
+                                                                                element={
+                                                                                    <GearPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/simulation"
+                                                                                element={
+                                                                                    <SimulationPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/autogear"
+                                                                                element={
+                                                                                    <AutogearPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/engineering"
+                                                                                element={
+                                                                                    <EngineeringStatsPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/loadouts"
+                                                                                element={
+                                                                                    <LoadoutsPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/encounters"
+                                                                                element={
+                                                                                    <EncounterNotesPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/"
+                                                                                element={
+                                                                                    <HomePage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/ships/:shipId"
+                                                                                element={
+                                                                                    <ShipDetailsPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/ships/index"
+                                                                                element={
+                                                                                    <ShipIndexPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/ships/lore"
+                                                                                element={
+                                                                                    <ShipLorePage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/ships/leaderboard/:shipName"
+                                                                                element={
+                                                                                    <LeaderboardPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/defense"
+                                                                                element={
+                                                                                    <DefenseCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/damage"
+                                                                                element={
+                                                                                    <DPSCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/healing"
+                                                                                element={
+                                                                                    <HealingCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/damage-deconstruction"
+                                                                                element={
+                                                                                    <DamageDeconstructionPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/json-diff"
+                                                                                element={
+                                                                                    <JsonDiffCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/recruitment"
+                                                                                element={
+                                                                                    <RecruitmentCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/speed"
+                                                                                element={
+                                                                                    <SpeedCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/chrono-reaver"
+                                                                                element={
+                                                                                    <ChronoReaverCalculatorPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/shared-encounters"
+                                                                                element={
+                                                                                    <SharedEncountersPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/implants"
+                                                                                element={
+                                                                                    <ImplantIndexPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/buffs"
+                                                                                element={
+                                                                                    <EffectIndexPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/documentation"
+                                                                                element={
+                                                                                    <DocumentationPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/statistics"
+                                                                                element={
+                                                                                    <StatisticsPage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/profile"
+                                                                                element={
+                                                                                    <ProfilePage />
+                                                                                }
+                                                                            />
+                                                                            <Route
+                                                                                path="/admin"
+                                                                                element={
+                                                                                    <AdminPanel />
+                                                                                }
+                                                                            />
+                                                                        </Routes>
+                                                                    </Suspense>
+                                                                </ChunkErrorBoundary>
+                                                            </div>
+
+                                                            <JokeCorner />
+                                                            <footer className="text-center text-xs mt-auto pt-5">
+                                                                Made with ❤️ by {AUTHOR} (
+                                                                <a
+                                                                    href={`mailto:${AUTHOR_EMAIL}`}
+                                                                    className="hover:underline"
+                                                                >
+                                                                    {AUTHOR_EMAIL}
+                                                                </a>
+                                                                )
+                                                                <br />
+                                                                <br />
+                                                                <a
+                                                                    href="https://www.buymeacoffee.com/starborneplanner"
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="hover:underline"
+                                                                >
+                                                                    Buy me a coffee to keep me
+                                                                    going! ☕
+                                                                </a>
+                                                            </footer>
+                                                        </div>
+                                                    </div>
+                                                    <ChangelogModal
+                                                        isOpen={showChangelog}
+                                                        onClose={handleCloseChangelog}
+                                                        entries={CHANGELOG}
+                                                        lastSeenVersion={lastSeenVersion}
+                                                    />
+                                                    <NotificationContainer />
+                                                    <TutorialOverlay />
+                                                </main>
+                                            </TutorialProvider>
+                                        </Router>
+                                    </EngineeringStatsProvider>
+                                </AutogearConfigProvider>
+                            </ShipsProvider>
+                        </InventoryProvider>
+                    </AuthProvider>
+                </NotificationProvider>
+            </ThemeProvider>
         </HelmetProvider>
     );
 };
