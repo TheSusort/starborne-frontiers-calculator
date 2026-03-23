@@ -23,7 +23,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
 
     return (
         <div className="flex flex-col space-y-2">
-            <label className="text-sm font-medium text-gray-300">{label}</label>
+            <label className="text-sm font-medium text-theme-text">{label}</label>
             <input
                 type="file"
                 accept={accept}

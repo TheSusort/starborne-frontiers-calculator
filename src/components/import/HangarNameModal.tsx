@@ -47,7 +47,7 @@ export const HangarNameModal: React.FC<Props> = ({
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title="Enter Hangar Name" highZIndex={true}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <p className="text-gray-300">
+                <p className="text-theme-text">
                     Please enter a name for your hangar that will be displayed on
                     frontiers.cubedweb.net
                 </p>

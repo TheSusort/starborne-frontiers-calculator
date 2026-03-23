@@ -125,7 +125,7 @@ export const LoadoutsPage: React.FC = () => {
                             ))}
 
                             {teamLoadouts.length === 0 && (
-                                <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                                <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                     No team loadouts created yet. Create one by clicking the
                                     &quot;New Team&quot; button above.
                                 </div>

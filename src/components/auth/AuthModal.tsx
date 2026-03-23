@@ -58,7 +58,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <div className="space-y-6">
                 {error && <div className="text-red-500 text-sm">{error}</div>}
 
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-theme-text-secondary">
                     Login is optional, to easily access your data across devices. The app works
                     without it. If you login, your data will be synced to the cloud.
                     <b>
@@ -88,7 +88,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 <div className="w-full border-t border-dark-border"></div>
                             </div>
                             <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-dark-lighter text-gray-400">Or</span>
+                                <span className="px-2 bg-dark-lighter text-theme-text-secondary">
+                                    Or
+                                </span>
                             </div>
                         </div>
                         <Button

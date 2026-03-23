@@ -416,11 +416,13 @@ const HealingCalculatorPage: React.FC = () => {
 
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between mb-2">
-                                            <span className="text-gray-400">Base Healing:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Base Healing:
+                                            </span>
                                             <span>{config.healing?.toLocaleString()} HP</span>
                                         </div>
                                         <div className="flex justify-between mb-2">
-                                            <span className="text-gray-400">
+                                            <span className="text-theme-text-secondary">
                                                 Healing with Crits:
                                             </span>
                                             <span>
@@ -428,7 +430,7 @@ const HealingCalculatorPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-gray-400">
+                                            <span className="text-theme-text-secondary">
                                                 Effective Healing:
                                             </span>
                                             <span
@@ -446,7 +448,7 @@ const HealingCalculatorPage: React.FC = () => {
                                             bestHealer.effectiveHealing &&
                                             config.effectiveHealing && (
                                                 <div className="flex justify-between mt-2">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Compared to best:
                                                     </span>
                                                     <span className="text-red-500">

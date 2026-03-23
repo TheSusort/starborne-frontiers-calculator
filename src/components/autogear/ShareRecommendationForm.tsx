@@ -99,7 +99,7 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
                     disabled={!ultimateImplantName || isSubmitting}
                 />
                 {!ultimateImplantName && (
-                    <p className="text-xs text-gray-500 ml-6">
+                    <p className="text-xs text-theme-text-secondary ml-6">
                         Equip an ultimate implant to enable this option
                     </p>
                 )}

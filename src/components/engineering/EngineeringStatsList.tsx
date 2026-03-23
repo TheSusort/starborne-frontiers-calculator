@@ -17,7 +17,7 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
 }) => {
     if (!stats || stats.length === 0) {
         return (
-            <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+            <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                 No engineering stats found.
             </div>
         );
@@ -28,8 +28,8 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
             <h3 className="text-xl font-semibold mb-4">Existing Engineering Stats</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
                 {stats.map((stat) => (
-                    <div key={stat.shipType} className="bg-dark mb-4 border border-gray-600">
-                        <div className="flex justify-between items-center px-4 py-2 border-b border-gray-600">
+                    <div key={stat.shipType} className="bg-dark mb-4 border border-dark-border">
+                        <div className="flex justify-between items-center px-4 py-2 border-b border-dark-border">
                             <h3 className="text-lg font-medium">
                                 {SHIP_TYPES[stat.shipType].name}
                             </h3>
@@ -55,7 +55,9 @@ export const EngineeringStatsList: React.FC<EngineeringStatsListProps> = ({
                             </Button>
                         </div>
                         <div className="p-4 space-y-4 flex-grow">
-                            <div className="text-sm text-gray-400 mb-2">Engineering Stats</div>
+                            <div className="text-sm text-theme-text-secondary mb-2">
+                                Engineering Stats
+                            </div>
                             <div className="space-y-2">
                                 <StatDisplay stats={stat.stats} />
                             </div>

@@ -141,7 +141,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                 {currentRecommendation && (
                     <div className="space-y-4">
                         {currentRecommendation.description && (
-                            <p className="text-gray-300 text-sm italic">
+                            <p className="text-theme-text text-sm italic">
                                 &ldquo;{currentRecommendation.description}&rdquo;
                             </p>
                         )}
@@ -179,7 +179,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
 
                 {!loading && !currentRecommendation && !showShareForm && (
                     <div className="text-center">
-                        <p className="text-gray-400 text-sm mb-2">
+                        <p className="text-theme-text-secondary text-sm mb-2">
                             Be the first to share a recommendation for this ship!
                         </p>
                         <CommunityActions
@@ -195,7 +195,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
 
                 {showShareForm && (
                     <div className="border-t border-dark-border">
-                        <h4 className="text-sm font-semibold text-gray-300 mb-3">
+                        <h4 className="text-sm font-semibold text-theme-text mb-3">
                             Share Your Build
                         </h4>
                         <ShareRecommendationForm

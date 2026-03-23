@@ -92,7 +92,7 @@ export const ImplantIndexPage: React.FC = () => {
                 <div className="space-y-6">
                     <div className="flex flex-col">
                         {filteredAndSortedImplants.length > 0 && (
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-theme-text-secondary">
                                 Showing {filteredAndSortedImplants.length} implants
                             </span>
                         )}
@@ -137,7 +137,7 @@ export const ImplantIndexPage: React.FC = () => {
                                                 <h3 className="text-xl font-semibold">
                                                     {implant.name}
                                                 </h3>
-                                                <div className="text-sm text-gray-400 capitalize">
+                                                <div className="text-sm text-theme-text-secondary capitalize">
                                                     {implant.type} Implant
                                                 </div>
                                             </div>
@@ -163,7 +163,7 @@ export const ImplantIndexPage: React.FC = () => {
                                                                     />
                                                                 </div>
                                                             )}
-                                                        <p className="text-sm text-gray-400">
+                                                        <p className="text-sm text-theme-text-secondary">
                                                             {variant.description}
                                                         </p>
                                                     </div>
@@ -173,7 +173,7 @@ export const ImplantIndexPage: React.FC = () => {
                                 </div>
                             ))
                         ) : (
-                            <div className="col-span-full text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                            <div className="col-span-full text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                 No matching implants found
                             </div>
                         )}

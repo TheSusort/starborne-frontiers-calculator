@@ -220,12 +220,12 @@ export const TutorialOverlay: React.FC = () => {
 
                 <div className="p-4 space-y-3">
                     <h3 className="font-bold text-white">{activeStep.title}</h3>
-                    <p className="text-sm text-gray-300 leading-relaxed">
+                    <p className="text-sm text-theme-text leading-relaxed">
                         {activeStep.description}
                     </p>
 
                     <div className="flex justify-between items-center pt-1">
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-theme-text-secondary">
                             {activeStepIndex + 1} of {totalSteps}
                         </span>
                         <div className="flex gap-2">

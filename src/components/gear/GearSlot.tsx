@@ -117,7 +117,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                 onClick={() => onSelect && onSelect(slotKey)}
                 className={`${slotKey.startsWith('implant_') ? 'w-12 h-12' : 'w-16 h-16'} bg-dark-lighter border border-dark-border flex items-center justify-center hover:bg-dark-border transition-colors`}
             >
-                <span className="text-xs text-gray-400 capitalize">equip</span>
+                <span className="text-xs text-theme-text-secondary capitalize">equip</span>
             </Button>
         );
     }

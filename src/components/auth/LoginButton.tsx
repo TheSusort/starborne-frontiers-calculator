@@ -23,11 +23,11 @@ export const LoginButton: React.FC = () => {
                     />
                 ) : (
                     <div
-                        className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-8 h-8 rounded-full bg-dark-lighter flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => navigate('/profile')}
                         title="View Profile"
                     >
-                        <UserIcon className="w-5 h-5 text-gray-300" />
+                        <UserIcon className="w-5 h-5 text-theme-text" />
                     </div>
                 )}
                 <Button

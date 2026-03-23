@@ -10,7 +10,7 @@ export const BoostSetStatus: React.FC<BoostSetStatusProps> = ({ simulation }) =>
 
     return (
         <div>
-            <span className="text-gray-400">Boost Set:</span>
+            <span className="text-theme-text-secondary">Boost Set:</span>
             <span className={`ml-2 ${boostSetActive ? 'text-green-500' : 'text-red-500'}`}>
                 {boostSetActive ? 'Active' : 'Inactive'}
             </span>

@@ -205,7 +205,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     >
                         <span className="flex items-center gap-2">
                             <ChevronDownIcon
-                                className={`text-sm text-gray-400 h-8 w-8 p-2 transition-transform duration-300 ${
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${
                                     showSecondaryRequirements ? 'rotate-180' : ''
                                 }`}
                             />
@@ -217,7 +217,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             onMouseEnter={() => setShowSecondaryRequirementsTooltip(true)}
                             onMouseLeave={() => setShowSecondaryRequirementsTooltip(false)}
                         >
-                            <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                            <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
                         </div>
                     </Button>
                     <Tooltip
@@ -259,7 +259,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
                     <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
                         <h3 className="font-semibold">Stat Bonuses</h3>
-                        <p className="text-sm text-gray-400">
+                        <p className="text-sm text-theme-text-secondary">
                             Add stat bonuses that contribute to the role score.
                             <strong> Additive</strong> adds stat × % directly (e.g., defense@80% for
                             a skill dealing 80% of defense as damage).
@@ -378,7 +378,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     <span>
                                         {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
                                         {' — '}
-                                        <span className="text-xs text-gray-500">
+                                        <span className="text-xs text-theme-text-secondary">
                                             {bonus.mode === 'multiplier'
                                                 ? 'Multiplier'
                                                 : 'Additive'}

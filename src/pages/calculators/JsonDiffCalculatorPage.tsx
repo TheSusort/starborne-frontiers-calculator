@@ -106,7 +106,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
             />
 
             <div className="mb-8">
-                <p className="text-gray-300 mb-6">
+                <p className="text-theme-text mb-6">
                     Compare two Starborne Frontiers JSON export files to see what has changed
                     between them. Upload your exported player data files to analyze differences in
                     units, equipment, and engineering.
@@ -125,7 +125,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
                             disabled={isCalculating}
                         />
                         {file1 && (
-                            <div className="mt-2 text-sm text-gray-400">
+                            <div className="mt-2 text-sm text-theme-text-secondary">
                                 {file1.name} ({formatFileSize(fileSize1)})
                             </div>
                         )}
@@ -138,7 +138,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
                             disabled={isCalculating}
                         />
                         {file2 && (
-                            <div className="mt-2 text-sm text-gray-400">
+                            <div className="mt-2 text-sm text-theme-text-secondary">
                                 {file2.name} ({formatFileSize(fileSize2)})
                             </div>
                         )}
@@ -172,7 +172,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
             {/* Information Section */}
             <div className="card mt-6">
                 <h2 className="text-xl font-semibold mb-4">How It Works</h2>
-                <div className="space-y-3 text-gray-300">
+                <div className="space-y-3 text-theme-text">
                     <p>
                         <strong>Small Files (&lt;5MB):</strong> Full recursive comparison of all
                         properties and nested objects.
@@ -194,7 +194,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
                             changes
                         </li>
                     </ul>
-                    <p className="text-sm text-gray-400 mt-4">
+                    <p className="text-sm text-theme-text-secondary mt-4">
                         Equipment changes are grouped with their equipped units for better
                         readability. Detailed Attributes fields are excluded to reduce verbosity in
                         large files.

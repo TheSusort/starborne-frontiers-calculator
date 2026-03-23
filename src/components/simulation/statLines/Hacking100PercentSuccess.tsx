@@ -38,7 +38,9 @@ export const Hacking100PercentSuccess: React.FC<Hacking100PercentSuccessProps> =
 
     return (
         <div>
-            <span className="text-gray-400">Hacking 100% success against security:</span>
+            <span className="text-theme-text-secondary">
+                Hacking 100% success against security:
+            </span>
             <span className="ml-2">
                 {'<='} {securityFor100Percent}
                 {showComparison &&

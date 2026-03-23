@@ -204,7 +204,7 @@ export const ShipCard: React.FC<Props> = ({
                             {/* Expanded Implants View */}
                             {variant === 'extended' && onRemoveImplant && onEquipImplant && (
                                 <div className="border-t border-dark-lighter pt-4">
-                                    <h4 className="text-sm font-semibold mb-3 text-gray-300">
+                                    <h4 className="text-sm font-semibold mb-3 text-theme-text">
                                         Implants
                                     </h4>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -238,7 +238,9 @@ export const ShipCard: React.FC<Props> = ({
                                     onMouseEnter={() => setShowGearSets(true)}
                                     onMouseLeave={() => setShowGearSets(false)}
                                 >
-                                    <span className="text-xs text-gray-400">Gear Sets:</span>
+                                    <span className="text-xs text-theme-text-secondary">
+                                        Gear Sets:
+                                    </span>
                                     {activeSets.map((setName, index) => (
                                         <img
                                             key={`${setName}-${index}`}

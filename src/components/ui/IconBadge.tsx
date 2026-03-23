@@ -12,8 +12,8 @@ interface IconBadgeProps {
 export const IconBadge: React.FC<IconBadgeProps> = ({
     icon: Icon,
     size = 24,
-    gradientFrom = 'from-gray-600',
-    gradientTo = 'to-gray-800',
+    gradientFrom = 'from-dark-lighter',
+    gradientTo = 'to-dark',
     className = '',
 }) => {
     return (

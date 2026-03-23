@@ -115,7 +115,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
 
                     {activeSets && activeSets.length > 0 && (
                         <div className="flex items-center gap-2 pt-3">
-                            <span className="text-xs text-gray-400">Sets:</span>
+                            <span className="text-xs text-theme-text-secondary">Sets:</span>
                             {activeSets.map((setName, index) => (
                                 <img
                                     key={`${setName}-${index}`}

@@ -85,7 +85,7 @@ export const ShipDetailsPage: React.FC = () => {
                     variant: 'secondary',
                 }}
             >
-                <div className="text-center text-gray-400">
+                <div className="text-center text-theme-text-secondary">
                     The requested ship could not be found.
                 </div>
             </PageLayout>
@@ -206,7 +206,7 @@ export const ShipDetailsPage: React.FC = () => {
                                     ))}
                                 </div>
                             ) : (
-                                <p className="text-gray-400">No refits installed</p>
+                                <p className="text-theme-text-secondary">No refits installed</p>
                             )}
                         </section>
                     </div>

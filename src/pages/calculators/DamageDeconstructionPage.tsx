@@ -170,7 +170,7 @@ const DamageDeconstructionPage: React.FC = () => {
     ) => (
         <div>
             <label className="block text-sm font-medium mb-1">{title}</label>
-            {helpText && <p className="text-xs text-gray-500 mb-2">{helpText}</p>}
+            {helpText && <p className="text-xs text-theme-text-secondary mb-2">{helpText}</p>}
             {(form[type] as BuffDebuff[]).map((buff, index) => (
                 <div key={index} className="flex gap-2 mb-2">
                     <Input
@@ -330,14 +330,14 @@ const DamageDeconstructionPage: React.FC = () => {
                             <p>Enemy Defense Estimation: {Math.round(results.enemyDefense)}</p>
 
                             {results.hasModifiers && (
-                                <p className="text-sm text-gray-500">
+                                <p className="text-sm text-theme-text-secondary">
                                     <span className="font-bold">Note:</span> Damage Reduction is the
                                     effective reduction after defense penetration and defense
                                     buffs/debuffs are applied. Base Damage Reduction is the
                                     reduction from the estimated base defense stat alone.
                                 </p>
                             )}
-                            <p className="text-sm text-gray-500">
+                            <p className="text-sm text-theme-text-secondary">
                                 <span className="font-bold">Note:</span> This is an estimation based
                                 on an approximation of the damage reduction, and most likely not
                                 100% accurate. The worst result I&apos;ve seen has been so far is

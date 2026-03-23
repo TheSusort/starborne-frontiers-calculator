@@ -62,7 +62,7 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
 
     return (
         <div>
-            <span className="text-gray-400">{label}:</span>
+            <span className="text-theme-text-secondary">{label}:</span>
             <span className="ml-2">{displayValue}</span>
             {showComparison && currentValue !== undefined && suggestedValue !== undefined && (
                 <span className={`ml-2 ${isImprovement ? 'text-green-500' : 'text-red-500'}`}>

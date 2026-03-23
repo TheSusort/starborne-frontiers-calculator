@@ -26,7 +26,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType
 
     return (
         <>
-            <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-gray-600">
+            <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border">
                 <div className="flex items-center gap-2">
                     <span className="font-semibold text-primary">{skillType}</span>
                     {charge !== undefined && (
@@ -36,7 +36,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType
                         </span>
                     )}
                 </div>
-                <div className="text-sm text-gray-300 mb-2">
+                <div className="text-sm text-theme-text mb-2">
                     {segments.map((segment, index) => {
                         if (segment.type === 'text') {
                             return <span key={index}>{renderTextWithBreaks(segment.text)}</span>;
@@ -52,7 +52,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({ skillText, skillType
                                             <div className="font-semibold text-sm text-primary capitalize">
                                                 {segment.text}
                                             </div>
-                                            <div className="text-sm text-gray-300">
+                                            <div className="text-sm text-theme-text">
                                                 {segment.buffDescription}
                                             </div>
                                         </div>

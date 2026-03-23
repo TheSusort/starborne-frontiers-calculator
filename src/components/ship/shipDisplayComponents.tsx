@@ -116,7 +116,7 @@ export const ShipHeader = memo(
                 {Array.from({ length: 6 }, (_, index) => (
                     <span
                         key={index}
-                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-gray-300' : 'text-gray-500'}`}
+                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
                     >
                         ★
                     </span>
@@ -373,7 +373,7 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
                         e.stopPropagation();
                         if (!isAdded) onQuickAdd(ship);
                     }}
-                    className={isAdded ? 'text-gray-500' : ''}
+                    className={isAdded ? 'text-theme-text-secondary' : ''}
                 >
                     <div className="flex items-center gap-2">
                         {isAdded ? (
@@ -444,7 +444,7 @@ export const ImplantsDisplay: React.FC<ImplantsDisplayProps> = ({ ship, getGearP
 
     return (
         <div className="relative">
-            <div className="flex items-center gap-2 text-gray-300 border-b py-1 border-dark-lighter">
+            <div className="flex items-center gap-2 text-theme-text border-b py-1 border-dark-lighter">
                 <span>Implants:</span>
                 <div className="flex items-center gap-1 ms-auto">
                     {IMPLANT_SLOT_ORDER.map((slot) => {
@@ -519,7 +519,7 @@ export const ShipCopiesBadge: React.FC<ShipCopiesBadgeProps> = ({ copies }) => {
 
     return (
         <div className="flex items-center gap-1 justify-end px-4 pb-2">
-            <span className="text-gray-300 text-sm">x{copies}</span>
+            <span className="text-theme-text text-sm">x{copies}</span>
             <CopyIcon />
         </div>
     );

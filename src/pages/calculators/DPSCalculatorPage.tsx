@@ -359,7 +359,7 @@ const DPSCalculatorPage: React.FC = () => {
                             value={enemyDefense}
                             onChange={(e) => setEnemyDefense(parseInt(e.target.value) || 0)}
                         />
-                        <p className="text-sm text-gray-400 mt-2">
+                        <p className="text-sm text-theme-text-secondary mt-2">
                             Common defense value that all ships will be calculated against
                         </p>
                     </div>
@@ -372,7 +372,7 @@ const DPSCalculatorPage: React.FC = () => {
                             </Button>
                         </div>
                         {buffs.length === 0 ? (
-                            <p className="text-sm text-gray-400">No buffs active</p>
+                            <p className="text-sm text-theme-text-secondary">No buffs active</p>
                         ) : (
                             <div className="space-y-2">
                                 {buffs.map((buff) => (
@@ -405,7 +405,7 @@ const DPSCalculatorPage: React.FC = () => {
                                             }
                                             className="w-24"
                                         />
-                                        <span className="text-gray-400">%</span>
+                                        <span className="text-theme-text-secondary">%</span>
                                         <Button
                                             variant="danger"
                                             size="sm"
@@ -418,7 +418,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 ))}
                             </div>
                         )}
-                        <p className="text-sm text-gray-400 mt-2">
+                        <p className="text-sm text-theme-text-secondary mt-2">
                             Buffs apply to all ships. Attack and Outgoing Damage are multiplicative,
                             Crit Rate and Crit Damage are additive.
                         </p>
@@ -526,7 +526,9 @@ const DPSCalculatorPage: React.FC = () => {
 
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between mb-2">
-                                            <span className="text-gray-400">Crit Multiplier:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Crit Multiplier:
+                                            </span>
                                             <span>
                                                 {calculateCritMultiplier({
                                                     attack: config.attack,
@@ -543,7 +545,7 @@ const DPSCalculatorPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-gray-400">DPS:</span>
+                                            <span className="text-theme-text-secondary">DPS:</span>
                                             <span
                                                 className={
                                                     bestConfig && bestConfig.id === config.id
@@ -559,7 +561,7 @@ const DPSCalculatorPage: React.FC = () => {
                                             bestConfig.dps &&
                                             config.dps && (
                                                 <div className="flex justify-between mt-2">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Compared to best:
                                                     </span>
                                                     <span className="text-red-500">
@@ -598,7 +600,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
                             </Button>
                         </div>
-                        <p className="text-sm text-gray-400 mb-4">
+                        <p className="text-sm text-theme-text-secondary mb-4">
                             This visualization shows DPS values at 100% crit rate for different
                             attack values (relative to your current attack) and crit damage
                             percentages.
@@ -623,7 +625,7 @@ const DPSCalculatorPage: React.FC = () => {
                     {/* Defense Penetration Visualization */}
                     <div className="card">
                         <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
-                        <p className="text-sm text-gray-400 mb-4">
+                        <p className="text-sm text-theme-text-secondary mb-4">
                             Shows how defense penetration affects damage increase for different
                             enemy defense values. Hover over the lines to see exact values.
                         </p>

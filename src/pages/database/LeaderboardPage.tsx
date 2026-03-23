@@ -349,7 +349,7 @@ export const LeaderboardPage: React.FC = () => {
                         <div className="flex md:items-center md:space-x-2 flex-col md:flex-row ml-auto">
                             <label
                                 htmlFor="role-selector"
-                                className="text-sm font-medium text-gray-300"
+                                className="text-sm font-medium text-theme-text"
                             >
                                 Score as:
                             </label>
@@ -388,12 +388,12 @@ export const LeaderboardPage: React.FC = () => {
                                     }`}
                                 >
                                     <div className="flex items-center space-x-4">
-                                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-700 text-white font-bold text-lg">
+                                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-dark-lighter text-white font-bold text-lg">
                                             {entry.rank === 1 && (
                                                 <TrophyIcon className="w-6 h-6 text-yellow-400" />
                                             )}
                                             {entry.rank === 2 && (
-                                                <TrophyIcon className="w-6 h-6 text-gray-300" />
+                                                <TrophyIcon className="w-6 h-6 text-theme-text" />
                                             )}
                                             {entry.rank === 3 && (
                                                 <TrophyIcon className="w-6 h-6 text-amber-600" />
@@ -411,7 +411,7 @@ export const LeaderboardPage: React.FC = () => {
                                                 {Array.from({ length: 6 }, (_, index) => (
                                                     <span
                                                         key={index}
-                                                        className={`text-xs tracking-tightest ${index < entry.ship.refits?.length ? 'text-yellow-400' : entry.ship.rank && index < entry.ship.rank ? 'text-gray-300' : 'text-gray-500'}`}
+                                                        className={`text-xs tracking-tightest ${index < entry.ship.refits?.length ? 'text-yellow-400' : entry.ship.rank && index < entry.ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
                                                     >
                                                         ★
                                                     </span>
@@ -455,17 +455,17 @@ export const LeaderboardPage: React.FC = () => {
                                                     ? `${((entry.score / topScore) * 100).toFixed(1)}%`
                                                     : '0%'}
                                             </div>
-                                            <div className="text-sm text-gray-400">
+                                            <div className="text-sm text-theme-text-secondary">
                                                 {entry.rank === 1 ? 'Top Score' : 'vs Top'}
                                             </div>
                                         </div>
-                                        <div className="w-full bg-gray-700 h-2 relative overflow-hidden">
+                                        <div className="w-full bg-dark-lighter h-2 relative overflow-hidden">
                                             <div
                                                 className={`h-full transition-all duration-300 ${
                                                     entry.rank === 1
                                                         ? 'bg-yellow-400'
                                                         : entry.rank === 2
-                                                          ? 'bg-gray-300'
+                                                          ? 'bg-dark-border'
                                                           : entry.rank === 3
                                                             ? 'bg-amber-600'
                                                             : 'bg-primary'

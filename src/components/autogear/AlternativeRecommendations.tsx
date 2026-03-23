@@ -30,14 +30,14 @@ export const AlternativeRecommendations: React.FC<AlternativeRecommendationsProp
         } else if (sum < 0) {
             return <span className="text-red-400">{sum}</span>;
         } else {
-            return <span className="text-gray-400">0</span>;
+            return <span className="text-theme-text-secondary">0</span>;
         }
     };
 
     return (
-        <div className="pt-2 border-t border-gray-600">
+        <div className="pt-2 border-t border-dark-border">
             <div className="flex items-center justify-between mb-2">
-                <h5 className="text-sm font-semibold text-gray-300">
+                <h5 className="text-sm font-semibold text-theme-text">
                     {selectedAlternative
                         ? 'Other Suggestions'
                         : `${alternatives.length} Other Suggestion${alternatives.length === 1 ? '' : 's'}`}
@@ -57,7 +57,7 @@ export const AlternativeRecommendations: React.FC<AlternativeRecommendationsProp
                         size="sm"
                         variant="secondary"
                         onClick={onToggleShow}
-                        className="text-gray-400 hover:text-gray-300"
+                        className="text-theme-text-secondary hover:text-theme-text"
                     >
                         {showAlternatives ? 'Hide' : 'View'}
                     </Button>
@@ -72,7 +72,7 @@ export const AlternativeRecommendations: React.FC<AlternativeRecommendationsProp
                             className={`p-3 border cursor-pointer transition-colors ${
                                 selectedAlternative?.id === alt.id
                                     ? 'border-blue-500 bg-blue-900/20'
-                                    : 'border-gray-600 bg-gray-800/50 hover:border-gray-500'
+                                    : 'border-dark-border bg-dark/50 hover:border-dark-border'
                             }`}
                             onClick={() => onSelectAlternative(alt)}
                         >
@@ -84,7 +84,7 @@ export const AlternativeRecommendations: React.FC<AlternativeRecommendationsProp
                                     {renderVoteSum(alt.upvotes || 0, alt.downvotes || 0)}
                                 </div>
                             </div>
-                            <p className="text-xs text-gray-400 line-clamp-2">
+                            <p className="text-xs text-theme-text-secondary line-clamp-2">
                                 &ldquo;{alt.reasoning}&rdquo;
                             </p>
                             {selectedAlternative?.id === alt.id && (

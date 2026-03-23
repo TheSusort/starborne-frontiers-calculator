@@ -16,7 +16,7 @@ const getTypeColor = (type: string) => {
         case 'modified':
             return 'text-yellow-400 border-yellow-500/30 bg-yellow-900/20';
         default:
-            return 'text-gray-400 border-gray-500/30 bg-gray-900/20';
+            return 'text-theme-text-secondary border-dark-border/30 bg-dark/20';
     }
 };
 

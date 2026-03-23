@@ -387,25 +387,25 @@ export const EngineeringPreviewTab: React.FC = () => {
 
             {/* Empty States */}
             {!selectedShip && (
-                <div className="text-center text-gray-400 py-8">
+                <div className="text-center text-theme-text-secondary py-8">
                     Select a ship to preview engineering upgrades
                 </div>
             )}
 
             {selectedShip && !selectedRole && (
-                <div className="text-center text-gray-400 py-8">
+                <div className="text-center text-theme-text-secondary py-8">
                     Select an engineering role to see available upgrades
                 </div>
             )}
 
             {selectedShip && selectedRole && !scoringRole && (
-                <div className="text-center text-gray-400 py-8">
+                <div className="text-center text-theme-text-secondary py-8">
                     Select a scoring role to evaluate upgrades
                 </div>
             )}
 
             {selectedShip && selectedRole && !currentEngineeringStats && (
-                <div className="text-center text-gray-400 py-8">
+                <div className="text-center text-theme-text-secondary py-8">
                     No engineering stats configured for {baseRole}. Add them in the Engineering
                     Stats tab.
                 </div>
@@ -444,7 +444,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                                             />
                                             <span>
                                                 {STATS[statName].label}
-                                                <span className="text-gray-400 ml-2">
+                                                <span className="text-theme-text-secondary ml-2">
                                                     (Level {currentLevel} → {currentLevel + 1})
                                                 </span>
                                             </span>
@@ -458,7 +458,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                     )}
                                                 </span>
                                             )}
-                                            <span className="text-gray-400">
+                                            <span className="text-theme-text-secondary">
                                                 {isMaxLevel ? 'MAX' : `${formatNumber(cost)} EP`}
                                             </span>
                                             {!isMaxLevel && (
@@ -507,13 +507,15 @@ export const EngineeringPreviewTab: React.FC = () => {
                                     </h3>
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-gray-400">Role Score</span>
+                                            <span className="text-theme-text-secondary">
+                                                Role Score
+                                            </span>
                                             <div className="flex items-center gap-3">
-                                                <span className="text-gray-300">
+                                                <span className="text-theme-text">
                                                     {formatNumber(roleScoreEfficiency.currentScore)}
                                                 </span>
-                                                <span className="text-gray-500">→</span>
-                                                <span className="text-gray-300">
+                                                <span className="text-theme-text-secondary">→</span>
+                                                <span className="text-theme-text">
                                                     {formatNumber(roleScoreEfficiency.previewScore)}
                                                 </span>
                                                 <span
@@ -522,7 +524,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                             ? 'text-green-400'
                                                             : roleScoreEfficiency.change < 0
                                                               ? 'text-red-400'
-                                                              : 'text-gray-400'
+                                                              : 'text-theme-text-secondary'
                                                     }
                                                 >
                                                     ({roleScoreEfficiency.change > 0 ? '+' : ''}
@@ -534,7 +536,9 @@ export const EngineeringPreviewTab: React.FC = () => {
                                             </div>
                                         </div>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-gray-400">Score Efficiency</span>
+                                            <span className="text-theme-text-secondary">
+                                                Score Efficiency
+                                            </span>
                                             <span className="text-primary font-medium">
                                                 {roleScoreEfficiency.efficiencyPercent !== null ? (
                                                     <>
@@ -574,7 +578,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                 key={metric.label}
                                                 className="flex items-center justify-between"
                                             >
-                                                <span className="text-gray-400">
+                                                <span className="text-theme-text-secondary">
                                                     {metric.label}
                                                 </span>
                                                 <div className="flex items-center gap-3">
@@ -591,7 +595,9 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                             : metric.change.toFixed(1)}
                                                         {metric.unit}
                                                     </span>
-                                                    <span className="text-gray-500">→</span>
+                                                    <span className="text-theme-text-secondary">
+                                                        →
+                                                    </span>
                                                     <span className="text-primary font-medium">
                                                         {metric.efficiency >= 1
                                                             ? metric.efficiency.toFixed(1)

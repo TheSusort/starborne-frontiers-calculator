@@ -110,7 +110,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                                         {(parseInt(defenseValue) / 1000).toFixed(0)}k Def: +
                                         {damageIncrease.toFixed(1)}% damage
                                     </div>
-                                    <div className="text-xs text-gray-400">
+                                    <div className="text-xs text-theme-text-secondary">
                                         {originalDamage.toFixed(1)}% → {currentDamage.toFixed(1)}%
                                         damage dealt
                                     </div>

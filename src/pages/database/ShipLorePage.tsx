@@ -137,16 +137,19 @@ const ExpandableCard: React.FC<{
                         {title}
                         {!onClickOverride && (
                             <ChevronDownIcon
-                                className={`w-5 h-5 text-gray-500 ml-auto flex-shrink-0 transition-transform duration-300 ${showExpanded ? 'rotate-180' : ''}`}
+                                className={`w-5 h-5 text-theme-text-secondary ml-auto flex-shrink-0 transition-transform duration-300 ${showExpanded ? 'rotate-180' : ''}`}
                             />
                         )}
                     </div>
                     {!showExpanded && snippet && <SnippetText text={snippet} query={searchQuery} />}
                     {!showExpanded && !snippet && quote && (
-                        <p className="text-sm text-gray-400 mt-1 line-clamp-2 font-primary italic">
+                        <p className="text-sm text-theme-text-secondary mt-1 line-clamp-2 font-primary italic">
                             {quote}
                             {quoteAuthor && (
-                                <span className="not-italic text-gray-500"> — {quoteAuthor}</span>
+                                <span className="not-italic text-theme-text-secondary">
+                                    {' '}
+                                    — {quoteAuthor}
+                                </span>
                             )}
                         </p>
                     )}
@@ -162,12 +165,12 @@ const ExpandableCard: React.FC<{
                 >
                     <div className="mt-3 pt-3 border-t border-dark-border">
                         {quote && (
-                            <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-gray-400 font-primary">
+                            <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-theme-text-secondary font-primary">
                                 <p>
                                     <HighlightedText text={quote} query={searchQuery} />
                                 </p>
                                 {quoteAuthor && (
-                                    <footer className="mt-1 text-sm not-italic text-gray-500">
+                                    <footer className="mt-1 text-sm not-italic text-theme-text-secondary">
                                         — <HighlightedText text={quoteAuthor} query={searchQuery} />
                                     </footer>
                                 )}
@@ -231,7 +234,7 @@ const ShipBioCard: React.FC<{
                 <BioContent
                     bio={ship.bio ?? ''}
                     searchQuery={searchQuery}
-                    className="text-gray-300 leading-relaxed font-sans"
+                    className="text-theme-text leading-relaxed font-sans"
                 />
             }
         >
@@ -273,7 +276,7 @@ const LoreArticleCard: React.FC<{
                 <PlainTextContent
                     text={article.body}
                     searchQuery={searchQuery}
-                    className="text-gray-300 leading-relaxed font-primary"
+                    className="text-theme-text leading-relaxed font-primary"
                 />
             }
         />
@@ -321,12 +324,12 @@ const ShipReaderPane: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, s
         </div>
 
         {ship.quote && (
-            <blockquote className="border-l-2 border-primary pl-4 italic text-gray-400 font-primary">
+            <blockquote className="border-l-2 border-primary pl-4 italic text-theme-text-secondary font-primary">
                 <p>
                     <HighlightedText text={ship.quote} query={searchQuery} />
                 </p>
                 {ship.quoteAuthor && (
-                    <footer className="mt-1 text-sm not-italic text-gray-500">
+                    <footer className="mt-1 text-sm not-italic text-theme-text-secondary">
                         — <HighlightedText text={ship.quoteAuthor} query={searchQuery} />
                     </footer>
                 )}
@@ -337,7 +340,7 @@ const ShipReaderPane: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, s
             <BioContent
                 bio={ship.bio ?? ''}
                 searchQuery={searchQuery}
-                className="text-gray-300 leading-relaxed font-sans"
+                className="text-theme-text leading-relaxed font-sans"
             />
         </div>
     </div>
@@ -354,7 +357,7 @@ const ArticleReaderPane: React.FC<{ article: LoreArticle; searchQuery: string }>
             <PlainTextContent
                 text={article.body}
                 searchQuery={searchQuery}
-                className="text-gray-300 leading-relaxed font-primary"
+                className="text-theme-text leading-relaxed font-primary"
             />
         </div>
 
@@ -511,7 +514,7 @@ export const ShipLorePage: React.FC = () => {
         <>
             {activeTab === 'bios' && filteredArticles.length > 0 && (
                 <>
-                    <div className="text-xs text-gray-500 uppercase tracking-wide pt-2">
+                    <div className="text-xs text-theme-text-secondary uppercase tracking-wide pt-2">
                         World Lore
                     </div>
                     {filteredArticles.map((article) => (
@@ -529,7 +532,7 @@ export const ShipLorePage: React.FC = () => {
             )}
             {activeTab === 'articles' && filteredShips.length > 0 && (
                 <>
-                    <div className="text-xs text-gray-500 uppercase tracking-wide pt-2">
+                    <div className="text-xs text-theme-text-secondary uppercase tracking-wide pt-2">
                         Ship Bios
                     </div>
                     {filteredShips.map((ship) => (
@@ -569,7 +572,7 @@ export const ShipLorePage: React.FC = () => {
                                         placeholder="Search all lore..."
                                         className="flex-1"
                                     />
-                                    <span className="text-sm text-gray-400 whitespace-nowrap">
+                                    <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                         {resultCount}
                                     </span>
                                 </div>
@@ -578,7 +581,7 @@ export const ShipLorePage: React.FC = () => {
                                     {activeTab === 'articles' && articleList}
                                     {crossResults}
                                     {visibleCount === 0 && (
-                                        <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                                        <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                             No matching lore found
                                         </div>
                                     )}
@@ -601,7 +604,7 @@ export const ShipLorePage: React.FC = () => {
                                 style={{ top: `${stickyTop}px` }}
                             >
                                 <div className="flex items-center justify-between mb-4">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wide">
+                                    <span className="text-xs text-theme-text-secondary uppercase tracking-wide">
                                         Reading
                                     </span>
                                     <Button
@@ -635,7 +638,7 @@ export const ShipLorePage: React.FC = () => {
                                 placeholder="Search all lore..."
                                 className="flex-1"
                             />
-                            <span className="text-sm text-gray-400 whitespace-nowrap">
+                            <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                 {resultCount}
                             </span>
                         </div>
@@ -644,7 +647,7 @@ export const ShipLorePage: React.FC = () => {
                             {activeTab === 'articles' && articleList}
                             {crossResults}
                             {visibleCount === 0 && (
-                                <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                                <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                     No matching lore found
                                 </div>
                             )}

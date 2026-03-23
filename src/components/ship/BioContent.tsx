@@ -108,7 +108,7 @@ export const PlainTextContent: React.FC<{
 };
 
 export const SnippetText: React.FC<{ text: string; query: string }> = ({ text, query }) => (
-    <p className="text-sm text-gray-400 mt-1 line-clamp-2 font-primary">
+    <p className="text-sm text-theme-text-secondary mt-1 line-clamp-2 font-primary">
         ...
         <HighlightedText text={text} query={query} />
         ...

@@ -145,7 +145,7 @@ export const StatModifierInput: React.FC<Props> = ({
                         <EditIcon />
                     </Button>
                     {stats.length > 0 && (
-                        <div className="flex gap-2 text-gray-400 items-center">
+                        <div className="flex gap-2 text-theme-text-secondary items-center">
                             {stats.map((stat, index) => (
                                 <React.Fragment key={index}>
                                     <StatSummary stat={stat} />

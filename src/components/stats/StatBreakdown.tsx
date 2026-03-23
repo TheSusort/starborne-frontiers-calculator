@@ -55,15 +55,15 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
         <div className="pb-4">
             <table className="w-full text-xs table-auto">
                 <thead>
-                    <tr className="border-b border-gray-600 text-left">
-                        <th className="font-bold p-1 border-r border-gray-600">Stat</th>
+                    <tr className="border-b border-dark-border text-left">
+                        <th className="font-bold p-1 border-r border-dark-border">Stat</th>
                         <th className="font-bold p-1">Base</th>
                         <th className="font-bold p-1">Refits</th>
-                        <th className="font-bold p-1 border-r border-gray-600">Eng.</th>
+                        <th className="font-bold p-1 border-r border-dark-border">Eng.</th>
                         <th className="font-bold p-1">Gear</th>
                         <th className="font-bold p-1">Sets</th>
                         <th className="font-bold p-1">Impl.</th>
-                        <th className="font-bold p-1 border-l border-gray-600">Final</th>
+                        <th className="font-bold p-1 border-l border-dark-border">Final</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -93,38 +93,40 @@ export const StatBreakdown: React.FC<Props> = ({ breakdown }) => {
                         return (
                             <tr
                                 key={statName}
-                                className={`${statName !== 'speed' ? 'border-b border-gray-600' : ''}`}
+                                className={`${statName !== 'speed' ? 'border-b border-dark-border' : ''}`}
                             >
-                                <td className="p-1 border-r border-gray-600">
+                                <td className="p-1 border-r border-dark-border">
                                     {STATS[statName].shortLabel}
                                 </td>
-                                <td className="p-1 text-gray-400">{baseValue || '-'}</td>
+                                <td className="p-1 text-theme-text-secondary">
+                                    {baseValue || '-'}
+                                </td>
                                 <td
-                                    className={`p-1 ${refitValue ? 'text-yellow-400' : 'text-gray-400'}`}
+                                    className={`p-1 ${refitValue ? 'text-yellow-400' : 'text-theme-text-secondary'}`}
                                 >
                                     {refitValue ? formatValue(refitValue) : '-'}
                                 </td>
                                 <td
-                                    className={`p-1 border-r border-gray-600 ${engineeringValue ? 'text-blue-400' : 'text-gray-400'}`}
+                                    className={`p-1 border-r border-dark-border ${engineeringValue ? 'text-blue-400' : 'text-theme-text-secondary'}`}
                                 >
                                     {engineeringValue ? formatValue(engineeringValue) : '-'}
                                 </td>
                                 <td
-                                    className={`p-1 ${gearValue ? 'text-green-400' : 'text-gray-400'}`}
+                                    className={`p-1 ${gearValue ? 'text-green-400' : 'text-theme-text-secondary'}`}
                                 >
                                     {gearValue ? formatValue(gearValue) : '-'}
                                 </td>
                                 <td
-                                    className={`p-1 ${setsValue ? 'text-emerald-400' : 'text-gray-400'}`}
+                                    className={`p-1 ${setsValue ? 'text-emerald-400' : 'text-theme-text-secondary'}`}
                                 >
                                     {setsValue ? formatValue(setsValue) : '-'}
                                 </td>
                                 <td
-                                    className={`p-1 ${implantValue ? 'text-purple-400' : 'text-gray-400'}`}
+                                    className={`p-1 ${implantValue ? 'text-purple-400' : 'text-theme-text-secondary'}`}
                                 >
                                     {implantValue ? formatValue(implantValue) : '-'}
                                 </td>
-                                <td className={`p-1 border-l border-gray-600`}>
+                                <td className={`p-1 border-l border-dark-border`}>
                                     {finalValue ? Math.round(finalValue) : '-'}
                                 </td>
                             </tr>

@@ -68,7 +68,7 @@ class ChunkErrorBoundary extends Component<Props, State> {
             return (
                 <div className="flex flex-col items-center justify-center min-h-[200px]">
                     <Loader size="sm" />
-                    <p className="text-gray-400 mt-4">Updating to latest version...</p>
+                    <p className="text-theme-text-secondary mt-4">Updating to latest version...</p>
                 </div>
             );
         }

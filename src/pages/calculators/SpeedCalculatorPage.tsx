@@ -170,7 +170,7 @@ const SpeedCalculatorPage: React.FC = () => {
                                         Add Modifier
                                     </Button>
                                 </div>
-                                <p className="text-sm text-gray-400 mb-4">
+                                <p className="text-sm text-theme-text-secondary mb-4">
                                     Add speed buffs (+) and debuffs (-) as percentages. All
                                     modifiers are summed together and applied to the base speed.
                                 </p>
@@ -222,7 +222,9 @@ const SpeedCalculatorPage: React.FC = () => {
                                 {modifiers.length > 0 && (
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-gray-400">Total Modifier:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Total Modifier:
+                                            </span>
                                             <span
                                                 className={`font-bold ${
                                                     getTotalModifier(modifiers) >= 0
@@ -242,13 +244,17 @@ const SpeedCalculatorPage: React.FC = () => {
                                 <h3 className="text-lg font-bold mb-4">Result</h3>
                                 <div className="space-y-2">
                                     <div className="flex justify-between items-center">
-                                        <span className="text-gray-400">Base Speed:</span>
+                                        <span className="text-theme-text-secondary">
+                                            Base Speed:
+                                        </span>
                                         <span className="font-mono">
                                             {Math.round(baseSpeed).toLocaleString()}
                                         </span>
                                     </div>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-gray-400">Total Modifier:</span>
+                                        <span className="text-theme-text-secondary">
+                                            Total Modifier:
+                                        </span>
                                         <span
                                             className={`font-mono ${
                                                 getTotalModifier(modifiers) >= 0
@@ -275,10 +281,10 @@ const SpeedCalculatorPage: React.FC = () => {
 
                             <div className="card">
                                 <h3 className="text-lg font-bold mb-2">Calculation Formula</h3>
-                                <p className="text-sm text-gray-400 mb-2">
+                                <p className="text-sm text-theme-text-secondary mb-2">
                                     Final Speed = Base Speed × (1 + Total Modifier / 100)
                                 </p>
-                                <p className="text-sm text-gray-400">
+                                <p className="text-sm text-theme-text-secondary">
                                     Where Total Modifier is the sum of all individual modifiers.
                                 </p>
                             </div>
@@ -290,7 +296,7 @@ const SpeedCalculatorPage: React.FC = () => {
                         <div className="space-y-6">
                             <div className="card">
                                 <h3 className="text-lg font-bold mb-4">Target Speed Range</h3>
-                                <p className="text-sm text-gray-400 mb-4">
+                                <p className="text-sm text-theme-text-secondary mb-4">
                                     Enter 0 for minimum or maximum to indicate no lower or upper
                                     limit respectively.
                                 </p>
@@ -330,7 +336,7 @@ const SpeedCalculatorPage: React.FC = () => {
                                         Add Modifier
                                     </Button>
                                 </div>
-                                <p className="text-sm text-gray-400 mb-4">
+                                <p className="text-sm text-theme-text-secondary mb-4">
                                     Add speed buffs (+) and debuffs (-) as percentages. The
                                     calculator will determine what base speed range is needed to
                                     achieve your target speed range after applying these modifiers.
@@ -383,7 +389,9 @@ const SpeedCalculatorPage: React.FC = () => {
                                 {reverseModifiers.length > 0 && (
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-gray-400">Total Modifier:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Total Modifier:
+                                            </span>
                                             <span
                                                 className={`font-bold ${
                                                     getTotalModifier(reverseModifiers) >= 0
@@ -404,7 +412,7 @@ const SpeedCalculatorPage: React.FC = () => {
                                 {baseSpeedRange ? (
                                     <div className="space-y-2">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-gray-400">
+                                            <span className="text-theme-text-secondary">
                                                 Target Speed Range:
                                             </span>
                                             <span className="font-mono">
@@ -418,7 +426,9 @@ const SpeedCalculatorPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="flex justify-between items-center">
-                                            <span className="text-gray-400">Total Modifier:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Total Modifier:
+                                            </span>
                                             <span
                                                 className={`font-mono ${
                                                     getTotalModifier(reverseModifiers) >= 0
@@ -437,7 +447,9 @@ const SpeedCalculatorPage: React.FC = () => {
                                                 </span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-gray-400">Minimum:</span>
+                                                <span className="text-theme-text-secondary">
+                                                    Minimum:
+                                                </span>
                                                 <span className="text-xl font-bold text-primary">
                                                     {baseSpeedRange.min === null
                                                         ? 'No limit'
@@ -445,7 +457,9 @@ const SpeedCalculatorPage: React.FC = () => {
                                                 </span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-gray-400">Maximum:</span>
+                                                <span className="text-theme-text-secondary">
+                                                    Maximum:
+                                                </span>
                                                 <span className="text-xl font-bold text-primary">
                                                     {baseSpeedRange.max === null
                                                         ? 'No limit'
@@ -464,10 +478,10 @@ const SpeedCalculatorPage: React.FC = () => {
 
                             <div className="card">
                                 <h3 className="text-lg font-bold mb-2">Calculation Formula</h3>
-                                <p className="text-sm text-gray-400 mb-2">
+                                <p className="text-sm text-theme-text-secondary mb-2">
                                     Base Speed = Target Speed / (1 + Total Modifier / 100)
                                 </p>
-                                <p className="text-sm text-gray-400">
+                                <p className="text-sm text-theme-text-secondary">
                                     The calculator finds the base speed range by reversing the
                                     forward calculation for both the minimum and maximum target
                                     speeds.

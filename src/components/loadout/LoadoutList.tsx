@@ -24,7 +24,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
 
     if (loadouts.length === 0) {
         return (
-            <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+            <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                 No loadouts created yet. Create one by clicking the &quot;New Loadout&quot; button
                 above.
             </div>

@@ -39,11 +39,13 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
         tryToCompleteSets;
 
     if (!hasConfig) {
-        return <div className="text-xs text-gray-400 px-2 py-1">No configuration set</div>;
+        return (
+            <div className="text-xs text-theme-text-secondary px-2 py-1">No configuration set</div>
+        );
     }
 
     return (
-        <div className="text-xs px-2 py-1 text-gray-400 me-auto ms-3">
+        <div className="text-xs px-2 py-1 text-theme-text-secondary me-auto ms-3">
             {/* Ship Role */}
             {shipRole && (
                 <div className="flex items-center text-white">
@@ -51,7 +53,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                 </div>
             )}
 
-            <div className="flex flex-wrap gap-1 divide-x-2 divide-gray-500 *:ps-1 ms-[-0.25rem]">
+            <div className="flex flex-wrap gap-1 divide-x-2 divide-dark-border *:ps-1 ms-[-0.25rem]">
                 {/* Settings */}
                 {optimizeImplants && <span>Include implants</span>}
                 {ignoreEquipped && <span>Ignore equipped</span>}

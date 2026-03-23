@@ -34,7 +34,7 @@ export const RangeFilter: React.FC<RangeFilterProps> = ({
 
     return (
         <div className={`space-y-2 ${className}`}>
-            <label className="block text-sm font-medium text-gray-200">{label}</label>
+            <label className="block text-sm font-medium text-theme-text">{label}</label>
             <div className="flex gap-2">
                 <div className="flex-1">
                     <Input
@@ -46,7 +46,7 @@ export const RangeFilter: React.FC<RangeFilterProps> = ({
                         min={0}
                     />
                 </div>
-                <div className="flex items-center text-gray-400">to</div>
+                <div className="flex items-center text-theme-text-secondary">to</div>
                 <div className="flex-1">
                     <Input
                         type="number"

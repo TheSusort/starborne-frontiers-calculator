@@ -13,9 +13,9 @@ export const BuffTooltip: React.FC<BuffTooltipProps> = ({ buffName }) => {
     }
 
     return (
-        <div className="bg-dark-lighter p-2 shadow-lg max-w-xs mt-1 border border-gray-600">
+        <div className="bg-dark-lighter p-2 shadow-lg max-w-xs mt-1 border border-dark-border">
             <div className="font-semibold text-sm text-primary capitalize">{buffName}</div>
-            <div className="text-sm text-gray-300">{description}</div>
+            <div className="text-sm text-theme-text">{description}</div>
         </div>
     );
 };

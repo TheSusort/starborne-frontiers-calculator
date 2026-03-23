@@ -44,7 +44,7 @@ const DiscoBall: React.FC<{ descended: boolean }> = ({ descended }) => (
         style={{ top: descended ? '0px' : '-250px' }}
     >
         {/* String */}
-        <div className="w-[2px] h-12 bg-gradient-to-b from-gray-400 to-gray-600 mx-auto" />
+        <div className="w-[2px] h-12 bg-gradient-to-b from-dark-border to-dark-lighter mx-auto" />
 
         {/* Ball container with perspective */}
         <div

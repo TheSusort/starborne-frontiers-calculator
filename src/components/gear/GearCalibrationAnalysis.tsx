@@ -20,7 +20,7 @@ interface Props {
     initialSubTab?: 'candidates' | 'ship' | null;
 }
 
-const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
+const winnerColors = ['text-yellow-500', 'text-theme-text-secondary', 'text-amber-600'];
 
 export const GearCalibrationAnalysis: React.FC<Props> = ({
     inventory,
@@ -202,7 +202,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             {activeSubTab === 'candidates' && (
                 <>
                     <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-400">
+                        <span className="text-sm text-theme-text-secondary">
                             Find the best gear pieces to calibrate for maximum stat improvements.
                             {eligibleCount > 0 && (
                                 <span className="ml-2 text-cyan-400">
@@ -219,7 +219,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                         </Button>
                     </div>
 
-                    <div className="text-sm text-gray-400 space-y-2">
+                    <div className="text-sm text-theme-text-secondary space-y-2">
                         <p>
                             Click &quot;Analyze Calibration&quot; to find the best gear pieces to
                             calibrate for each ship role. Only level 16 gear with 5-6 stars is
@@ -237,7 +237,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                     </div>
 
                     {eligibleCount === 0 && (
-                        <div className="text-center py-12 text-gray-400">
+                        <div className="text-center py-12 text-theme-text-secondary">
                             <p className="text-lg">No calibration-eligible gear found.</p>
                             <p className="text-sm mt-2">
                                 Upgrade gear to level 16 with 5 or 6 stars to calibrate it.
@@ -254,7 +254,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                     )}
 
                     {Object.keys(results).length === 0 && !isLoading && eligibleCount > 0 && (
-                        <div className="text-center py-12 text-gray-400">
+                        <div className="text-center py-12 text-theme-text-secondary">
                             <p className="text-lg">No analysis results yet.</p>
                             <p className="text-sm mt-2">
                                 Click &quot;Analyze Calibration&quot; to find the best calibration
@@ -283,7 +283,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                         return (
                             <div key={role} className="space-y-4 card">
                                 <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
-                                <span className="text-sm text-gray-400">
+                                <span className="text-sm text-theme-text-secondary">
                                     {SHIP_TYPES[role].description}
                                 </span>
                                 <Tabs
@@ -303,7 +303,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                                             />
                                             <div className="text-sm px-4 pb-4 space-y-1">
                                                 <div
-                                                    className={`flex justify-between ${winnerColors[index] || 'text-gray-300'}`}
+                                                    className={`flex justify-between ${winnerColors[index] || 'text-theme-text'}`}
                                                 >
                                                     <span>Role Score:</span>
                                                     <span>

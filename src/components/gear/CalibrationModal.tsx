@@ -204,8 +204,8 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
 
                         {/* Hint to select a ship */}
                         {isEligible && !selectedShip && (
-                            <div className="bg-gray-800/50 border border-gray-700 p-4 rounded">
-                                <p className="text-sm text-gray-400">
+                            <div className="bg-dark/50 border border-dark-border p-4 rounded">
+                                <p className="text-sm text-theme-text-secondary">
                                     Select a ship below to see the potential stat improvements.
                                 </p>
                             </div>
@@ -237,7 +237,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
                 {/* Ship Selection */}
                 {isEligible && (
                     <div className="space-y-4">
-                        <h4 className="text-sm font-medium text-gray-400">
+                        <h4 className="text-sm font-medium text-theme-text-secondary">
                             Select Ship to Calibrate For
                         </h4>
 
@@ -267,7 +267,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
 
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-[300px] overflow-y-auto">
                                     {filteredShips.length === 0 && (
-                                        <p className="text-gray-400 col-span-full text-center py-4">
+                                        <p className="text-theme-text-secondary col-span-full text-center py-4">
                                             No ships found
                                         </p>
                                     )}
@@ -286,7 +286,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
                 )}
 
                 {/* Actions */}
-                <div className="flex justify-end gap-4 pt-4 border-t border-gray-700">
+                <div className="flex justify-end gap-4 pt-4 border-t border-dark-border">
                     <Button variant="secondary" onClick={handleClose}>
                         Cancel
                     </Button>

@@ -63,7 +63,7 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
 
     return (
         <div className="space-y-6">
-            <div className="text-sm text-gray-400 space-y-2">
+            <div className="text-sm text-theme-text-secondary space-y-2">
                 <p>
                     Select a ship and role to see how calibrating each equipped gear piece would
                     improve the ship&apos;s role score.
@@ -87,7 +87,7 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                             onChange={setSelectedRole}
                             label="Select Role"
                         />
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-theme-text-secondary">
                             Defaults to ship&apos;s type: {SHIP_TYPES[selectedShip.type]?.name}
                         </p>
                     </div>
@@ -101,25 +101,33 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                         <h3 className="text-lg font-medium">Overall Impact</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                                <div className="text-sm text-gray-400">Current Score</div>
+                                <div className="text-sm text-theme-text-secondary">
+                                    Current Score
+                                </div>
                                 <div className="text-xl font-semibold">
                                     {Math.round(analysis.currentTotalScore).toLocaleString()}
                                 </div>
                             </div>
                             <div>
-                                <div className="text-sm text-gray-400">Calibrated Score</div>
+                                <div className="text-sm text-theme-text-secondary">
+                                    Calibrated Score
+                                </div>
                                 <div className="text-xl font-semibold text-cyan-400">
                                     {Math.round(analysis.calibratedTotalScore).toLocaleString()}
                                 </div>
                             </div>
                             <div>
-                                <div className="text-sm text-gray-400">Total Improvement</div>
+                                <div className="text-sm text-theme-text-secondary">
+                                    Total Improvement
+                                </div>
                                 <div className="text-xl font-semibold text-green-400">
                                     +{Math.round(analysis.totalImprovement).toLocaleString()}
                                 </div>
                             </div>
                             <div>
-                                <div className="text-sm text-gray-400">% Improvement</div>
+                                <div className="text-sm text-theme-text-secondary">
+                                    % Improvement
+                                </div>
                                 <div className="text-xl font-semibold text-green-400">
                                     +{Math.round(analysis.totalImprovementPercentage)}%
                                 </div>
@@ -149,7 +157,7 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                                                     />
                                                     {slotResult.isEligible ? (
                                                         <div className="mt-2 space-y-1 text-sm">
-                                                            <div className="flex justify-between text-gray-300">
+                                                            <div className="flex justify-between text-theme-text">
                                                                 <span>Ship score (current):</span>
                                                                 <span>
                                                                     {Math.round(
@@ -202,14 +210,14 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                                                             ✓ Already calibrated
                                                         </div>
                                                     ) : (
-                                                        <div className="mt-2 text-xs text-gray-400">
+                                                        <div className="mt-2 text-xs text-theme-text-secondary">
                                                             Not eligible (requires level 16, 5-6
                                                             stars)
                                                         </div>
                                                     )}
                                                 </>
                                             ) : (
-                                                <div className="text-sm text-gray-400 py-4">
+                                                <div className="text-sm text-theme-text-secondary py-4">
                                                     No gear equipped
                                                 </div>
                                             )}
@@ -223,13 +231,13 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
             )}
 
             {selectedShip && !selectedRole && (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-theme-text-secondary">
                     <p>Please select a role to analyze.</p>
                 </div>
             )}
 
             {!selectedShip && (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-theme-text-secondary">
                     <p>Please select a ship to analyze.</p>
                 </div>
             )}

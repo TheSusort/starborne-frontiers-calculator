@@ -25,19 +25,21 @@ export const DiffSummaryComponent: React.FC<DiffSummaryProps> = ({ summary }) =>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="text-center">
                     <div className="text-2xl font-bold text-green-400">{summary.added}</div>
-                    <div className="text-sm text-gray-400">Added</div>
+                    <div className="text-sm text-theme-text-secondary">Added</div>
                 </div>
                 <div className="text-center">
                     <div className="text-2xl font-bold text-red-400">{summary.removed}</div>
-                    <div className="text-sm text-gray-400">Removed</div>
+                    <div className="text-sm text-theme-text-secondary">Removed</div>
                 </div>
                 <div className="text-center">
                     <div className="text-2xl font-bold text-yellow-400">{summary.modified}</div>
-                    <div className="text-sm text-gray-400">Modified</div>
+                    <div className="text-sm text-theme-text-secondary">Modified</div>
                 </div>
                 <div className="text-center">
-                    <div className="text-2xl font-bold text-gray-400">{summary.unchanged}</div>
-                    <div className="text-sm text-gray-400">Unchanged</div>
+                    <div className="text-2xl font-bold text-theme-text-secondary">
+                        {summary.unchanged}
+                    </div>
+                    <div className="text-sm text-theme-text-secondary">Unchanged</div>
                 </div>
             </div>
         </div>

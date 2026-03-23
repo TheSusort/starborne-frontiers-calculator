@@ -46,7 +46,7 @@ export const StatDisplay: React.FC<Props> = ({
                                         stats.find(
                                             (s) => s.name === stat.name && s.type === stat.type
                                         ) && (
-                                            <span className="text-gray-500">
+                                            <span className="text-theme-text-secondary">
                                                 {' ('}
                                                 {
                                                     stats.find(
@@ -62,7 +62,9 @@ export const StatDisplay: React.FC<Props> = ({
                                 </span>
                             </>
                         )}
-                        {stat.value === 0 && <span className="text-gray-400">No stats added</span>}
+                        {stat.value === 0 && (
+                            <span className="text-theme-text-secondary">No stats added</span>
+                        )}
                     </div>
                 ))}
             </div>

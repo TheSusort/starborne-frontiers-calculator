@@ -233,7 +233,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
                                         <thead>
-                                            <tr className="border-b border-dark-border text-gray-400">
+                                            <tr className="border-b border-dark-border text-theme-text-secondary">
                                                 <th className="px-2 py-1 text-left">Round</th>
                                                 <th className="px-2 py-1 text-left">Charges</th>
                                                 <th className="px-2 py-1 text-left">Action</th>
@@ -272,7 +272,9 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                                                 </span>
                                                             )
                                                         ) : (
-                                                            <span className="text-gray-600">-</span>
+                                                            <span className="text-theme-text-secondary">
+                                                                -
+                                                            </span>
                                                         )}
                                                     </td>
                                                     <td className="px-2 py-1">

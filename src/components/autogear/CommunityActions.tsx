@@ -23,13 +23,15 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
     const { user } = useAuth();
 
     return (
-        <div className="pt-2 border-t border-gray-600 space-y-2">
+        <div className="pt-2 border-t border-dark-border space-y-2">
             {/* Voting for community recommendations */}
             {recommendation?.id && (
                 <div className="flex items-center justify-center space-x-4">
                     {user ? (
                         <>
-                            <span className="text-sm text-gray-400">Rate this recommendation:</span>
+                            <span className="text-sm text-theme-text-secondary">
+                                Rate this recommendation:
+                            </span>
                             <Button
                                 size="sm"
                                 variant={userVote === 'upvote' ? 'primary' : 'secondary'}
@@ -48,7 +50,7 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
                             </Button>
                         </>
                     ) : (
-                        <span className="text-sm text-gray-400">Sign in to vote</span>
+                        <span className="text-sm text-theme-text-secondary">Sign in to vote</span>
                     )}
                 </div>
             )}
@@ -67,12 +69,14 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
                                 <span>Share to Community</span>
                             </Button>
                         ) : (
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm text-theme-text-secondary">
                                 Configure autogear settings to share your build
                             </span>
                         )
                     ) : (
-                        <span className="text-sm text-gray-400">Sign in to share your build</span>
+                        <span className="text-sm text-theme-text-secondary">
+                            Sign in to share your build
+                        </span>
                     )}
                 </div>
             )}

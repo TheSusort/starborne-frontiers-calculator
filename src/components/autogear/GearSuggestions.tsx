@@ -118,7 +118,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                         (hasImplantSuggestions() ||
                             (ship.implants && Object.keys(ship.implants).length > 0)) && (
                             <div className="border-t border-dark-lighter mt-4 p-4">
-                                <h4 className="text-sm font-semibold mb-3 text-gray-300">
+                                <h4 className="text-sm font-semibold mb-3 text-theme-text">
                                     Implants
                                 </h4>
                                 {!expanded && !isPrinting ? (
@@ -200,7 +200,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                     <div className="grid grid-cols-2 gap-4">
                                         {/* Left column: 3 Minors */}
                                         <div className="space-y-2">
-                                            <div className="text-xs text-gray-400 mb-2">
+                                            <div className="text-xs text-theme-text-secondary mb-2">
                                                 Minor Slots
                                             </div>
                                             {[
@@ -233,7 +233,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 
                                         {/* Right column: Major + Ultimate */}
                                         <div className="space-y-2">
-                                            <div className="text-xs text-gray-400 mb-2">
+                                            <div className="text-xs text-theme-text-secondary mb-2">
                                                 Major & Ultimate
                                             </div>
                                             {['implant_major', 'implant_ultimate'].map((slot) => {
@@ -270,7 +270,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 
                 <div className="flex justify-end items-center pt-4 gap-2">
                     {useUpgradedStats && (
-                        <div className="text-sm text-gray-400 mr-auto">
+                        <div className="text-sm text-theme-text-secondary mr-auto">
                             Total upgrade cost:{' '}
                             {Intl.NumberFormat('en', { notation: 'compact' }).format(
                                 getTotalUpgradeCost()

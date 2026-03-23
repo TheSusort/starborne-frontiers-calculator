@@ -187,11 +187,15 @@ const DefenseCalculatorPage: React.FC = () => {
 
                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                         <div className="flex justify-between mb-2">
-                                            <span className="text-gray-400">Damage Reduction:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Damage Reduction:
+                                            </span>
                                             <span>{config.damageReduction?.toFixed(2)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-gray-400">Effective HP:</span>
+                                            <span className="text-theme-text-secondary">
+                                                Effective HP:
+                                            </span>
                                             <span
                                                 className={
                                                     bestShip && bestShip.id === config.id
@@ -203,7 +207,9 @@ const DefenseCalculatorPage: React.FC = () => {
                                             </span>
                                         </div>
                                         <div className="flex justify-between mt-2">
-                                            <span className="text-gray-400">HP Multiplier:</span>
+                                            <span className="text-theme-text-secondary">
+                                                HP Multiplier:
+                                            </span>
                                             <span>
                                                 {((config.effectiveHP || 0) / config.hp).toFixed(2)}
                                                 x

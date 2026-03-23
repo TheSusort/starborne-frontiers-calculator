@@ -27,7 +27,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
     return (
         <section className="card">
             <h3 className="font-semibold">Upgrade Suggestions (EXPERIMENTAL)</h3>
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-theme-text-secondary mb-4">
                 <span>
                     These are suggestions for upgrading your gear, based on the gear contribution
                     and the ship&apos;s final score.
@@ -72,7 +72,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                 </span>
                             )}
                         </div>
-                        <ul className="text-sm text-gray-400 list-disc ml-4">
+                        <ul className="text-sm text-theme-text-secondary list-disc ml-4">
                             {suggestion.reasons.map((reason, index) => {
                                 const tooltipId = `${suggestion.slotName}-${index}`;
                                 return (
@@ -93,7 +93,7 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                                             isVisible={tooltips[tooltipId] || false}
                                             targetElement={tooltipRefs.current[tooltipId]}
                                         >
-                                            <span className="text-gray-400 bg-dark-lighter p-2 border border-gray-300 block">
+                                            <span className="text-theme-text-secondary bg-dark-lighter p-2 border border-dark-border block">
                                                 {tooltipContent[tooltipId]}
                                             </span>
                                         </Tooltip>

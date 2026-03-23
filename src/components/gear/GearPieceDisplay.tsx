@@ -144,7 +144,7 @@ export const GearPieceDisplay = memo(
                                     {gearSetInfo && (
                                         <Tooltip
                                             isVisible={showSetTooltip}
-                                            className="bg-dark p-2 border border-dark-border min-w-[200px] text-gray-300"
+                                            className="bg-dark p-2 border border-dark-border min-w-[200px] text-theme-text"
                                             targetElement={setTooltipRef.current}
                                         >
                                             <div className="space-y-2">
@@ -260,7 +260,9 @@ export const GearPieceDisplay = memo(
                         {/* Main Stat */}
                         {!isImplant && (
                             <div>
-                                <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
+                                <div
+                                    className={`text-theme-text-secondary ${small ? 'text-xs' : 'mb-1'}`}
+                                >
                                     Main Stat
                                 </div>
                                 <div className="space-y-1">
@@ -285,7 +287,9 @@ export const GearPieceDisplay = memo(
                         {isImplant &&
                             (gear.slot === 'implant_major' || gear.slot === 'implant_ultimate') && (
                                 <div>
-                                    <div className={`text-gray-400 ${small ? 'text-xs' : 'mb-1'}`}>
+                                    <div
+                                        className={`text-theme-text-secondary ${small ? 'text-xs' : 'mb-1'}`}
+                                    >
                                         Description
                                     </div>
                                     <div className="bg-dark-lighter py-1.5 px-3">
@@ -302,7 +306,7 @@ export const GearPieceDisplay = memo(
                         {gear.subStats.length > 0 && (
                             <div>
                                 {mode !== 'subcompact' && (
-                                    <div className="text-gray-400 mb-2">Sub Stats</div>
+                                    <div className="text-theme-text-secondary mb-2">Sub Stats</div>
                                 )}
                                 <div className="space-y-1">
                                     <StatDisplay
@@ -322,7 +326,7 @@ export const GearPieceDisplay = memo(
                             (() => {
                                 const cost = calculateUpgradeCost(gear, 16);
                                 return cost > 0 ? (
-                                    <div className="text-xs text-gray-400">
+                                    <div className="text-xs text-theme-text-secondary">
                                         Upgrade cost:{' '}
                                         {Intl.NumberFormat('en', { notation: 'compact' }).format(
                                             cost

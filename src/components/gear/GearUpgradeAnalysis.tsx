@@ -29,7 +29,7 @@ interface Props {
     onEdit?: (piece: GearPiece) => void;
 }
 
-const winnerColors = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
+const winnerColors = ['text-yellow-500', 'text-theme-text-secondary', 'text-amber-600'];
 
 const RARITY_OPTIONS = [
     { value: 'rare', label: 'Rare', description: 'Rare and above' },
@@ -355,7 +355,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             {mode === 'analysis' && (
                 <>
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                        <span className="text-sm text-gray-400">
+                        <span className="text-sm text-theme-text-secondary">
                             Find the best gear pieces to upgrade for maximum stat improvements.
                         </span>
                         <div className="flex gap-2">
@@ -497,7 +497,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                         </div>
                     )}
                     <div
-                        className="text-sm text-gray-400"
+                        className="text-sm text-theme-text-secondary"
                         data-tutorial="gear-analysis-description"
                     >
                         Click &quot;Analyze Gear&quot; to find the 6 best gear upgrades for each
@@ -520,7 +520,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             {mode === 'simulation' && (
                 <>
                     <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-400">
+                        <span className="text-sm text-theme-text-secondary">
                             Simulate random upgrades on your gear to preview potential stats.
                         </span>
                         <div className="space-x-4">
@@ -540,7 +540,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             </Button>
                         </div>
                     </div>
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-theme-text-secondary">
                         &quot;Simulate Upgrades&quot; will randomly upgrade all your gear pieces,
                         just like in the game. The upgraded stats will be displayed on gear cards
                         throughout the app, with original stats shown in gray. Use &quot;Clear
@@ -683,7 +683,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                             </Button>
                                         </div>
                                     </div>
-                                    <p className="text-xs text-gray-400">
+                                    <p className="text-xs text-theme-text-secondary">
                                         {statFilterMode === 'AND'
                                             ? 'Only show pieces that have ALL selected stats (as main stat or substat).'
                                             : 'Only show pieces that have at least ONE of the selected stats (as main stat or substat).'}
@@ -788,7 +788,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
             )}
 
             {mode === 'analysis' && Object.keys(results).length === 0 && !isLoading && (
-                <div className="text-center py-12 text-gray-400">
+                <div className="text-center py-12 text-theme-text-secondary">
                     <p className="text-lg">No analysis results yet.</p>
                     <p className="text-sm mt-2">
                         Click &quot;Analyze Gear&quot; to find the best upgrade candidates.
@@ -822,7 +822,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     return (
                         <div key={role} className="space-y-4 card">
                             <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-theme-text-secondary">
                                 {SHIP_TYPES[role].description}
                             </span>
                             <Tabs
@@ -861,7 +861,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                     ))}
                                 </div>
                             ) : (
-                                <div className="text-center py-8 text-gray-400">
+                                <div className="text-center py-8 text-theme-text-secondary">
                                     <p className="text-sm">
                                         No upgrade candidates found for this slot with the current
                                         filters.

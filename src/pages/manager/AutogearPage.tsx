@@ -940,7 +940,7 @@ export const AutogearPage: React.FC = () => {
                                         {/* Ship Header for Print */}
                                         {isPrinting && (
                                             <div className="print:block hidden">
-                                                <h3 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4">
+                                                <h3 className="text-xl font-bold border-b border-dark-border pb-2 mb-4">
                                                     {ship.name} - Detailed Results
                                                 </h3>
                                             </div>
@@ -958,7 +958,7 @@ export const AutogearPage: React.FC = () => {
                                                         }
                                                         )
                                                     </h4>
-                                                    <p className="text-xs text-gray-500 mb-4">
+                                                    <p className="text-xs text-theme-text-secondary mb-4">
                                                         Damage calculated against 15k enemy defense
                                                     </p>
                                                     <SimulationResults

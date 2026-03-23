@@ -51,7 +51,9 @@ const CustomTooltip = ({ active, payload }: TooltipProps) => {
             // Ship point tooltip
             return (
                 <div className="bg-dark-lighter p-2 border border-dark-border text-white">
-                    <p className="text-xs text-gray-400">{data.isBest ? 'Best DPS' : ''}</p>
+                    <p className="text-xs text-theme-text-secondary">
+                        {data.isBest ? 'Best DPS' : ''}
+                    </p>
                     <p className="font-bold">{data.name}</p>
                     <p>Attack: {(data.y / 1000).toFixed(1)}k</p>
                     <p>Crit Damage: {data.x.toFixed(0)}%</p>

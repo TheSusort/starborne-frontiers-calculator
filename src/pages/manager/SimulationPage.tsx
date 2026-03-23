@@ -326,7 +326,7 @@ export const SimulationPage: React.FC = () => {
 export default SimulationPage;
 
 const SimulationInfo: React.FC = () => (
-    <ul className="list-disc list-inside text-sm text-gray-400">
+    <ul className="list-disc list-inside text-sm text-theme-text-secondary">
         <li>It will only use 100% damage hits, no ship specific attacks are used.</li>
         <li>
             For defenders, it will take hits from {ENEMY_COUNT} enemies with {ENEMY_ATTACK} attack.

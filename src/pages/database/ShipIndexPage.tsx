@@ -308,7 +308,7 @@ export const ShipIndexPage: React.FC = () => {
                 <div className="space-y-6">
                     <div className="flex flex-col" data-tutorial="ship-db-filter-panel">
                         {filteredAndSortedShips.length > 0 && (
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-theme-text-secondary">
                                 Showing {filteredAndSortedShips.length} ships
                             </span>
                         )}
@@ -612,7 +612,7 @@ export const ShipIndexPage: React.FC = () => {
                                 </div>
                             ))
                         ) : (
-                            <div className="col-span-full text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                            <div className="col-span-full text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                 No matching ships found
                             </div>
                         )}
@@ -630,10 +630,10 @@ export const ShipIndexPage: React.FC = () => {
                     return (
                         <>
                             {bioShip?.quote && (
-                                <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-gray-400">
+                                <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-theme-text-secondary">
                                     <p>{bioShip.quote}</p>
                                     {bioShip.quoteAuthor && (
-                                        <footer className="mt-1 text-sm not-italic text-gray-500">
+                                        <footer className="mt-1 text-sm not-italic text-theme-text-secondary">
                                             — {bioShip.quoteAuthor}
                                         </footer>
                                     )}
@@ -641,7 +641,7 @@ export const ShipIndexPage: React.FC = () => {
                             )}
                             <BioContent
                                 bio={bioShip?.bio ?? ''}
-                                className="text-gray-300 leading-relaxed"
+                                className="text-theme-text leading-relaxed"
                             />
                         </>
                     );

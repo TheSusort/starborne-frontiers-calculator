@@ -111,7 +111,7 @@ export const EncounterList = ({
 
     if (encounters.length === 0) {
         return (
-            <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+            <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                 {encounters.length === 0 ? 'No encounters found' : 'No matching encounters found'}
             </div>
         );
@@ -119,7 +119,7 @@ export const EncounterList = ({
 
     return (
         <div className="flex flex-col overflow-hidden">
-            <span className="text-sm text-gray-400 -mt-4">
+            <span className="text-sm text-theme-text-secondary -mt-4">
                 {encounters.length} {encounters.length === 1 ? 'encounter' : 'encounters'}
             </span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">

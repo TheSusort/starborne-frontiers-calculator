@@ -220,7 +220,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     {/* Instructions */}
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">How It Works</h2>
-                        <ul className="list-disc list-inside space-y-2 text-gray-400 text-sm">
+                        <ul className="list-disc list-inside space-y-2 text-theme-text-secondary text-sm">
                             <li>
                                 <strong>Public Beacon:</strong> 60% Common, 38% Uncommon, 2% Rare
                             </li>
@@ -287,7 +287,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                         AND (All ships)
                                     </Button>
                                 </div>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-theme-text-secondary">
                                     {calculationMode === 'or'
                                         ? 'Probability of getting at least one target ship'
                                         : 'Probability of getting all target ships'}
@@ -364,7 +364,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                         <h3 className="text-lg font-semibold mb-2">
                                             Faction Event
                                         </h3>
-                                        <p className="text-sm text-gray-400 mb-4">
+                                        <p className="text-sm text-theme-text-secondary mb-4">
                                             Ships from the selected faction have 20x the pull weight
                                             in the specialist beacon pool.
                                         </p>
@@ -402,7 +402,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                         <h3 className="text-lg font-semibold mb-2">
                                             Event Ships (Epic & Legendary)
                                         </h3>
-                                        <p className="text-sm text-gray-400 mb-4">
+                                        <p className="text-sm text-theme-text-secondary mb-4">
                                             Select ships for events. Each ship can have either a
                                             rate change or be guaranteed after a certain number of
                                             pulls (mutually exclusive).
@@ -447,7 +447,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                             >
                                                                 {ship.name}
                                                             </span>
-                                                            <span className="text-sm text-gray-400">
+                                                            <span className="text-sm text-theme-text-secondary">
                                                                 ({rarityInfo.label})
                                                             </span>
                                                         </div>
@@ -504,7 +504,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     {/* Beacon Inventory */}
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">Beacon Inventory (Optional)</h2>
-                        <p className="text-sm text-gray-400 mb-4">
+                        <p className="text-sm text-theme-text-secondary mb-4">
                             Enter how many beacons you have to see the probability of getting your
                             target ships with your current inventory.
                         </p>
@@ -569,11 +569,11 @@ const RecruitmentCalculatorPage: React.FC = () => {
                             </h2>
                             {selectedShips.length > 0 && (
                                 <div className="mb-4">
-                                    <p className="text-sm text-gray-400">
+                                    <p className="text-sm text-theme-text-secondary">
                                         Target ships: {selectedShips.map((s) => s.name).join(', ')}
                                     </p>
                                     {selectedShips.length > 1 && (
-                                        <p className="text-sm text-gray-500 mt-1 italic">
+                                        <p className="text-sm text-theme-text-secondary mt-1 italic">
                                             {calculationMode === 'or'
                                                 ? 'Showing probability of getting at least one of the selected ships'
                                                 : 'Showing probability of getting all selected ships'}
@@ -596,7 +596,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             >
                                                 {getBeaconLabel(result.beaconType)}
                                             </h3>
-                                            <p className="text-sm text-gray-400 mb-4">
+                                            <p className="text-sm text-theme-text-secondary mb-4">
                                                 {getBeaconDescription(result.beaconType)}
                                             </p>
                                             {result.beaconType === 'specialist' && factionEvent && (
@@ -609,7 +609,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
 
                                             <div className="space-y-2">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Probability per pull (at least one):
                                                     </span>
                                                     <span className="font-semibold">
@@ -617,7 +617,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Expected pulls (average):
                                                     </span>
                                                     <span className="font-semibold">
@@ -628,13 +628,13 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                               ).toLocaleString()}
                                                     </span>
                                                 </div>
-                                                <p className="text-xs text-gray-500 -mt-1">
+                                                <p className="text-xs text-theme-text-secondary -mt-1">
                                                     {calculationMode === 'or'
                                                         ? 'Average number of pulls needed to get at least one target ship'
                                                         : 'Average number of pulls needed to get all target ships (max of individual expected pulls)'}
                                                 </p>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Pulls for 90% chance:
                                                     </span>
                                                     <span className="font-semibold">
@@ -643,13 +643,13 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                             : result.pullsFor90Percent.toLocaleString()}
                                                     </span>
                                                 </div>
-                                                <p className="text-xs text-gray-500 -mt-1">
+                                                <p className="text-xs text-theme-text-secondary -mt-1">
                                                     {calculationMode === 'or'
                                                         ? 'Pulls needed for 90% chance of getting at least one target ship'
                                                         : 'Pulls needed for 90% chance of getting all target ships'}
                                                 </p>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-400">
+                                                    <span className="text-theme-text-secondary">
                                                         Pulls for 99% chance:
                                                     </span>
                                                     <span className="font-semibold">
@@ -658,7 +658,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                             : result.pullsFor99Percent.toLocaleString()}
                                                     </span>
                                                 </div>
-                                                <p className="text-xs text-gray-500 -mt-1">
+                                                <p className="text-xs text-theme-text-secondary -mt-1">
                                                     {calculationMode === 'or'
                                                         ? 'Pulls needed for 99% chance of getting at least one target ship'
                                                         : 'Pulls needed for 99% chance of getting all target ships'}
@@ -666,7 +666,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                 {beaconInventory[result.beaconType] > 0 && (
                                                     <div className="mt-4 pt-4 border-t border-dark-border">
                                                         <div className="flex justify-between mb-2">
-                                                            <span className="text-gray-400">
+                                                            <span className="text-theme-text-secondary">
                                                                 With{' '}
                                                                 {beaconInventory[
                                                                     result.beaconType
@@ -722,7 +722,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                                 %
                                                             </span>
                                                         </div>
-                                                        <p className="text-xs text-gray-500 mt-1">
+                                                        <p className="text-xs text-theme-text-secondary mt-1">
                                                             {calculationMode === 'or'
                                                                 ? 'Probability of getting at least one target ship'
                                                                 : 'Probability of getting all target ships'}
@@ -774,7 +774,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                     )}
 
                     {selectedShips.length === 0 && (
-                        <div className="card text-center text-gray-400">
+                        <div className="card text-center text-theme-text-secondary">
                             Select one or more ships above to see recruitment probabilities
                         </div>
                     )}

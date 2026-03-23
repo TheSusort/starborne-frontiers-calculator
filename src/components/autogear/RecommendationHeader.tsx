@@ -29,7 +29,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
         } else if (sum < 0) {
             return <span className="text-red-400 font-medium">{sum}</span>;
         } else {
-            return <span className="text-gray-500">0</span>;
+            return <span className="text-theme-text-secondary">0</span>;
         }
     };
 
@@ -41,13 +41,13 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
             <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                     <ChevronDownIcon
-                        className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                        className={`w-4 h-4 text-theme-text-secondary flex-shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
                     />
 
                     {loading ? (
                         <div className="flex items-center gap-2">
                             <Loader size="sm" />
-                            <span className="text-gray-400 text-sm">Loading...</span>
+                            <span className="text-theme-text-secondary text-sm">Loading...</span>
                         </div>
                     ) : recommendation ? (
                         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -67,7 +67,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
                             </span>
 
                             {/* Role label */}
-                            <span className="text-xs text-gray-400 flex-shrink-0">
+                            <span className="text-xs text-theme-text-secondary flex-shrink-0">
                                 ({getRoleInfo(recommendation.ship_role).name})
                             </span>
 
@@ -80,7 +80,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
                                 )}
                         </div>
                     ) : (
-                        <span className="text-sm text-gray-400">
+                        <span className="text-sm text-theme-text-secondary">
                             No community recommendations yet
                         </span>
                     )}
@@ -90,7 +90,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
                 {recommendation && !loading && (
                     <div className="flex items-center gap-2 flex-shrink-0 text-xs">
                         {renderVoteSum(recommendation.upvotes || 0, recommendation.downvotes || 0)}
-                        <span className="text-gray-500">
+                        <span className="text-theme-text-secondary">
                             {Math.round((recommendation.score || 0) * 100)}%
                         </span>
                     </div>

@@ -154,7 +154,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                                     (_, index) => (
                                                                         <span
                                                                             key={index}
-                                                                            className={`text-[0.55rem] ${index < (fullShip.refits?.length ?? 0) ? 'text-yellow-400' : fullShip.rank && index < fullShip.rank ? 'text-gray-300' : 'text-gray-500'}`}
+                                                                            className={`text-[0.55rem] ${index < (fullShip.refits?.length ?? 0) ? 'text-yellow-400' : fullShip.rank && index < fullShip.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
                                                                         >
                                                                             ★
                                                                         </span>
@@ -176,7 +176,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                                 (_, index) => (
                                                                     <span
                                                                         key={index}
-                                                                        className={`text-xs tracking-tightest ${index < (ship.refits?.length ?? 0) ? 'text-yellow-400' : 'rank' in ship && ship.rank && index < ship.rank ? 'text-gray-300' : 'text-gray-500'}`}
+                                                                        className={`text-xs tracking-tightest ${index < (ship.refits?.length ?? 0) ? 'text-yellow-400' : 'rank' in ship && ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
                                                                     >
                                                                         ★
                                                                     </span>
@@ -197,7 +197,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 </div>
             ))}
             {onRemoveShip && (
-                <div className="text-xs text-gray-400 mt-10">
+                <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
                 </div>

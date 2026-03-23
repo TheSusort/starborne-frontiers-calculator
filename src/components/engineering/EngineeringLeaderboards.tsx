@@ -167,7 +167,9 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
         return (
             <div className={`${className}`}>
                 <div className="flex items-center justify-center h-[300px]">
-                    <div className="text-gray-400">Please sign in to view leaderboards</div>
+                    <div className="text-theme-text-secondary">
+                        Please sign in to view leaderboards
+                    </div>
                 </div>
             </div>
         );
@@ -178,16 +180,16 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
             {/* Engineering Points Leaderboard */}
             <div className="card">
                 <h3 className="text-lg font-semibold mb-4">Engineering Points Ranking</h3>
-                <p className="text-sm text-gray-400 mb-4">
+                <p className="text-sm text-theme-text-secondary mb-4">
                     Compare your total engineering points with other players.
                 </p>
                 {leaderboardLoading ? (
                     <div className="flex items-center justify-center h-[300px]">
-                        <div className="text-gray-400">Loading leaderboard...</div>
+                        <div className="text-theme-text-secondary">Loading leaderboard...</div>
                     </div>
                 ) : leaderboardChartData.length === 0 ? (
                     <div className="flex items-center justify-center h-[300px]">
-                        <div className="text-gray-400">
+                        <div className="text-theme-text-secondary">
                             No data available. Start investing engineering points!
                         </div>
                     </div>
@@ -233,16 +235,16 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
             {/* Engineering Tokens Leaderboard */}
             <div className="card">
                 <h3 className="text-lg font-semibold mb-4">Engineering Tokens Ranking</h3>
-                <p className="text-sm text-gray-400 mb-4">
+                <p className="text-sm text-theme-text-secondary mb-4">
                     Compare total tokens spent. Higher levels cost more tokens!
                 </p>
                 {tokensLeaderboardLoading ? (
                     <div className="flex items-center justify-center h-[300px]">
-                        <div className="text-gray-400">Loading leaderboard...</div>
+                        <div className="text-theme-text-secondary">Loading leaderboard...</div>
                     </div>
                 ) : tokensLeaderboardChartData.length === 0 ? (
                     <div className="flex items-center justify-center h-[300px]">
-                        <div className="text-gray-400">
+                        <div className="text-theme-text-secondary">
                             No data available. Start investing engineering points!
                         </div>
                     </div>

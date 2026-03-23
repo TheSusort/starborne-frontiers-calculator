@@ -20,7 +20,7 @@ export function ShipComparisonPanel<T extends Ship>({
     return (
         <div className="space-y-3 p-4 bg-dark-lighter border border-dark-border mx-[-16px]">
             <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-300">
+                <span className="text-sm text-theme-text">
                     Comparing {ships.length} ship{ships.length !== 1 ? 's' : ''}
                 </span>
                 <Button variant="secondary" size="xs" onClick={onClearAll}>

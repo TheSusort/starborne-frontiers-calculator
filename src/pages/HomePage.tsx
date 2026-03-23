@@ -180,11 +180,11 @@ const HomePage: React.FC = () => {
                                     gradientFrom="from-indigo-600"
                                     gradientTo="to-indigo-800"
                                 />
-                                <h3 className="text-xl font-semibold text-gray-100">
+                                <h3 className="text-xl font-semibold text-theme-text">
                                     Join the Community
                                 </h3>
                             </div>
-                            <p className="text-gray-300 mb-4">
+                            <p className="text-theme-text mb-4">
                                 Get support, share strategies, and discuss features with other
                                 players.
                             </p>
@@ -222,14 +222,14 @@ const HomePage: React.FC = () => {
                             <div className="flex items-center gap-3 mb-4">
                                 <IconBadge
                                     icon={Github}
-                                    gradientFrom="from-gray-600"
-                                    gradientTo="to-gray-800"
+                                    gradientFrom="from-dark-lighter"
+                                    gradientTo="to-dark"
                                 />
-                                <h3 className="text-xl font-semibold text-gray-100">
+                                <h3 className="text-xl font-semibold text-theme-text">
                                     Open Source Project
                                 </h3>
                             </div>
-                            <p className="text-gray-300 mb-4">
+                            <p className="text-theme-text mb-4">
                                 This project is free and open source. Contributions, bug reports,
                                 and feature requests are welcome!
                             </p>
@@ -275,10 +275,10 @@ const HomePage: React.FC = () => {
                                 className="w-16 h-16"
                             />
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-100 mb-3">
+                        <h2 className="text-2xl font-bold text-theme-text mb-3">
                             Backup & Restore Your Data
                         </h2>
-                        <p className="text-gray-300 mb-6">
+                        <p className="text-theme-text mb-6">
                             Protect your fleet data by creating backups. Useful for migrating to a
                             new device or recovering from data loss.
                         </p>

@@ -135,7 +135,7 @@ export const HeroCarousel: React.FC = () => {
                                         {slide.title}
                                     </h2>
                                 )}
-                                <p className="text-lg text-gray-200 mb-8 max-w-3xl drop-shadow-md animate-fadeIn animation-delay-200">
+                                <p className="text-lg text-theme-text mb-8 max-w-3xl drop-shadow-md animate-fadeIn animation-delay-200">
                                     {slide.subtitle}
                                 </p>
                                 {slide.ctaLink === '#' ? (

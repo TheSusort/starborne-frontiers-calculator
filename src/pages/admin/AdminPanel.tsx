@@ -358,7 +358,7 @@ export const AdminPanel: React.FC = () => {
                         {/* Lifetime Stats */}
                         {lifetimeStats && (
                             <div>
-                                <h3 className="text-lg font-semibold mb-3 text-gray-300">
+                                <h3 className="text-lg font-semibold mb-3 text-theme-text">
                                     Lifetime Statistics
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -516,7 +516,7 @@ export const AdminPanel: React.FC = () => {
                                                     <span className="font-medium">
                                                         {template.name}
                                                     </span>
-                                                    <span className="text-gray-400 ml-2">
+                                                    <span className="text-theme-text-secondary ml-2">
                                                         {template.faction} · {template.type} ·{' '}
                                                         {template.rarity}
                                                     </span>
@@ -527,7 +527,7 @@ export const AdminPanel: React.FC = () => {
                                     {templateSearchQuery.length >= 2 &&
                                         filteredTemplates.length === 0 &&
                                         !selectedTemplate && (
-                                            <div className="absolute z-10 w-full mt-1 bg-dark-800 border border-dark-600 rounded-lg shadow-lg px-4 py-2 text-gray-400 text-sm">
+                                            <div className="absolute z-10 w-full mt-1 bg-dark-800 border border-dark-600 rounded-lg shadow-lg px-4 py-2 text-theme-text-secondary text-sm">
                                                 No templates found
                                             </div>
                                         )}

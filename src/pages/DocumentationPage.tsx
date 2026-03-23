@@ -230,12 +230,12 @@ const DocumentationPage: React.FC = () => {
                                     Importing Your Game Data
                                 </h3>
                                 <div className="space-y-4">
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         To get started, you&apos;ll need to import your game data.
                                         This process requires the Windows version of Starborne
                                         Frontiers, which can be accessed through either:
                                     </p>
-                                    <ul className="list-disc pl-6 space-y-2 text-gray-300">
+                                    <ul className="list-disc pl-6 space-y-2 text-theme-text">
                                         <li>The standalone Windows client</li>
                                         <li>The Steam client</li>
                                     </ul>
@@ -244,7 +244,7 @@ const DocumentationPage: React.FC = () => {
                                         <h4 className="font-semibold text-primary mb-2">
                                             Steps to Export Data:
                                         </h4>
-                                        <ol className="list-decimal pl-6 space-y-2 text-gray-300">
+                                        <ol className="list-decimal pl-6 space-y-2 text-theme-text">
                                             <li>Open Starborne Frontiers in Windows</li>
                                             <li>
                                                 Click on{' '}
@@ -292,7 +292,7 @@ const DocumentationPage: React.FC = () => {
                                         <h4 className="font-semibold text-primary mb-2">
                                             Importing into the Calculator:
                                         </h4>
-                                        <ol className="list-decimal pl-6 space-y-2 text-gray-300">
+                                        <ol className="list-decimal pl-6 space-y-2 text-theme-text">
                                             <li>
                                                 Locate the yellow{' '}
                                                 <span className="text-primary">Import Data</span>{' '}
@@ -382,7 +382,7 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">FAQ</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Here are some frequently asked questions about the app.
                             </p>
                             <ul className="list-disc pl-6 space-y-4">
@@ -460,7 +460,7 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Ship Cards</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Each ship in your fleet is displayed as a card containing
                                 comprehensive information and management options.
                             </p>
@@ -469,7 +469,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Ship Information
                                 </h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Basic Info:</span> Name
                                     </li>
@@ -515,7 +515,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Ship Actions</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Equip Gear:</span> Manually
                                         equip gear pieces to different slots
@@ -557,11 +557,11 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Ship Comparison</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Compare multiple ships side-by-side to analyze their stats and
                                     gear configurations:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         Click &quot;Compare&quot; on ship cards to add them to the
                                         comparison panel
@@ -578,11 +578,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Filtering and Sorting
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     The ship management interface includes powerful filtering and
                                     sorting capabilities:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Faction Filter:</span> Filter
                                         ships by their faction
@@ -608,10 +608,10 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Sorting Options</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Ships can be sorted by various criteria:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Date Added (default)</li>
                                     <li>Name (alphabetical)</li>
                                     <li>Ship Type</li>
@@ -626,16 +626,16 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Search Functionality
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     The search feature allows you to find ships by:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1 mt-2">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1 mt-2">
                                     <li>Ship name</li>
                                     <li>Ship type</li>
                                     <li>Faction name</li>
                                     <li>Affinity</li>
                                 </ul>
-                                <p className="text-gray-300 mt-2">
+                                <p className="text-theme-text mt-2">
                                     The search is case-insensitive and updates results in real-time
                                     as you type.
                                 </p>
@@ -663,7 +663,7 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <h3 className="text-xl font-semibold mt-6 mb-2">Ship Details Page</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The ship details page shows detailed information about a specific
                                 ship. Including:
                             </p>
@@ -687,7 +687,7 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Gear Cards</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Each piece of gear in your inventory is displayed as a card
                                 containing detailed information and management options.
                             </p>
@@ -696,7 +696,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Gear Information
                                 </h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Header:</span>
                                         <ul className="list-disc pl-4 mt-1">
@@ -751,7 +751,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Gear Actions</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Edit:</span> Modify gear
                                         details (not available for implants)
@@ -771,11 +771,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Filtering and Sorting
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     The gear management interface includes powerful filtering and
                                     sorting capabilities:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Slot Filter:</span> Filter by
                                         gear slot type
@@ -799,10 +799,10 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Search Functionality
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     The search feature allows you to find gear by:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Gear name</li>
                                     <li>Slot type</li>
                                     <li>Set name</li>
@@ -810,7 +810,7 @@ const DocumentationPage: React.FC = () => {
                                     <li>Stat names and values</li>
                                     <li>Equipped ship name</li>
                                 </ul>
-                                <p className="text-gray-300 mt-2">
+                                <p className="text-theme-text mt-2">
                                     The search is case-insensitive and updates results in real-time
                                     as you type.
                                 </p>
@@ -818,10 +818,10 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Sorting Options</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Gear can be sorted by various criteria:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Date Added (default)</li>
                                     <li>Level</li>
                                     <li>Stars</li>
@@ -830,13 +830,13 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <h3 className="text-xl font-semibold mb-2">Gear Page Tabs</h3>
-                            <p className="text-gray-300 mb-4">
+                            <p className="text-theme-text mb-4">
                                 The Gear page has four tabs for different management features:
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Inventory Tab</h4>
-                                <p className="text-gray-300">
+                                <p className="text-theme-text">
                                     Your main gear inventory with filtering, sorting, and search
                                     capabilities as described above.
                                 </p>
@@ -844,12 +844,12 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Calibration Tab</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Gear calibration is an in-game feature that boosts your
                                     gear&apos;s main stat when calibrated to a specific ship.
                                     Requirements: level 16 gear with 5 or 6 stars.
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <strong>Calibration Candidates:</strong> Find your best gear
                                         pieces to calibrate for each role, ranked by potential score
@@ -875,13 +875,13 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Upgrade Analysis Tab
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     This tab shows which gear pieces are most likely to improve your
                                     role scores when upgraded. It simulates upgrading unlevelled
                                     gear 10 times, scores each result using the role scoring system,
                                     and averages the results.
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         Results are displayed per role, sorted by score improvement
                                     </li>
@@ -893,11 +893,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Simulate Upgrades Tab
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Simulate upgrading all your unlevelled gear to see potential
                                     outcomes:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         Click &quot;Simulate Upgrades&quot; to randomly upgrade all
                                         unlevelled gear (like the in-game RNG)
@@ -959,7 +959,7 @@ const DocumentationPage: React.FC = () => {
                                     Ship Roles and Scoring
                                 </h3>
                                 <div className="space-y-4">
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Each ship role has specific scoring criteria that determine
                                         how gear combinations are evaluated. Understanding these
                                         criteria helps you make better decisions about gear
@@ -976,10 +976,10 @@ const DocumentationPage: React.FC = () => {
                                     <div className="flex flex-wrap gap-4">
                                         <div className="p-4 bg-dark-lighter">
                                             <h4 className="font-semibold text-primary">Attacker</h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Focuses on maximizing damage output through:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Base attack damage</li>
                                                 <li>Critical hit chance and damage</li>
                                                 <li>Defense penetration</li>
@@ -990,10 +990,10 @@ const DocumentationPage: React.FC = () => {
                                     <div className="flex flex-wrap gap-4">
                                         <div className="p-4 bg-dark-lighter">
                                             <h4 className="font-semibold text-primary">Defender</h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Optimizes for survival through:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Effective HP (HP × damage reduction)</li>
                                                 <li>Healing and shield regeneration</li>
                                                 <li>Survival rounds calculation</li>
@@ -1004,10 +1004,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Defender (Security)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Combines defensive capabilities with security:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Base defender score</li>
                                                 <li>Security stat multiplier</li>
                                                 <li>Balanced defensive stats</li>
@@ -1018,10 +1018,10 @@ const DocumentationPage: React.FC = () => {
                                     <div className="flex flex-wrap gap-4">
                                         <div className="p-4 bg-dark-lighter">
                                             <h4 className="font-semibold text-primary">Debuffer</h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Specializes in hacking and damage:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × DPS</li>
                                             </ul>
                                         </div>
@@ -1030,10 +1030,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Defensive)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Balances hacking with survivability:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Effective HP</li>
                                             </ul>
                                         </div>
@@ -1042,10 +1042,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Defensive, Security)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Anti-debuffer specialist with survivability:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking × Security × Effective HP</li>
                                             </ul>
                                         </div>
@@ -1054,10 +1054,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Bomber)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Focuses on hacking and raw attack power:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Attack</li>
                                             </ul>
                                         </div>
@@ -1066,10 +1066,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Corrosion)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 DoT specialist for long-term damage:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Hacking stat × Decimation</li>
                                                 <li>Optimized for corrosion stacking</li>
                                             </ul>
@@ -1081,10 +1081,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Supporter
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Optimizes healing capabilities:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Base healing (15% of HP)</li>
                                                 <li>Critical hit multiplier</li>
                                                 <li>Heal modifier</li>
@@ -1095,10 +1095,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Buffer)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Focuses on speed and defensive support:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Speed × 10 (base weight)</li>
                                                 <li>
                                                     Boost set bonus (30,000 points for 4 pieces)
@@ -1111,10 +1111,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Offensive)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Balances speed with attack power:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Speed × 10 (base weight)</li>
                                                 <li>Attack power (square root scaled)</li>
                                                 <li>
@@ -1127,10 +1127,10 @@ const DocumentationPage: React.FC = () => {
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Shield)
                                             </h4>
-                                            <p className="text-gray-300">
+                                            <p className="text-theme-text">
                                                 Maximizes shielding capability:
                                             </p>
-                                            <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                            <ul className="text-theme-text list-disc pl-4 space-y-1">
                                                 <li>Maximize HP</li>
                                                 <li>
                                                     Best for ships that provide shields based on HP
@@ -1165,7 +1165,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Stat Priorities</h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Define minimum and maximum values for specific stats. The
                                         algorithm will try to keep stats within these ranges while
                                         optimizing the overall build.
@@ -1174,7 +1174,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Set Priorities</h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Specify which gear sets you want to complete and how many
                                         pieces of each set. The algorithm will prioritize completing
                                         these sets while maintaining stat requirements. Setting the
@@ -1185,7 +1185,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Stat Bonuses</h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Add bonus effects that contribute to the role score. For
                                         example, an attacker that gains extra damage equal to 10% of
                                         HP.
@@ -1194,7 +1194,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Equipment Constraints</h4>
-                                    <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <ul className="text-theme-text list-disc pl-4 space-y-1">
                                         <li>
                                             <strong>Ignore currently equipped gear:</strong> When
                                             enabled, the algorithm will only consider gear that
@@ -1224,7 +1224,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Arena Season Modifiers</h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         PVP arena seasons apply temporary stat modifiers to ships
                                         based on conditions like faction, rarity, or role (e.g.,
                                         &quot;all epic defenders get +150% HP and +150% DEF&quot;).
@@ -1233,7 +1233,7 @@ const DocumentationPage: React.FC = () => {
                                         autogear algorithm account for these modifiers when scoring
                                         gear loadouts.
                                     </p>
-                                    <ul className="text-gray-300 list-disc pl-4 space-y-1 mt-2">
+                                    <ul className="text-theme-text list-disc pl-4 space-y-1 mt-2">
                                         <li>
                                             Modifiers are applied to total stats before scoring —
                                             they shift which gear the algorithm considers optimal.
@@ -1262,7 +1262,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary">
                                         Genetic Algorithm (Recommended)
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Easily the best algorithm, an evolution-inspired approach
                                         that maintains a population of potential solutions and
                                         evolves them over time. This algorithm is particularly good
@@ -1275,7 +1275,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary">
                                         Two-Pass Algorithm
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         A fast algorithm that first optimizes individual stats, then
                                         looks for opportunities to complete gear sets. Good for
                                         quick results when you have specific stat requirements.
@@ -1286,7 +1286,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary">
                                         Set-First Approach
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Prioritizes completing gear sets before optimizing
                                         individual stats. Best used when set bonuses are crucial for
                                         your build.
@@ -1295,7 +1295,7 @@ const DocumentationPage: React.FC = () => {
 
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold text-primary">Beam Search</h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         A balanced approach that keeps multiple possible
                                         configurations in consideration. Good for finding
                                         near-optimal solutions when you have complex requirements.
@@ -1331,7 +1331,7 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mt-6 mb-2">
                                 After running autogear
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 After running autogear, you can see the gear suggestions on the
                                 right side of the page, together with an equip all button, a lock
                                 equipment button, and an expand gear button.
@@ -1356,7 +1356,7 @@ const DocumentationPage: React.FC = () => {
                             </ul>
 
                             <h4 className="text-lg font-semibold mt-6 mb-2">Simulation Results</h4>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The simulation results will show you a comparison of the gear
                                 suggestions, and the current gear on the ship, based on the
                                 different goals of the roles.
@@ -1375,7 +1375,7 @@ const DocumentationPage: React.FC = () => {
                             Community Recommendations
                         </h2>
                         <div className="card space-y-4">
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The community recommendations system allows players to share their
                                 autogear configurations with others.
                             </p>
@@ -1384,7 +1384,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Viewing Recommendations
                                 </h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         When you select a ship, you&apos;ll see the highest-voted
                                         community recommendation
@@ -1398,7 +1398,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Sharing Your Build
                                 </h4>
-                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
                                         Configure your autogear settings (stat priorities, set
                                         bonuses, etc.)
@@ -1424,7 +1424,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Voting</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         Click &quot;Helpful&quot; or &quot;Not Helpful&quot; to vote
                                         on recommendations
@@ -1466,7 +1466,7 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Ship Type Bonuses</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The Engineering Stats page allows you to manage per-ship-type
                                 engineering bonuses that apply to all ships of that type in your
                                 fleet. The page has two tabs: Engineering Stats and Preview Upgrade.
@@ -1476,7 +1476,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Engineering Stats Tab
                                 </h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Set engineering bonuses for each ship type</li>
                                     <li>Bonuses automatically apply to all ships of that type</li>
                                     <li>Import engineering data from game exports</li>
@@ -1491,11 +1491,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Preview Upgrade Tab
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     See how investing in engineering upgrades will affect your ships
                                     before spending resources:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Select a ship and role to analyze</li>
                                     <li>Choose which engineering stat to preview upgrading</li>
                                     <li>See current stats vs. stats after the upgrade</li>
@@ -1530,7 +1530,7 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Save and Manage Ship Configurations
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Loadouts allow you to save ship configurations for easy switching
                                 between different gear setups and team compositions.
                             </p>
@@ -1539,7 +1539,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Individual Loadouts
                                 </h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Save current gear configuration for a ship</li>
                                     <li>Create multiple loadouts per ship</li>
                                     <li>
@@ -1552,7 +1552,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Team Loadouts</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Save entire team compositions</li>
                                     <li>Store gear configuration for all ships in a team</li>
                                     <li>Perfect for Arena, Vault, or Faction Ops setups</li>
@@ -1585,14 +1585,14 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Browse All Ships</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The Ship Database provides a comprehensive reference for all ships
                                 available in Starborne Frontiers.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>View base stats for all ships at level 60</li>
                                     <li>Filter by faction, ship type, rarity, and affinity</li>
                                     <li>Search ships by name</li>
@@ -1603,7 +1603,7 @@ const DocumentationPage: React.FC = () => {
                                         configurations
                                     </li>
                                 </ul>
-                                <p className="text-gray-300 mt-4">
+                                <p className="text-theme-text mt-4">
                                     Ships can have up to three passive skills: first passive
                                     (unlocked at lower ranks), second passive (unlocked at higher
                                     ranks), and third passive (available on newest ships).
@@ -1614,11 +1614,11 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Implant Database
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Similar to the Ship Database, the Implant Database lets you
                                     browse all available implants:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>View all Minor, Major, and Ultimate implants</li>
                                     <li>Filter by implant type and slot</li>
                                     <li>See detailed implant effects and descriptions</li>
@@ -1647,7 +1647,7 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Browse All Buffs, Debuffs, and Effects
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The Effect Index provides a comprehensive reference of all buffs,
                                 debuffs, and effects in the game. Use the search bar to find
                                 specific effects or filter by type.
@@ -1655,7 +1655,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Search effects by name, type, or description</li>
                                     <li>Filter by type: buffs, debuffs, or effects</li>
                                     <li>Sort effects alphabetically</li>
@@ -1666,7 +1666,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Effect Types</h4>
-                                <div className="space-y-3 text-gray-300">
+                                <div className="space-y-3 text-theme-text">
                                     <div>
                                         <span className="text-green-400 font-semibold">Buffs:</span>{' '}
                                         Positive effects that enhance your ship&apos;s capabilities
@@ -1708,14 +1708,14 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Ship Performance Rankings
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Leaderboards showcase the highest-scoring ship configurations for
                                 each ship type across all users.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>View top configurations for any ship</li>
                                     <li>See role-specific scores (Attacker, Defender, etc.)</li>
                                     <li>Compare your ship performance against community leaders</li>
@@ -1732,7 +1732,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     How to Access Leaderboards
                                 </h4>
-                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>Go to Ship Database</li>
                                     <li>Click on any ship card</li>
                                     <li>Click the &quot;View Leaderboard&quot; button</li>
@@ -1760,7 +1760,7 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Advanced Combat Calculators
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Various specialized calculators to analyze and optimize combat
                                 performance.
                             </p>
@@ -1770,7 +1770,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         DPS Calculator
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Calculate damage per second for ships, factoring in attack,
                                         crit rate, crit damage, and defense penetration.
                                     </p>
@@ -1780,7 +1780,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Defense Calculator
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Analyze defensive capabilities including effective HP,
                                         damage reduction, and survivability metrics.
                                     </p>
@@ -1790,7 +1790,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Healing Calculator
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Calculate healing output for supporter ships, including
                                         critical heal multipliers and heal modifiers.
                                     </p>
@@ -1800,7 +1800,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Damage Deconstruction
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Reverse-engineer combat results to understand damage
                                         calculations and identify enemy stats.
                                     </p>
@@ -1810,7 +1810,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         JSON Diff Calculator
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Compare two game data exports to identify changes in your
                                         account, ships, gear, or engineering stats between different
                                         time periods.
@@ -1821,11 +1821,11 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Speed Calculator
                                     </h4>
-                                    <p className="text-gray-300 mb-2">
+                                    <p className="text-theme-text mb-2">
                                         Calculate speed values with various modifiers. Two modes
                                         available:
                                     </p>
-                                    <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                    <ul className="text-theme-text list-disc pl-4 space-y-1">
                                         <li>
                                             <strong>Forward:</strong> Enter base speed and modifiers
                                             to calculate final speed
@@ -1835,7 +1835,7 @@ const DocumentationPage: React.FC = () => {
                                             modifiers to find required base speed
                                         </li>
                                     </ul>
-                                    <p className="text-gray-300 mt-2">
+                                    <p className="text-theme-text mt-2">
                                         Add multiple speed modifiers (buffs/debuffs) and label them
                                         for easy reference.
                                     </p>
@@ -1864,7 +1864,7 @@ const DocumentationPage: React.FC = () => {
 
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Recruitment Calculator</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Calculate the probability of obtaining specific ships from different
                                 beacon types.
                             </p>
@@ -1874,7 +1874,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Beacon Types
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         The calculator supports all beacon types: Public,
                                         Specialist, Expert, and Elite. Each beacon type has
                                         different rarity pools and drop rates.
@@ -1885,7 +1885,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Faction Events
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         During faction events, ships from the selected faction have
                                         20x the pull weight in specialist beacons. This bypasses the
                                         normal affinity split - all ships of the same rarity compete
@@ -1897,7 +1897,7 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Individual Event Ships
                                     </h4>
-                                    <p className="text-gray-300">
+                                    <p className="text-theme-text">
                                         Configure individual event ships with custom drop rates or
                                         pity thresholds to accurately calculate probabilities during
                                         special events.
@@ -1930,14 +1930,14 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Track Your Battle Encounters
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Document enemy compositions, strategies, and notes for various game
                                 encounters. Your personal encounter notes are stored privately.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Create notes for Faction Ops, Story missions, etc.</li>
                                     <li>Record enemy ship compositions and stats</li>
                                     <li>Document successful strategies</li>
@@ -1972,14 +1972,14 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">
                                 Community-Shared Fleet Formations
                             </h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 Browse encounters shared by other players to learn strategies and
                                 fleet compositions for challenging content.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Browse all publicly shared encounters</li>
                                     <li>Search by name or description</li>
                                     <li>
@@ -1995,7 +1995,7 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     How to Share Your Encounters
                                 </h4>
-                                <ol className="text-gray-300 list-decimal pl-4 space-y-1">
+                                <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>Create an encounter in your personal Encounter Notes</li>
                                     <li>Toggle the &quot;Share publicly&quot; option</li>
                                     <li>
@@ -2023,7 +2023,7 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Fleet and Gear Analytics</h3>
-                            <p className="text-gray-300">
+                            <p className="text-theme-text">
                                 The Statistics page provides a comprehensive analytics dashboard to
                                 understand your collection at a glance. View detailed breakdowns
                                 with charts and metrics across four tabs.
@@ -2031,10 +2031,10 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Ships Tab</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Analyze your ship collection with filters by role and rarity:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Total ships, average level, max level count</li>
                                     <li>Total refits and average refits per ship</li>
                                     <li>Ships with implants percentage</li>
@@ -2048,11 +2048,11 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Gear Tab</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Analyze your gear inventory with filters by set, main stat, and
                                     rarity:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Total gear pieces and equipped percentage</li>
                                     <li>Average level and star level</li>
                                     <li>Most common set bonus and main stat</li>
@@ -2065,10 +2065,10 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Implants Tab</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Analyze your implant collection with filters by type and rarity:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Total implants and equipped percentage</li>
                                     <li>Types available (Minor, Major, Ultimate)</li>
                                     <li>Rarity distribution</li>
@@ -2078,10 +2078,10 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Engineering Tab</h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Analyze your engineering investment across roles:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Total engineering points invested</li>
                                     <li>Average points per role</li>
                                     <li>Most invested role identification</li>
@@ -2114,14 +2114,14 @@ const DocumentationPage: React.FC = () => {
                         </h2>
                         <div className="card space-y-4">
                             <h3 className="text-xl font-semibold mb-2">Battle Simulation</h3>
-                            <p className="text-gray-300 mb-4">
+                            <p className="text-theme-text mb-4">
                                 The simulation page allows you to test different gear and implant
                                 configurations without permanently changing your ships.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Features</h4>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Select any ship from your fleet</li>
                                     <li>Choose a role to simulate (Attacker, Defender, etc.)</li>
                                     <li>Temporarily swap gear pieces to test alternatives</li>
@@ -2137,10 +2137,10 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Simulation Results
                                 </h4>
-                                <p className="text-gray-300 mb-2">
+                                <p className="text-theme-text mb-2">
                                     Results show role-specific metrics based on the selected role:
                                 </p>
-                                <ul className="text-gray-300 list-disc pl-4 space-y-1">
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <strong>Attacker:</strong> DPS, crit rate, crit damage
                                     </li>
@@ -2159,7 +2159,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Equip Changes</h4>
-                                <p className="text-gray-300">
+                                <p className="text-theme-text">
                                     After testing, you can permanently equip your temporary gear
                                     configuration with one click. The simulation will show you which
                                     ships will lose gear if you proceed.

@@ -351,7 +351,7 @@ export const ShipInventory: React.FC<Props> = ({
         <div className="space-y-6">
             <div className="flex flex-col" data-tutorial="ships-filter-panel">
                 {sortedInventory.length > 0 && (
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-theme-text-secondary">
                         Showing {visibleItems.length} of {sortedInventory.length} ships
                         {ships.length !== sortedInventory.length && ` (${ships.length} total)`}
                     </span>
@@ -397,7 +397,7 @@ export const ShipInventory: React.FC<Props> = ({
             />
 
             {sortedInventory.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                     {ships.length === 0 ? 'No ships created yet' : 'No matching ships found'}
                 </div>
             ) : (

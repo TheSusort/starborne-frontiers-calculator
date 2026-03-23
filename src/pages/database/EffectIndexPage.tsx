@@ -84,7 +84,7 @@ export const EffectIndexPage: React.FC = () => {
                 <div className="space-y-6">
                     <div className="flex flex-col">
                         {filteredAndSortedEffects.length > 0 && (
-                            <span className="text-sm text-gray-400">
+                            <span className="text-sm text-theme-text-secondary">
                                 Showing {filteredAndSortedEffects.length} effects
                             </span>
                         )}
@@ -143,12 +143,14 @@ export const EffectIndexPage: React.FC = () => {
                                         </h3>
 
                                         {/* Description */}
-                                        <p className="text-sm text-gray-300">{buff.description}</p>
+                                        <p className="text-sm text-theme-text">
+                                            {buff.description}
+                                        </p>
                                     </div>
                                 </div>
                             ))
                         ) : (
-                            <div className="col-span-full text-center py-8 text-gray-400 bg-dark-lighter border-2 border-dashed">
+                            <div className="col-span-full text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                 No matching effects found
                             </div>
                         )}

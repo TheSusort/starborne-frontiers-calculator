@@ -89,7 +89,7 @@ export const StatFilter: React.FC<StatFilterProps> = ({
     return (
         <div className={`space-y-4 ${className}`}>
             <div className="space-y-3">
-                <label className="block text-sm font-medium text-gray-200">{label}</label>
+                <label className="block text-sm font-medium text-theme-text">{label}</label>
 
                 {/* Available stat buttons */}
                 <div className="flex flex-wrap gap-2">
