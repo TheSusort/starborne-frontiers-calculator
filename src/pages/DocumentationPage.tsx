@@ -205,6 +205,13 @@ const DocumentationPage: React.FC = () => {
                                     </span>
                                 </a>
                             </li>
+                            <li className="[counter-increment:index]">
+                                <a href="#themes" className="text-primary hover:text-primary-light">
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Themes & Appearance
+                                    </span>
+                                </a>
+                            </li>
                         </ul>
                     </nav>
 
@@ -2183,6 +2190,41 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                 </ul>
                             </div>
+                        </div>
+                    </section>
+
+                    {/* Themes Section */}
+                    <section id="themes" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Themes & Appearance
+                        </h2>
+                        <div className="card space-y-4">
+                            <p className="text-theme-text">
+                                Customize the appearance of the calculator by choosing between
+                                different themes. The theme switcher is located on your Profile page
+                                and is available to authenticated users.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Available Themes
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Dark:</strong> The default dark theme with a clean,
+                                        professional aesthetic
+                                    </li>
+                                    <li>
+                                        <strong>Synthwave:</strong> A vibrant retro-futuristic theme
+                                        featuring neon pink and cyan accents with visual effects
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <p className="text-theme-text">
+                                Your theme preference is saved locally in your browser, so your
+                                choice will persist whenever you return to the calculator.
+                            </p>
                         </div>
                     </section>
                 </div>
