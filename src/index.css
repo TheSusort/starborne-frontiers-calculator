@@ -20,13 +20,13 @@
         --color-bg: 13 10 46;
         --color-bg-lighter: 26 16 80;
         --color-border: 42 26 94;
-        --color-primary: 255 45 155;
-        --color-primary-hover: 255 94 181;
+        --color-primary: 160 50 120;
+        --color-primary-hover: 190 70 145;
         --color-text: 224 208 255;
         --color-text-secondary: 160 144 192;
         --color-accent: 0 212 255;
-        --color-primary-gradient-from: 204 26 122;
-        --color-primary-gradient-to: 204 26 122;
+        --color-primary-gradient-from: 102 13 61;
+        --color-primary-gradient-to: 102 13 61;
     }
 
     html {
@@ -234,6 +234,28 @@
         border-color: theme('colors.dark.border') transparent transparent transparent;
     }
 
+    /* Synthwave: Modal gradient background */
+    [data-theme='synthwave'] [role='dialog'] {
+        background: linear-gradient(
+            160deg,
+            color-mix(in srgb, rgb(var(--color-primary)) 30%, rgb(var(--color-bg))) 0%,
+            rgb(var(--color-bg)) 25%,
+            rgb(var(--color-bg-lighter)) 50%,
+            rgb(var(--color-bg)) 75%,
+            color-mix(in srgb, rgb(var(--color-accent)) 20%, rgb(var(--color-bg))) 100%
+        );
+        border: 1px solid rgb(var(--color-primary) / 0.4);
+        border-top: 2px solid rgb(var(--color-primary) / 0.6);
+        box-shadow:
+            0 0 40px rgb(var(--color-primary) / 0.3),
+            0 0 80px rgb(var(--color-accent) / 0.15),
+            inset 0 1px 0 rgb(var(--color-primary) / 0.2);
+    }
+
+    [data-theme='synthwave'] [role='dialog'] .border-b {
+        border-color: rgb(var(--color-primary) / 0.3);
+    }
+
     /* Synthwave: Neon card glow + accent line */
     [data-theme='synthwave'] .card {
         border-color: rgb(var(--color-primary) / 0.3);
@@ -253,6 +275,16 @@
             0 0 40px rgb(var(--color-accent) / 0.1);
     }
 
+    /* Synthwave: Primary button flat color + light text */
+    [data-theme='synthwave'] button.shine-effect {
+        background: rgb(var(--color-primary)) !important;
+        color: #fff;
+    }
+
+    [data-theme='synthwave'] button.shine-effect:hover {
+        background: rgb(var(--color-primary-hover)) !important;
+    }
+
     /* Synthwave: Neon button glow */
     [data-theme='synthwave'] button.shine-effect {
         box-shadow: 0 0 10px rgb(var(--color-primary) / 0.4);
@@ -264,25 +296,58 @@
             0 0 40px rgb(var(--color-primary) / 0.3);
     }
 
-    /* Synthwave: Section header accent */
-    [data-theme='synthwave'] h2 {
-        padding-left: 0.5rem;
-        border-left: 2px solid rgb(var(--color-accent) / 0.6);
-        box-shadow: -4px 0 8px rgb(var(--color-accent) / 0.15);
-    }
-
     /* Synthwave: Sidebar bottom accent */
     [data-theme='synthwave'] nav {
         border-bottom: 2px solid rgb(var(--color-primary) / 0.4);
         box-shadow: 0 4px 8px rgb(var(--color-primary) / 0.15);
     }
 
-    /* Synthwave: Glowing headers */
+    /* Synthwave: Fonts */
+    [data-theme='synthwave'] body {
+        font-family: 'Exo 2', sans-serif;
+    }
+
+    [data-theme='synthwave'] h1,
+    [data-theme='synthwave'] h2,
+    [data-theme='synthwave'] h3,
+    [data-theme='synthwave'] h4,
+    [data-theme='synthwave'] h5,
+    [data-theme='synthwave'] h6,
+    [data-theme='synthwave'] nav > a {
+        font-family: 'Orbitron', sans-serif;
+    }
+
+    [data-theme='synthwave'] button {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 0.85em;
+    }
+
+    [data-theme='synthwave'] button.text-xxs {
+        font-size: 0.4rem;
+    }
+
+    [data-theme='synthwave'] [data-testid='desktop-sidebar'] h1,
+    [data-theme='synthwave'] .lg\\:hidden h1 {
+        font-size: 0.9rem;
+    }
+
+    /* Synthwave: Chrome metallic headers */
     [data-theme='synthwave'] h1,
     [data-theme='synthwave'] h2 {
-        text-shadow:
-            0 0 10px rgb(var(--color-primary) / 0.5),
-            0 0 20px rgb(var(--color-primary) / 0.25);
+        background: linear-gradient(
+            180deg,
+            #e0d0ff 0%,
+            #c8a0d8 25%,
+            #a070b0 50%,
+            #c8a0d8 75%,
+            #e0d0ff 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: none;
+        filter: drop-shadow(0 0 6px rgb(var(--color-primary) / 0.4))
+            drop-shadow(0 0 15px rgb(var(--color-primary) / 0.2));
     }
 
     /* Synthwave: CRT scanlines */
@@ -319,52 +384,12 @@
         z-index: 0;
     }
 
-    /* Synthwave: Perspective grid floor */
-    [data-theme='synthwave'] #root::after {
-        content: '';
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 40vh;
-        background: repeating-linear-gradient(
-                90deg,
-                rgb(var(--color-accent) / 0.08) 0px,
-                transparent 1px,
-                transparent 80px
-            ),
-            repeating-linear-gradient(
-                0deg,
-                rgb(var(--color-accent) / 0.05) 0px,
-                transparent 1px,
-                transparent 40px
-            );
-        transform: perspective(300px) rotateX(50deg);
-        transform-origin: bottom;
-        pointer-events: none;
-        z-index: 0;
-        mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
-        -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
-    }
-
-    /* Synthwave: Starfield */
+    /* Synthwave: Background image */
     [data-theme='synthwave'] body {
-        background-image: radial-gradient(
-                1px 1px at 10% 20%,
-                rgba(255, 255, 255, 0.7) 0%,
-                transparent 100%
-            ),
-            radial-gradient(1px 1px at 30% 65%, rgba(255, 255, 255, 0.5) 0%, transparent 100%),
-            radial-gradient(2px 2px at 50% 10%, rgba(255, 255, 255, 0.8) 0%, transparent 100%),
-            radial-gradient(1px 1px at 70% 40%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
-            radial-gradient(1px 1px at 85% 75%, rgba(255, 255, 255, 0.6) 0%, transparent 100%),
-            radial-gradient(2px 2px at 15% 85%, rgba(255, 255, 255, 0.5) 0%, transparent 100%),
-            radial-gradient(1px 1px at 60% 90%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
-            radial-gradient(1px 1px at 40% 35%, rgba(255, 255, 255, 0.6) 0%, transparent 100%),
-            radial-gradient(2px 2px at 90% 15%, rgba(255, 255, 255, 0.7) 0%, transparent 100%),
-            radial-gradient(1px 1px at 25% 50%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
-            radial-gradient(1px 1px at 75% 60%, rgba(255, 255, 255, 0.5) 0%, transparent 100%),
-            radial-gradient(1px 1px at 5% 45%, rgba(255, 255, 255, 0.3) 0%, transparent 100%);
+        background-image: url('/images/synthwave-bg.jpg');
+        background-size: cover;
+        background-position: center bottom;
+        background-attachment: fixed;
         background-color: rgb(var(--color-bg));
     }
 

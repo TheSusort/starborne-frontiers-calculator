@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface Slide {
     id: number;
@@ -58,6 +59,8 @@ export const HeroCarousel: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
     const [isHovered, setIsHovered] = useState(false);
+    const { theme } = useTheme();
+    const isSynthwave = theme === 'synthwave';
 
     const nextSlide = useCallback(() => {
         setCurrentSlide((prev) => (prev + 1) % slides.length);
@@ -112,11 +115,15 @@ export const HeroCarousel: React.FC = () => {
                                 ? 'opacity-100 pointer-events-auto'
                                 : 'opacity-0 pointer-events-none'
                         }`}
-                        style={{
-                            backgroundImage: `url(${slide.backgroundImage})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center top',
-                        }}
+                        style={
+                            isSynthwave
+                                ? undefined
+                                : {
+                                      backgroundImage: `url(${slide.backgroundImage})`,
+                                      backgroundSize: 'cover',
+                                      backgroundPosition: 'center top',
+                                  }
+                        }
                     >
                         {/* Gradient overlay for text readability */}
                         <div className="absolute inset-0 bg-gradient-to-tr from-black/90 via-black/30 to-black/10" />

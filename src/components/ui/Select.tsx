@@ -123,15 +123,14 @@ export const Select: React.FC<Props> = ({
                 </label>
             )}
             <div className="relative">
-                <button
-                    type="button"
+                <a
+                    href="javascript:void(0)"
                     id={selectId}
-                    onClick={() => !disabled && setIsOpen(!isOpen)}
+                    onClick={() => setIsOpen(!isOpen)}
                     onKeyDown={handleKeyDown}
                     aria-haspopup="listbox"
                     aria-expanded={isOpen}
                     aria-labelledby={label ? selectId : undefined}
-                    disabled={disabled}
                     data-testid={testId}
                     className={`
                         w-full px-4 py-2
@@ -151,7 +150,7 @@ export const Select: React.FC<Props> = ({
                     <span className="transition-transform duration-200">
                         {isOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
                     </span>
-                </button>
+                </a>
 
                 <div
                     className={`

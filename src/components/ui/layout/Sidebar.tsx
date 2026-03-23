@@ -11,6 +11,7 @@ import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
 import { InstallButton } from '../InstallButton';
 import { isAdmin } from '../../../services/adminService';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 // Define the type for navigation items
 type NavigationItem = {
@@ -147,10 +148,9 @@ const NavigationItem: React.FC<{
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                <button
+                <a
+                    href="javascript:void(0)"
                     onClick={toggleExpanded}
-                    type="button"
-                    disabled={isDisabled}
                     className={`
                     w-[calc(100%-6px)] px-4 py-2 max-w-full
                     transition-all duration-200 ease-in-out
@@ -169,7 +169,7 @@ const NavigationItem: React.FC<{
                         className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
                     />
                     <span>{item.label}</span>
-                </button>
+                </a>
 
                 <CollapsibleSection isOpen={isExpanded}>
                     {item.children!.map((child) => (
@@ -206,6 +206,8 @@ export const Sidebar: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [shareData, setShareData] = useState(false);
     const { user } = useAuth();
+    const { theme } = useTheme();
+    const isSynthwave = theme === 'synthwave';
     const [isUserAdmin, setIsUserAdmin] = useState(false);
 
     // Check if user is admin
@@ -347,7 +349,7 @@ export const Sidebar: React.FC = () => {
         <>
             {/* Mobile Header */}
             <div
-                className="lg:hidden fixed top-0 left-0 right-0 bg-dark px-4 py-3 z-20 bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-center"
+                className={`lg:hidden fixed top-0 left-0 right-0 px-4 py-3 z-20 ${isSynthwave ? 'bg-black/70 backdrop-blur-sm' : "bg-dark bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-center"}`}
                 role="banner"
             >
                 <div className="flex justify-between items-center">
@@ -371,7 +373,7 @@ export const Sidebar: React.FC = () => {
             {/* Desktop Sidebar */}
             <div
                 data-testid="desktop-sidebar"
-                className="hidden lg:block fixed top-0 left-0 h-full w-64 bg-dark z-20 bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"
+                className={`hidden lg:block fixed top-0 left-0 h-full w-64 z-20 ${isSynthwave ? 'bg-black/70 backdrop-blur-sm' : "bg-dark bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"}`}
             >
                 <div className="p-4 h-full">
                     <SidebarContent shareData={shareData} setShareData={setShareData} />
