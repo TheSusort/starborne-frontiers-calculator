@@ -20,6 +20,8 @@ export default defineConfig({
             // Don't generate a manifest — use the existing public/manifest.json
             manifest: false,
             workbox: {
+                skipWaiting: true,
+                clientsClaim: true,
                 // Precache all built assets
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
                 runtimeCaching: [
