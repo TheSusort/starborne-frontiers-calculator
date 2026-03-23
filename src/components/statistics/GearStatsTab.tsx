@@ -8,6 +8,7 @@ import { StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface GearStatsTabProps {
     gear: GearPiece[];
@@ -36,6 +37,7 @@ const RARITY_COLORS: Record<string, string> = {
 };
 
 export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
+    const colors = useThemeColors();
     // Filter out implants - only show actual gear pieces
     const gearOnly = useMemo(() => {
         return gear.filter((piece) => !piece.slot.startsWith('implant_'));
@@ -212,12 +214,12 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Top 10 Gear Sets</h3>
                     <BaseChart height={300}>
                         <BarChart data={setChartData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis type="number" stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis type="number" stroke={colors.axisStroke} />
                             <YAxis
                                 dataKey="setName"
                                 type="category"
-                                stroke="#9ca3af"
+                                stroke={colors.axisStroke}
                                 width={100}
                                 interval={0}
                                 style={{ fontSize: '11px' }}
@@ -233,12 +235,12 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Top 10 Main Stats</h3>
                     <BaseChart height={300}>
                         <BarChart data={mainStatChartData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis type="number" stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis type="number" stroke={colors.axisStroke} />
                             <YAxis
                                 dataKey="name"
                                 type="category"
-                                stroke="#9ca3af"
+                                stroke={colors.axisStroke}
                                 width={120}
                                 interval={0}
                                 style={{ fontSize: '11px' }}
@@ -284,9 +286,9 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Star Level Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={starChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="stars" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="stars" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="count" fill="#f59e0b" />
                         </BarChart>
@@ -298,9 +300,9 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Level Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={levelChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="range" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="range" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="count" fill="#8b5cf6" />
                         </BarChart>

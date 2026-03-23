@@ -7,6 +7,7 @@ import { StatCard } from '../ui';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface ImplantsStatsTabProps {
     gear: GearPiece[];
@@ -30,6 +31,7 @@ const RARITY_COLORS: Record<string, string> = {
 };
 
 export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships }) => {
+    const colors = useThemeColors();
     // Filter to only implants
     const implantsOnly = useMemo(() => {
         return gear.filter((piece) => piece.slot.startsWith('implant_'));
@@ -163,9 +165,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                     <h3 className="text-lg font-semibold mb-4">Type Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={typeChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="type" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="type" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="count" fill="#8b5cf6" />
                         </BarChart>
@@ -196,12 +198,15 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                             layout="vertical"
                                             margin={{ left: 20 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                            <XAxis type="number" stroke="#9ca3af" />
+                                            <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke={colors.gridStroke}
+                                            />
+                                            <XAxis type="number" stroke={colors.axisStroke} />
                                             <YAxis
                                                 dataKey="setName"
                                                 type="category"
-                                                stroke="#9ca3af"
+                                                stroke={colors.axisStroke}
                                                 width={120}
                                                 interval={0}
                                                 style={{ fontSize: '10px' }}
@@ -240,12 +245,15 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                                             layout="vertical"
                                             margin={{ left: 20 }}
                                         >
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                            <XAxis type="number" stroke="#9ca3af" />
+                                            <CartesianGrid
+                                                strokeDasharray="3 3"
+                                                stroke={colors.gridStroke}
+                                            />
+                                            <XAxis type="number" stroke={colors.axisStroke} />
                                             <YAxis
                                                 dataKey="setName"
                                                 type="category"
-                                                stroke="#9ca3af"
+                                                stroke={colors.axisStroke}
                                                 width={150}
                                                 interval={0}
                                                 style={{ fontSize: '11px' }}

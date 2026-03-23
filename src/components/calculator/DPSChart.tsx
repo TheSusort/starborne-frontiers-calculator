@@ -3,6 +3,7 @@ import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, Legend, LabelList } from 
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
 import { BaseChart, DefaultErrorFallback } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface ShipConfig {
     id: string;
@@ -196,6 +197,7 @@ interface ShapeCallbackProps {
 
 export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) => {
     const chartContainerRef = useRef<HTMLDivElement>(null);
+    const colors = useThemeColors();
 
     // Calculate DPS for ships and find max DPS
     const { shipPoints, maxDps } = useMemo(() => {
@@ -304,7 +306,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                     width: '100%',
                     height,
                     position: 'relative',
-                    backgroundColor: '#111827', // Dark background to match cells
+                    backgroundColor: colors.bg, // Dark background to match cells
                 }}
             >
                 {/* The chart container */}
@@ -329,9 +331,9 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                                 value: 'Crit Damage (%)',
                                 position: 'insideBottom',
                                 offset: -10,
-                                fill: '#fff',
+                                fill: colors.text,
                             }}
-                            tick={{ fill: '#fff' }}
+                            tick={{ fill: colors.text }}
                         />
                         <YAxis
                             type="number"
@@ -345,9 +347,9 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                                 angle: -90,
                                 position: 'insideLeft',
                                 offset: 10,
-                                fill: '#fff',
+                                fill: colors.text,
                             }}
-                            tick={{ fill: '#fff' }}
+                            tick={{ fill: colors.text }}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={false} />
                         <Legend content={<CustomLegend />} />
@@ -382,7 +384,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                             <LabelList
                                 dataKey="name"
                                 position="top"
-                                fill="#fff"
+                                fill={colors.text}
                                 offset={10}
                                 width={100}
                             />

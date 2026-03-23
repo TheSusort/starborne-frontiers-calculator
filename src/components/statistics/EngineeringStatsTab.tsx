@@ -5,6 +5,7 @@ import { calculateEngineeringStatistics } from '../../utils/statistics/engineeri
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { EngineeringLeaderboards } from '../engineering/EngineeringLeaderboards';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface EngineeringStatsTabProps {
     engineeringStats: EngineeringStat[];
@@ -20,6 +21,7 @@ const CHART_COLORS = [
 ];
 
 export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engineeringStats }) => {
+    const colors = useThemeColors();
     const stats = useMemo(() => {
         return calculateEngineeringStatistics(engineeringStats);
     }, [engineeringStats]);
@@ -95,9 +97,14 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                     <h3 className="text-lg font-semibold mb-4">Points by Role</h3>
                     <BaseChart height={400}>
                         <BarChart data={roleChartData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis type="number" stroke="#9ca3af" />
-                            <YAxis dataKey="name" type="category" stroke="#9ca3af" width={150} />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis type="number" stroke={colors.axisStroke} />
+                            <YAxis
+                                dataKey="name"
+                                type="category"
+                                stroke={colors.axisStroke}
+                                width={150}
+                            />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="points" fill="#3b82f6" />
                         </BarChart>
@@ -109,9 +116,9 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                     <h3 className="text-lg font-semibold mb-4">Point Distribution by Stat Type</h3>
                     <BaseChart height={400}>
                         <BarChart data={stackedChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="name" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="name" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Legend />
                             {allStatNames.map((statName, index) => (

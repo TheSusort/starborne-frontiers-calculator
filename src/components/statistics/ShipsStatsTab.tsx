@@ -7,6 +7,7 @@ import { StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface ShipsStatsTabProps {
     ships: Ship[];
@@ -33,6 +34,7 @@ const RARITY_COLORS: Record<string, string> = {
 };
 
 export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
+    const colors = useThemeColors();
     const [roleFilter, setRoleFilter] = useState<ShipTypeName | 'all'>('all');
     const [rarityFilter, setRarityFilter] = useState<RarityName | 'all'>('all');
 
@@ -188,9 +190,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Role Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={roleChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="name" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="name" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="value" fill="#3b82f6" />
                         </BarChart>
@@ -202,9 +204,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                     <h3 className="text-lg font-semibold mb-4">Level Distribution</h3>
                     <BaseChart height={300}>
                         <BarChart data={levelChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis dataKey="range" stroke="#9ca3af" />
-                            <YAxis stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                            <XAxis dataKey="range" stroke={colors.axisStroke} />
+                            <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             <Bar dataKey="count" fill="#10b981" />
                         </BarChart>
@@ -217,9 +219,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                         <h3 className="text-lg font-semibold mb-4">Refits by Rarity</h3>
                         <BaseChart height={300}>
                             <BarChart data={refitsByRarityData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                                <XAxis dataKey="name" stroke="#9ca3af" />
-                                <YAxis stroke="#9ca3af" />
+                                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                                <XAxis dataKey="name" stroke={colors.axisStroke} />
+                                <YAxis stroke={colors.axisStroke} />
                                 <Tooltip
                                     content={<ChartTooltip />}
                                     cursor={{ fill: 'transparent' }}

@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
 import { BaseChart, DefaultErrorFallback, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface Ship {
     id: string;
@@ -31,6 +32,7 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
     height = 400,
     maxDefense = 26000,
 }) => {
+    const colors = useThemeColors();
     // Generate data for the curve
     const curveData = useMemo(() => {
         try {
@@ -126,17 +128,17 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
                 }
             >
                 <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                     <XAxis
                         dataKey="defense"
                         name="Defense"
                         domain={[0, maxDefense]}
-                        tick={{ fill: '#fff' }}
+                        tick={{ fill: colors.text }}
                         label={{
                             value: 'Defense',
                             position: 'insideBottomRight',
                             offset: -10,
-                            fill: '#fff',
+                            fill: colors.text,
                         }}
                         type="number"
                         allowDataOverflow={true}
@@ -145,12 +147,12 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
                         dataKey="reduction"
                         name="Damage Reduction"
                         domain={[0, 100]}
-                        tick={{ fill: '#fff' }}
+                        tick={{ fill: colors.text }}
                         label={{
                             value: 'Damage Reduction (%)',
                             angle: -90,
                             position: 'insideLeft',
-                            fill: '#fff',
+                            fill: colors.text,
                         }}
                         type="number"
                         allowDataOverflow={true}

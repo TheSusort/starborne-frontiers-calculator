@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import {
     getEngineeringLeaderboard,
     getEngineeringTokensLeaderboard,
@@ -93,6 +94,7 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
     className = '',
 }) => {
     const { user } = useAuth();
+    const themeColors = useThemeColors();
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [leaderboardLoading, setLeaderboardLoading] = useState(false);
     const [tokensLeaderboard, setTokensLeaderboard] = useState<TokensLeaderboardEntry[]>([]);
@@ -192,12 +194,12 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
                 ) : (
                     <BaseChart height={300}>
                         <BarChart data={leaderboardChartData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis type="number" stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={themeColors.gridStroke} />
+                            <XAxis type="number" stroke={themeColors.axisStroke} />
                             <YAxis
                                 dataKey="name"
                                 type="category"
-                                stroke="#9ca3af"
+                                stroke={themeColors.axisStroke}
                                 width={120}
                                 interval={0}
                                 tick={<CustomYAxisTick />}
@@ -247,12 +249,12 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
                 ) : (
                     <BaseChart height={300}>
                         <BarChart data={tokensLeaderboardChartData} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                            <XAxis type="number" stroke="#9ca3af" />
+                            <CartesianGrid strokeDasharray="3 3" stroke={themeColors.gridStroke} />
+                            <XAxis type="number" stroke={themeColors.axisStroke} />
                             <YAxis
                                 dataKey="name"
                                 type="category"
-                                stroke="#9ca3af"
+                                stroke={themeColors.axisStroke}
                                 width={120}
                                 interval={0}
                                 tick={<CustomYAxisTick />}

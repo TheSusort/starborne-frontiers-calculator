@@ -20,13 +20,18 @@ export const Loader = React.memo(({ size = 'lg' }: { size?: 'sm' | 'lg' }) => {
                     </defs>
 
                     {/* Background hexagon (dim) */}
-                    <use href="#hexPath" fill="none" stroke="#fff" strokeWidth="6" />
+                    <use
+                        href="#hexPath"
+                        fill="none"
+                        stroke="rgb(var(--color-text-secondary))"
+                        strokeWidth="6"
+                    />
 
                     {/* Animated hexagon (bright, follows outline) */}
                     <use
                         href="#hexPath"
                         fill="none"
-                        stroke="#ec8c37"
+                        stroke="rgb(var(--color-primary))"
                         strokeWidth="6"
                         strokeLinecap="round"
                         strokeDasharray="270"

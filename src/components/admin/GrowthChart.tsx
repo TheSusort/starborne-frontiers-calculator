@@ -2,6 +2,7 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { GrowthMetric } from '../../services/systemHealthService';
 import { BaseChart, ChartTooltip } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface GrowthChartProps {
     data: GrowthMetric[];
@@ -9,6 +10,7 @@ interface GrowthChartProps {
 }
 
 export const GrowthChart: React.FC<GrowthChartProps> = ({ data, title }) => {
+    const colors = useThemeColors();
     // Format data for the chart (reverse to show oldest to newest)
     const chartData = [...data].reverse().map((metric) => ({
         date: new Date(metric.date).toLocaleDateString('en-US', {
@@ -26,9 +28,9 @@ export const GrowthChart: React.FC<GrowthChartProps> = ({ data, title }) => {
             <h3 className="text-xl font-semibold mb-4">{title}</h3>
             <BaseChart height={300}>
                 <AreaChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="date" stroke="#9CA3AF" />
-                    <YAxis stroke="#9CA3AF" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                    <XAxis dataKey="date" stroke={colors.axisStroke} />
+                    <YAxis stroke={colors.axisStroke} />
                     <Tooltip content={<ChartTooltip />} />
                     <Legend />
                     <Area

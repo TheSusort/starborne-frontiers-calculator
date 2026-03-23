@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart } from 'recharts';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
 import { BaseChart, DefaultErrorFallback } from '../ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface DefensePenetrationChartProps {
     height?: number;
@@ -14,6 +15,8 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
     defenseValues = [2500, 5000, 10000, 12000, 15000, 20000],
     penetrationValues = [0, 7, 14, 21, 28, 35, 42, 45, 49, 52, 56, 59, 63, 66],
 }) => {
+    const themeColors = useThemeColors();
+
     // Generate data for each defense value
     const chartData = useMemo(() => {
         try {
@@ -141,28 +144,28 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                     data={chartData}
                     margin={{ top: 5, right: 30, left: 20, bottom: 12 }}
                 >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={themeColors.gridStroke} />
                     <XAxis
                         dataKey="penetration"
                         name="Defense Penetration"
                         domain={[0, 66]}
-                        tick={{ fill: '#fff' }}
+                        tick={{ fill: themeColors.text }}
                         label={{
                             value: 'Defense Penetration (%)',
                             position: 'insideBottom',
                             offset: -10,
-                            fill: '#fff',
+                            fill: themeColors.text,
                         }}
                         type="number"
                     />
                     <YAxis
                         domain={[0, 200]}
-                        tick={{ fill: '#fff' }}
+                        tick={{ fill: themeColors.text }}
                         label={{
                             value: 'Damage Increase (%)',
                             angle: -90,
                             position: 'insideLeft',
-                            fill: '#fff',
+                            fill: themeColors.text,
                         }}
                         type="number"
                     />
