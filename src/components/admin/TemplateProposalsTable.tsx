@@ -37,7 +37,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
     if (proposals.length === 0) {
         return (
             <div className="card text-center">
-                <p className="text-gray-400">No pending template proposals</p>
+                <p className="text-theme-text-secondary">No pending template proposals</p>
             </div>
         );
     }
@@ -49,17 +49,19 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-dark-border">
-                            <th className="text-left p-3 text-gray-400">Ship</th>
-                            <th className="text-left p-3 text-gray-400">Reports</th>
-                            <th className="text-left p-3 text-gray-400">Changes</th>
-                            <th className="text-left p-3 text-gray-400">First Reported</th>
-                            <th className="text-right p-3 text-gray-400">Actions</th>
+                            <th className="text-left p-3 text-theme-text-secondary">Ship</th>
+                            <th className="text-left p-3 text-theme-text-secondary">Reports</th>
+                            <th className="text-left p-3 text-theme-text-secondary">Changes</th>
+                            <th className="text-left p-3 text-theme-text-secondary">
+                                First Reported
+                            </th>
+                            <th className="text-right p-3 text-theme-text-secondary">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {proposals.map((proposal) => (
                             <React.Fragment key={proposal.id}>
-                                <tr className="border-b border-gray-800 hover:bg-dark transition-colors">
+                                <tr className="border-b border-dark-border hover:bg-dark transition-colors">
                                     <td className="p-3">
                                         <div className="font-semibold">{proposal.ship_name}</div>
                                     </td>
@@ -70,12 +72,12 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                         </span>
                                     </td>
                                     <td className="p-3">
-                                        <span className="text-sm text-gray-400">
+                                        <span className="text-sm text-theme-text-secondary">
                                             {proposal.stat_differences.length} stat
                                             {proposal.stat_differences.length !== 1 ? 's' : ''}
                                         </span>
                                     </td>
-                                    <td className="p-3 text-sm text-gray-400">
+                                    <td className="p-3 text-sm text-theme-text-secondary">
                                         {new Date(proposal.created_at).toLocaleDateString()}
                                     </td>
                                     <td className="p-3 text-right space-x-2">
@@ -124,21 +126,21 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                                 key={diff.stat}
                                                                 className="bg-dark-lighter p-3 border border-dark-border"
                                                             >
-                                                                <div className="text-sm text-gray-400 mb-1">
+                                                                <div className="text-sm text-theme-text-secondary mb-1">
                                                                     {diff.stat}
                                                                 </div>
                                                                 <div className="flex items-center justify-between">
                                                                     <span className="text-red-400">
                                                                         {diff.currentValue ?? 'N/A'}
                                                                     </span>
-                                                                    <span className="text-gray-500 mx-2">
+                                                                    <span className="text-theme-text-secondary mx-2">
                                                                         →
                                                                     </span>
                                                                     <span className="text-green-400">
                                                                         {diff.proposedValue}
                                                                     </span>
                                                                 </div>
-                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                <div className="text-xs text-theme-text-secondary mt-1">
                                                                     {diff.difference > 0 ? '+' : ''}
                                                                     {diff.difference}
                                                                 </div>
@@ -154,7 +156,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                                 Current Stats:
                                                             </h4>
                                                             <div className="bg-dark-lighter p-3 border border-dark-border text-sm">
-                                                                <pre className="text-gray-300 whitespace-pre-wrap">
+                                                                <pre className="text-theme-text whitespace-pre-wrap">
                                                                     {JSON.stringify(
                                                                         proposal.current_stats,
                                                                         null,
@@ -169,7 +171,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                                             Proposed Stats:
                                                         </h4>
                                                         <div className="bg-dark-lighter p-3 border border-dark-border text-sm">
-                                                            <pre className="text-gray-300 whitespace-pre-wrap">
+                                                            <pre className="text-theme-text whitespace-pre-wrap">
                                                                 {JSON.stringify(
                                                                     proposal.proposed_stats,
                                                                     null,

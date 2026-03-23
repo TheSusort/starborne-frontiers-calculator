@@ -202,7 +202,7 @@ export const ProfilePage: React.FC = () => {
         return (
             <PageLayout title="Profile">
                 <div className="text-center py-8">
-                    <p className="text-gray-400">Please sign in to view your profile</p>
+                    <p className="text-theme-text-secondary">Please sign in to view your profile</p>
                 </div>
             </PageLayout>
         );
@@ -355,13 +355,13 @@ export const ProfilePage: React.FC = () => {
                                     >
                                         <div>
                                             <div className="font-semibold">{ship.shipName}</div>
-                                            <div className="text-sm text-gray-400">
+                                            <div className="text-sm text-theme-text-secondary">
                                                 {ship.shipType}
                                             </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="font-bold">Rank #{ship.rank}</div>
-                                            <div className="text-xs text-gray-400">
+                                            <div className="text-xs text-theme-text-secondary">
                                                 out of {ship.totalEntries}
                                             </div>
                                         </div>
@@ -369,7 +369,7 @@ export const ProfilePage: React.FC = () => {
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-8 text-gray-400">
+                            <div className="text-center py-8 text-theme-text-secondary">
                                 No ship rankings available
                             </div>
                         )}

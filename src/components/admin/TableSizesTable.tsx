@@ -45,24 +45,26 @@ export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-semibold">Database Tables</h3>
                 <div className={`px-4 py-2 border ${getTotalSizeBgColor()}`}>
-                    <span className="text-sm text-gray-400 mr-2">Total Size:</span>
+                    <span className="text-sm text-theme-text-secondary mr-2">Total Size:</span>
                     <span className={`text-lg font-bold ${getTotalSizeColor()}`}>
                         {totalSizeMB.toFixed(2)} MB
                     </span>
-                    <span className="text-xs text-gray-500 ml-2">/ 500 MB</span>
+                    <span className="text-xs text-theme-text-secondary ml-2">/ 500 MB</span>
                 </div>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead>
                         <tr className="border-b border-dark-border">
-                            <th className="pb-3 font-semibold text-gray-300">Table Name</th>
-                            <th className="pb-3 font-semibold text-gray-300 text-right">Rows</th>
-                            <th className="pb-3 font-semibold text-gray-300 text-right">
+                            <th className="pb-3 font-semibold text-theme-text">Table Name</th>
+                            <th className="pb-3 font-semibold text-theme-text text-right">Rows</th>
+                            <th className="pb-3 font-semibold text-theme-text text-right">
                                 Table Size
                             </th>
-                            <th className="pb-3 font-semibold text-gray-300 text-right">Indexes</th>
-                            <th className="pb-3 font-semibold text-gray-300 text-right">
+                            <th className="pb-3 font-semibold text-theme-text text-right">
+                                Indexes
+                            </th>
+                            <th className="pb-3 font-semibold text-theme-text text-right">
                                 Total Size
                             </th>
                         </tr>
@@ -71,12 +73,12 @@ export const TableSizesTable: React.FC<TableSizesTableProps> = ({ tables }) => {
                         {tables.map((table) => (
                             <tr
                                 key={table.table_name}
-                                className="border-b border-gray-800 hover:bg-dark transition-colors"
+                                className="border-b border-dark-border hover:bg-dark transition-colors"
                             >
-                                <td className="py-3 text-gray-200 font-mono text-xs">
+                                <td className="py-3 text-theme-text font-mono text-xs">
                                     {table.table_name.replace('public.', '')}
                                 </td>
-                                <td className="py-3 text-right text-gray-300">
+                                <td className="py-3 text-right text-theme-text">
                                     {table.row_count.toLocaleString()}
                                 </td>
                                 <td className="py-3 text-right text-blue-400">

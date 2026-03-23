@@ -24,7 +24,7 @@ export const LiveTrafficCard: React.FC = () => {
     if (loading) {
         return (
             <div className="card animate-pulse">
-                <div className="h-24 bg-gray-700 rounded"></div>
+                <div className="h-24 bg-dark-lighter rounded"></div>
             </div>
         );
     }

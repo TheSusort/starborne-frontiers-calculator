@@ -54,7 +54,9 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
     if (stats.totalPoints === 0) {
         return (
             <div className="card p-12 text-center">
-                <div className="text-gray-400 text-lg">No engineering points invested yet.</div>
+                <div className="text-theme-text-secondary text-lg">
+                    No engineering points invested yet.
+                </div>
             </div>
         );
     }
@@ -135,16 +137,18 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-dark-border">
-                                <th className="text-left py-2 text-gray-400">Role</th>
+                                <th className="text-left py-2 text-theme-text-secondary">Role</th>
                                 {allStatNames.map((statName) => (
                                     <th
                                         key={statName}
-                                        className="text-right py-2 px-2 text-gray-400"
+                                        className="text-right py-2 px-2 text-theme-text-secondary"
                                     >
                                         {statName}
                                     </th>
                                 ))}
-                                <th className="text-right py-2 text-gray-400 font-bold">Total</th>
+                                <th className="text-right py-2 text-theme-text-secondary font-bold">
+                                    Total
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -153,7 +157,7 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                     role.byStatType.map((s) => [s.statName, s.points])
                                 );
                                 return (
-                                    <tr key={role.role} className="border-b border-gray-800">
+                                    <tr key={role.role} className="border-b border-dark-border">
                                         <td className="py-2">{role.role}</td>
                                         {allStatNames.map((statName) => (
                                             <td key={statName} className="text-right py-2 px-2">
@@ -175,7 +179,9 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
             {stats.rolesWithZeroInvestment.length > 0 && (
                 <div className="bg-red-900/20 border border-red-700 p-4">
                     <h4 className="text-red-400 font-semibold mb-2">Roles with No Investment</h4>
-                    <div className="text-gray-300">{stats.rolesWithZeroInvestment.join(', ')}</div>
+                    <div className="text-theme-text">
+                        {stats.rolesWithZeroInvestment.join(', ')}
+                    </div>
                 </div>
             )}
         </div>

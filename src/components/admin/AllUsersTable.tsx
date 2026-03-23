@@ -48,7 +48,7 @@ export const AllUsersTable: React.FC = () => {
                 label: '#',
                 align: 'left',
                 render: (_, index) => (
-                    <span className="text-gray-400">
+                    <span className="text-theme-text-secondary">
                         {(currentPage - 1) * pageSize + index + 1}
                     </span>
                 ),
@@ -58,7 +58,7 @@ export const AllUsersTable: React.FC = () => {
                 label: 'Email',
                 sortable: true,
                 align: 'left',
-                render: (user) => <span className="text-gray-200">{user.email}</span>,
+                render: (user) => <span className="text-theme-text">{user.email}</span>,
             },
             {
                 key: 'total_autogear_runs',
@@ -99,7 +99,7 @@ export const AllUsersTable: React.FC = () => {
                 sortable: true,
                 align: 'right',
                 render: (user) => (
-                    <span className="text-gray-400">
+                    <span className="text-theme-text-secondary">
                         {user.last_active ? new Date(user.last_active).toLocaleDateString() : 'N/A'}
                     </span>
                 ),

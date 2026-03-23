@@ -103,7 +103,9 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Gear Set</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Gear Set
+                        </label>
                         <Select
                             value={setFilter}
                             onChange={(value) =>
@@ -120,7 +122,9 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Main Stat</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Main Stat
+                        </label>
                         <Select
                             value={mainStatFilter}
                             onChange={(value) => setMainStatFilter(value)}
@@ -137,7 +141,9 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Rarity</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Rarity
+                        </label>
                         <Select
                             value={rarityFilter}
                             onChange={(value) => setRarityFilter(value as RarityName | 'all')}
@@ -309,13 +315,13 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships }) => {
                     <table className="w-full">
                         <thead>
                             <tr className="border-b border-dark-border">
-                                <th className="text-left py-2 text-gray-400">Slot</th>
-                                <th className="text-right py-2 text-gray-400">Count</th>
+                                <th className="text-left py-2 text-theme-text-secondary">Slot</th>
+                                <th className="text-right py-2 text-theme-text-secondary">Count</th>
                             </tr>
                         </thead>
                         <tbody>
                             {stats.bySlot.map((slot) => (
-                                <tr key={slot.slot} className="border-b border-gray-800">
+                                <tr key={slot.slot} className="border-b border-dark-border">
                                     <td className="py-2">{slot.slot}</td>
                                     <td className="text-right py-2">{slot.count}</td>
                                 </tr>

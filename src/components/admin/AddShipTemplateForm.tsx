@@ -133,7 +133,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                 {/* Basic Info Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Ship Name *
                         </label>
                         <Input
@@ -146,7 +146,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Rarity *
                         </label>
                         <Select
@@ -157,7 +157,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Faction *
                         </label>
                         <Select
@@ -168,7 +168,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Type (Role) *
                         </label>
                         <Select
@@ -179,7 +179,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Affinity *
                         </label>
                         <Select
@@ -190,7 +190,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Image Key
                         </label>
                         <Input
@@ -202,7 +202,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                        <label className="block text-sm font-medium text-theme-text mb-1">
                             Definition ID
                         </label>
                         <Input
@@ -219,7 +219,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     <h4 className="text-lg font-semibold mb-3 text-primary">Base Stats</h4>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 HP *
                             </label>
                             <Input
@@ -232,7 +232,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Attack *
                             </label>
                             <Input
@@ -245,7 +245,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Defence *
                             </label>
                             <Input
@@ -258,7 +258,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Hacking *
                             </label>
                             <Input
@@ -271,7 +271,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Security *
                             </label>
                             <Input
@@ -284,7 +284,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Crit Rate (%) *
                             </label>
                             <Input
@@ -298,7 +298,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Crit Damage (%) *
                             </label>
                             <Input
@@ -312,7 +312,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Speed *
                             </label>
                             <Input
@@ -325,7 +325,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 HP Regen (%)
                             </label>
                             <Input
@@ -338,7 +338,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Shield (%)
                             </label>
                             <Input
@@ -351,7 +351,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Shield Penetration (%)
                             </label>
                             <Input
@@ -366,7 +366,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Defense Penetration (%)
                             </label>
                             <Input
@@ -407,7 +407,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-1">
+                            <label className="block text-sm font-medium text-theme-text mb-1">
                                 Charge Skill Charge
                             </label>
                             <Input

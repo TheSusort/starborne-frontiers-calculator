@@ -96,7 +96,7 @@ const ChipSelect: React.FC<ChipSelectProps> = ({ label, options, selected, onCha
 
     return (
         <div>
-            <div className="text-xs text-gray-500 mb-1">{label}</div>
+            <div className="text-xs text-theme-text-secondary mb-1">{label}</div>
             <div className="flex flex-wrap gap-1">
                 {options.map(({ key, label: optLabel }) => (
                     <button
@@ -106,7 +106,7 @@ const ChipSelect: React.FC<ChipSelectProps> = ({ label, options, selected, onCha
                         className={`px-2 py-0.5 rounded text-xs transition-colors ${
                             selected.includes(key)
                                 ? 'bg-primary/20 text-primary border border-primary/40'
-                                : 'text-gray-500 border border-dark-lighter hover:border-gray-500 hover:text-gray-400'
+                                : 'text-theme-text-secondary border border-dark-lighter hover:border-dark-border hover:text-theme-text'
                         }`}
                     >
                         {optLabel}
@@ -201,7 +201,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
     return (
         <div className="border border-dark-lighter rounded p-4 space-y-3">
             <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-300">
+                <span className="text-sm font-medium text-theme-text">
                     {isEdit ? 'Edit Rule' : 'New Rule'}
                 </span>
                 <Button variant="link" size="xs" onClick={onCancel}>
@@ -231,7 +231,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
             </div>
 
             <div>
-                <div className="text-xs text-gray-500 mb-1">Modifiers (%)</div>
+                <div className="text-xs text-theme-text-secondary mb-1">Modifiers (%)</div>
                 <div className="space-y-1">
                     {modifierPairs.map((pair, index) => (
                         <div key={index} className="flex items-center gap-2">
@@ -271,7 +271,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
                                             prev.filter((_, i) => i !== index)
                                         )
                                     }
-                                    className="text-gray-500 hover:text-red-400"
+                                    className="text-theme-text-secondary hover:text-red-400"
                                 >
                                     ✕
                                 </Button>
@@ -372,7 +372,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
             {/* Season settings - compact inline */}
             <div className="flex flex-wrap gap-4 items-end">
                 <div className="flex-1 min-w-[200px]">
-                    <div className="text-xs text-gray-500 mb-1">Season Name</div>
+                    <div className="text-xs text-theme-text-secondary mb-1">Season Name</div>
                     <div className="flex gap-2">
                         <Input
                             type="text"
@@ -390,7 +390,9 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                     </div>
                 </div>
                 <div>
-                    <div className="text-xs text-gray-500 mb-1">End Date (01:00 UTC)</div>
+                    <div className="text-xs text-theme-text-secondary mb-1">
+                        End Date (01:00 UTC)
+                    </div>
                     <div className="flex gap-2">
                         <Input
                             type="date"
@@ -420,7 +422,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
             {/* Rules */}
             <div>
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-300">
+                    <span className="text-sm font-medium text-theme-text">
                         Rules ({season.rules.length})
                     </span>
                     {!showAddRule && (
@@ -431,7 +433,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                 </div>
 
                 {season.rules.length === 0 && !showAddRule ? (
-                    <p className="text-gray-500 text-sm">No rules yet.</p>
+                    <p className="text-theme-text-secondary text-sm">No rules yet.</p>
                 ) : (
                     <div className="space-y-2">
                         {season.rules.map((rule) =>
@@ -449,13 +451,13 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                             ) : (
                                 <div
                                     key={rule.id}
-                                    className="flex items-center justify-between gap-4 p-2 rounded border border-dark-lighter hover:border-gray-600 transition-colors"
+                                    className="flex items-center justify-between gap-4 p-2 rounded border border-dark-lighter hover:border-dark-border transition-colors"
                                 >
                                     <div className="min-w-0">
-                                        <span className="text-sm text-gray-300">
+                                        <span className="text-sm text-theme-text">
                                             {buildFilterSummary(rule)}
                                         </span>
-                                        <span className="text-gray-600 mx-2">|</span>
+                                        <span className="text-theme-text-secondary mx-2">|</span>
                                         <span className="text-sm text-primary">
                                             {buildModifierSummary(rule.modifiers)}
                                         </span>
@@ -594,7 +596,7 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
             );
         }
         return (
-            <span className="px-2 py-0.5 rounded text-xs bg-gray-700/30 text-gray-500 border border-gray-700/50">
+            <span className="px-2 py-0.5 rounded text-xs bg-dark-lighter text-theme-text-secondary border border-dark-border">
                 Inactive
             </span>
         );
@@ -635,24 +637,28 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
             {/* Seasons list */}
             {seasons.length === 0 ? (
                 <div className="card text-center">
-                    <p className="text-gray-400">No arena seasons yet. Create one above.</p>
+                    <p className="text-theme-text-secondary">
+                        No arena seasons yet. Create one above.
+                    </p>
                 </div>
             ) : (
                 <div className="card">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-dark-border">
-                                <th className="text-left p-3 text-gray-400">Name</th>
-                                <th className="text-left p-3 text-gray-400">Status</th>
-                                <th className="text-left p-3 text-gray-400">Ends</th>
-                                <th className="text-left p-3 text-gray-400">Rules</th>
-                                <th className="text-right p-3 text-gray-400">Actions</th>
+                                <th className="text-left p-3 text-theme-text-secondary">Name</th>
+                                <th className="text-left p-3 text-theme-text-secondary">Status</th>
+                                <th className="text-left p-3 text-theme-text-secondary">Ends</th>
+                                <th className="text-left p-3 text-theme-text-secondary">Rules</th>
+                                <th className="text-right p-3 text-theme-text-secondary">
+                                    Actions
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             {seasons.map((season) => (
                                 <React.Fragment key={season.id}>
-                                    <tr className="border-b border-gray-800 hover:bg-dark transition-colors">
+                                    <tr className="border-b border-dark-border hover:bg-dark transition-colors">
                                         <td className="p-3">
                                             <button
                                                 type="button"
@@ -664,16 +670,18 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                                                 className="text-left hover:text-primary transition-colors font-medium"
                                             >
                                                 {season.name}
-                                                <span className="ml-1 text-gray-600 text-xs">
+                                                <span className="ml-1 text-theme-text-secondary text-xs">
                                                     {expandedId === season.id ? '▲' : '▼'}
                                                 </span>
                                             </button>
                                         </td>
                                         <td className="p-3">{getStatusBadge(season)}</td>
-                                        <td className="p-3 text-gray-400 text-xs">
+                                        <td className="p-3 text-theme-text-secondary text-xs">
                                             {formatEndDate(season.ends_at)}
                                         </td>
-                                        <td className="p-3 text-gray-400">{season.rules.length}</td>
+                                        <td className="p-3 text-theme-text-secondary">
+                                            {season.rules.length}
+                                        </td>
                                         <td className="p-3 text-right">
                                             <div className="flex justify-end gap-2">
                                                 {season.active ? (

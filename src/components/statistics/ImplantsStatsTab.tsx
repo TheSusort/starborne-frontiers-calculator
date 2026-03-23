@@ -74,7 +74,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Implant Type</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Implant Type
+                        </label>
                         <Select
                             value={typeFilter}
                             onChange={(value) => setTypeFilter(value)}
@@ -88,7 +90,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                         />
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Rarity</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Rarity
+                        </label>
                         <Select
                             value={rarityFilter}
                             onChange={(value) => setRarityFilter(value as RarityName | 'all')}
@@ -175,7 +179,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
 
                 {/* Minor Implants Row */}
                 <div className="mb-6">
-                    <h4 className="text-sm font-semibold mb-3 text-gray-400">Minor Implants</h4>
+                    <h4 className="text-sm font-semibold mb-3 text-theme-text-secondary">
+                        Minor Implants
+                    </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {stats.setsByType
                             .filter((typeData) => typeData.type.startsWith('Minor'))
@@ -214,7 +220,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
 
                 {/* Major and Ultimate Row */}
                 <div>
-                    <h4 className="text-sm font-semibold mb-3 text-gray-400">
+                    <h4 className="text-sm font-semibold mb-3 text-theme-text-secondary">
                         Major & Ultimate Implants
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -264,14 +270,16 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                     <table className="w-full">
                         <thead>
                             <tr className="border-b border-dark-border">
-                                <th className="text-left py-2 text-gray-400">Type</th>
-                                <th className="text-right py-2 text-gray-400">Count</th>
-                                <th className="text-right py-2 text-gray-400">Percentage</th>
+                                <th className="text-left py-2 text-theme-text-secondary">Type</th>
+                                <th className="text-right py-2 text-theme-text-secondary">Count</th>
+                                <th className="text-right py-2 text-theme-text-secondary">
+                                    Percentage
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             {stats.byType.map((type) => (
-                                <tr key={type.type} className="border-b border-gray-800">
+                                <tr key={type.type} className="border-b border-dark-border">
                                     <td className="py-2">{type.type}</td>
                                     <td className="text-right py-2">{type.count}</td>
                                     <td className="text-right py-2">

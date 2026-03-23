@@ -71,7 +71,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                 <h3 className="text-lg font-semibold mb-4">Filters</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Ship Role</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Ship Role
+                        </label>
                         <Select
                             value={roleFilter}
                             onChange={(value) => setRoleFilter(value as ShipTypeName | 'all')}
@@ -85,7 +87,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm text-gray-400 mb-2">Ship Rarity</label>
+                        <label className="block text-sm text-theme-text-secondary mb-2">
+                            Ship Rarity
+                        </label>
                         <Select
                             value={rarityFilter}
                             onChange={(value) => setRarityFilter(value as RarityName | 'all')}
@@ -235,13 +239,20 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                         <table className="w-full">
                             <thead>
                                 <tr className="border-b border-dark-border">
-                                    <th className="text-left py-2 text-gray-400">Faction</th>
-                                    <th className="text-right py-2 text-gray-400">Count</th>
+                                    <th className="text-left py-2 text-theme-text-secondary">
+                                        Faction
+                                    </th>
+                                    <th className="text-right py-2 text-theme-text-secondary">
+                                        Count
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {stats.byFaction.map((faction) => (
-                                    <tr key={faction.faction} className="border-b border-gray-800">
+                                    <tr
+                                        key={faction.faction}
+                                        className="border-b border-dark-border"
+                                    >
                                         <td className="py-2">{faction.faction}</td>
                                         <td className="text-right py-2">{faction.count}</td>
                                     </tr>
