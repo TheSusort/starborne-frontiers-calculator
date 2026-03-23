@@ -14,6 +14,7 @@ import {
     isCalibrationEligible,
     getCalibratedMainStat,
 } from '../../utils/gear/calibrationCalculator';
+import { calculateUpgradeCost } from '../../utils/gear/potentialCalculator';
 
 interface Props {
     gear: GearPiece;
@@ -316,14 +317,19 @@ export const GearPieceDisplay = memo(
                             </div>
                         )}
 
-                        {upgrade?.cost > 0 && !isMaxLevel && (
-                            <div className="text-xs text-gray-400">
-                                Upgrade cost:{' '}
-                                {Intl.NumberFormat('en', { notation: 'compact' }).format(
-                                    upgrade.cost
-                                )}
-                            </div>
-                        )}
+                        {!isMaxLevel &&
+                            !isImplant &&
+                            (() => {
+                                const cost = calculateUpgradeCost(gear, 16);
+                                return cost > 0 ? (
+                                    <div className="text-xs text-gray-400">
+                                        Upgrade cost:{' '}
+                                        {Intl.NumberFormat('en', { notation: 'compact' }).format(
+                                            cost
+                                        )}
+                                    </div>
+                                ) : null;
+                            })()}
 
                         {shipName && mode !== 'subcompact' && (
                             <div className="text-xs !mt-auto pt-2 flex items-center gap-1">

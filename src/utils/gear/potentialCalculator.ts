@@ -159,7 +159,7 @@ export function simulateUpgrade(
     };
 }
 
-function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
+export function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
     const startCost = UPGRADE_COSTS[piece.stars][piece.rarity];
     if (!startCost || targetLevel <= piece.level) return 0;
 
