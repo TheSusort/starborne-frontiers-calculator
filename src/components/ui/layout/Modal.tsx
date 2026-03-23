@@ -76,13 +76,13 @@ export const Modal: React.FC<Props> = ({
                     onClick={onClose}
                 >
                     <div
-                        className="relative transform overflow-hidden bg-dark-lighter border border-gray-600 shadow-xl transition-all w-full max-w-4xl flex flex-col"
+                        className="relative transform overflow-hidden bg-dark-lighter border border-dark-border shadow-xl transition-all w-full max-w-4xl flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-labelledby="modal-title"
                     >
                         {/* Header */}
-                        <div className="px-6 py-4 border-b border-gray-600 flex justify-between items-center">
+                        <div className="px-6 py-4 border-b border-dark-border flex justify-between items-center">
                             <h3 id="modal-title" className="text-xl font-semibold ">
                                 {title}
                             </h3>

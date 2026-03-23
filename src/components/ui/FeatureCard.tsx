@@ -24,9 +24,9 @@ export const FeatureCard: React.FC<FeatureCardProps> = ({
                     className="text-primary mb-3 group-hover:scale-110 transition-transform"
                     size={32}
                 />
-                <h3 className="text-lg font-semibold text-gray-100 mb-2">{title}</h3>
+                <h3 className="text-lg font-semibold text-theme-text mb-2">{title}</h3>
             </div>
-            <p className="text-sm text-gray-400">{description}</p>
+            <p className="text-sm text-theme-text-secondary">{description}</p>
         </Link>
     );
 };

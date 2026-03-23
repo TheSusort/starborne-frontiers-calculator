@@ -17,10 +17,10 @@ export const Button: React.FC<Props> = ({
     const baseStyles = 'transition-colors whitespace-nowrap shine-effect relative overflow-hidden';
     const variants = {
         primary:
-            'text-dark clip-1-corner bg-gradient-to-br from-amber-600 via-primary to-amber-600',
-        secondary: 'bg-dark border border-gray-600 text-gray-300 hover:bg-dark-border',
-        danger: 'bg-gradient-to-r from-red-600 to-red-500 text-gray-300 hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500',
-        link: 'text-gray-300 hover:text-white !p-0 bg-dark',
+            'text-dark clip-1-corner bg-gradient-to-br from-[rgb(var(--color-primary-gradient-from))] via-primary to-[rgb(var(--color-primary-gradient-to))]',
+        secondary: 'bg-dark border border-dark-border text-theme-text hover:bg-dark-border',
+        danger: 'bg-gradient-to-r from-red-600 to-red-500 text-theme-text hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500',
+        link: 'text-theme-text hover:text-white !p-0 bg-dark',
     };
 
     const sizes = {

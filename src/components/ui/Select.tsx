@@ -115,7 +115,7 @@ export const Select: React.FC<Props> = ({
                                 onMouseEnter={() => setShowHelpTooltip(true)}
                                 onMouseLeave={() => setShowHelpTooltip(false)}
                             >
-                                <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                                <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
                             </div>
                             {tooltip}
                         </>
@@ -195,7 +195,7 @@ export const Select: React.FC<Props> = ({
                         return (
                             <React.Fragment key={option.value}>
                                 {showGroupHeader && (
-                                    <div className="px-4 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-dark border-t border-dark-border">
+                                    <div className="px-4 py-1 text-xs font-semibold text-theme-text-secondary uppercase tracking-wider bg-dark border-t border-dark-border">
                                         {option.group}
                                     </div>
                                 )}

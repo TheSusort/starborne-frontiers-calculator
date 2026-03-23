@@ -13,8 +13,8 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
 }) => {
     return (
         <div className={`text-center ${className}`}>
-            <h2 className="text-3xl font-bold text-gray-100 mb-2">{title}</h2>
-            {subtitle && <p className="text-gray-400">{subtitle}</p>}
+            <h2 className="text-3xl font-bold text-theme-text mb-2">{title}</h2>
+            {subtitle && <p className="text-theme-text-secondary">{subtitle}</p>}
         </div>
     );
 };

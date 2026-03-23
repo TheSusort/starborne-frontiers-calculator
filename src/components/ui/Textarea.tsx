@@ -41,7 +41,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, Props>(
                                     onMouseEnter={() => setShowHelpTooltip(true)}
                                     onMouseLeave={() => setShowHelpTooltip(false)}
                                 >
-                                    <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                                    <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
                                 </div>
                                 {tooltip}
                             </>

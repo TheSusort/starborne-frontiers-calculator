@@ -44,7 +44,7 @@ export const QuickStartCard: React.FC<QuickStartCardProps> = ({
                     gradientFrom={iconGradientFrom}
                     gradientTo={iconGradientTo}
                 />
-                <h3 className="text-xl font-semibold text-gray-100">{title}</h3>
+                <h3 className="text-xl font-semibold text-theme-text">{title}</h3>
             </div>
             {videoSrc && (
                 <div className="mb-4 overflow-hidden border border-dark-border h-48 relative">
@@ -61,7 +61,7 @@ export const QuickStartCard: React.FC<QuickStartCardProps> = ({
                     )}
                 </div>
             )}
-            <p className="text-gray-300 mb-4">{description}</p>
+            <p className="text-theme-text mb-4">{description}</p>
             {action && <div>{action}</div>}
         </div>
     );

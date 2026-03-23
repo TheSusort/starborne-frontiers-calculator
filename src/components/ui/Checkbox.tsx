@@ -60,7 +60,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                         flex items-center justify-center
                         border
                         transition-all duration-200
-                        ${checked ? 'bg-primary border-primary' : 'border-gray-600 bg-dark'}
+                        ${checked ? 'bg-primary border-primary' : 'border-dark-border bg-dark'}
                         ${!disabled && 'hover:border-primary'}
                         focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-0
                     `}
@@ -83,7 +83,7 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                                 onMouseEnter={() => setShowHelpTooltip(true)}
                                 onMouseLeave={() => setShowHelpTooltip(false)}
                             >
-                                <InfoIcon className="text-sm text-gray-400 h-8 w-8 p-2" />
+                                <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
                             </div>
                             {tooltip}
                         </>

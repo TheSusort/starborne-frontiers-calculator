@@ -419,7 +419,7 @@ export const MilestoneModal: React.FC<Props> = ({ isOpen, onClose, milestoneCoun
                     >
                         {milestoneCount} Autogear Runs!
                     </p>
-                    <p className="text-gray-300">
+                    <p className="text-theme-text">
                         Thank you for using the Starborne Planner! Your continued use means a lot.
                         If you&apos;re enjoying the app and want to support its development,
                         consider buying me a coffee.
@@ -438,7 +438,7 @@ export const MilestoneModal: React.FC<Props> = ({ isOpen, onClose, milestoneCoun
                             Buy me a coffee
                         </Button>
 
-                        <p className="text-gray-300 text-sm pt-2">
+                        <p className="text-theme-text text-sm pt-2">
                             No pressure, the app will be free as long as I can keep below the free
                             tier of the hosting provider.
                         </p>

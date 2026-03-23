@@ -46,7 +46,9 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                     )}
                 </div>
                 {description && (
-                    <p className="text-sm text-gray-400 order-2 w-full">{description}</p>
+                    <p className="text-sm text-theme-text-secondary order-2 w-full">
+                        {description}
+                    </p>
                 )}
                 {(helpLink || tutorialGroupId) && (
                     <div className="flex gap-2 mt-2">
@@ -73,7 +75,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                                     className="bg-dark border border-dark-lighter p-2 w-48"
                                     targetElement={tooltipRef.current}
                                 >
-                                    <p className="text-sm text-gray-300">
+                                    <p className="text-sm text-theme-text">
                                         Click to view the relevant help section
                                     </p>
                                 </Tooltip>
@@ -87,7 +89,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                                     className="bg-dark border border-dark-lighter p-2 w-48"
                                     targetElement={tooltipRef.current}
                                 >
-                                    <p className="text-sm text-gray-300">
+                                    <p className="text-sm text-theme-text">
                                         Click to replay the tutorial for this page
                                     </p>
                                 </Tooltip>

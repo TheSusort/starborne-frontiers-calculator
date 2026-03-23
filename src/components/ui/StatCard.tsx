@@ -31,13 +31,15 @@ export const StatCard: React.FC<StatCardProps> = ({
         <div className={`card ${className}`}>
             <div className={icon ? 'flex items-center justify-between' : ''}>
                 <div>
-                    <div className="text-sm text-gray-400 mb-1">{title}</div>
+                    <div className="text-sm text-theme-text-secondary mb-1">{title}</div>
                     <div
                         className={`text-2xl font-bold ${colorClasses[color as keyof typeof colorClasses] ?? colorClasses.default}`}
                     >
                         {value}
                     </div>
-                    {subtitle && <div className="text-xs text-gray-500 mt-1">{subtitle}</div>}
+                    {subtitle && (
+                        <div className="text-xs text-theme-text-secondary mt-1">{subtitle}</div>
+                    )}
                 </div>
                 {icon && <div className="text-4xl opacity-50">{icon}</div>}
             </div>

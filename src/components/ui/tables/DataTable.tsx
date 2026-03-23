@@ -54,7 +54,7 @@ export function DataTable<T>({
     const getSortIcon = (column: Column<T>) => {
         if (!column.sortable || !onSort) return null;
         if (sortBy !== column.key) {
-            return <span className="text-gray-600">⇅</span>;
+            return <span className="text-theme-text-secondary">⇅</span>;
         }
         return sortDirection === 'asc' ? (
             <span className="text-primary">↑</span>
@@ -83,7 +83,7 @@ export function DataTable<T>({
                             {columns.map((column) => (
                                 <th
                                     key={column.key}
-                                    className={`pb-3 font-semibold text-gray-300 ${
+                                    className={`pb-3 font-semibold text-theme-text ${
                                         column.align === 'right' ? 'text-right' : ''
                                     } ${
                                         column.sortable && onSort
@@ -112,7 +112,7 @@ export function DataTable<T>({
                             <tr>
                                 <td
                                     colSpan={columns.length}
-                                    className="py-3 text-center text-gray-400"
+                                    className="py-3 text-center text-theme-text-secondary"
                                 >
                                     <Loader size="sm" />
                                 </td>
@@ -121,7 +121,7 @@ export function DataTable<T>({
                             <tr>
                                 <td
                                     colSpan={columns.length}
-                                    className="py-3 text-center text-gray-400"
+                                    className="py-3 text-center text-theme-text-secondary"
                                 >
                                     {emptyMessage}
                                 </td>
@@ -130,7 +130,7 @@ export function DataTable<T>({
                             data.map((item, index) => (
                                 <tr
                                     key={getRowKey(item, index)}
-                                    className={`border-b border-gray-800 hover:bg-dark-lighter transition-colors ${
+                                    className={`border-b border-dark-border hover:bg-dark-lighter transition-colors ${
                                         rowClassName ? rowClassName(item, index) : ''
                                     }`}
                                 >
@@ -173,7 +173,7 @@ export function DataTable<T>({
             {pagination && pagination.totalPages > 1 && (
                 <div className="flex justify-between items-center mt-4 px-3">
                     {pagination.showItemCount !== false && (
-                        <div className="text-sm text-gray-400">
+                        <div className="text-sm text-theme-text-secondary">
                             Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} to{' '}
                             {Math.min(
                                 pagination.currentPage * pagination.pageSize,

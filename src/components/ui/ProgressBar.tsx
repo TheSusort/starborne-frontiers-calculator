@@ -26,14 +26,14 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 aria-valuemax={total}
             >
                 <Loader size="sm" />
-                {label && <label className="text-sm text-gray-400">{label}</label>}
+                {label && <label className="text-sm text-theme-text-secondary">{label}</label>}
                 <div className="flex justify-between mb-1">
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-theme-text-secondary">
                         Progress: {current.toLocaleString()} / {total.toLocaleString()}
                     </span>
-                    <span className="text-sm text-gray-400">{percentage}%</span>
+                    <span className="text-sm text-theme-text-secondary">{percentage}%</span>
                 </div>
-                <div className="w-full bg-gray-700 h-2.5">
+                <div className="w-full bg-dark-border h-2.5">
                     <div
                         className="bg-gradient-to-r from-amber-700 via-primary to-amber-700 h-2.5"
                         data-testid="progress-fill"

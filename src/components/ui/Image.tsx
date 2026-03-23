@@ -25,9 +25,9 @@ export const Image = memo(
 
         if (!src || src === '' || imageError) {
             return (
-                <div className={`bg-gray-700 ${className}`} style={aspectStyle}>
+                <div className={`bg-dark-lighter ${className}`} style={aspectStyle}>
                     <div className="flex items-center justify-center h-full">
-                        <span className="text-gray-400">No image available</span>
+                        <span className="text-theme-text-secondary">No image available</span>
                     </div>
                 </div>
             );

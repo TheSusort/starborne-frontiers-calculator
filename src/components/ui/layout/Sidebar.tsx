@@ -304,7 +304,9 @@ export const Sidebar: React.FC = () => {
             setShareData: (value: boolean) => void;
         }) => (
             <div className="space-y-2 flex flex-col h-full">
-                <span className="text-xs text-gray-400 hidden lg:block">v{CURRENT_VERSION}</span>
+                <span className="text-xs text-theme-text-secondary hidden lg:block">
+                    v{CURRENT_VERSION}
+                </span>
                 <Link to="/">
                     <h1 className=" text-xl font-bold mb-2 hidden lg:flex gap-2 items-center">
                         <img src={logo} alt="logo" className="w-8 h-8" />
@@ -362,7 +364,7 @@ export const Sidebar: React.FC = () => {
                             {APP_NAME}
                         </h1>
                     </Link>
-                    <span className="text-xs text-gray-400">v{CURRENT_VERSION}</span>
+                    <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
                 </div>
             </div>
 
