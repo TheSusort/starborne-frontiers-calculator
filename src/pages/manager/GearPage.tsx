@@ -43,8 +43,8 @@ export const GearPage: React.FC = () => {
     const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
     const tabs = [
         { id: 'inventory', label: 'Inventory', dataTutorial: 'gear-tab-inventory' },
-        { id: 'calibration', label: 'Calibration', dataTutorial: 'gear-tab-calibration' },
         { id: 'analysis', label: 'Upgrade Analysis', dataTutorial: 'gear-tab-analysis' },
+        { id: 'calibration', label: 'Calibration', dataTutorial: 'gear-tab-calibration' },
         { id: 'simulation', label: 'Simulate Upgrades', dataTutorial: 'gear-tab-simulation' },
     ];
 
