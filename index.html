@@ -40,10 +40,18 @@
             rel="stylesheet"
         />
         <title>Starborne Planner</title>
+        <script>
+            (function() {
+                var theme = localStorage.getItem('app_theme');
+                if (theme && theme !== 'dark') {
+                    document.documentElement.setAttribute('data-theme', theme);
+                }
+            })();
+        </script>
     </head>
 
     <body
-        class="text-gray-300 bg-dark-lighter bg-gradient-to-bl from-dark-lighter to-dark bg-cover bg-center bg-fixed"
+        class="text-theme-text bg-dark-lighter bg-gradient-to-bl from-dark-lighter to-dark bg-cover bg-center bg-fixed"
     >
         <noscript>You need to enable JavaScript to run this app.</noscript>
         <div id="root"></div>
