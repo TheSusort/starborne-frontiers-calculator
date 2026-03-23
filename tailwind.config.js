@@ -11,13 +11,18 @@ module.exports = {
             },
             colors: {
                 primary: {
-                    DEFAULT: '#ec8c37',
-                    hover: '#f7b06e',
+                    DEFAULT: 'rgb(var(--color-primary) / <alpha-value>)',
+                    hover: 'rgb(var(--color-primary-hover) / <alpha-value>)',
                 },
                 dark: {
-                    DEFAULT: '#111827',
-                    lighter: '#1f2937',
-                    border: '#374151',
+                    DEFAULT: 'rgb(var(--color-bg) / <alpha-value>)',
+                    lighter: 'rgb(var(--color-bg-lighter) / <alpha-value>)',
+                    border: 'rgb(var(--color-border) / <alpha-value>)',
+                },
+                accent: 'rgb(var(--color-accent) / <alpha-value>)',
+                'theme-text': {
+                    DEFAULT: 'rgb(var(--color-text) / <alpha-value>)',
+                    secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
                 },
                 rarity: {
                     common: '#d1d5db',

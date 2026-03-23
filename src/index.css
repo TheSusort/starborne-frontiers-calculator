@@ -3,6 +3,32 @@
 @tailwind utilities;
 
 @layer base {
+    :root {
+        --color-bg: 17 24 39;
+        --color-bg-lighter: 31 41 55;
+        --color-border: 55 65 81;
+        --color-primary: 236 140 55;
+        --color-primary-hover: 247 176 110;
+        --color-text: 229 231 235;
+        --color-text-secondary: 156 163 175;
+        --color-accent: 236 140 55;
+        --color-primary-gradient-from: 217 119 6;
+        --color-primary-gradient-to: 217 119 6;
+    }
+
+    [data-theme='synthwave'] {
+        --color-bg: 13 10 46;
+        --color-bg-lighter: 26 16 80;
+        --color-border: 42 26 94;
+        --color-primary: 255 45 155;
+        --color-primary-hover: 255 94 181;
+        --color-text: 224 208 255;
+        --color-text-secondary: 160 144 192;
+        --color-accent: 0 212 255;
+        --color-primary-gradient-from: 204 26 122;
+        --color-primary-gradient-to: 204 26 122;
+    }
+
     html {
         scroll-behavior: smooth;
         overflow-y: scroll;
@@ -188,7 +214,7 @@
     /* Buff tooltip on hover */
     .skill-tooltip {
         @apply absolute z-50 invisible group-hover:visible;
-        @apply bg-dark-lighter p-2 shadow-lg max-w-xs border border-gray-600;
+        @apply bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border;
         @apply transition-opacity duration-200 opacity-0 group-hover:opacity-100;
         bottom: 100%;
         left: 50%;
@@ -205,6 +231,6 @@
         margin-left: -5px;
         border-width: 5px;
         border-style: solid;
-        border-color: theme('colors.gray.600') transparent transparent transparent;
+        border-color: theme('colors.dark.border') transparent transparent transparent;
     }
 }
