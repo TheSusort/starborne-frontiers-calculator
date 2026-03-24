@@ -1,8 +1,19 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.46.0';
+export const CURRENT_VERSION = '1.47.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.47.0',
+        date: '2026-03-24',
+        changes: [
+            'Added Synthwave theme — toggle it from the sidebar (sparkles icon). Features neon glowing buttons, chrome metallic headers, CRT scanlines, synthwave background, gradient cards/modals, chromatic aberration on ship images, and more.',
+            'Synthwave theme includes Orbitron and Exo 2 fonts for a retro-futuristic feel',
+            'VHS static glitch transition when switching themes',
+            'Added synthwave soundtrack with play/pause control in the sidebar',
+            'Theme preference saved locally and persists across sessions',
+        ],
+    },
     {
         version: '1.46.0',
         date: '2026-03-19',
