@@ -117,7 +117,6 @@ const App: React.FC = () => {
                                                     keywords="starborne, frontiers, calculator, ships, gear, simulation"
                                                 />
                                                 <main className="flex">
-                                                    <div className="twinkle-stars" />
                                                     <Sidebar />
                                                     <div className="flex-1 lg:pl-64 max-w-full">
                                                         <div className="min-h-screen py-8 px-4 mt-14 lg:mt-0 flex flex-col">

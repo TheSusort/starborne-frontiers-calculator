@@ -17,13 +17,13 @@ export const LoginButton: React.FC = () => {
                     <img
                         src={user.photoURL}
                         alt={user.displayName || user.email || 'User'}
-                        className="w-8 h-8 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-10 h-10 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => navigate('/profile')}
                         title="View Profile"
                     />
                 ) : (
                     <div
-                        className="w-8 h-8 rounded-full bg-dark-lighter flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-8 h-8 bg-dark-lighter flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={() => navigate('/profile')}
                         title="View Profile"
                     >
