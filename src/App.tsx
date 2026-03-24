@@ -116,7 +116,13 @@ const App: React.FC = () => {
                                                     description="Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations."
                                                     keywords="starborne, frontiers, calculator, ships, gear, simulation"
                                                 />
-                                                <div id="synthwave-bg" />
+                                                <div id="synthwave-bg">
+                                                    <img
+                                                        src="/images/synthwave-bg2.jpg"
+                                                        alt=""
+                                                        aria-hidden="true"
+                                                    />
+                                                </div>
                                                 <main className="flex">
                                                     <Sidebar />
                                                     <div className="flex-1 lg:pl-64 max-w-full">

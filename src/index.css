@@ -522,22 +522,39 @@
         background-color: rgb(var(--color-bg));
     }
 
-    /* Synthwave: Fixed background image (real DOM element avoids mobile repaint issues) */
+    /* Synthwave: Fixed background image via <img> for mobile GPU compositing */
+    #synthwave-bg {
+        display: none;
+    }
+
     [data-theme='synthwave'] #synthwave-bg {
+        display: block;
         position: fixed;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
+        width: 100vw;
+        height: 100vh;
+        height: 100svh;
         pointer-events: none;
         z-index: -1;
-        background-image: linear-gradient(
-                rgba(13, 10, 46, 0.6),
-                rgba(13, 10, 46, 0.4),
-                rgba(13, 10, 46, 0.6)
-            ),
-            url('/images/synthwave-bg2.jpg');
-        background-size: cover;
-        background-position: center bottom;
+        overflow: hidden;
+    }
+
+    [data-theme='synthwave'] #synthwave-bg img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center bottom;
+    }
+
+    [data-theme='synthwave'] #synthwave-bg::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            rgba(13, 10, 46, 0.6),
+            rgba(13, 10, 46, 0.4),
+            rgba(13, 10, 46, 0.6)
+        );
     }
 }
