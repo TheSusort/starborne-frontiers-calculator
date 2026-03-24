@@ -471,7 +471,7 @@
         text-shadow: none;
         filter: drop-shadow(0 0 6px rgb(var(--color-primary) / 0.4))
             drop-shadow(0 0 15px rgb(var(--color-primary) / 0.2));
-        animation: shimmer-text 4s linear infinite;
+        animation: none;
     }
 
     @keyframes shimmer-text {
@@ -483,38 +483,48 @@
         }
     }
 
-    /* Synthwave: CRT scanlines */
-    [data-theme='synthwave'] body::after {
-        content: '';
-        position: fixed;
-        inset: 0;
-        background: repeating-linear-gradient(
-            0deg,
-            transparent,
-            transparent 2px,
-            rgba(0, 0, 0, 0.06) 2px,
-            rgba(0, 0, 0, 0.06) 4px
-        );
-        pointer-events: none;
-        z-index: 50;
+    /* Enable shimmer animation on desktop only */
+    @media (min-width: 1024px) {
+        [data-theme='synthwave'] h1,
+        [data-theme='synthwave'] h2 {
+            animation: shimmer-text 4s linear infinite;
+        }
     }
 
-    /* Synthwave: Sunset gradient at top */
-    [data-theme='synthwave'] body::before {
-        content: '';
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 200px;
-        background: linear-gradient(
-            180deg,
-            rgba(255, 107, 43, 0.2),
-            rgba(255, 45, 155, 0.08),
-            transparent
-        );
-        pointer-events: none;
-        z-index: 0;
+    /* Synthwave: CRT scanlines (desktop only) */
+    @media (min-width: 1024px) {
+        [data-theme='synthwave'] body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.06) 2px,
+                rgba(0, 0, 0, 0.06) 4px
+            );
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        /* Synthwave: Sunset gradient at top */
+        [data-theme='synthwave'] body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: linear-gradient(
+                180deg,
+                rgba(255, 107, 43, 0.2),
+                rgba(255, 45, 155, 0.08),
+                transparent
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
     }
 
     /* Synthwave: Background color on body (image moved to fixed div for mobile compat) */
