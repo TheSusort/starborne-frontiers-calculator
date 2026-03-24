@@ -214,16 +214,37 @@ export const Sidebar: React.FC = () => {
     const isSynthwave = theme === 'synthwave';
     const [isPlaying, setIsPlaying] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const tracksRef = useRef<string[]>([]);
+    const trackIndexRef = useRef(0);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
 
-    // Initialize audio element once
+    // Initialize audio with shuffled playlist
     useEffect(() => {
-        const audio = new Audio('/audio/disco.mp3');
-        audio.loop = true;
+        const tracks = [
+            '/audio/disco.mp3',
+            '/audio/disco2.mp3',
+            '/audio/disco3.mp3',
+            '/audio/disco4.mp3',
+        ];
+        // Shuffle
+        for (let i = tracks.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+        }
+        tracksRef.current = tracks;
+        trackIndexRef.current = 0;
+
+        const audio = new Audio(tracks[0]);
         audio.volume = 0.3;
+        audio.addEventListener('ended', () => {
+            trackIndexRef.current = (trackIndexRef.current + 1) % tracksRef.current.length;
+            audio.src = tracksRef.current[trackIndexRef.current];
+            audio.play();
+        });
         audioRef.current = audio;
         return () => {
             audio.pause();
+            audio.removeEventListener('ended', () => {});
             audio.src = '';
         };
     }, []);

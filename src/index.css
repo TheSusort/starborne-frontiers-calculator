@@ -517,8 +517,18 @@
         z-index: 0;
     }
 
-    /* Synthwave: Background image with dark overlay */
+    /* Synthwave: Background color on body (image moved to fixed div for mobile compat) */
     [data-theme='synthwave'] body {
+        background-color: rgb(var(--color-bg));
+    }
+
+    /* Synthwave: Fixed background image (avoids mobile viewport jump from background-attachment: fixed) */
+    [data-theme='synthwave'] #root::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
         background-image: linear-gradient(
                 rgba(13, 10, 46, 0.6),
                 rgba(13, 10, 46, 0.4),
@@ -527,7 +537,5 @@
             url('/images/synthwave-bg2.jpg');
         background-size: cover;
         background-position: center bottom;
-        background-attachment: fixed;
-        background-color: rgb(var(--color-bg));
     }
 }
