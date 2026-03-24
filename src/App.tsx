@@ -19,6 +19,7 @@ import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
 import { Loader } from './components/ui/Loader';
 import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
 import { startHeartbeat } from './services/heartbeatService';
+import { SynthwaveCanvas } from './components/theme/SynthwaveCanvas';
 // Lazy load components and pages
 const ChangelogModal = lazy(() => import('./components/changelog/ChangelogModal'));
 const JokeCorner = lazy(() => import('./components/home/JokeCorner'));
@@ -116,6 +117,7 @@ const App: React.FC = () => {
                                                         alt=""
                                                         aria-hidden="true"
                                                     />
+                                                    <SynthwaveCanvas />
                                                 </div>
                                                 <main className="flex">
                                                     <Sidebar />
