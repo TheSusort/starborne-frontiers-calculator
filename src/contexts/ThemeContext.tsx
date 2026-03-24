@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useCallback,
+    useEffect,
+    startTransition,
+} from 'react';
 
 export type Theme = 'dark' | 'synthwave';
 
@@ -48,15 +55,17 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         document.body.appendChild(overlay);
 
-        // Swap theme immediately
+        // Swap theme during transition
         setTimeout(() => {
-            setThemeState(newTheme);
             localStorage.setItem(STORAGE_KEY, newTheme);
             if (newTheme === 'dark') {
                 document.documentElement.removeAttribute('data-theme');
             } else {
                 document.documentElement.setAttribute('data-theme', newTheme);
             }
+            startTransition(() => {
+                setThemeState(newTheme);
+            });
         }, 80);
 
         // Remove overlay after animation
