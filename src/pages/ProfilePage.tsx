@@ -8,7 +8,6 @@ import { Checkbox } from '../components/ui/Checkbox';
 import { Loader } from '../components/ui/Loader';
 import { StatCard } from '../components/ui/StatCard';
 import { Select } from '../components/ui/Select';
-import { useTheme, Theme } from '../contexts/ThemeContext';
 import {
     getUserProfile,
     updateUserProfile,
@@ -28,7 +27,6 @@ import { TrophyIcon } from '../components/ui/icons';
 export const ProfilePage: React.FC = () => {
     const { user } = useAuth();
     const { addNotification } = useNotification();
-    const { theme, setTheme } = useTheme();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -266,21 +264,6 @@ export const ProfilePage: React.FC = () => {
                                 </Button>
                             </div>
                         </div>
-                    </div>
-
-                    {/* Appearance */}
-                    <div className="card space-y-4">
-                        <h2 className="text-xl font-semibold">Appearance</h2>
-                        <Select
-                            label="Theme"
-                            value={theme}
-                            onChange={(value) => setTheme(value as Theme)}
-                            options={[
-                                { value: 'dark', label: 'Dark' },
-                                { value: 'synthwave', label: 'Synthwave' },
-                            ]}
-                            helpLabel="Choose your visual theme. Changes apply immediately."
-                        />
                     </div>
 
                     {/* Statistics */}
