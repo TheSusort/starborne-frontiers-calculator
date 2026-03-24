@@ -187,24 +187,6 @@ export const HeroCarousel: React.FC = () => {
                 ))}
             </div>
 
-            {/* Navigation Arrows */}
-            <Button
-                onClick={prevSlide}
-                variant="secondary"
-                className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 transition-all duration-300 opacity-0 group-hover:opacity-100 border-0"
-                aria-label="Previous slide"
-            >
-                <ChevronLeft size={24} />
-            </Button>
-            <Button
-                onClick={nextSlide}
-                variant="secondary"
-                className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-3 transition-all duration-300 opacity-0 group-hover:opacity-100 border-0"
-                aria-label="Next slide"
-            >
-                <ChevronRight size={24} />
-            </Button>
-
             {/* Dot Indicators */}
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-3">
                 {slides.map((_, index) => (

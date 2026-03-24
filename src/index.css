@@ -522,14 +522,13 @@
         background-color: rgb(var(--color-bg));
     }
 
-    /* Synthwave: Fixed background image (avoids mobile viewport jump from background-attachment: fixed) */
-    [data-theme='synthwave'] #root::before {
-        content: '';
+    /* Synthwave: Fixed background image (real DOM element avoids mobile repaint issues) */
+    [data-theme='synthwave'] #synthwave-bg {
         position: fixed;
         top: 0;
         left: 0;
-        width: 100vw;
-        height: 100dvh;
+        width: 100%;
+        height: 100%;
         pointer-events: none;
         z-index: -1;
         background-image: linear-gradient(
