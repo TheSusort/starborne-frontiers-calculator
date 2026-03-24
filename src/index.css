@@ -526,7 +526,10 @@
     [data-theme='synthwave'] #root::before {
         content: '';
         position: fixed;
-        inset: 0;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100dvh;
         pointer-events: none;
         z-index: -1;
         background-image: linear-gradient(
