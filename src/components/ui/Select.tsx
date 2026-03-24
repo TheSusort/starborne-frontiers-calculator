@@ -123,8 +123,8 @@ export const Select: React.FC<Props> = ({
                 </label>
             )}
             <div className="relative">
-                <a
-                    href="javascript:void(0)"
+                <button
+                    type="button"
                     id={selectId}
                     onClick={() => setIsOpen(!isOpen)}
                     onKeyDown={handleKeyDown}
@@ -133,7 +133,7 @@ export const Select: React.FC<Props> = ({
                     aria-labelledby={label ? selectId : undefined}
                     data-testid={testId}
                     className={`
-                        w-full px-4 py-2
+                        w-full px-4 py-2 text-left
                         bg-dark-lighter border border-dark-border
                         focus:outline-none focus:ring-2 focus:ring-primary
                         h-10 hover:bg-dark-border
@@ -150,7 +150,7 @@ export const Select: React.FC<Props> = ({
                     <span className="transition-transform duration-200">
                         {isOpen ? <ChevronUpIcon /> : <ChevronDownIcon />}
                     </span>
-                </a>
+                </button>
 
                 <div
                     className={`

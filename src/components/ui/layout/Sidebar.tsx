@@ -6,6 +6,7 @@ import logo from '/favicon.ico?url';
 import { LoginButton } from '../../auth/LoginButton';
 import { MenuIcon } from '../icons/MenuIcon';
 import { ChevronDownIcon } from '../icons';
+import { Sun, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
@@ -148,9 +149,12 @@ const NavigationItem: React.FC<{
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                <a
-                    href="javascript:void(0)"
+                <button
                     onClick={toggleExpanded}
+                    disabled={isDisabled}
+                    aria-disabled={isDisabled}
+                    aria-expanded={isExpanded}
+                    aria-label={`Toggle ${item.label} menu`}
                     className={`
                     w-[calc(100%-6px)] px-4 py-2 max-w-full
                     transition-all duration-200 ease-in-out
@@ -169,7 +173,7 @@ const NavigationItem: React.FC<{
                         className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
                     />
                     <span>{item.label}</span>
-                </a>
+                </button>
 
                 <CollapsibleSection isOpen={isExpanded}>
                     {item.children!.map((child) => (
@@ -206,9 +210,31 @@ export const Sidebar: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [shareData, setShareData] = useState(false);
     const { user } = useAuth();
-    const { theme } = useTheme();
+    const { theme, setTheme } = useTheme();
     const isSynthwave = theme === 'synthwave';
+    const [isPlaying, setIsPlaying] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
+
+    // Initialize audio element once
+    useEffect(() => {
+        const audio = new Audio('/audio/disco.mp3');
+        audio.loop = true;
+        audio.volume = 0.3;
+        audioRef.current = audio;
+        return () => {
+            audio.pause();
+            audio.src = '';
+        };
+    }, []);
+
+    // Pause music when leaving synthwave
+    useEffect(() => {
+        if (!isSynthwave && audioRef.current) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+        }
+    }, [isSynthwave]);
 
     // Check if user is admin
     useEffect(() => {
@@ -306,11 +332,40 @@ export const Sidebar: React.FC = () => {
             setShareData: (value: boolean) => void;
         }) => (
             <div className="space-y-2 flex flex-col h-full">
-                <span className="text-xs text-theme-text-secondary hidden lg:block">
-                    v{CURRENT_VERSION}
-                </span>
+                <div className="hidden lg:flex items-center justify-between">
+                    <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
+                    <div className="flex items-center gap-2">
+                        {isSynthwave && (
+                            <button
+                                onClick={() => {
+                                    if (audioRef.current) {
+                                        if (isPlaying) {
+                                            audioRef.current.pause();
+                                        } else {
+                                            audioRef.current.play();
+                                        }
+                                        setIsPlaying(!isPlaying);
+                                    }
+                                }}
+                                className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                                title={isPlaying ? 'Pause music' : 'Play music'}
+                            >
+                                {isPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                            className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                            title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
+                        >
+                            {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
+                        </button>
+                    </div>
+                </div>
                 <Link to="/" data-sidebar-title>
-                    <h1 className=" text-xl font-bold mb-2 hidden lg:flex gap-2 items-center">
+                    <h1
+                        className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 hidden lg:flex gap-2 items-center`}
+                    >
                         <img src={logo} alt="logo" className="w-8 h-8" />
                         {APP_NAME}
                     </h1>
@@ -330,7 +385,6 @@ export const Sidebar: React.FC = () => {
                 </nav>
 
                 <div className="!mt-auto flex flex-col gap-2 pt-2">
-                    <InstallButton />
                     <div data-tutorial="sidebar-import-button">
                         <ImportButton
                             className="w-full text-right"
@@ -366,7 +420,33 @@ export const Sidebar: React.FC = () => {
                             {APP_NAME}
                         </h1>
                     </Link>
-                    <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
+                    <div className="flex items-center gap-2">
+                        {isSynthwave && (
+                            <button
+                                onClick={() => {
+                                    if (audioRef.current) {
+                                        if (isPlaying) {
+                                            audioRef.current.pause();
+                                        } else {
+                                            audioRef.current.play();
+                                        }
+                                        setIsPlaying(!isPlaying);
+                                    }
+                                }}
+                                className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                                title={isPlaying ? 'Pause music' : 'Play music'}
+                            >
+                                {isPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                            className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                            title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
+                        >
+                            {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
+                        </button>
+                    </div>
                 </div>
             </div>
 

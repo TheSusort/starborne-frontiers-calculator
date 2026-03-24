@@ -282,7 +282,7 @@
     }
 
     /* Synthwave: Neon glowing button */
-    [data-theme='synthwave'] button.shine-effect {
+    [data-theme='synthwave'] [data-variant] {
         background: none !important;
         color: rgb(var(--color-primary));
         border: 2px solid rgb(var(--color-primary));
@@ -295,7 +295,7 @@
         position: relative;
     }
 
-    [data-theme='synthwave'] button.shine-effect::before {
+    [data-theme='synthwave'] [data-variant='primary']::before {
         content: '';
         position: absolute;
         bottom: 0;
@@ -309,7 +309,7 @@
         pointer-events: none;
     }
 
-    [data-theme='synthwave'] button.shine-effect:hover {
+    [data-theme='synthwave'] [data-variant='primary']:hover {
         color: #fff;
         background: rgb(var(--color-primary) / 0.25) !important;
         box-shadow:
@@ -320,7 +320,7 @@
         animation: none;
     }
 
-    [data-theme='synthwave'] button.shine-effect:hover::before {
+    [data-theme='synthwave'] [data-variant='primary']:hover::before {
         filter: blur(1.5em);
         opacity: 0.8;
     }
@@ -409,7 +409,7 @@
         font-family: 'Orbitron', sans-serif;
     }
 
-    [data-theme='synthwave'] button {
+    [data-theme='synthwave'] button[data-variant] {
         font-family: 'Orbitron', sans-serif;
         font-size: 0.85em;
     }
@@ -418,13 +418,7 @@
         font-size: 0.4rem;
     }
 
-    [data-theme='synthwave'] [data-testid='desktop-sidebar'] h1,
-    [data-theme='synthwave'] .lg\\:hidden h1 {
-        font-size: 0.9rem;
-    }
-
     [data-theme='synthwave'] [data-sidebar-title] {
-        display: inline-block;
         animation: synthwave-glitch 6s linear infinite;
     }
 
@@ -438,7 +432,7 @@
             filter: brightness(1);
         }
         49.5% {
-            transform: scaleY(0.1) skewX(200deg);
+            transform: scaleY(0.1) skewX(100deg);
             filter: brightness(1.9);
         }
         50.5% {
