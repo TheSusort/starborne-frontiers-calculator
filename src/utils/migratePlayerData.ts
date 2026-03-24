@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { supabase as defaultSupabase } from '../config/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageKey } from '../constants/storage';
 import { Ship } from '../types/ship';
@@ -226,7 +227,7 @@ export const syncMigratedDataToSupabase = async (
     client?: SupabaseClient
 ) => {
     // Use provided client or import default (avoids circular dependencies)
-    const supabase = client ?? (await import('../config/supabase')).supabase;
+    const supabase = client ?? defaultSupabase;
     const { ships, inventory, encounters, loadouts, teamLoadouts, engineeringStats } =
         migrationResult;
 
