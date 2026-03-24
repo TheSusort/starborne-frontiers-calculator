@@ -160,8 +160,10 @@ export function simulateUpgrade(
 }
 
 export function calculateUpgradeCost(piece: GearPiece, targetLevel: number): number {
-    const startCost = UPGRADE_COSTS[piece.stars][piece.rarity];
-    if (!startCost || targetLevel <= piece.level) return 0;
+    const starCosts = UPGRADE_COSTS[piece.stars];
+    if (!starCosts || targetLevel <= piece.level) return 0;
+    const startCost = starCosts[piece.rarity];
+    if (!startCost) return 0;
 
     const scale = 1.4019;
     const from = piece.level;

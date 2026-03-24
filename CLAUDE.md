@@ -466,7 +466,6 @@ src/
 ## External Integrations
 
 **Cloudinary:** Image hosting for ship/gear icons
-**Hotjar:** Analytics (production only)
 **frontiers.cubedweb.net:** Optional hangar sharing on data import
 
 ## Performance Considerations

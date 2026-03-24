@@ -4,7 +4,6 @@ import { HelmetProvider } from 'react-helmet-async';
 import { Sidebar } from './components/ui';
 import { NotificationProvider } from './contexts/NotificationProvider';
 import { NotificationContainer } from './components/notification/NotificationContainer';
-import Hotjar from '@hotjar/browser';
 import { AuthProvider } from './contexts/AuthProvider';
 import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
@@ -58,11 +57,6 @@ const ChronoReaverCalculatorPage = lazy(
     () => import('./pages/calculators/ChronoReaverCalculatorPage')
 );
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
-
-// init hotjar
-const siteId = 5241833;
-const hotjarVersion = 6;
-Hotjar.init(siteId, hotjarVersion);
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);

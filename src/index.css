@@ -283,7 +283,7 @@
 
     /* Synthwave: Neon glowing button */
     [data-theme='synthwave'] [data-variant] {
-        background: none !important;
+        background: rgba(0, 0, 0, 0.5) !important;
         color: rgb(var(--color-primary));
         border: 2px solid rgb(var(--color-primary));
         box-shadow:

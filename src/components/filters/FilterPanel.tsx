@@ -252,7 +252,7 @@ export const FilterPanel: React.FC<Props> = ({
                                 <Button
                                     variant="secondary"
                                     onClick={handleSearchToggle}
-                                    className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-100' : 'opacity-0'}`}
+                                    className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none invisible'}`}
                                 >
                                     <CloseIcon />
                                 </Button>
@@ -262,7 +262,7 @@ export const FilterPanel: React.FC<Props> = ({
                                 onClick={handleSearchToggle}
                                 aria-label="Search"
                                 title="Search"
-                                className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-0' : 'opacity-100'}`}
+                                className={`!absolute right-0 top-0 transition-opacity duration-300 ${isSearchExpanded ? 'opacity-0 pointer-events-none invisible' : 'opacity-100'}`}
                             >
                                 <SearchIcon />
                             </Button>
