@@ -309,7 +309,7 @@ export const Sidebar: React.FC = () => {
                 <span className="text-xs text-theme-text-secondary hidden lg:block">
                     v{CURRENT_VERSION}
                 </span>
-                <Link to="/">
+                <Link to="/" data-sidebar-title>
                     <h1 className=" text-xl font-bold mb-2 hidden lg:flex gap-2 items-center">
                         <img src={logo} alt="logo" className="w-8 h-8" />
                         {APP_NAME}
@@ -360,7 +360,7 @@ export const Sidebar: React.FC = () => {
                     >
                         <MenuIcon className="h-6 w-6" />
                     </button>
-                    <Link to="/">
+                    <Link to="/" data-sidebar-title>
                         <h1 className="text-white text-xl font-bold flex items-center gap-2">
                             <img src={logo} alt="logo" className="w-8 h-8" />
                             {APP_NAME}

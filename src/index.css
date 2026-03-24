@@ -258,6 +258,12 @@
 
     /* Synthwave: Neon card glow + accent line */
     [data-theme='synthwave'] .card {
+        background: linear-gradient(
+            160deg,
+            rgb(var(--color-bg-lighter)) 0%,
+            rgb(var(--color-bg)) 50%,
+            color-mix(in srgb, rgb(var(--color-accent)) 5%, rgb(var(--color-bg))) 100%
+        );
         border-color: rgb(var(--color-primary) / 0.3);
         border-top: 2px solid rgb(var(--color-primary) / 0.5);
         box-shadow:
@@ -275,31 +281,117 @@
             0 0 40px rgb(var(--color-accent) / 0.1);
     }
 
-    /* Synthwave: Primary button flat color + light text */
+    /* Synthwave: Neon glowing button */
     [data-theme='synthwave'] button.shine-effect {
-        background: rgb(var(--color-primary)) !important;
-        color: #fff;
-    }
-
-    [data-theme='synthwave'] button.shine-effect:hover {
-        background: rgb(var(--color-primary-hover)) !important;
-    }
-
-    /* Synthwave: Neon button glow */
-    [data-theme='synthwave'] button.shine-effect {
-        box-shadow: 0 0 10px rgb(var(--color-primary) / 0.4);
-    }
-
-    [data-theme='synthwave'] button.shine-effect:hover {
+        background: none !important;
+        color: rgb(var(--color-primary));
+        border: 2px solid rgb(var(--color-primary));
         box-shadow:
-            0 0 20px rgb(var(--color-primary) / 0.6),
-            0 0 40px rgb(var(--color-primary) / 0.3);
+            inset 0 0 0.5em 0 rgb(var(--color-primary) / 0.4),
+            0 0 0.5em 0 rgb(var(--color-primary) / 0.4);
+        text-shadow: 0 0 0.5em rgb(var(--color-primary) / 0.5);
+        animation: neon-border-flicker 4s linear infinite;
+        clip-path: none;
+        position: relative;
+    }
+
+    [data-theme='synthwave'] button.shine-effect::before {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100%;
+        opacity: 0.5;
+        filter: blur(1em);
+        transform: translateY(75%) rotateX(90deg) scale(1, 0.35);
+        background: rgb(var(--color-primary));
+        pointer-events: none;
+    }
+
+    [data-theme='synthwave'] button.shine-effect:hover {
+        color: #fff;
+        background: rgb(var(--color-primary) / 0.25) !important;
+        box-shadow:
+            inset 0 0 1em 0 rgb(var(--color-primary) / 0.5),
+            0 0 1em 0 rgb(var(--color-primary) / 0.6),
+            0 0 2em 0 rgb(var(--color-primary) / 0.3);
+        text-shadow: 0 0 0.5em rgb(var(--color-primary));
+        animation: none;
+    }
+
+    [data-theme='synthwave'] button.shine-effect:hover::before {
+        filter: blur(1.5em);
+        opacity: 0.8;
+    }
+
+    @keyframes neon-border-flicker {
+        0% {
+            opacity: 0.9;
+        }
+        2% {
+            opacity: 1;
+        }
+        4% {
+            opacity: 0.85;
+        }
+        8% {
+            opacity: 1;
+        }
+        70% {
+            opacity: 0.9;
+        }
+        100% {
+            opacity: 1;
+        }
     }
 
     /* Synthwave: Sidebar bottom accent */
     [data-theme='synthwave'] nav {
         border-bottom: 2px solid rgb(var(--color-primary) / 0.4);
         box-shadow: 0 4px 8px rgb(var(--color-primary) / 0.15);
+    }
+
+    /* Synthwave: Ship image filter + chromatic aberration */
+    [data-theme='synthwave'] img[src*='BigPortrait'],
+    [data-theme='synthwave'] video {
+        filter: saturate(1.5) brightness(1.1) contrast(1.2);
+    }
+
+    /* Synthwave: Ship card gradient background */
+    [data-theme='synthwave'] [id^='ship-card-'] {
+        background: linear-gradient(
+            160deg,
+            rgb(var(--color-bg-lighter)) 0%,
+            rgb(var(--color-bg)) 50%,
+            color-mix(in srgb, rgb(var(--color-accent)) 5%, rgb(var(--color-bg))) 100%
+        );
+    }
+
+    /* Synthwave: Chromatic aberration via duplicated offset images */
+    [data-theme='synthwave'] .chromatic-ab {
+        position: relative;
+        overflow: hidden;
+    }
+
+    [data-theme='synthwave'] .chromatic-layer-r {
+        transform: translateX(4px);
+        opacity: 0.5;
+        mix-blend-mode: screen;
+        filter: grayscale(1) sepia(1) hue-rotate(-30deg) saturate(4) brightness(0.8);
+    }
+
+    [data-theme='synthwave'] .chromatic-layer-c {
+        transform: translateX(-4px);
+        opacity: 0.5;
+        mix-blend-mode: screen;
+        filter: grayscale(1) sepia(1) hue-rotate(150deg) saturate(4) brightness(0.8);
+    }
+
+    /* Synthwave: Logo filter */
+    [data-theme='synthwave'] img[alt='logo'] {
+        filter: brightness(1.2) saturate(1.5) hue-rotate(280deg)
+            drop-shadow(0 0 4px rgb(var(--color-primary) / 0.6));
     }
 
     /* Synthwave: Fonts */
@@ -331,23 +423,70 @@
         font-size: 0.9rem;
     }
 
-    /* Synthwave: Chrome metallic headers */
+    [data-theme='synthwave'] [data-sidebar-title] {
+        display: inline-block;
+        animation: synthwave-glitch 6s linear infinite;
+    }
+
+    @keyframes synthwave-glitch {
+        0% {
+            transform: translateY(0);
+            filter: brightness(1);
+        }
+        49% {
+            transform: translateY(-1px);
+            filter: brightness(1);
+        }
+        49.5% {
+            transform: scaleY(0.1) skewX(200deg);
+            filter: brightness(1.9);
+        }
+        50.5% {
+            transform: scaleY(0.5) skewY(30deg);
+            filter: brightness(1.9);
+        }
+        51.5% {
+            transform: translateY(0);
+            filter: brightness(1.5);
+        }
+        100% {
+            transform: translateY(0);
+            filter: brightness(1);
+        }
+    }
+
+    /* Synthwave: Chrome metallic headers with scrolling gradient */
     [data-theme='synthwave'] h1,
     [data-theme='synthwave'] h2 {
         background: linear-gradient(
             180deg,
             #e0d0ff 0%,
-            #c8a0d8 25%,
-            #a070b0 50%,
-            #c8a0d8 75%,
+            #c8a0d8 15%,
+            #a070b0 30%,
+            #c8a0d8 45%,
+            #e0d0ff 50%,
+            #c8a0d8 65%,
+            #a070b0 80%,
+            #c8a0d8 90%,
             #e0d0ff 100%
         );
+        background-size: 100% 200%;
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
         text-shadow: none;
         filter: drop-shadow(0 0 6px rgb(var(--color-primary) / 0.4))
             drop-shadow(0 0 15px rgb(var(--color-primary) / 0.2));
+        animation: shimmer-text 4s linear infinite;
+    }
+
+    @keyframes shimmer-text {
+        0% {
+            background-position: center 200%;
+        }
+        100% {
+            background-position: center 0%;
+        }
     }
 
     /* Synthwave: CRT scanlines */
@@ -376,7 +515,7 @@
         height: 200px;
         background: linear-gradient(
             180deg,
-            rgba(255, 107, 43, 0.12),
+            rgba(255, 107, 43, 0.2),
             rgba(255, 45, 155, 0.08),
             transparent
         );
@@ -384,37 +523,17 @@
         z-index: 0;
     }
 
-    /* Synthwave: Background image */
+    /* Synthwave: Background image with dark overlay */
     [data-theme='synthwave'] body {
-        background-image: url('/images/synthwave-bg.jpg');
+        background-image: linear-gradient(
+                rgba(13, 10, 46, 0.6),
+                rgba(13, 10, 46, 0.4),
+                rgba(13, 10, 46, 0.6)
+            ),
+            url('/images/synthwave-bg2.jpg');
         background-size: cover;
         background-position: center bottom;
         background-attachment: fixed;
         background-color: rgb(var(--color-bg));
-    }
-
-    /* Synthwave: Twinkling star layer */
-    [data-theme='synthwave'] .twinkle-stars {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        z-index: 0;
-        background-image: radial-gradient(
-                1px 1px at 20% 30%,
-                rgba(255, 255, 255, 0.8) 0%,
-                transparent 100%
-            ),
-            radial-gradient(1px 1px at 65% 15%, rgba(255, 255, 255, 0.6) 0%, transparent 100%),
-            radial-gradient(2px 2px at 80% 55%, rgba(255, 255, 255, 0.9) 0%, transparent 100%);
-        animation: twinkle 4s ease-in-out infinite alternate;
-    }
-
-    @keyframes twinkle {
-        0% {
-            opacity: 0.3;
-        }
-        100% {
-            opacity: 1;
-        }
     }
 }

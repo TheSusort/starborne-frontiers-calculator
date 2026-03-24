@@ -8,6 +8,7 @@ import { hasShipVideo } from '../../utils/ship/hasVideo';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useNotification } from '../../hooks/useNotification';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
     ShipDisplayProps,
     ShipHeader,
@@ -55,6 +56,8 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
     }) => {
         const panelStyles = PANEL_VARIANTS[panelVariant];
         const hasVideo = hasShipVideo(ship.rarity, ship.imageKey);
+        const { theme } = useTheme();
+        const isSynthwave = theme === 'synthwave';
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
@@ -180,7 +183,9 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                 onMouseLeave={handleMouseLeave}
             >
                 {ship.imageKey && (
-                    <div className={`relative mx-auto w-full ${panelStyles.imageMargin}`}>
+                    <div
+                        className={`relative mx-auto w-full ${panelStyles.imageMargin} chromatic-ab`}
+                    >
                         <Image
                             src={`${ship.imageKey}_BigPortrait.jpg`}
                             alt={ship.name}
@@ -188,6 +193,24 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                             imageClassName="w-full"
                             aspectRatio="1/1"
                         />
+                        {isSynthwave && (
+                            <>
+                                <Image
+                                    src={`${ship.imageKey}_BigPortrait.jpg`}
+                                    alt=""
+                                    className="absolute inset-0 w-full pointer-events-none chromatic-layer-r"
+                                    imageClassName="w-full"
+                                    aspectRatio="1/1"
+                                />
+                                <Image
+                                    src={`${ship.imageKey}_BigPortrait.jpg`}
+                                    alt=""
+                                    className="absolute inset-0 w-full pointer-events-none chromatic-layer-c"
+                                    imageClassName="w-full"
+                                    aspectRatio="1/1"
+                                />
+                            </>
+                        )}
                         {hasVideo && (
                             <Video
                                 ref={videoRef}
