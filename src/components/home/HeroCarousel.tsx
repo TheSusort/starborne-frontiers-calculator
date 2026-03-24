@@ -57,7 +57,6 @@ const slides: Slide[] = [
 
 export const HeroCarousel: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
-    const [isPlaying, setIsPlaying] = useState(true);
     const [isHovered, setIsHovered] = useState(false);
     const { theme } = useTheme();
     const isSynthwave = theme === 'synthwave';
@@ -76,14 +75,14 @@ export const HeroCarousel: React.FC = () => {
 
     // Auto-advance slides
     useEffect(() => {
-        if (!isPlaying || isHovered) return;
+        if (isHovered) return;
 
         const interval = setInterval(() => {
             nextSlide();
         }, 5000); // 5 seconds per slide
 
         return () => clearInterval(interval);
-    }, [isPlaying, isHovered, nextSlide]);
+    }, [isHovered, nextSlide]);
 
     const handleCtaClick = (link: string, e: React.MouseEvent) => {
         // If link is '#', trigger the Import Game Data modal
@@ -202,16 +201,6 @@ export const HeroCarousel: React.FC = () => {
                     />
                 ))}
             </div>
-
-            {/* Play/Pause Button */}
-            <Button
-                onClick={() => setIsPlaying(!isPlaying)}
-                variant="secondary"
-                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-2 transition-all duration-300 opacity-0 group-hover:opacity-100 border-0"
-                aria-label={isPlaying ? 'Pause' : 'Play'}
-            >
-                {isPlaying ? <Pause size={20} /> : <Play size={20} />}
-            </Button>
         </div>
     );
 };
