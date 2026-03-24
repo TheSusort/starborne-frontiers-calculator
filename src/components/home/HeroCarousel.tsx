@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -63,10 +62,6 @@ export const HeroCarousel: React.FC = () => {
 
     const nextSlide = useCallback(() => {
         setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, []);
-
-    const prevSlide = useCallback(() => {
-        setCurrentSlide((prev) => (prev - 1 + slides.length) % slides.length);
     }, []);
 
     const goToSlide = useCallback((index: number) => {
