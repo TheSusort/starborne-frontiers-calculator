@@ -201,6 +201,9 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                     className="absolute inset-0 w-full pointer-events-none chromatic-layer-r"
                                     imageClassName="w-full"
                                     aspectRatio="1/1"
+                                    style={{
+                                        animationDelay: `${-((ship.id?.charCodeAt(0) || 0) % 40) / 10}s`,
+                                    }}
                                 />
                                 <Image
                                     src={`${ship.imageKey}_BigPortrait.jpg`}
@@ -208,6 +211,9 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                     className="absolute inset-0 w-full pointer-events-none chromatic-layer-c"
                                     imageClassName="w-full"
                                     aspectRatio="1/1"
+                                    style={{
+                                        animationDelay: `${-((ship.id?.charCodeAt(2) || 0) % 40) / 10}s`,
+                                    }}
                                 />
                             </>
                         )}

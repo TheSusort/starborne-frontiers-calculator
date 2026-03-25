@@ -14,14 +14,15 @@ interface ImageProps {
     imageClassName?: string;
     /** Aspect ratio as "width/height" (e.g., "16/9", "389/518") to prevent layout shift */
     aspectRatio?: string;
+    style?: React.CSSProperties;
 }
 
 export const Image = memo(
-    ({ src, alt = '', className = '', imageClassName = '', aspectRatio }: ImageProps) => {
+    ({ src, alt = '', className = '', imageClassName = '', aspectRatio, style }: ImageProps) => {
         const [imageError, setImageError] = useState(false);
         const [isLoading, setIsLoading] = useState(true);
 
-        const aspectStyle = aspectRatio ? { aspectRatio } : undefined;
+        const aspectStyle = { ...(aspectRatio ? { aspectRatio } : {}), ...style };
 
         if (!src || src === '' || imageError) {
             return (

@@ -355,7 +355,8 @@
     /* Synthwave: Ship image filter + chromatic aberration */
     [data-theme='synthwave'] img[src*='BigPortrait'],
     [data-theme='synthwave'] video {
-        filter: saturate(1.5) brightness(1.1) contrast(1.2);
+        filter: saturate(100%) invert(14%) saturate(300%) hue-rotate(282deg) contrast(150%)
+            brightness(1.1);
     }
 
     /* Synthwave: Ship card gradient background */
@@ -391,14 +392,14 @@
     }
 
     [data-theme='synthwave'] .chromatic-layer-r {
-        opacity: 0.5;
+        opacity: 0.1;
         mix-blend-mode: screen;
         filter: grayscale(1) sepia(1) hue-rotate(-30deg) saturate(4) brightness(0.8);
         animation: vhs-glitch-r 4s steps(1) infinite;
     }
 
     [data-theme='synthwave'] .chromatic-layer-c {
-        opacity: 0.5;
+        opacity: 0.1;
         mix-blend-mode: screen;
         filter: grayscale(1) sepia(1) hue-rotate(150deg) saturate(4) brightness(0.8);
         animation: vhs-glitch-c 4s steps(1) infinite;
@@ -534,7 +535,7 @@
     }
 
     [data-theme='synthwave'] [data-sidebar-title] {
-        animation: synthwave-glitch 6s linear infinite;
+        animation: synthwave-glitch 10s linear infinite;
     }
 
     @keyframes synthwave-glitch {
@@ -542,19 +543,19 @@
             transform: translateY(0);
             filter: brightness(1);
         }
-        49% {
+        49.9% {
             transform: translateY(-1px);
             filter: brightness(1);
         }
-        49.5% {
+        50% {
             transform: scaleY(0.1) skewX(100deg);
             filter: brightness(1.9);
         }
-        50.5% {
+        50.2% {
             transform: scaleY(0.5) skewY(30deg);
             filter: brightness(1.9);
         }
-        51.5% {
+        50.4% {
             transform: translateY(0);
             filter: brightness(1.5);
         }
