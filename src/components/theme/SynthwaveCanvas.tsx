@@ -555,8 +555,8 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 const depth = farPlane - ((i / numHLines + gridSpeed) % 1) * (farPlane - nearPlane);
                 const screenY = horizonY + gridHeight * (nearPlane / depth);
                 const closeness = 1 - (depth - nearPlane) / (farPlane - nearPlane);
-                const alpha = Math.min(closeness * 0.3, 0.25);
-                const lineWidth = 2 + closeness * 8;
+                const alpha = Math.min(closeness * 0.15, 0.12);
+                const lineWidth = 2 + closeness * 6;
 
                 ctx.strokeStyle = `rgba(180, 80, 255, ${alpha})`;
                 ctx.lineWidth = lineWidth;
@@ -596,7 +596,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 const absFromCenter = Math.abs(distFromCenter);
                 const bottomW = Math.max(10 - absFromCenter * 16, 0.5);
                 const topW = 0.4;
-                const alpha = 0.2 - absFromCenter * 0.2;
+                const alpha = 0.25 - absFromCenter * 0.3;
 
                 ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.02)})`;
                 ctx.beginPath();
