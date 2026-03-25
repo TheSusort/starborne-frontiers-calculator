@@ -354,7 +354,7 @@
 
     /* Synthwave: Ship image filter + chromatic aberration */
     [data-theme='synthwave'] img[src*='BigPortrait'],
-    [data-theme='synthwave'] video {
+    [data-theme='synthwave'] .chromatic-ab video {
         filter: saturate(100%) invert(14%) saturate(300%) hue-rotate(282deg) contrast(150%)
             brightness(1.1);
     }
