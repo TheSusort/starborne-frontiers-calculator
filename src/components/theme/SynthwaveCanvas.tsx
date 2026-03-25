@@ -550,7 +550,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
             const nearPlane = 1;
             const farPlane = 15;
 
-            // First pass: wide faint "glow" lines
+            // First pass: wide faint "glow" lines — fade toward edges
             for (let i = 0; i < numHLines; i++) {
                 const depth = farPlane - ((i / numHLines + gridSpeed) % 1) * (farPlane - nearPlane);
                 const screenY = horizonY + gridHeight * (nearPlane / depth);
@@ -558,14 +558,19 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 const alpha = Math.min(closeness * 0.15, 0.12);
                 const lineWidth = 2 + closeness * 6;
 
-                ctx.strokeStyle = `rgba(180, 80, 255, ${alpha})`;
+                const hGlowGrad = ctx.createLinearGradient(0, screenY, w, screenY);
+                hGlowGrad.addColorStop(0, 'rgba(180, 80, 255, 0)');
+                hGlowGrad.addColorStop(0.3, `rgba(180, 80, 255, ${alpha})`);
+                hGlowGrad.addColorStop(0.7, `rgba(180, 80, 255, ${alpha})`);
+                hGlowGrad.addColorStop(1, 'rgba(180, 80, 255, 0)');
+                ctx.strokeStyle = hGlowGrad;
                 ctx.lineWidth = lineWidth;
                 ctx.beginPath();
                 ctx.moveTo(0, screenY);
                 ctx.lineTo(w, screenY);
                 ctx.stroke();
             }
-            // Second pass: thin bright core lines
+            // Second pass: thin bright core lines — fade toward edges
             for (let i = 0; i < numHLines; i++) {
                 const depth = farPlane - ((i / numHLines + gridSpeed) % 1) * (farPlane - nearPlane);
                 const screenY = horizonY + gridHeight * (nearPlane / depth);
@@ -573,7 +578,12 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 const alpha = Math.min(closeness * 0.8, 0.7);
                 const lineWidth = 0.3 + closeness * 2;
 
-                ctx.strokeStyle = `rgba(180, 80, 255, ${alpha})`;
+                const hCoreGrad = ctx.createLinearGradient(0, screenY, w, screenY);
+                hCoreGrad.addColorStop(0, 'rgba(180, 80, 255, 0)');
+                hCoreGrad.addColorStop(0.25, `rgba(180, 80, 255, ${alpha})`);
+                hCoreGrad.addColorStop(0.75, `rgba(180, 80, 255, ${alpha})`);
+                hCoreGrad.addColorStop(1, 'rgba(180, 80, 255, 0)');
+                ctx.strokeStyle = hCoreGrad;
                 ctx.lineWidth = lineWidth;
                 ctx.beginPath();
                 ctx.moveTo(0, screenY);
@@ -594,9 +604,9 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                 const distFromCenter = t - 0.5;
                 const topX = vanishX + distFromCenter * horizonSpread;
                 const absFromCenter = Math.abs(distFromCenter);
-                const bottomW = Math.max(10 - absFromCenter * 16, 0.5);
-                const topW = 0.4;
-                const alpha = 0.25 - absFromCenter * 0.3;
+                const bottomW = Math.max(14 - absFromCenter * 20, 0.8);
+                const topW = 0.6;
+                const alpha = 0.35 - absFromCenter * 0.35;
 
                 ctx.fillStyle = `rgba(180, 80, 255, ${Math.max(alpha, 0.02)})`;
                 ctx.beginPath();
