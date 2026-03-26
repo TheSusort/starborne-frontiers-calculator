@@ -96,7 +96,7 @@ export async function updateUserProfile(
  */
 export async function checkUsernameAvailability(username: string): Promise<boolean> {
     // Validate format first
-    const usernameRegex = /^[a-zA-Z0-9]{3,20}$/;
+    const usernameRegex = /^[a-zA-Z0-9 _-]{3,20}$/;
     if (!usernameRegex.test(username)) {
         return false;
     }

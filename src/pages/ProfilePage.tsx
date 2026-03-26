@@ -108,13 +108,15 @@ export const ProfilePage: React.FC = () => {
     }, [user?.id, addNotification]);
 
     const validateUsername = (value: string): boolean => {
-        const usernameRegex = /^[a-zA-Z0-9]{3,20}$/;
+        const usernameRegex = /^[a-zA-Z0-9 _-]{3,20}$/;
         if (!value) {
             setUsernameError(null);
             return true; // Empty is allowed
         }
         if (!usernameRegex.test(value)) {
-            setUsernameError('Username must be 3-20 characters, alphanumeric only');
+            setUsernameError(
+                'Username must be 3-20 characters (letters, numbers, spaces, dashes, underscores)'
+            );
             return false;
         }
         setUsernameError(null);
@@ -232,9 +234,9 @@ export const ProfilePage: React.FC = () => {
                                 label="Username"
                                 value={username}
                                 onChange={(e) => handleUsernameChange(e.target.value)}
-                                placeholder="Enter username (3-20 alphanumeric characters)"
+                                placeholder="Enter username (3-20 characters)"
                                 error={usernameError || undefined}
-                                helpLabel="Username will appear in leaderboards if you're set to public. Must be unique and alphanumeric only."
+                                helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
                             />
 
                             <Input
