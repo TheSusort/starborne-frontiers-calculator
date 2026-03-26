@@ -8,9 +8,11 @@ import { calculateShipStatistics, filterShips } from '../../utils/statistics/shi
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { ShipsSnapshot } from '../../types/statisticsSnapshot';
 
 interface ShipsStatsTabProps {
     ships: Ship[];
+    previousStats?: ShipsSnapshot;
 }
 
 // Colors for charts

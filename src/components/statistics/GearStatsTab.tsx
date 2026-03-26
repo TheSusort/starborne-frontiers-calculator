@@ -9,10 +9,12 @@ import { calculateGearStatistics, filterGear } from '../../utils/statistics/gear
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { GearSnapshot } from '../../types/statisticsSnapshot';
 
 interface GearStatsTabProps {
     gear: GearPiece[];
     ships: Ship[];
+    previousStats?: GearSnapshot;
 }
 
 const CHART_COLORS = [

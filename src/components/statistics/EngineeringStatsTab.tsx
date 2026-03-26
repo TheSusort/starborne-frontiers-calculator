@@ -6,9 +6,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'rec
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { EngineeringLeaderboards } from '../engineering/EngineeringLeaderboards';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { EngineeringSnapshot } from '../../types/statisticsSnapshot';
 
 interface EngineeringStatsTabProps {
     engineeringStats: EngineeringStat[];
+    previousStats?: EngineeringSnapshot;
 }
 
 const CHART_COLORS = [

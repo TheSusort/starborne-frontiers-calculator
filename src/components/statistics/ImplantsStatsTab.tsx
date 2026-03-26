@@ -8,10 +8,12 @@ import { calculateImplantStatistics, filterImplants } from '../../utils/statisti
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { ImplantsSnapshot } from '../../types/statisticsSnapshot';
 
 interface ImplantsStatsTabProps {
     gear: GearPiece[];
     ships: Ship[];
+    previousStats?: ImplantsSnapshot;
 }
 
 const CHART_COLORS = [
