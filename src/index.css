@@ -510,6 +510,35 @@
             drop-shadow(0 0 4px rgb(var(--color-primary) / 0.6));
     }
 
+    /* Synthwave: Notification colors */
+    [data-theme='synthwave'] .notification-success {
+        background-color: rgba(20, 10, 40, 0.9);
+        border: 1px solid #00ffa0;
+        box-shadow: 0 0 12px rgba(0, 255, 160, 0.3);
+        color: #00ffa0;
+    }
+
+    [data-theme='synthwave'] .notification-error {
+        background-color: rgba(20, 10, 40, 0.9);
+        border: 1px solid #ff3070;
+        box-shadow: 0 0 12px rgba(255, 48, 112, 0.3);
+        color: #ff3070;
+    }
+
+    [data-theme='synthwave'] .notification-info {
+        background-color: rgba(20, 10, 40, 0.9);
+        border: 1px solid #60a0ff;
+        box-shadow: 0 0 12px rgba(96, 160, 255, 0.3);
+        color: #60a0ff;
+    }
+
+    [data-theme='synthwave'] .notification-warning {
+        background-color: rgba(20, 10, 40, 0.9);
+        border: 1px solid #ffcc00;
+        box-shadow: 0 0 12px rgba(255, 204, 0, 0.3);
+        color: #ffcc00;
+    }
+
     /* Synthwave: Fonts */
     [data-theme='synthwave'] body {
         font-family: 'Exo 2', sans-serif;
