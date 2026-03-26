@@ -6,10 +6,10 @@ export type BaseRoleName = 'ATTACKER' | 'DEFENDER' | 'DEBUFFER' | 'SUPPORTER';
 
 // 4 engineering stats per base role (order matches game UI)
 export const ENGINEERING_STATS_BY_ROLE: Record<BaseRoleName, StatName[]> = {
-    SUPPORTER: ['hacking', 'hp', 'security', 'defence'],
-    ATTACKER: ['hacking', 'defence', 'critDamage', 'attack'],
-    DEBUFFER: ['attack', 'security', 'hp', 'hacking'],
-    DEFENDER: ['defence', 'hp', 'hacking', 'security'],
+    ATTACKER: ['critDamage', 'attack', 'defence', 'hacking'],
+    DEFENDER: ['hacking', 'security', 'hp', 'defence'],
+    SUPPORTER: ['hacking', 'defence', 'security', 'hp'],
+    DEBUFFER: ['hp', 'attack', 'hacking', 'security'],
 };
 
 // Cumulative cost table (index = level, max level 20)

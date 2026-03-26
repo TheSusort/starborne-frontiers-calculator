@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { EngineeringStat, Stat } from '../../types/stats';
-import { ShipTypeName, SHIP_TYPES } from '../../constants';
-import { StatModifierInput } from '../stats/StatModifierInput';
-import { Button, Select } from '../ui';
+import React, { useState, useEffect, useMemo } from 'react';
+import { EngineeringStat, Stat, StatName } from '../../types/stats';
+import { ShipTypeName, SHIP_TYPES, STATS } from '../../constants';
+import {
+    BaseRoleName,
+    ENGINEERING_STATS_BY_ROLE,
+    isEngineeringFlatStat,
+} from '../../constants/engineeringStats';
+import { Button, Select, Input } from '../ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+
+const BASE_ROLES: BaseRoleName[] = ['ATTACKER', 'DEFENDER', 'SUPPORTER', 'DEBUFFER'];
 
 interface EngineeringStatsFormProps {
     initialStats?: EngineeringStat | null;
@@ -15,58 +21,76 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     onSubmit,
 }) => {
     const [shipType, setShipType] = useState<ShipTypeName>(
-        initialStats?.shipType || (Object.keys(SHIP_TYPES)[0] as ShipTypeName)
+        (initialStats?.shipType as ShipTypeName) || 'ATTACKER'
     );
     const [stats, setStats] = useState<Stat[]>(initialStats?.stats || []);
 
-    const { getAllAllowedStats, engineeringStats } = useEngineeringStats();
+    const { engineeringStats } = useEngineeringStats();
 
-    // Filter out ship types that already have stats
-    const availableShipTypes = Object.entries(SHIP_TYPES).filter(([key]) => {
-        // Supporter(Buffer) is a subtype of Supporter, so we don't want to show it
-        if (key === 'SUPPORTER_BUFFER') return false;
+    // Get the fixed stats for the selected role
+    const roleStats = useMemo(
+        () => ENGINEERING_STATS_BY_ROLE[shipType as BaseRoleName],
+        [shipType]
+    );
 
-        return (
-            initialStats?.shipType === key || // Include current ship type if editing
-            !engineeringStats.stats?.some((stat) => stat.shipType === key)
-        );
-    });
-
-    const shipTypeOptions = availableShipTypes.map(([key, type]) => ({
-        value: key,
-        label: type.name,
+    // Only show the 4 base roles, filtering out ones that already have stats
+    const shipTypeOptions = BASE_ROLES.filter(
+        (role) =>
+            initialStats?.shipType === role ||
+            !engineeringStats.stats?.some((stat) => stat.shipType === role)
+    ).map((role) => ({
+        value: role,
+        label: SHIP_TYPES[role].name,
     }));
+
+    // Build stats array from role's fixed stats, preserving existing values
+    const buildStatsForRole = (role: StatName[], existingStats: Stat[]): Stat[] => {
+        return role.map((statName) => {
+            const existing = existingStats.find((s) => s.name === statName);
+            return {
+                name: statName,
+                value: existing?.value ?? 0,
+                type: isEngineeringFlatStat(statName) ? 'flat' : 'percentage',
+            } as Stat;
+        });
+    };
+
+    // When ship type changes, rebuild stats for the new role
+    useEffect(() => {
+        setStats(buildStatsForRole(roleStats, stats));
+    }, [roleStats]);
 
     // Reset form to initial state
     const resetForm = () => {
-        setShipType(Object.keys(SHIP_TYPES)[0] as ShipTypeName);
-        setStats([]);
+        setShipType('ATTACKER');
+        setStats(buildStatsForRole(ENGINEERING_STATS_BY_ROLE['ATTACKER'], []));
     };
 
     useEffect(() => {
         if (initialStats) {
             setShipType(initialStats.shipType);
-            setStats(initialStats.stats);
+            setStats(buildStatsForRole(roleStats, initialStats.stats));
         } else {
             resetForm();
         }
     }, [initialStats]);
 
-    const handleStatChange = (newStats: Stat[]) => {
-        setStats(newStats);
+    const handleValueChange = (statName: StatName, value: number) => {
+        setStats((prev) => prev.map((s) => (s.name === statName ? { ...s, value } : s)));
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSubmit({ shipType, stats });
-        // Only reset if we're not editing existing stats
+        // Only include stats with non-zero values
+        const nonZeroStats = stats.filter((s) => s.value !== 0);
+        onSubmit({ shipType, stats: nonZeroStats });
         if (!initialStats) {
             resetForm();
         }
     };
 
     return (
-        <form onSubmit={handleSubmit} className="card">
+        <form onSubmit={handleSubmit} className="card max-w-md">
             <div className="mb-4">
                 <Select
                     label="Ship Type"
@@ -76,12 +100,23 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
                 />
             </div>
 
-            <StatModifierInput
-                stats={stats}
-                onChange={handleStatChange}
-                maxStats={5}
-                allowedStats={getAllAllowedStats()}
-            />
+            <div className="space-y-3">
+                {stats.map((stat) => (
+                    <div key={stat.name} className="flex items-end gap-4">
+                        <div className="flex-1">
+                            <Input
+                                type="number"
+                                label={`${STATS[stat.name].label} (${stat.type === 'flat' ? 'Flat' : '%'})`}
+                                value={stat.value}
+                                onChange={(e) =>
+                                    handleValueChange(stat.name, Number(e.target.value))
+                                }
+                                min={0}
+                            />
+                        </div>
+                    </div>
+                ))}
+            </div>
 
             <Button
                 aria-label="Save engineering stats"
