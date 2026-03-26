@@ -7,6 +7,7 @@ import { BaseChart, ChartTooltip } from '../ui/charts';
 import { EngineeringLeaderboards } from '../engineering/EngineeringLeaderboards';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { EngineeringSnapshot } from '../../types/statisticsSnapshot';
+import { mergeDistributions } from '../../utils/statistics/mergeDistributions';
 
 interface EngineeringStatsTabProps {
     engineeringStats: EngineeringStat[];
@@ -22,17 +23,30 @@ const CHART_COLORS = [
     '#06b6d4', // Other
 ];
 
-export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engineeringStats }) => {
+export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
+    engineeringStats,
+    previousStats,
+}) => {
     const colors = useThemeColors();
     const stats = useMemo(() => {
         return calculateEngineeringStatistics(engineeringStats);
     }, [engineeringStats]);
 
     // Prepare data for points by role chart
-    const roleChartData = stats.byRole.map((role) => ({
-        name: role.role,
-        points: role.totalPoints,
-    }));
+    const roleChartData = useMemo(() => {
+        const current = stats.byRole.map((role) => ({
+            name: role.role,
+            value: role.totalPoints,
+        }));
+        if (previousStats) {
+            const previous = previousStats.byRole.map((role) => ({
+                name: role.role,
+                value: role.totalPoints,
+            }));
+            return mergeDistributions(current, previous);
+        }
+        return current.map((d) => ({ name: d.name, current: d.value, previous: 0 }));
+    }, [stats.byRole, previousStats]);
 
     // Prepare data for stacked bar chart (points by stat type per role)
     const stackedChartData = stats.byRole.map((role) => {
@@ -73,11 +87,13 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                     title="Total Points"
                     value={stats.totalPoints.toLocaleString()}
                     color="blue"
+                    previousValue={previousStats?.totalPoints}
                 />
                 <StatCard
                     title="Average Per Role"
                     value={stats.averagePointsPerRole.toFixed(0)}
                     color="green"
+                    previousValue={previousStats?.averagePointsPerRole}
                 />
                 <StatCard
                     title="Most Invested"
@@ -108,7 +124,11 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({ engine
                                 width={150}
                             />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
-                            <Bar dataKey="points" fill="#3b82f6" />
+                            {previousStats && <Legend />}
+                            <Bar dataKey="current" name="Current" fill="#3b82f6" />
+                            {previousStats && (
+                                <Bar dataKey="previous" name="Previous" fill="#6b7280" />
+                            )}
                         </BarChart>
                     </BaseChart>
                 </div>
