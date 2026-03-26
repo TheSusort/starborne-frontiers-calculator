@@ -9,6 +9,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ShipsSnapshot } from '../../types/statisticsSnapshot';
+import { mergeDistributions } from '../../utils/statistics/mergeDistributions';
 
 interface ShipsStatsTabProps {
     ships: Ship[];
@@ -35,7 +36,7 @@ const RARITY_COLORS: Record<string, string> = {
     legendary: '#f97316', // orange
 };
 
-export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
+export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousStats }) => {
     const colors = useThemeColors();
     const [roleFilter, setRoleFilter] = useState<ShipTypeName | 'all'>('all');
     const [rarityFilter, setRarityFilter] = useState<RarityName | 'all'>('all');
@@ -55,18 +56,39 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
         percentage: r.percentage.toFixed(1),
     }));
 
-    const roleChartData = stats.byRole.map((r) => ({
-        name: r.role,
-        value: r.count,
-        percentage: r.percentage.toFixed(1),
-    }));
+    const roleCurrentData = stats.byRole.map((r) => ({ name: r.role, value: r.count }));
+    const roleChartData = previousStats
+        ? mergeDistributions(
+              roleCurrentData,
+              previousStats.byRole.map((r) => ({ name: r.role, value: r.count }))
+          )
+        : stats.byRole.map((r) => ({
+              name: r.role,
+              value: r.count,
+              percentage: r.percentage.toFixed(1),
+          }));
 
-    const levelChartData = stats.levels;
+    const levelCurrentData = stats.levels.map((l) => ({ name: l.range, value: l.count }));
+    const levelChartData = previousStats
+        ? mergeDistributions(
+              levelCurrentData,
+              previousStats.levels.map((l) => ({ name: l.range, value: l.count }))
+          )
+        : stats.levels;
 
-    const refitsByRarityData = stats.refits.byRarity.map((r) => ({
+    const refitsCurrentData = stats.refits.byRarity.map((r) => ({
         name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
         value: r.count,
     }));
+    const refitsByRarityData = previousStats
+        ? mergeDistributions(
+              refitsCurrentData,
+              previousStats.refits.byRarity.map((r) => ({
+                  name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+                  value: r.count,
+              }))
+          )
+        : refitsCurrentData;
 
     return (
         <div className="space-y-6">
@@ -112,23 +134,31 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
 
             {/* Overview Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard title="Total Ships" value={stats.total} color="blue" />
+                <StatCard
+                    title="Total Ships"
+                    value={stats.total}
+                    color="blue"
+                    previousValue={previousStats?.total}
+                />
                 <StatCard
                     title="Average Level"
                     value={stats.averageLevel.toFixed(1)}
                     color="green"
+                    previousValue={previousStats?.averageLevel}
                 />
                 <StatCard
                     title="Max Level Ships"
                     value={stats.maxLevelCount}
                     subtitle={`${stats.maxLevelPercentage.toFixed(1)}% of fleet`}
                     color="yellow"
+                    previousValue={previousStats?.maxLevelCount}
                 />
                 <StatCard
                     title="Total Refits"
                     value={stats.refits.total}
                     subtitle={`Avg: ${stats.refits.average.toFixed(1)} per ship`}
                     color="purple"
+                    previousValue={previousStats?.refits.total}
                 />
             </div>
 
@@ -139,20 +169,29 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                     value={stats.withImplantsCount}
                     subtitle={`${stats.withImplantsPercentage.toFixed(1)}%`}
                     color="blue"
+                    previousValue={previousStats?.withImplantsCount}
                 />
                 <StatCard
                     title="Fully Geared"
                     value={stats.fullyGearedCount}
                     subtitle={`${stats.fullyGearedPercentage.toFixed(1)}%`}
                     color="green"
+                    previousValue={previousStats?.fullyGearedCount}
                 />
                 <StatCard
                     title="Ungeared"
                     value={stats.ungearedCount}
                     subtitle={`${stats.ungearedPercentage.toFixed(1)}%`}
                     color="orange"
+                    previousValue={previousStats?.ungearedCount}
+                    positiveDirection="down"
                 />
-                <StatCard title="Factions" value={stats.byFaction.length} color="purple" />
+                <StatCard
+                    title="Factions"
+                    value={stats.byFaction.length}
+                    color="purple"
+                    previousValue={previousStats?.byFaction.length}
+                />
             </div>
 
             {/* Charts */}
@@ -161,29 +200,51 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <BaseChart height={300}>
-                        <PieChart>
-                            <Pie
-                                data={rarityChartData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={(entry) => `${entry.name}: ${entry.value}`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
+                        {previousStats ? (
+                            <BarChart
+                                data={mergeDistributions(
+                                    rarityChartData,
+                                    previousStats.byRarity.map((r) => ({
+                                        name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+                                        value: r.count,
+                                    }))
+                                )}
                             >
-                                {rarityChartData.map((entry, index) => (
-                                    <Cell
-                                        key={`cell-${index}`}
-                                        fill={
-                                            RARITY_COLORS[entry.name.toLowerCase()] ||
-                                            CHART_COLORS[index % CHART_COLORS.length]
-                                        }
-                                    />
-                                ))}
-                            </Pie>
-                            <Tooltip content={<ChartTooltip />} />
-                        </PieChart>
+                                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                                <XAxis dataKey="name" stroke={colors.axisStroke} />
+                                <YAxis stroke={colors.axisStroke} />
+                                <Tooltip
+                                    content={<ChartTooltip />}
+                                    cursor={{ fill: 'transparent' }}
+                                />
+                                <Bar dataKey="current" fill="#3b82f6" name="Current" />
+                                <Bar dataKey="previous" fill="#3b82f666" name="Previous" />
+                            </BarChart>
+                        ) : (
+                            <PieChart>
+                                <Pie
+                                    data={rarityChartData}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    label={(entry) => `${entry.name}: ${entry.value}`}
+                                    outerRadius={80}
+                                    fill="#8884d8"
+                                    dataKey="value"
+                                >
+                                    {rarityChartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={
+                                                RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                CHART_COLORS[index % CHART_COLORS.length]
+                                            }
+                                        />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={<ChartTooltip />} />
+                            </PieChart>
+                        )}
                     </BaseChart>
                 </div>
 
@@ -196,7 +257,14 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                             <XAxis dataKey="name" stroke={colors.axisStroke} />
                             <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
-                            <Bar dataKey="value" fill="#3b82f6" />
+                            {previousStats ? (
+                                <>
+                                    <Bar dataKey="current" fill="#3b82f6" name="Current" />
+                                    <Bar dataKey="previous" fill="#3b82f666" name="Previous" />
+                                </>
+                            ) : (
+                                <Bar dataKey="value" fill="#3b82f6" />
+                            )}
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -207,10 +275,20 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                     <BaseChart height={300}>
                         <BarChart data={levelChartData}>
                             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
-                            <XAxis dataKey="range" stroke={colors.axisStroke} />
+                            <XAxis
+                                dataKey={previousStats ? 'name' : 'range'}
+                                stroke={colors.axisStroke}
+                            />
                             <YAxis stroke={colors.axisStroke} />
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
-                            <Bar dataKey="count" fill="#10b981" />
+                            {previousStats ? (
+                                <>
+                                    <Bar dataKey="current" fill="#10b981" name="Current" />
+                                    <Bar dataKey="previous" fill="#10b98166" name="Previous" />
+                                </>
+                            ) : (
+                                <Bar dataKey="count" fill="#10b981" />
+                            )}
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -228,7 +306,14 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships }) => {
                                     content={<ChartTooltip />}
                                     cursor={{ fill: 'transparent' }}
                                 />
-                                <Bar dataKey="value" fill="#f59e0b" />
+                                {previousStats ? (
+                                    <>
+                                        <Bar dataKey="current" fill="#f59e0b" name="Current" />
+                                        <Bar dataKey="previous" fill="#f59e0b66" name="Previous" />
+                                    </>
+                                ) : (
+                                    <Bar dataKey="value" fill="#f59e0b" />
+                                )}
                             </BarChart>
                         </BaseChart>
                     </div>
