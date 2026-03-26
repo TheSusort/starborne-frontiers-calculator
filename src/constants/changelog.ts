@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.47.0';
+export const CURRENT_VERSION = '1.48.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.48.0',
+        date: '2026-03-26',
+        changes: [
+            'Added monthly statistics snapshots — your stats are automatically saved each month so you can track your progression over time',
+            'Compare with previous months via the dropdown on the Statistics page. Metric cards show delta indicators and charts display side-by-side grouped bars',
+            'Added "Total Tokens Spent" card to the Engineering statistics tab',
+            'Implant set bonus charts (minor, major, ultimate) now support snapshot comparison',
+        ],
+    },
     {
         version: '1.47.0',
         date: '2026-03-24',
