@@ -146,7 +146,9 @@ export default defineConfig({
                 renderedRoute.html = stripElement(renderedRoute.html, '<div id="modal-root"');
 
                 // Remove tutorial overlay entirely (not nested in a container we want to keep)
-                const tutorialStart = renderedRoute.html.indexOf('<div class="fixed inset-0 z-[100]');
+                const tutorialStart = renderedRoute.html.indexOf(
+                    '<div class="fixed inset-0 z-[100]'
+                );
                 if (tutorialStart !== -1) {
                     const tagEnd = renderedRoute.html.indexOf('>', tutorialStart);
                     let depth = 1;
@@ -164,42 +166,163 @@ export default defineConfig({
                         }
                     }
                     renderedRoute.html =
-                        renderedRoute.html.slice(0, tutorialStart) +
-                        renderedRoute.html.slice(pos);
+                        renderedRoute.html.slice(0, tutorialStart) + renderedRoute.html.slice(pos);
                 }
 
                 // Post-process: ensure Helmet meta tags are in the <head>
                 // react-helmet-async sometimes fails to flush <head> in headless Puppeteer
-                const seoMap: Record<string, { title: string; description: string; keywords: string }> = {
-                    '/': { title: '', description: 'Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations.', keywords: 'starborne, frontiers, calculator, ships, gear, simulation' },
-                    '/ships': { title: 'Ships', description: 'Manage and optimize your Starborne Frontiers ships. View ship details, stats, and configurations.', keywords: 'starborne ships, ship management, ship stats, ship configurations' },
-                    '/gear': { title: 'Gear', description: 'Optimize your ship gear and equipment in Starborne Frontiers. Find the best gear combinations for your ships.', keywords: 'ship gear, equipment, gear optimization, ship equipment' },
-                    '/simulation': { title: 'Simulation', description: 'Simulate ship battles and test different configurations in Starborne Frontiers.', keywords: 'battle simulation, ship battles, combat testing, battle configurations' },
-                    '/autogear': { title: 'Autogear', description: 'Automatically find optimized gear for your ships in Starborne Frontiers.', keywords: 'autogear, ship autogear, autogear calculator, ship autogear calculations' },
-                    '/engineering': { title: 'Engineering', description: 'Manage engineering stats for Starborne Frontiers.', keywords: 'engineering calculator, ship engineering, engineering stats' },
-                    '/loadouts': { title: 'Loadouts', description: 'Create and manage your ship loadouts in Starborne Frontiers.', keywords: 'ship loadouts, ship configurations, battle loadouts, ship setup' },
-                    '/encounters': { title: 'Encounters', description: 'Save your encounters in Starborne Frontiers.', keywords: 'encounters, ship encounters, encounter stats' },
-                    '/ships/index': { title: 'Ship Database', description: 'View and search through the Starborne Frontiers ship database.', keywords: 'ship database, ship stats, ship details, ship information' },
-                    '/defense': { title: 'Defense Calculator', description: 'Calculate ship defense values and optimize your defensive capabilities in Starborne Frontiers.', keywords: 'defense calculator, ship defense, defensive stats, shield calculations' },
-                    '/damage': { title: 'DPS Calculator', description: "Calculate and optimize your ship's damage per second (DPS) in Starborne Frontiers.", keywords: 'dps calculator, damage calculation, ship damage, weapon damage' },
-                    '/healing': { title: 'Healing Calculator', description: "Calculate and optimize your ship's healing capabilities in Starborne Frontiers.", keywords: 'healing calculator, ship healing, repair calculations, support ships' },
-                    '/damage-deconstruction': { title: 'Damage Deconstruction', description: 'Analyze and break down ship damage calculations in Starborne Frontiers.', keywords: 'damage analysis, damage breakdown, damage calculations' },
-                    '/shared-encounters': { title: 'Shared Encounters', description: "View and learn from other players' successful fleet formations for different encounters", keywords: 'starborne, frontiers, shared encounters, fleet formations' },
-                    '/implants': { title: 'Implant Database', description: 'Browse and search through all available implants in Starborne Frontiers.', keywords: 'starborne, frontiers, implants, database, stats, effects' },
-                    '/buffs': { title: 'Effect Index', description: 'Browse all buffs, debuffs, and effects in Starborne Frontiers. Search and filter through 155+ game effects.', keywords: 'starborne, frontiers, buffs, debuffs, effects, status effects' },
-                    '/documentation': { title: 'Documentation', description: 'Comprehensive guide to using the Starborne Planner tool.', keywords: 'starborne, frontiers, documentation, guide, tutorial' },
-                    '/json-diff': { title: 'JSON Diff Calculator', description: 'Compare two Starborne Frontiers JSON export files to see differences.', keywords: 'json diff, file comparison, starborne frontiers' },
-                    '/recruitment': { title: 'Ship Recruitment Calculator', description: 'Calculate the probability of recruiting specific ships from different beacon types in Starborne Frontiers.', keywords: 'ship recruitment, gacha calculator, beacon calculator' },
-                    '/speed': { title: 'Speed Calculator', description: 'Calculate ship speed with buffs and debuffs in Starborne Frontiers.', keywords: 'speed calculator, ship speed, speed buffs, speed debuffs' },
-                    '/chrono-reaver': { title: 'Chrono Reaver Calculator', description: 'Simulate Chrono Reaver implant charge mechanics in Starborne Frontiers.', keywords: 'chrono reaver, implant calculator, charge mechanics' },
-                    '/statistics': { title: 'Statistics', description: 'View comprehensive analytics for your fleet in Starborne Frontiers.', keywords: 'statistics, analytics, fleet stats' },
-                    '/ships/lore': { title: 'Ship Lore', description: 'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.', keywords: 'ship lore, ship bios, starborne frontiers lore, ship backstories' },
+                const seoMap: Record<
+                    string,
+                    { title: string; description: string; keywords: string }
+                > = {
+                    '/': {
+                        title: '',
+                        description:
+                            'Starborne Planner - Your comprehensive tool for ship management, gear optimization, and battle simulations.',
+                        keywords: 'starborne, frontiers, calculator, ships, gear, simulation',
+                    },
+                    '/ships': {
+                        title: 'Ships',
+                        description:
+                            'Manage and optimize your Starborne Frontiers ships. View ship details, stats, and configurations.',
+                        keywords:
+                            'starborne ships, ship management, ship stats, ship configurations',
+                    },
+                    '/gear': {
+                        title: 'Gear',
+                        description:
+                            'Optimize your ship gear and equipment in Starborne Frontiers. Find the best gear combinations for your ships.',
+                        keywords: 'ship gear, equipment, gear optimization, ship equipment',
+                    },
+                    '/simulation': {
+                        title: 'Simulation',
+                        description:
+                            'Simulate ship battles and test different configurations in Starborne Frontiers.',
+                        keywords:
+                            'battle simulation, ship battles, combat testing, battle configurations',
+                    },
+                    '/autogear': {
+                        title: 'Autogear',
+                        description:
+                            'Automatically find optimized gear for your ships in Starborne Frontiers.',
+                        keywords:
+                            'autogear, ship autogear, autogear calculator, ship autogear calculations',
+                    },
+                    '/engineering': {
+                        title: 'Engineering',
+                        description: 'Manage engineering stats for Starborne Frontiers.',
+                        keywords: 'engineering calculator, ship engineering, engineering stats',
+                    },
+                    '/loadouts': {
+                        title: 'Loadouts',
+                        description: 'Create and manage your ship loadouts in Starborne Frontiers.',
+                        keywords: 'ship loadouts, ship configurations, battle loadouts, ship setup',
+                    },
+                    '/encounters': {
+                        title: 'Encounters',
+                        description: 'Save your encounters in Starborne Frontiers.',
+                        keywords: 'encounters, ship encounters, encounter stats',
+                    },
+                    '/ships/index': {
+                        title: 'Ship Database',
+                        description:
+                            'View and search through the Starborne Frontiers ship database.',
+                        keywords: 'ship database, ship stats, ship details, ship information',
+                    },
+                    '/defense': {
+                        title: 'Defense Calculator',
+                        description:
+                            'Calculate ship defense values and optimize your defensive capabilities in Starborne Frontiers.',
+                        keywords:
+                            'defense calculator, ship defense, defensive stats, shield calculations',
+                    },
+                    '/damage': {
+                        title: 'DPS Calculator',
+                        description:
+                            "Calculate and optimize your ship's damage per second (DPS) in Starborne Frontiers.",
+                        keywords: 'dps calculator, damage calculation, ship damage, weapon damage',
+                    },
+                    '/healing': {
+                        title: 'Healing Calculator',
+                        description:
+                            "Calculate and optimize your ship's healing capabilities in Starborne Frontiers.",
+                        keywords:
+                            'healing calculator, ship healing, repair calculations, support ships',
+                    },
+                    '/damage-deconstruction': {
+                        title: 'Damage Deconstruction',
+                        description:
+                            'Analyze and break down ship damage calculations in Starborne Frontiers.',
+                        keywords: 'damage analysis, damage breakdown, damage calculations',
+                    },
+                    '/shared-encounters': {
+                        title: 'Shared Encounters',
+                        description:
+                            "View and learn from other players' successful fleet formations for different encounters",
+                        keywords: 'starborne, frontiers, shared encounters, fleet formations',
+                    },
+                    '/implants': {
+                        title: 'Implant Database',
+                        description:
+                            'Browse and search through all available implants in Starborne Frontiers.',
+                        keywords: 'starborne, frontiers, implants, database, stats, effects',
+                    },
+                    '/buffs': {
+                        title: 'Effect Index',
+                        description:
+                            'Browse all buffs, debuffs, and effects in Starborne Frontiers. Search and filter through 155+ game effects.',
+                        keywords: 'starborne, frontiers, buffs, debuffs, effects, status effects',
+                    },
+                    '/documentation': {
+                        title: 'Documentation',
+                        description: 'Comprehensive guide to using the Starborne Planner tool.',
+                        keywords: 'starborne, frontiers, documentation, guide, tutorial',
+                    },
+                    '/json-diff': {
+                        title: 'JSON Diff Calculator',
+                        description:
+                            'Compare two Starborne Frontiers JSON export files to see differences.',
+                        keywords: 'json diff, file comparison, starborne frontiers',
+                    },
+                    '/recruitment': {
+                        title: 'Ship Recruitment Calculator',
+                        description:
+                            'Calculate the probability of recruiting specific ships from different beacon types in Starborne Frontiers.',
+                        keywords: 'ship recruitment, gacha calculator, beacon calculator',
+                    },
+                    '/speed': {
+                        title: 'Speed Calculator',
+                        description:
+                            'Calculate ship speed with buffs and debuffs in Starborne Frontiers.',
+                        keywords: 'speed calculator, ship speed, speed buffs, speed debuffs',
+                    },
+                    '/chrono-reaver': {
+                        title: 'Chrono Reaver Calculator',
+                        description:
+                            'Simulate Chrono Reaver implant charge mechanics in Starborne Frontiers.',
+                        keywords: 'chrono reaver, implant calculator, charge mechanics',
+                    },
+                    '/statistics': {
+                        title: 'Statistics',
+                        description:
+                            'View comprehensive analytics for your fleet in Starborne Frontiers.',
+                        keywords: 'statistics, analytics, fleet stats',
+                    },
+                    '/ships/lore': {
+                        title: 'Ship Lore',
+                        description:
+                            'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.',
+                        keywords:
+                            'ship lore, ship bios, starborne frontiers lore, ship backstories',
+                    },
                 };
 
                 const seo = seoMap[renderedRoute.route];
                 if (seo) {
                     const siteUrl = 'https://starborneplanner.com';
-                    const fullTitle = seo.title ? `${seo.title} | Starborne Planner` : 'Starborne Planner';
+                    const fullTitle = seo.title
+                        ? `${seo.title} | Starborne Planner`
+                        : 'Starborne Planner';
                     const canonicalUrl = `${siteUrl}${renderedRoute.route}`;
                     const ogImage = `${siteUrl}/faviconV2.png`;
 
@@ -232,7 +355,10 @@ export default defineConfig({
                         `<meta name="twitter:image" content="${ogImage}">`,
                     ].join('\n        ');
 
-                    renderedRoute.html = renderedRoute.html.replace('</head>', `${metaTags}\n    </head>`);
+                    renderedRoute.html = renderedRoute.html.replace(
+                        '</head>',
+                        `${metaTags}\n    </head>`
+                    );
                 }
 
                 return renderedRoute;
@@ -265,7 +391,6 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: {
-                    'react-vendor': ['react', 'react-dom'],
                     'router-vendor': ['react-router-dom'],
                 },
             },
