@@ -9,6 +9,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Toolti
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ImplantsSnapshot } from '../../types/statisticsSnapshot';
+import { mergeDistributions } from '../../utils/statistics/mergeDistributions';
 
 interface ImplantsStatsTabProps {
     gear: GearPiece[];
@@ -32,7 +33,11 @@ const RARITY_COLORS: Record<string, string> = {
     legendary: '#f97316', // orange
 };
 
-export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships }) => {
+export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
+    gear,
+    ships,
+    previousStats,
+}) => {
     const colors = useThemeColors();
     // Filter to only implants
     const implantsOnly = useMemo(() => {
@@ -59,6 +64,24 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
         value: r.count,
         percentage: r.percentage.toFixed(1),
     }));
+
+    const rarityMergedData = previousStats
+        ? mergeDistributions(
+              rarityChartData.map((r) => ({ name: r.name, value: r.value })),
+              previousStats.byRarity.map((r) => ({
+                  name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+                  value: r.count,
+              }))
+          )
+        : null;
+
+    const typeCurrentData = stats.byType.map((t) => ({ name: t.type, value: t.count }));
+    const typeMergedData = previousStats
+        ? mergeDistributions(
+              typeCurrentData,
+              previousStats.byType.map((t) => ({ name: t.type, value: t.count }))
+          )
+        : null;
 
     const typeChartData = stats.byType;
 
@@ -115,12 +138,18 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
 
             {/* Overview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatCard title="Total Implants" value={stats.total} color="blue" />
+                <StatCard
+                    title="Total Implants"
+                    value={stats.total}
+                    color="blue"
+                    previousValue={previousStats?.total}
+                />
                 <StatCard
                     title="Equipped"
                     value={stats.equippedCount}
                     subtitle={`${stats.equippedPercentage.toFixed(1)}%`}
                     color="green"
+                    previousValue={previousStats?.equippedPercentage}
                 />
                 <StatCard
                     title="Unequipped"
@@ -136,29 +165,43 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <BaseChart height={300}>
-                        <PieChart>
-                            <Pie
-                                data={rarityChartData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={(entry) => `${entry.name}: ${entry.value}`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                            >
-                                {rarityChartData.map((entry, index) => (
-                                    <Cell
-                                        key={`cell-${index}`}
-                                        fill={
-                                            RARITY_COLORS[entry.name.toLowerCase()] ||
-                                            CHART_COLORS[index % CHART_COLORS.length]
-                                        }
-                                    />
-                                ))}
-                            </Pie>
-                            <Tooltip content={<ChartTooltip />} />
-                        </PieChart>
+                        {rarityMergedData ? (
+                            <BarChart data={rarityMergedData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                                <XAxis dataKey="name" stroke={colors.axisStroke} />
+                                <YAxis stroke={colors.axisStroke} />
+                                <Tooltip
+                                    content={<ChartTooltip />}
+                                    cursor={{ fill: 'transparent' }}
+                                />
+                                <Bar dataKey="current" name="Current" fill="#3b82f6" />
+                                <Bar dataKey="previous" name="Previous" fill="#6b7280" />
+                            </BarChart>
+                        ) : (
+                            <PieChart>
+                                <Pie
+                                    data={rarityChartData}
+                                    cx="50%"
+                                    cy="50%"
+                                    labelLine={false}
+                                    label={(entry) => `${entry.name}: ${entry.value}`}
+                                    outerRadius={80}
+                                    fill="#8884d8"
+                                    dataKey="value"
+                                >
+                                    {rarityChartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={
+                                                RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                CHART_COLORS[index % CHART_COLORS.length]
+                                            }
+                                        />
+                                    ))}
+                                </Pie>
+                                <Tooltip content={<ChartTooltip />} />
+                            </PieChart>
+                        )}
                     </BaseChart>
                 </div>
 
@@ -166,13 +209,30 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({ gear, ships 
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Type Distribution</h3>
                     <BaseChart height={300}>
-                        <BarChart data={typeChartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
-                            <XAxis dataKey="type" stroke={colors.axisStroke} />
-                            <YAxis stroke={colors.axisStroke} />
-                            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
-                            <Bar dataKey="count" fill="#8b5cf6" />
-                        </BarChart>
+                        {typeMergedData ? (
+                            <BarChart data={typeMergedData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                                <XAxis dataKey="name" stroke={colors.axisStroke} />
+                                <YAxis stroke={colors.axisStroke} />
+                                <Tooltip
+                                    content={<ChartTooltip />}
+                                    cursor={{ fill: 'transparent' }}
+                                />
+                                <Bar dataKey="current" name="Current" fill="#8b5cf6" />
+                                <Bar dataKey="previous" name="Previous" fill="#6b7280" />
+                            </BarChart>
+                        ) : (
+                            <BarChart data={typeChartData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                                <XAxis dataKey="type" stroke={colors.axisStroke} />
+                                <YAxis stroke={colors.axisStroke} />
+                                <Tooltip
+                                    content={<ChartTooltip />}
+                                    cursor={{ fill: 'transparent' }}
+                                />
+                                <Bar dataKey="count" fill="#8b5cf6" />
+                            </BarChart>
+                        )}
                     </BaseChart>
                 </div>
             </div>
