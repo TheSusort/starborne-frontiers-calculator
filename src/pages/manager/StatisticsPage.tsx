@@ -7,15 +7,16 @@ import { ShipsStatsTab } from '../../components/statistics/ShipsStatsTab';
 import { GearStatsTab } from '../../components/statistics/GearStatsTab';
 import { ImplantsStatsTab } from '../../components/statistics/ImplantsStatsTab';
 import { EngineeringStatsTab } from '../../components/statistics/EngineeringStatsTab';
+import { SnapshotSelector } from '../../components/statistics/SnapshotSelector';
+import { useStatisticsSnapshot } from '../../hooks/useStatisticsSnapshot';
 import { Link } from 'react-router-dom';
 
 export const StatisticsPage: React.FC = () => {
-    const { ships } = useShips();
-    const { inventory: gear } = useInventory();
-    const { engineeringStats } = useEngineeringStats();
+    const { ships, loading: shipsLoading } = useShips();
+    const { inventory: gear, loading: gearLoading } = useInventory();
+    const { engineeringStats, loading: engineeringLoading } = useEngineeringStats();
     const [activeTab, setActiveTab] = useState('ships');
 
-    // Separate gear and implants
     const gearOnly = useMemo(() => {
         return gear.filter((piece) => !piece.slot.startsWith('implant_'));
     }, [gear]);
@@ -25,8 +26,22 @@ export const StatisticsPage: React.FC = () => {
     }, [gear]);
 
     const hasData = ships.length > 0 || gear.length > 0;
+    const allContextsLoaded = !shipsLoading && !gearLoading && !engineeringLoading;
 
-    // Empty state
+    const {
+        snapshots,
+        selectedSnapshot,
+        selectedMonth,
+        setSelectedMonth,
+        loading: snapshotLoading,
+    } = useStatisticsSnapshot({
+        ships,
+        gear: gearOnly,
+        implants: implantsOnly,
+        engineeringStats: engineeringStats.stats,
+        allContextsLoaded,
+    });
+
     if (!hasData) {
         return (
             <PageLayout title="Statistics" description="View statistics about your fleet and gear">
@@ -51,7 +66,13 @@ export const StatisticsPage: React.FC = () => {
             description="Detailed statistics about your ships, gear, and engineering"
         >
             <div className="space-y-6">
-                {/* Tabs */}
+                <SnapshotSelector
+                    snapshots={snapshots}
+                    selectedMonth={selectedMonth}
+                    onChange={setSelectedMonth}
+                    loading={snapshotLoading}
+                />
+
                 <Tabs
                     tabs={[
                         { id: 'ships', label: `Ships (${ships.length})` },
@@ -63,12 +84,31 @@ export const StatisticsPage: React.FC = () => {
                     onChange={setActiveTab}
                 />
 
-                {/* Tab Content */}
-                {activeTab === 'ships' && <ShipsStatsTab ships={ships} />}
-                {activeTab === 'gear' && <GearStatsTab gear={gear} ships={ships} />}
-                {activeTab === 'implants' && <ImplantsStatsTab gear={gear} ships={ships} />}
+                {activeTab === 'ships' && (
+                    <ShipsStatsTab
+                        ships={ships}
+                        previousStats={selectedSnapshot?.shipsStats ?? undefined}
+                    />
+                )}
+                {activeTab === 'gear' && (
+                    <GearStatsTab
+                        gear={gear}
+                        ships={ships}
+                        previousStats={selectedSnapshot?.gearStats ?? undefined}
+                    />
+                )}
+                {activeTab === 'implants' && (
+                    <ImplantsStatsTab
+                        gear={gear}
+                        ships={ships}
+                        previousStats={selectedSnapshot?.implantsStats ?? undefined}
+                    />
+                )}
                 {activeTab === 'engineering' && (
-                    <EngineeringStatsTab engineeringStats={engineeringStats.stats} />
+                    <EngineeringStatsTab
+                        engineeringStats={engineeringStats.stats}
+                        previousStats={selectedSnapshot?.engineeringStats ?? undefined}
+                    />
                 )}
             </div>
         </PageLayout>
