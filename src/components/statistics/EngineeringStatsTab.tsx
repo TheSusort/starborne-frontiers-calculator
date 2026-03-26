@@ -8,6 +8,7 @@ import { EngineeringLeaderboards } from '../engineering/EngineeringLeaderboards'
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { EngineeringSnapshot } from '../../types/statisticsSnapshot';
 import { mergeDistributions } from '../../utils/statistics/mergeDistributions';
+import { ENGINEERING_CUMULATIVE_COSTS } from '../../constants/engineeringStats';
 
 interface EngineeringStatsTabProps {
     engineeringStats: EngineeringStat[];
@@ -30,6 +31,22 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
     const colors = useThemeColors();
     const stats = useMemo(() => {
         return calculateEngineeringStatistics(engineeringStats);
+    }, [engineeringStats]);
+
+    // Calculate total tokens spent (cumulative cost per stat level)
+    const totalTokens = useMemo(() => {
+        let tokens = 0;
+        engineeringStats.forEach((roleStat) => {
+            roleStat.stats.forEach((stat) => {
+                const level = stat.type === 'flat' ? (stat.value || 0) / 2 : stat.value || 0;
+                const clampedLevel = Math.min(
+                    Math.max(0, Math.round(level)),
+                    ENGINEERING_CUMULATIVE_COSTS.length - 1
+                );
+                tokens += ENGINEERING_CUMULATIVE_COSTS[clampedLevel];
+            });
+        });
+        return tokens;
     }, [engineeringStats]);
 
     // Prepare data for points by role chart
@@ -102,9 +119,9 @@ export const EngineeringStatsTab: React.FC<EngineeringStatsTabProps> = ({
                     color="yellow"
                 />
                 <StatCard
-                    title="Roles with 0 Points"
-                    value={stats.rolesWithZeroInvestment.length}
-                    color="red"
+                    title="Total Tokens Spent"
+                    value={totalTokens.toLocaleString()}
+                    color="purple"
                 />
             </div>
 

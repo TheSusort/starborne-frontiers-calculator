@@ -249,39 +249,71 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {stats.setsByType
                             .filter((typeData) => typeData.type.startsWith('Minor'))
-                            .map((typeData) => (
-                                <div key={typeData.type} className="flex flex-col">
-                                    <h5 className="text-md font-semibold mb-2 text-center">
-                                        {typeData.type}
-                                    </h5>
-                                    <BaseChart height={300}>
-                                        <BarChart
-                                            data={typeData.setBonuses}
-                                            layout="vertical"
-                                            margin={{ left: 20 }}
-                                        >
-                                            <CartesianGrid
-                                                strokeDasharray="3 3"
-                                                stroke={colors.gridStroke}
-                                            />
-                                            <XAxis type="number" stroke={colors.axisStroke} />
-                                            <YAxis
-                                                dataKey="setName"
-                                                type="category"
-                                                stroke={colors.axisStroke}
-                                                width={120}
-                                                interval={0}
-                                                style={{ fontSize: '10px' }}
-                                            />
-                                            <Tooltip
-                                                content={<ChartTooltip />}
-                                                cursor={{ fill: 'transparent' }}
-                                            />
-                                            <Bar dataKey="count" fill="#10b981" />
-                                        </BarChart>
-                                    </BaseChart>
-                                </div>
-                            ))}
+                            .map((typeData) => {
+                                const prevTypeData = previousStats?.setsByType?.find(
+                                    (p) => p.type === typeData.type
+                                );
+                                const chartData = prevTypeData
+                                    ? mergeDistributions(
+                                          typeData.setBonuses.map((s) => ({
+                                              name: s.setName,
+                                              value: s.count,
+                                          })),
+                                          prevTypeData.setBonuses.map((s) => ({
+                                              name: s.setName,
+                                              value: s.count,
+                                          }))
+                                      )
+                                    : null;
+                                return (
+                                    <div key={typeData.type} className="flex flex-col">
+                                        <h5 className="text-md font-semibold mb-2 text-center">
+                                            {typeData.type}
+                                        </h5>
+                                        <BaseChart height={300}>
+                                            <BarChart
+                                                data={chartData || typeData.setBonuses}
+                                                layout="vertical"
+                                                margin={{ left: 20 }}
+                                            >
+                                                <CartesianGrid
+                                                    strokeDasharray="3 3"
+                                                    stroke={colors.gridStroke}
+                                                />
+                                                <XAxis type="number" stroke={colors.axisStroke} />
+                                                <YAxis
+                                                    dataKey={chartData ? 'name' : 'setName'}
+                                                    type="category"
+                                                    stroke={colors.axisStroke}
+                                                    width={120}
+                                                    interval={0}
+                                                    style={{ fontSize: '10px' }}
+                                                />
+                                                <Tooltip
+                                                    content={<ChartTooltip />}
+                                                    cursor={{ fill: 'transparent' }}
+                                                />
+                                                {chartData ? (
+                                                    <>
+                                                        <Bar
+                                                            dataKey="current"
+                                                            name="Current"
+                                                            fill="#10b981"
+                                                        />
+                                                        <Bar
+                                                            dataKey="previous"
+                                                            name="Previous"
+                                                            fill="#6b7280"
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <Bar dataKey="count" fill="#10b981" />
+                                                )}
+                                            </BarChart>
+                                        </BaseChart>
+                                    </div>
+                                );
+                            })}
                     </div>
                 </div>
 
@@ -296,39 +328,71 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                 (typeData) =>
                                     typeData.type === 'Major' || typeData.type === 'Ultimate'
                             )
-                            .map((typeData) => (
-                                <div key={typeData.type} className="flex flex-col">
-                                    <h5 className="text-md font-semibold mb-2 text-center">
-                                        {typeData.type}
-                                    </h5>
-                                    <BaseChart height={400}>
-                                        <BarChart
-                                            data={typeData.setBonuses}
-                                            layout="vertical"
-                                            margin={{ left: 20 }}
-                                        >
-                                            <CartesianGrid
-                                                strokeDasharray="3 3"
-                                                stroke={colors.gridStroke}
-                                            />
-                                            <XAxis type="number" stroke={colors.axisStroke} />
-                                            <YAxis
-                                                dataKey="setName"
-                                                type="category"
-                                                stroke={colors.axisStroke}
-                                                width={150}
-                                                interval={0}
-                                                style={{ fontSize: '11px' }}
-                                            />
-                                            <Tooltip
-                                                content={<ChartTooltip />}
-                                                cursor={{ fill: 'transparent' }}
-                                            />
-                                            <Bar dataKey="count" fill="#3b82f6" />
-                                        </BarChart>
-                                    </BaseChart>
-                                </div>
-                            ))}
+                            .map((typeData) => {
+                                const prevTypeData = previousStats?.setsByType?.find(
+                                    (p) => p.type === typeData.type
+                                );
+                                const chartData = prevTypeData
+                                    ? mergeDistributions(
+                                          typeData.setBonuses.map((s) => ({
+                                              name: s.setName,
+                                              value: s.count,
+                                          })),
+                                          prevTypeData.setBonuses.map((s) => ({
+                                              name: s.setName,
+                                              value: s.count,
+                                          }))
+                                      )
+                                    : null;
+                                return (
+                                    <div key={typeData.type} className="flex flex-col">
+                                        <h5 className="text-md font-semibold mb-2 text-center">
+                                            {typeData.type}
+                                        </h5>
+                                        <BaseChart height={400}>
+                                            <BarChart
+                                                data={chartData || typeData.setBonuses}
+                                                layout="vertical"
+                                                margin={{ left: 20 }}
+                                            >
+                                                <CartesianGrid
+                                                    strokeDasharray="3 3"
+                                                    stroke={colors.gridStroke}
+                                                />
+                                                <XAxis type="number" stroke={colors.axisStroke} />
+                                                <YAxis
+                                                    dataKey={chartData ? 'name' : 'setName'}
+                                                    type="category"
+                                                    stroke={colors.axisStroke}
+                                                    width={150}
+                                                    interval={0}
+                                                    style={{ fontSize: '11px' }}
+                                                />
+                                                <Tooltip
+                                                    content={<ChartTooltip />}
+                                                    cursor={{ fill: 'transparent' }}
+                                                />
+                                                {chartData ? (
+                                                    <>
+                                                        <Bar
+                                                            dataKey="current"
+                                                            name="Current"
+                                                            fill="#3b82f6"
+                                                        />
+                                                        <Bar
+                                                            dataKey="previous"
+                                                            name="Previous"
+                                                            fill="#6b7280"
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <Bar dataKey="count" fill="#3b82f6" />
+                                                )}
+                                            </BarChart>
+                                        </BaseChart>
+                                    </div>
+                                );
+                            })}
                     </div>
                 </div>
             </div>
