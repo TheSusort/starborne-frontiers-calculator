@@ -136,6 +136,38 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
             c.fill();
         };
 
+        // Helper: draw fighter from behind (overhead ships flying away)
+        const drawFighterRear = (c: CanvasRenderingContext2D, s: number) => {
+            c.beginPath();
+            // Fuselage center
+            c.moveTo(0, -s * 0.8);
+            // Right side of fuselage
+            c.lineTo(s * 0.4, -s * 0.5);
+            // Right wing
+            c.lineTo(s * 2.0, -s * 0.2);
+            c.lineTo(s * 2.2, s * 0.1);
+            c.lineTo(s * 0.6, s * 0.2);
+            // Right engine
+            c.lineTo(s * 0.5, s * 0.6);
+            c.lineTo(s * 0.2, s * 0.6);
+            // Tail center
+            c.lineTo(s * 0.15, s * 0.3);
+            // Dorsal fin
+            c.lineTo(0, -s * 0.1);
+            c.lineTo(-s * 0.15, s * 0.3);
+            // Left engine
+            c.lineTo(-s * 0.2, s * 0.6);
+            c.lineTo(-s * 0.5, s * 0.6);
+            c.lineTo(-s * 0.6, s * 0.2);
+            // Left wing
+            c.lineTo(-s * 2.2, s * 0.1);
+            c.lineTo(-s * 2.0, -s * 0.2);
+            // Left side of fuselage
+            c.lineTo(-s * 0.4, -s * 0.5);
+            c.closePath();
+            c.fill();
+        };
+
         // Helper: draw contrail as single batched path per alpha bucket
         const drawContrail = (
             c: CanvasRenderingContext2D,
@@ -348,7 +380,6 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                     const screenY = (os.startY + (1.0 - os.startY) * t) * horizonY;
                     const shipScale = Math.max(1 - t * 0.85, 0.1);
                     const s = 5 * shipScale;
-                    const facingDir = os.startX < 0.5 ? 1 : -1;
 
                     // Only add trail points while still flying
                     if (t < 1.0) {
@@ -366,17 +397,17 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
                     if (s > 0.4 && t < 1.0) {
                         ctx.save();
                         ctx.translate(screenX, screenY);
-                        ctx.scale(facingDir, 1);
                         ctx.fillStyle = '#0d0620';
-                        drawFighter(ctx, s);
+                        drawFighterRear(ctx, s);
 
-                        // Engine glow — radial gradient, no shadowBlur
-                        const eg = ctx.createRadialGradient(-s, 0, 0, -s, 0, s * 2);
-                        eg.addColorStop(0, 'rgba(220, 180, 255, 0.8)');
+                        // Engine glow — at tail, connecting into contrail above
+                        const eg = ctx.createRadialGradient(0, -s * 0.2, 0, 0, -s * 0.2, s * 1.5);
+                        eg.addColorStop(0, 'rgba(220, 180, 255, 0.7)');
                         eg.addColorStop(0.4, 'rgba(180, 100, 255, 0.3)');
                         eg.addColorStop(1, 'rgba(0, 0, 0, 0)');
                         ctx.fillStyle = eg;
-                        ctx.fillRect(-s * 3, -s * 2, s * 4, s * 4);
+                        ctx.fillRect(-s * 1.5, -s * 1.7, s * 3, s * 3);
+
                         ctx.restore();
                     }
 
