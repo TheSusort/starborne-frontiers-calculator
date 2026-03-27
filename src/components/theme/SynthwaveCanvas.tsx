@@ -315,6 +315,10 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
 
             // Sun body — cached offscreen canvas, redrawn every ~3 frames
             const sunFrame = Math.floor(time / 50); // ~20fps for sun stripes
+            if (canvas.width === 0 || canvas.height === 0) {
+                animationRef.current = requestAnimationFrame(render);
+                return;
+            }
             if (!sunCanvasRef.current || sunFrame !== lastSunDrawRef.current) {
                 if (!sunCanvasRef.current) {
                     sunCanvasRef.current = document.createElement('canvas');
