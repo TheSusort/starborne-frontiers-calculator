@@ -114,6 +114,15 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
         resize();
         window.addEventListener('resize', resize);
 
+        // Observe the canvas element so we re-resize when it becomes visible
+        // (e.g. parent goes from display:none to display:block on theme swap)
+        const resizeObserver = new ResizeObserver(() => {
+            if (canvas.offsetWidth > 0 && canvas.offsetHeight > 0) {
+                resize();
+            }
+        });
+        resizeObserver.observe(canvas);
+
         // Helper: draw fighter silhouette at current transform
         const drawFighter = (c: CanvasRenderingContext2D, s: number) => {
             c.beginPath();
@@ -781,6 +790,7 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
 
         return () => {
             window.removeEventListener('resize', resize);
+            resizeObserver.disconnect();
             if (animationRef.current) {
                 cancelAnimationFrame(animationRef.current);
             }
