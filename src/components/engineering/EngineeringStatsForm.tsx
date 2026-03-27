@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { EngineeringStat, Stat, StatName } from '../../types/stats';
 import { ShipTypeName, SHIP_TYPES, STATS } from '../../constants';
 import {
@@ -44,7 +44,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     }));
 
     // Build stats array from role's fixed stats, preserving existing values
-    const buildStatsForRole = (role: StatName[], existingStats: Stat[]): Stat[] => {
+    const buildStatsForRole = useCallback((role: StatName[], existingStats: Stat[]): Stat[] => {
         return role.map((statName) => {
             const existing = existingStats.find((s) => s.name === statName);
             return {
@@ -53,18 +53,18 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
                 type: isEngineeringFlatStat(statName) ? 'flat' : 'percentage',
             } as Stat;
         });
-    };
+    }, []);
 
     // When ship type changes, rebuild stats for the new role
     useEffect(() => {
-        setStats(buildStatsForRole(roleStats, stats));
-    }, [roleStats]);
+        setStats((prev) => buildStatsForRole(roleStats, prev));
+    }, [roleStats, buildStatsForRole]);
 
     // Reset form to initial state
-    const resetForm = () => {
+    const resetForm = useCallback(() => {
         setShipType('ATTACKER');
         setStats(buildStatsForRole(ENGINEERING_STATS_BY_ROLE['ATTACKER'], []));
-    };
+    }, [buildStatsForRole]);
 
     useEffect(() => {
         if (initialStats) {
@@ -73,7 +73,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
         } else {
             resetForm();
         }
-    }, [initialStats]);
+    }, [initialStats, roleStats, buildStatsForRole, resetForm]);
 
     const handleValueChange = (statName: StatName, value: number) => {
         setStats((prev) => prev.map((s) => (s.name === statName ? { ...s, value } : s)));

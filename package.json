@@ -50,12 +50,6 @@
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
         "admin:import": "tsx scripts/admin-import.ts"
     },
-    "eslintConfig": {
-        "extends": [
-            "react-app",
-            "react-app/jest"
-        ]
-    },
     "browserslist": {
         "production": [
             ">0.2%",

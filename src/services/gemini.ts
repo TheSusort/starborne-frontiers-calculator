@@ -227,7 +227,6 @@ Example correct outputs:
 export const getGeminiService = (): GeminiService | null => {
     const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
     if (!apiKey) {
-        // eslint-disable-next-line no-console
         console.warn('Google API key not found in environment variables');
         return null;
     }

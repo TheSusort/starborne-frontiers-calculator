@@ -253,7 +253,6 @@ Example correct outputs:
 export const getOpenRouterService = (): OpenRouterService | null => {
     const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
     if (!apiKey) {
-        // eslint-disable-next-line no-console
         console.warn('OpenRouter API key not found in environment variables');
         return null;
     }

@@ -7,7 +7,6 @@ import { Input } from '../components/ui/Input';
 import { Checkbox } from '../components/ui/Checkbox';
 import { Loader } from '../components/ui/Loader';
 import { StatCard } from '../components/ui/StatCard';
-import { Select } from '../components/ui/Select';
 import {
     getUserProfile,
     updateUserProfile,

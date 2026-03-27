@@ -10,7 +10,6 @@ import { Sun, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthProvider';
 import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
-import { InstallButton } from '../InstallButton';
 import { isAdmin } from '../../../services/adminService';
 import { useTheme } from '../../../contexts/ThemeContext';
 
