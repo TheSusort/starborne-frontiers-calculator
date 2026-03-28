@@ -34,7 +34,7 @@ const IMPLANT_TYPE_TO_STAT: Record<string, StatName> = {
 /**
  * Get the primary stat an implant type provides.
  */
-export function getImplantTypeStat(setBonus: string | null): StatName | null {
+function getImplantTypeStat(setBonus: string | null): StatName | null {
     if (!setBonus) return null;
     return IMPLANT_TYPE_TO_STAT[setBonus] || null;
 }
@@ -46,7 +46,7 @@ export function getImplantTypeStat(setBonus: string | null): StatName | null {
  * Higher priority stats (earlier in list) get exponentially higher weights.
  * Stats not in priorities get zero weight.
  */
-export function scoreImplantForPriorities(implant: GearPiece, priorities: StatPriority[]): number {
+function scoreImplantForPriorities(implant: GearPiece, priorities: StatPriority[]): number {
     if (!implant.subStats || implant.subStats.length === 0) {
         return 0;
     }

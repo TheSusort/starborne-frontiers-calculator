@@ -11,6 +11,3 @@ export * from './shipTypes';
 export * from './stats';
 export * from './statValues';
 export * from './storage';
-
-// Create lazy loaded exports for heavy data
-export const loadShips = () => import('./ships').then((m) => m.SHIPS);

@@ -1,0 +1,11 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": ["src/index.tsx", "src/App.tsx"],
+    "project": ["src/**/*.{ts,tsx}"],
+    "ignore": ["src/test-utils/**"],
+    "ignoreDependencies": [
+        "@testing-library/jest-dom",
+        "@testing-library/react",
+        "@testing-library/user-event"
+    ]
+}

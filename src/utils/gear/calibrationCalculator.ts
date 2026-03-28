@@ -159,24 +159,6 @@ export function getCalibratedMainStat(gear: GearPiece): Stat | null {
 }
 
 /**
- * Calculate the calibration bonus value for display purposes.
- * Returns the difference between calibrated and base (uncalibrated) value.
- * Always calculates from base stat, even if gear is already calibrated.
- */
-export function getCalibrationBonus(gear: GearPiece): number {
-    if (!gear.mainStat || !isCalibrationEligible(gear)) {
-        return 0;
-    }
-
-    // Get base stat (reverse calibration if already calibrated)
-    const baseStat = getBaseMainStat(gear);
-    if (!baseStat) return 0;
-
-    const calibratedValue = calculateCalibratedStatValue(baseStat, gear.stars);
-    return calibratedValue - baseStat.value;
-}
-
-/**
  * Create a copy of the gear piece with calibration stats applied to main stat.
  * Always calculates from base stat to ensure consistency.
  */

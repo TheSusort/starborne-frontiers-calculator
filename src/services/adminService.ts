@@ -93,27 +93,6 @@ export async function getDailyUsageStats(daysBack: number = 30): Promise<DailyUs
 }
 
 /**
- * Get top active users
- */
-export async function getTopActiveUsers(limit: number = 5): Promise<TopUser[] | null> {
-    try {
-        const { data, error } = await supabase.rpc('get_top_active_users', {
-            limit_count: limit,
-        });
-
-        if (error) {
-            console.error('Error fetching top active users:', error);
-            return null;
-        }
-
-        return data;
-    } catch (error) {
-        console.error('Error fetching top active users:', error);
-        return null;
-    }
-}
-
-/**
  * Get total user count
  */
 export async function getTotalUserCount(): Promise<number> {

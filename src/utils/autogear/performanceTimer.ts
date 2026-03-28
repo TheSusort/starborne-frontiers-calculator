@@ -9,7 +9,7 @@ export interface PerformanceTimer {
     totalTime: number;
 }
 
-export class PerformanceTracker {
+class PerformanceTracker {
     private timers: Map<string, PerformanceTimer> = new Map();
     private currentTimer?: PerformanceTimer;
     private stack: (PerformanceTimer | undefined)[] = [];

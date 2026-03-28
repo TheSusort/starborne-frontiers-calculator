@@ -119,7 +119,7 @@ function getArcaneSiegeBaseMultiplier(
  *
  * Optimized to reuse setCount and cache implant lookup.
  */
-export function calculateArcaneSiegeMultiplier(
+function calculateArcaneSiegeMultiplier(
     ship: Ship,
     setCount: Record<string, number>,
     getGearPiece: (id: string) => GearPiece | undefined
@@ -139,7 +139,7 @@ export function calculateArcaneSiegeMultiplier(
     return baseMultiplier;
 }
 
-export function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): number {
+function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): number {
     const attack = stats.attack || 0;
     const critMultiplier = calculateCritMultiplier(stats);
     const defensePenetration = stats.defensePenetration || 0;

@@ -63,7 +63,7 @@ export const AUTOGEAR_INITIAL_TUTORIAL: TutorialGroup = {
 };
 
 // Autogear - community recommendations (deferred, after ship select)
-export const AUTOGEAR_COMMUNITY_TUTORIAL: TutorialGroup = {
+const AUTOGEAR_COMMUNITY_TUTORIAL: TutorialGroup = {
     id: 'autogear-community',
     steps: [
         {
@@ -94,7 +94,7 @@ export const AUTOGEAR_RESULTS_TUTORIAL: TutorialGroup = {
 };
 
 // Autogear settings modal (deferred, on first open)
-export const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
+const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
     id: 'autogear-settings',
     steps: [
         {

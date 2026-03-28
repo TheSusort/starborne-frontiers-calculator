@@ -37,7 +37,7 @@ export const ENGINEERING_CUMULATIVE_COSTS = [
     147200, // level 20
 ] as const;
 
-export const MAX_ENGINEERING_LEVEL = 20;
+const MAX_ENGINEERING_LEVEL = 20;
 
 /**
  * Get the cost to upgrade from currentLevel to currentLevel + 1

@@ -45,14 +45,6 @@ export function startHeartbeat(userId: string | null): void {
     intervalId = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
 }
 
-export function stopHeartbeat(): void {
-    if (intervalId !== null) {
-        clearInterval(intervalId);
-        intervalId = null;
-    }
-    currentUserId = null;
-}
-
 export function updateHeartbeatUser(userId: string | null): void {
     currentUserId = userId;
 }

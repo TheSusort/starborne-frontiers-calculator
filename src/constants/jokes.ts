@@ -1,4 +1,4 @@
-export const JOKES = [
+const JOKES = [
     'Why did the sun go to school? To get brighter!',
     'What kind of music do planets like? Nep-tunes!',
     "What do you call a star that doesn't shower? A smelly dwarf!",

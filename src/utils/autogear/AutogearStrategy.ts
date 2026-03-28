@@ -31,33 +31,3 @@ export enum AutogearAlgorithm {
     Genetic = 'genetic',
     // BruteForce = 'bruteForce',
 }
-
-export const AUTOGEAR_STRATEGIES: Record<
-    AutogearAlgorithm,
-    {
-        name: string;
-        description: string;
-    }
-> = {
-    [AutogearAlgorithm.TwoPass]: {
-        name: 'Two-Pass Algorithm',
-        description: 'Fast algorithm that first optimizes stats, then looks for set opportunities',
-    },
-    [AutogearAlgorithm.SetFirst]: {
-        name: 'Set-First Approach',
-        description: 'Prioritizes completing gear sets before individual stat optimization',
-    },
-    [AutogearAlgorithm.BeamSearch]: {
-        name: 'Beam Search',
-        description: 'Balanced approach keeping multiple possible configurations in consideration',
-    },
-    [AutogearAlgorithm.Genetic]: {
-        name: 'Genetic Algorithm',
-        description: 'Evolution-inspired approach for finding optimal gear combinations',
-    },
-    /*[AutogearAlgorithm.BruteForce]: {
-        name: 'Brute Force',
-        description:
-            'Tries every possible combination to find the absolute best gear setup (may crash browser)',
-    },*/
-};

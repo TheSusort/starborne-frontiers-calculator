@@ -1,6 +1,6 @@
 import { DiffResult } from '../../types/diff';
 
-export const compareValues = (oldValue: unknown, newValue: unknown): boolean => {
+const compareValues = (oldValue: unknown, newValue: unknown): boolean => {
     if (typeof oldValue !== typeof newValue) return false;
     if (typeof oldValue === 'object' && oldValue !== null && newValue !== null) {
         return JSON.stringify(oldValue) === JSON.stringify(newValue);

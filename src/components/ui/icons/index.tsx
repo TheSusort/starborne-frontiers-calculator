@@ -1,4 +1,3 @@
-export * from './ArrowLeftIcon';
 export * from './CalibrationIcon';
 export * from './ChartIcon';
 export * from './CompareIcon';

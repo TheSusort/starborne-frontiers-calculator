@@ -4,7 +4,7 @@ import { GearSuggestion } from '../../types/autogear';
 import { RarityName } from '../../constants/rarities';
 
 // Arcane Siege multiplier values by rarity
-export const ARCANE_SIEGE_MULTIPLIERS: Record<RarityName, number> = {
+const ARCANE_SIEGE_MULTIPLIERS: Record<RarityName, number> = {
     common: 3,
     uncommon: 5,
     rare: 10,
@@ -32,19 +32,6 @@ export function getArcaneSiegeInfo(
     }
 
     return { hasImplant: false, multiplier: 0, rarity: null };
-}
-
-/**
- * Check if suggestions include shield gear pieces
- */
-export function hasShieldGearInSuggestions(
-    suggestions: GearSuggestion[],
-    getGearPiece: (id: string) => GearPiece | undefined
-): boolean {
-    return suggestions.some((suggestion) => {
-        const gear = getGearPiece(suggestion.gearId);
-        return gear?.setBonus === 'SHIELD';
-    });
 }
 
 /**

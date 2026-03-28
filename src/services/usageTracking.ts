@@ -54,32 +54,3 @@ export async function trackDataImport(userId?: string | null): Promise<void> {
         console.error('Error tracking data import:', error);
     }
 }
-
-/**
- * Gets usage stats for a user
- */
-export async function getUserUsageStats(userId: string): Promise<{
-    autogearRunCount: number;
-    dataImportCount: number;
-} | null> {
-    try {
-        const { data, error } = await supabase
-            .from('users')
-            .select('autogear_run_count, data_import_count')
-            .eq('id', userId)
-            .single();
-
-        if (error) {
-            console.error('Error getting usage stats:', error);
-            return null;
-        }
-
-        return {
-            autogearRunCount: data?.autogear_run_count || 0,
-            dataImportCount: data?.data_import_count || 0,
-        };
-    } catch (error) {
-        console.error('Error getting usage stats:', error);
-        return null;
-    }
-}
