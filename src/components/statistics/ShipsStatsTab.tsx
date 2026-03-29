@@ -307,11 +307,41 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                                 />
                                 {previousStats ? (
                                     <>
-                                        <Bar dataKey="current" fill="#f59e0b" name="Current" />
-                                        <Bar dataKey="previous" fill="#f59e0b66" name="Previous" />
+                                        <Bar dataKey="current" name="Current">
+                                            {refitsByRarityData.map((entry, index) => (
+                                                <Cell
+                                                    key={`current-${index}`}
+                                                    fill={
+                                                        RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                        '#f59e0b'
+                                                    }
+                                                />
+                                            ))}
+                                        </Bar>
+                                        <Bar dataKey="previous" name="Previous">
+                                            {refitsByRarityData.map((entry, index) => (
+                                                <Cell
+                                                    key={`previous-${index}`}
+                                                    fill={
+                                                        (RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                            '#f59e0b') + '66'
+                                                    }
+                                                />
+                                            ))}
+                                        </Bar>
                                     </>
                                 ) : (
-                                    <Bar dataKey="value" fill="#f59e0b" />
+                                    <Bar dataKey="value">
+                                        {refitsByRarityData.map((entry, index) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={
+                                                    RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                    '#f59e0b'
+                                                }
+                                            />
+                                        ))}
+                                    </Bar>
                                 )}
                             </BarChart>
                         </BaseChart>

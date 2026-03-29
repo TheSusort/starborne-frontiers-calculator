@@ -1,5 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+    BarChart,
+    Bar,
+    PieChart,
+    Pie,
+    Cell,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+} from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { GearSetName } from '../../constants';
@@ -37,6 +48,64 @@ const RARITY_COLORS: Record<string, string> = {
     epic: '#a855f7',
     legendary: '#f97316',
 };
+
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+function buildRarityStackedData(
+    gear: GearPiece[],
+    groupBy: (piece: GearPiece) => string,
+    topN?: number,
+    fixedOrder?: string[]
+): { data: Record<string, string | number>[]; rarities: string[] } {
+    // Group gear by category, then by rarity within each category
+    const groupMap = new Map<string, Map<string, number>>();
+    const totalByGroup = new Map<string, number>();
+
+    gear.forEach((piece) => {
+        const group = groupBy(piece);
+        if (!groupMap.has(group)) {
+            groupMap.set(group, new Map());
+        }
+        const rarityMap = groupMap.get(group)!;
+        const rarity = piece.rarity || 'common';
+        rarityMap.set(rarity, (rarityMap.get(rarity) || 0) + 1);
+        totalByGroup.set(group, (totalByGroup.get(group) || 0) + 1);
+    });
+
+    // Sort by total count descending (or use fixed order), then take top N
+    let sortedGroups: string[];
+    if (fixedOrder) {
+        sortedGroups = fixedOrder.filter((name) => groupMap.has(name));
+    } else {
+        sortedGroups = Array.from(totalByGroup.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([name]) => name);
+    }
+
+    if (topN) {
+        sortedGroups = sortedGroups.slice(0, topN);
+    }
+
+    // Find which rarities are actually present
+    const presentRarities = new Set<string>();
+    sortedGroups.forEach((group) => {
+        const rarityMap = groupMap.get(group)!;
+        rarityMap.forEach((_, rarity) => presentRarities.add(rarity));
+    });
+    const rarities = RARITY_ORDER.filter((r) => presentRarities.has(r));
+
+    // Build stacked data
+    const data = sortedGroups.map((group) => {
+        const row: Record<string, string | number> = { name: group };
+        const rarityMap = groupMap.get(group)!;
+        rarities.forEach((rarity) => {
+            row[rarity] = rarityMap.get(rarity) || 0;
+        });
+        return row;
+    });
+
+    return { data, rarities };
+}
 
 export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previousStats }) => {
     const colors = useThemeColors();
@@ -120,6 +189,58 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
               previousStats.bySlot.map((s) => ({ name: s.slot, value: s.count }))
           )
         : slotCurrentData;
+
+    // Rarity-stacked data for charts (non-comparison mode)
+    const setByRarity = useMemo(
+        () => buildRarityStackedData(filteredGear, (p) => p.setBonus || 'None', 10),
+        [filteredGear]
+    );
+
+    const mainStatByRarity = useMemo(
+        () =>
+            buildRarityStackedData(
+                filteredGear.filter((p) => p.mainStat),
+                (p) => `${p.mainStat!.name} (${p.mainStat!.type})`,
+                10
+            ),
+        [filteredGear]
+    );
+
+    const starByRarity = useMemo(
+        () =>
+            buildRarityStackedData(
+                filteredGear,
+                (p) => String(p.stars || 1) + ' \u2605',
+                undefined,
+                ['1 \u2605', '2 \u2605', '3 \u2605', '4 \u2605', '5 \u2605', '6 \u2605']
+            ),
+        [filteredGear]
+    );
+
+    const levelByRarity = useMemo(() => {
+        const levelBins = [
+            { min: 0, max: 3, label: '0-3' },
+            { min: 4, max: 7, label: '4-7' },
+            { min: 8, max: 11, label: '8-11' },
+            { min: 12, max: 15, label: '12-15' },
+            { min: 16, max: 16, label: '16 (Max)' },
+        ];
+        return buildRarityStackedData(
+            filteredGear,
+            (p) => {
+                const level = p.level || 1;
+                const bin = levelBins.find((b) => level >= b.min && level <= b.max);
+                return bin?.label || 'Unknown';
+            },
+            undefined,
+            levelBins.map((b) => b.label)
+        );
+    }, [filteredGear]);
+
+    const slotByRarity = useMemo(
+        () => buildRarityStackedData(filteredGear, (p) => p.slot || 'UNKNOWN'),
+        [filteredGear]
+    );
 
     // Get unique main stat types for filter
     const mainStatOptions = useMemo(() => {
@@ -264,7 +385,10 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Top 10 Gear Sets</h3>
                     <BaseChart height={300}>
-                        <BarChart data={setChartData} layout="vertical">
+                        <BarChart
+                            data={previousStats ? setChartData : setByRarity.data}
+                            layout="vertical"
+                        >
                             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                             <XAxis type="number" stroke={colors.axisStroke} />
                             <YAxis
@@ -282,8 +406,19 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                     <Bar dataKey="previous" fill="#3b82f666" name="Previous" />
                                 </>
                             ) : (
-                                <Bar dataKey="value" fill="#3b82f6" />
+                                <>
+                                    {setByRarity.rarities.map((rarity) => (
+                                        <Bar
+                                            key={rarity}
+                                            dataKey={rarity}
+                                            stackId="a"
+                                            fill={RARITY_COLORS[rarity]}
+                                            name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                        />
+                                    ))}
+                                </>
                             )}
+                            <Legend />
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -292,7 +427,10 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Top 10 Main Stats</h3>
                     <BaseChart height={300}>
-                        <BarChart data={mainStatChartData} layout="vertical">
+                        <BarChart
+                            data={previousStats ? mainStatChartData : mainStatByRarity.data}
+                            layout="vertical"
+                        >
                             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                             <XAxis type="number" stroke={colors.axisStroke} />
                             <YAxis
@@ -310,8 +448,19 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                     <Bar dataKey="previous" fill="#10b98166" name="Previous" />
                                 </>
                             ) : (
-                                <Bar dataKey="value" fill="#10b981" />
+                                <>
+                                    {mainStatByRarity.rarities.map((rarity) => (
+                                        <Bar
+                                            key={rarity}
+                                            dataKey={rarity}
+                                            stackId="a"
+                                            fill={RARITY_COLORS[rarity]}
+                                            name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                        />
+                                    ))}
+                                </>
                             )}
+                            <Legend />
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -372,7 +521,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 <div className="card">
                     <h3 className="text-lg font-semibold mb-4">Star Level Distribution</h3>
                     <BaseChart height={300}>
-                        <BarChart data={starChartData}>
+                        <BarChart data={previousStats ? starChartData : starByRarity.data}>
                             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                             <XAxis dataKey="name" stroke={colors.axisStroke} />
                             <YAxis stroke={colors.axisStroke} />
@@ -383,8 +532,19 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                     <Bar dataKey="previous" fill="#f59e0b66" name="Previous" />
                                 </>
                             ) : (
-                                <Bar dataKey="value" fill="#f59e0b" />
+                                <>
+                                    {starByRarity.rarities.map((rarity) => (
+                                        <Bar
+                                            key={rarity}
+                                            dataKey={rarity}
+                                            stackId="a"
+                                            fill={RARITY_COLORS[rarity]}
+                                            name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                        />
+                                    ))}
+                                </>
                             )}
+                            <Legend />
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -393,7 +553,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 <div className="card lg:col-span-2">
                     <h3 className="text-lg font-semibold mb-4">Level Distribution</h3>
                     <BaseChart height={300}>
-                        <BarChart data={levelChartData}>
+                        <BarChart data={previousStats ? levelChartData : levelByRarity.data}>
                             <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                             <XAxis dataKey="name" stroke={colors.axisStroke} />
                             <YAxis stroke={colors.axisStroke} />
@@ -404,8 +564,19 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                     <Bar dataKey="previous" fill="#8b5cf666" name="Previous" />
                                 </>
                             ) : (
-                                <Bar dataKey="value" fill="#8b5cf6" />
+                                <>
+                                    {levelByRarity.rarities.map((rarity) => (
+                                        <Bar
+                                            key={rarity}
+                                            dataKey={rarity}
+                                            stackId="a"
+                                            fill={RARITY_COLORS[rarity]}
+                                            name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                        />
+                                    ))}
+                                </>
                             )}
+                            <Legend />
                         </BarChart>
                     </BaseChart>
                 </div>
@@ -415,7 +586,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
             <div className="card">
                 <h3 className="text-lg font-semibold mb-4">Gear by Slot</h3>
                 <BaseChart height={300}>
-                    <BarChart data={slotChartData}>
+                    <BarChart data={previousStats ? slotChartData : slotByRarity.data}>
                         <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                         <XAxis dataKey="name" stroke={colors.axisStroke} />
                         <YAxis stroke={colors.axisStroke} />
@@ -426,8 +597,19 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                 <Bar dataKey="previous" fill="#06b6d466" name="Previous" />
                             </>
                         ) : (
-                            <Bar dataKey="value" fill="#06b6d4" />
+                            <>
+                                {slotByRarity.rarities.map((rarity) => (
+                                    <Bar
+                                        key={rarity}
+                                        dataKey={rarity}
+                                        stackId="a"
+                                        fill={RARITY_COLORS[rarity]}
+                                        name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                    />
+                                ))}
+                            </>
                         )}
+                        <Legend />
                     </BarChart>
                 </BaseChart>
             </div>

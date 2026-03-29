@@ -1,5 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+    BarChart,
+    Bar,
+    PieChart,
+    Pie,
+    Cell,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+} from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
@@ -31,6 +42,63 @@ const RARITY_COLORS: Record<string, string> = {
     epic: '#a855f7', // purple
     legendary: '#f97316', // orange
 };
+
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+const IMPLANT_TYPE_LABELS: Record<string, string> = {
+    implant_minor_alpha: 'Minor Alpha',
+    implant_minor_gamma: 'Minor Gamma',
+    implant_minor_sigma: 'Minor Sigma',
+    implant_major: 'Major',
+    implant_ultimate: 'Ultimate',
+};
+
+function buildImplantRarityStackedData(
+    implants: GearPiece[],
+    groupBy: (piece: GearPiece) => string,
+    fixedOrder?: string[]
+): { data: Record<string, string | number>[]; rarities: string[] } {
+    const groupMap = new Map<string, Map<string, number>>();
+    const totalByGroup = new Map<string, number>();
+
+    implants.forEach((piece) => {
+        const group = groupBy(piece);
+        if (!groupMap.has(group)) {
+            groupMap.set(group, new Map());
+        }
+        const rarityMap = groupMap.get(group)!;
+        const rarity = piece.rarity || 'common';
+        rarityMap.set(rarity, (rarityMap.get(rarity) || 0) + 1);
+        totalByGroup.set(group, (totalByGroup.get(group) || 0) + 1);
+    });
+
+    let sortedGroups: string[];
+    if (fixedOrder) {
+        sortedGroups = fixedOrder.filter((name) => groupMap.has(name));
+    } else {
+        sortedGroups = Array.from(totalByGroup.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([name]) => name);
+    }
+
+    const presentRarities = new Set<string>();
+    sortedGroups.forEach((group) => {
+        const rarityMap = groupMap.get(group)!;
+        rarityMap.forEach((_, rarity) => presentRarities.add(rarity));
+    });
+    const rarities = RARITY_ORDER.filter((r) => presentRarities.has(r));
+
+    const data = sortedGroups.map((group) => {
+        const row: Record<string, string | number> = { name: group };
+        const rarityMap = groupMap.get(group)!;
+        rarities.forEach((rarity) => {
+            row[rarity] = rarityMap.get(rarity) || 0;
+        });
+        return row;
+    });
+
+    return { data, rarities };
+}
 
 export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
     gear,
@@ -82,7 +150,38 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
           )
         : null;
 
-    const typeChartData = stats.byType;
+    // Rarity-stacked data for type distribution
+    const typeByRarity = useMemo(
+        () =>
+            buildImplantRarityStackedData(
+                filteredImplants,
+                (p) => IMPLANT_TYPE_LABELS[p.slot] || p.slot
+            ),
+        [filteredImplants]
+    );
+
+    // Rarity-stacked data for set bonus distribution per implant type
+    const setsByTypeByRarity = useMemo(() => {
+        const typeGroups = new Map<string, GearPiece[]>();
+        filteredImplants.forEach((implant) => {
+            const type = IMPLANT_TYPE_LABELS[implant.slot] || implant.slot;
+            if (!typeGroups.has(type)) {
+                typeGroups.set(type, []);
+            }
+            typeGroups.get(type)!.push(implant);
+        });
+
+        const order = ['Minor Alpha', 'Minor Gamma', 'Minor Sigma', 'Major', 'Ultimate'];
+        return order
+            .filter((type) => typeGroups.has(type))
+            .map((type) => ({
+                type,
+                ...buildImplantRarityStackedData(
+                    typeGroups.get(type)!,
+                    (p) => p.setBonus || 'None'
+                ),
+            }));
+    }, [filteredImplants]);
 
     // Get unique implant types for filter
     const typeOptions = useMemo(() => {
@@ -221,15 +320,24 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                 <Bar dataKey="previous" name="Previous" fill="#6b7280" />
                             </BarChart>
                         ) : (
-                            <BarChart data={typeChartData}>
+                            <BarChart data={typeByRarity.data}>
                                 <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
-                                <XAxis dataKey="type" stroke={colors.axisStroke} />
+                                <XAxis dataKey="name" stroke={colors.axisStroke} />
                                 <YAxis stroke={colors.axisStroke} />
                                 <Tooltip
                                     content={<ChartTooltip />}
                                     cursor={{ fill: 'transparent' }}
                                 />
-                                <Bar dataKey="count" fill="#8b5cf6" />
+                                {typeByRarity.rarities.map((rarity) => (
+                                    <Bar
+                                        key={rarity}
+                                        dataKey={rarity}
+                                        stackId="a"
+                                        fill={RARITY_COLORS[rarity]}
+                                        name={rarity.charAt(0).toUpperCase() + rarity.slice(1)}
+                                    />
+                                ))}
+                                <Legend />
                             </BarChart>
                         )}
                     </BaseChart>
@@ -264,6 +372,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                           }))
                                       )
                                     : null;
+                                const rarityData = setsByTypeByRarity.find(
+                                    (s) => s.type === typeData.type
+                                );
                                 return (
                                     <div key={typeData.type} className="flex flex-col">
                                         <h5 className="text-md font-semibold mb-2 text-center">
@@ -271,7 +382,11 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                         </h5>
                                         <BaseChart height={300}>
                                             <BarChart
-                                                data={chartData || typeData.setBonuses}
+                                                data={
+                                                    chartData ||
+                                                    rarityData?.data ||
+                                                    typeData.setBonuses
+                                                }
                                                 layout="vertical"
                                                 margin={{ left: 20 }}
                                             >
@@ -281,7 +396,13 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                                 />
                                                 <XAxis type="number" stroke={colors.axisStroke} />
                                                 <YAxis
-                                                    dataKey={chartData ? 'name' : 'setName'}
+                                                    dataKey={
+                                                        chartData
+                                                            ? 'name'
+                                                            : rarityData
+                                                              ? 'name'
+                                                              : 'setName'
+                                                    }
                                                     type="category"
                                                     stroke={colors.axisStroke}
                                                     width={120}
@@ -305,9 +426,23 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                                             fill="#6b7280"
                                                         />
                                                     </>
+                                                ) : rarityData ? (
+                                                    rarityData.rarities.map((rarity) => (
+                                                        <Bar
+                                                            key={rarity}
+                                                            dataKey={rarity}
+                                                            stackId="a"
+                                                            fill={RARITY_COLORS[rarity]}
+                                                            name={
+                                                                rarity.charAt(0).toUpperCase() +
+                                                                rarity.slice(1)
+                                                            }
+                                                        />
+                                                    ))
                                                 ) : (
                                                     <Bar dataKey="count" fill="#10b981" />
                                                 )}
+                                                {!chartData && rarityData && <Legend />}
                                             </BarChart>
                                         </BaseChart>
                                     </div>
@@ -343,6 +478,9 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                           }))
                                       )
                                     : null;
+                                const rarityData = setsByTypeByRarity.find(
+                                    (s) => s.type === typeData.type
+                                );
                                 return (
                                     <div key={typeData.type} className="flex flex-col">
                                         <h5 className="text-md font-semibold mb-2 text-center">
@@ -350,7 +488,11 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                         </h5>
                                         <BaseChart height={400}>
                                             <BarChart
-                                                data={chartData || typeData.setBonuses}
+                                                data={
+                                                    chartData ||
+                                                    rarityData?.data ||
+                                                    typeData.setBonuses
+                                                }
                                                 layout="vertical"
                                                 margin={{ left: 20 }}
                                             >
@@ -360,7 +502,13 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                                 />
                                                 <XAxis type="number" stroke={colors.axisStroke} />
                                                 <YAxis
-                                                    dataKey={chartData ? 'name' : 'setName'}
+                                                    dataKey={
+                                                        chartData
+                                                            ? 'name'
+                                                            : rarityData
+                                                              ? 'name'
+                                                              : 'setName'
+                                                    }
                                                     type="category"
                                                     stroke={colors.axisStroke}
                                                     width={150}
@@ -384,9 +532,23 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                                             fill="#6b7280"
                                                         />
                                                     </>
+                                                ) : rarityData ? (
+                                                    rarityData.rarities.map((rarity) => (
+                                                        <Bar
+                                                            key={rarity}
+                                                            dataKey={rarity}
+                                                            stackId="a"
+                                                            fill={RARITY_COLORS[rarity]}
+                                                            name={
+                                                                rarity.charAt(0).toUpperCase() +
+                                                                rarity.slice(1)
+                                                            }
+                                                        />
+                                                    ))
                                                 ) : (
                                                     <Bar dataKey="count" fill="#3b82f6" />
                                                 )}
+                                                {!chartData && rarityData && <Legend />}
                                             </BarChart>
                                         </BaseChart>
                                     </div>
