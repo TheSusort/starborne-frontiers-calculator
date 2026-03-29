@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { GearSetName } from '../../constants';
+import { GearSetName, GEAR_SETS, GEAR_SLOTS, STATS } from '../../constants';
 import { RarityName } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
@@ -107,6 +107,13 @@ function buildRarityStackedData(
     return { data, rarities };
 }
 
+// Label helpers
+const getSetLabel = (key: string) => GEAR_SETS[key]?.name || key;
+const getSlotLabel = (key: string) => GEAR_SLOTS[key]?.label || key;
+const getStatLabel = (key: string) => STATS[key as keyof typeof STATS]?.label || key;
+const formatMainStat = (statName: string, statType: string) =>
+    statType === 'percentage' ? `${getStatLabel(statName)} %` : getStatLabel(statName);
+
 export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previousStats }) => {
     const colors = useThemeColors();
     // Filter out implants - only show actual gear pieces
@@ -133,23 +140,25 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     // Prepare chart data
     const setCurrentData = stats.bySet
         .slice(0, 10)
-        .map((s) => ({ name: s.setName, value: s.count }));
+        .map((s) => ({ name: getSetLabel(s.setName), value: s.count }));
     const setChartData = previousStats
         ? mergeDistributions(
               setCurrentData,
-              previousStats.bySet.slice(0, 10).map((s) => ({ name: s.setName, value: s.count }))
+              previousStats.bySet
+                  .slice(0, 10)
+                  .map((s) => ({ name: getSetLabel(s.setName), value: s.count }))
           )
         : setCurrentData;
 
     const mainStatCurrentData = stats.byMainStat.slice(0, 10).map((s) => ({
-        name: `${s.statName} (${s.statType})`,
+        name: formatMainStat(s.statName, s.statType),
         value: s.count,
     }));
     const mainStatChartData = previousStats
         ? mergeDistributions(
               mainStatCurrentData,
               previousStats.byMainStat.slice(0, 10).map((s) => ({
-                  name: `${s.statName} (${s.statType})`,
+                  name: formatMainStat(s.statName, s.statType),
                   value: s.count,
               }))
           )
@@ -182,17 +191,20 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
           )
         : levelCurrentData;
 
-    const slotCurrentData = stats.bySlot.map((s) => ({ name: s.slot, value: s.count }));
+    const slotCurrentData = stats.bySlot.map((s) => ({
+        name: getSlotLabel(s.slot),
+        value: s.count,
+    }));
     const slotChartData = previousStats
         ? mergeDistributions(
               slotCurrentData,
-              previousStats.bySlot.map((s) => ({ name: s.slot, value: s.count }))
+              previousStats.bySlot.map((s) => ({ name: getSlotLabel(s.slot), value: s.count }))
           )
         : slotCurrentData;
 
     // Rarity-stacked data for charts (non-comparison mode)
     const setByRarity = useMemo(
-        () => buildRarityStackedData(filteredGear, (p) => p.setBonus || 'None', 10),
+        () => buildRarityStackedData(filteredGear, (p) => getSetLabel(p.setBonus || 'None'), 10),
         [filteredGear]
     );
 
@@ -200,7 +212,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
         () =>
             buildRarityStackedData(
                 filteredGear.filter((p) => p.mainStat),
-                (p) => `${p.mainStat!.name} (${p.mainStat!.type})`,
+                (p) => formatMainStat(p.mainStat!.name, p.mainStat!.type),
                 10
             ),
         [filteredGear]
@@ -238,7 +250,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     }, [filteredGear]);
 
     const slotByRarity = useMemo(
-        () => buildRarityStackedData(filteredGear, (p) => p.slot || 'UNKNOWN'),
+        () => buildRarityStackedData(filteredGear, (p) => getSlotLabel(p.slot || 'UNKNOWN')),
         [filteredGear]
     );
 
@@ -282,7 +294,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                 { value: 'none', label: 'No Set' },
                                 ...setOptions.map((set) => ({
                                     value: set,
-                                    label: set,
+                                    label: getSetLabel(set),
                                 })),
                             ]}
                         />
@@ -300,7 +312,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                                     const [name, type] = stat.split('_');
                                     return {
                                         value: stat,
-                                        label: `${name} (${type})`,
+                                        label: formatMainStat(name, type),
                                     };
                                 }),
                             ]}
@@ -367,13 +379,13 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 />
                 <StatCard
                     title="Most Common Set"
-                    value={stats.bySet[0]?.setName || 'N/A'}
+                    value={stats.bySet[0] ? getSetLabel(stats.bySet[0].setName) : 'N/A'}
                     subtitle={`${stats.bySet[0]?.count || 0} pieces`}
                     color="green"
                 />
                 <StatCard
                     title="Most Common Main Stat"
-                    value={stats.byMainStat[0]?.statName || 'N/A'}
+                    value={stats.byMainStat[0] ? getStatLabel(stats.byMainStat[0].statName) : 'N/A'}
                     subtitle={`${stats.byMainStat[0]?.count || 0} pieces`}
                     color="purple"
                 />

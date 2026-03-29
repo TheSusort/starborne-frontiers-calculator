@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
-import { ShipTypeName } from '../../constants';
+import { ShipTypeName, SHIP_TYPES, FACTIONS } from '../../constants';
 import { RarityName } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
@@ -55,14 +55,18 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
         percentage: r.percentage.toFixed(1),
     }));
 
-    const roleCurrentData = stats.byRole.map((r) => ({ name: r.role, value: r.count }));
+    const getRoleLabel = (role: string) => SHIP_TYPES[role]?.name || role;
+    const roleCurrentData = stats.byRole.map((r) => ({
+        name: getRoleLabel(r.role),
+        value: r.count,
+    }));
     const roleChartData = previousStats
         ? mergeDistributions(
               roleCurrentData,
-              previousStats.byRole.map((r) => ({ name: r.role, value: r.count }))
+              previousStats.byRole.map((r) => ({ name: getRoleLabel(r.role), value: r.count }))
           )
         : stats.byRole.map((r) => ({
-              name: r.role,
+              name: getRoleLabel(r.role),
               value: r.count,
               percentage: r.percentage.toFixed(1),
           }));
@@ -371,7 +375,9 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                                         key={faction.faction}
                                         className="border-b border-dark-border"
                                     >
-                                        <td className="py-2">{faction.faction}</td>
+                                        <td className="py-2">
+                                            {FACTIONS[faction.faction]?.name || faction.faction}
+                                        </td>
                                         <td className="text-right py-2">{faction.count}</td>
                                     </tr>
                                 ))}

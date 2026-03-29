@@ -14,6 +14,8 @@ import {
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
+import { IMPLANTS } from '../../constants/implants';
+import { GEAR_SETS } from '../../constants/gearSets';
 import { Select, StatCard } from '../ui';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
 import { BaseChart, ChartTooltip } from '../ui/charts';
@@ -100,6 +102,8 @@ function buildImplantRarityStackedData(
     return { data, rarities };
 }
 
+const getSetLabel = (key: string) => IMPLANTS[key]?.name || GEAR_SETS[key]?.name || key;
+
 export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
     gear,
     ships,
@@ -176,9 +180,8 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
             .filter((type) => typeGroups.has(type))
             .map((type) => ({
                 type,
-                ...buildImplantRarityStackedData(
-                    typeGroups.get(type)!,
-                    (p) => p.setBonus || 'None'
+                ...buildImplantRarityStackedData(typeGroups.get(type)!, (p) =>
+                    p.setBonus ? getSetLabel(p.setBonus) : 'None'
                 ),
             }));
     }, [filteredImplants]);
@@ -363,11 +366,11 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                 const chartData = prevTypeData
                                     ? mergeDistributions(
                                           typeData.setBonuses.map((s) => ({
-                                              name: s.setName,
+                                              name: getSetLabel(s.setName),
                                               value: s.count,
                                           })),
                                           prevTypeData.setBonuses.map((s) => ({
-                                              name: s.setName,
+                                              name: getSetLabel(s.setName),
                                               value: s.count,
                                           }))
                                       )
@@ -469,11 +472,11 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                 const chartData = prevTypeData
                                     ? mergeDistributions(
                                           typeData.setBonuses.map((s) => ({
-                                              name: s.setName,
+                                              name: getSetLabel(s.setName),
                                               value: s.count,
                                           })),
                                           prevTypeData.setBonuses.map((s) => ({
-                                              name: s.setName,
+                                              name: getSetLabel(s.setName),
                                               value: s.count,
                                           }))
                                       )
