@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '../ui';
+import { Button } from '../ui/Button';
 import { useTutorial } from '../../contexts/TutorialContext';
 
 interface TutorialReplayButtonProps {

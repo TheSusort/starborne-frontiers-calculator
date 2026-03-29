@@ -1,7 +1,7 @@
-import { FactionName } from '../constants/factions';
-import { GearSlotName } from '../constants/gearTypes';
-import { ShipTypeName } from '../constants/shipTypes';
-import { RarityName } from '../constants/rarities';
+import type { FactionName } from '../constants/factions';
+import type { GearSlotName } from '../constants/gearTypes';
+import type { ShipTypeName } from '../constants/shipTypes';
+import type { RarityName } from '../constants/rarities';
 import { Stat, BaseStats } from './stats';
 
 export type AffinityName = 'chemical' | 'electric' | 'thermal' | 'antimatter';

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, CloseIcon } from '../';
+import { Button } from '../Button';
+import { CloseIcon } from '../icons/CloseIcon';
 
 // Create a single portal root for all offcanvases
 const getOrCreatePortalRoot = () => {

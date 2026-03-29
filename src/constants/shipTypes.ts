@@ -1,4 +1,4 @@
-import { ShipType } from '../types/ship';
+import type { ShipType } from '../types/ship';
 
 export const SHIP_TYPES: Record<string, ShipType> = {
     ATTACKER: {

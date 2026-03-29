@@ -9,7 +9,7 @@ import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
-import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationCalculator';
+import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationUtils';
 
 // Cache for gear piece stats to avoid recalculating
 const gearStatsCache = new Map<string, { mainStat?: Stat; subStats?: Stat[] }>();

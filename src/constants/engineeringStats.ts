@@ -1,4 +1,4 @@
-import { StatName } from '../types/stats';
+import type { StatName } from '../types/stats';
 import { ShipTypeName } from './shipTypes';
 
 // Base roles that have engineering stats (subtypes inherit from these)

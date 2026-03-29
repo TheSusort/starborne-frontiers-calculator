@@ -1,4 +1,4 @@
-import { ShipTypeName } from '../constants';
+import type { ShipTypeName } from '../constants/shipTypes';
 
 // Stats that can only be percentage-based
 export const PERCENTAGE_ONLY_STATS = [

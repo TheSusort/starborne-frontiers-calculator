@@ -1,4 +1,4 @@
-import { GearSlot } from '../types/gear';
+import type { GearSlot } from '../types/gear';
 
 // Expected contribution ranges based on slot type
 const PERCENTAGE_SLOT_EXPECTED = 18.33; // Sensors, Software, Thrusters

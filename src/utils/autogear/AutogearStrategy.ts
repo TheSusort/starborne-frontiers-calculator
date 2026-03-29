@@ -1,8 +1,8 @@
-import { Ship } from '../../types/ship';
-import { GearPiece } from '../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
-import { ShipTypeName } from '../../constants';
-import { EngineeringStat } from '../../types/stats';
+import type { Ship } from '../../types/ship';
+import type { GearPiece } from '../../types/gear';
+import type { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
+import type { ShipTypeName } from '../../constants/shipTypes';
+import type { EngineeringStat } from '../../types/stats';
 
 export interface AutogearStrategy {
     name: string;

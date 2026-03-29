@@ -1,4 +1,4 @@
-import { StatName, StatType } from '../types/stats';
+import type { StatName, StatType } from '../types/stats';
 import { GearSlotName } from './gearTypes';
 
 const MAX_FLAT_VALUE = 5000;

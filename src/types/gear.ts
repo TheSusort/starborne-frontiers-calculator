@@ -1,6 +1,6 @@
-import { GearSetName } from '../constants/gearSets';
-import { GearSlotName } from '../constants/gearTypes';
-import { RarityName } from '../constants/rarities';
+import type { GearSetName } from '../constants/gearSets';
+import type { GearSlotName } from '../constants/gearTypes';
+import type { RarityName } from '../constants/rarities';
 import { Stat, StatName } from './stats';
 
 export interface GearPiece {

@@ -1,4 +1,4 @@
-import { Faction } from '../types/ship';
+import type { Faction } from '../types/ship';
 
 export const FACTIONS: Record<string, Faction> = {
     ATLAS_SYNDICATE: {

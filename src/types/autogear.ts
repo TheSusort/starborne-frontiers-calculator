@@ -1,4 +1,4 @@
-import { ShipTypeName } from '../constants';
+import type { ShipTypeName } from '../constants/shipTypes';
 import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { StatName } from './stats';
 

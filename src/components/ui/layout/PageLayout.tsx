@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, InfoIcon, Tooltip } from '../';
+import { Button } from '../Button';
+import { InfoIcon } from '../icons/InfoIcon';
 import { TutorialReplayButton } from '../../tutorial/TutorialReplayButton';
+import { Tooltip } from './Tooltip';
 
 interface PageLayoutProps {
     title: string;

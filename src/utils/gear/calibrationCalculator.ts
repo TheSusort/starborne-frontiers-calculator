@@ -1,167 +1,25 @@
 import { GearPiece } from '../../types/gear';
 import {
     Stat,
-    StatName,
     BaseStats,
     PERCENTAGE_ONLY_STATS,
     PercentageOnlyStats,
     EngineeringStat,
 } from '../../types/stats';
 import { ShipTypeName, GearSlotName } from '../../constants';
-import { calculatePriorityScore } from '../autogear/scoring';
+import { calculatePriorityScore } from '../autogear/priorityScore';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { Ship } from '../../types/ship';
+import {
+    isCalibrationEligible,
+    getCalibratedMainStat,
+    getBaseMainStat,
+    reverseCalibrationStatValue,
+} from './calibrationUtils';
 
-/**
- * Calibration stat increases by main stat type and star level.
- * Based on game expansion rules:
- * - Flat attack: doubles (100% increase)
- * - Flat HP: 5★ 4000→6100 (+52.5%), 6★ 5000→7500 (+50%)
- * - Flat defense: +50%
- * - Percentage stats: 5★ 40%→45% (+5pp), 6★ 50%→57% (+7pp)
- * - Flat hacking/security: +10%
- * - Flat speed: +5
- */
-
-interface CalibrationBonus {
-    type: 'multiply' | 'add' | 'addPercentagePoints';
-    value5Star: number;
-    value6Star: number;
-}
-
-const CALIBRATION_BONUSES: Partial<
-    Record<StatName, Record<'flat' | 'percentage', CalibrationBonus>>
-> = {
-    attack: {
-        flat: { type: 'multiply', value5Star: 2, value6Star: 2 }, // Doubles
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    hp: {
-        flat: { type: 'multiply', value5Star: 1.525, value6Star: 1.5 }, // 4000→6100, 5000→7500
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    defence: {
-        flat: { type: 'multiply', value5Star: 1.5, value6Star: 1.5 }, // +50%
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    hacking: {
-        flat: { type: 'multiply', value5Star: 1.1, value6Star: 1.1 }, // +10%
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    security: {
-        flat: { type: 'multiply', value5Star: 1.1, value6Star: 1.1 }, // +10%
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    speed: {
-        flat: { type: 'add', value5Star: 5, value6Star: 5 }, // +5
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    crit: {
-        flat: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-    critDamage: {
-        flat: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-        percentage: { type: 'addPercentagePoints', value5Star: 5, value6Star: 7 },
-    },
-};
-
-/**
- * Check if a gear piece is eligible for calibration.
- * Requirements: level 16, stars 5 or 6
- */
-export function isCalibrationEligible(gear: GearPiece): boolean {
-    return (
-        gear.level === 16 &&
-        (gear.stars === 5 || gear.stars === 6) &&
-        !gear.slot.includes('implant')
-    );
-}
-
-/**
- * Calculate the calibrated value for a stat.
- */
-function calculateCalibratedStatValue(stat: Stat, stars: number): number {
-    const bonus = CALIBRATION_BONUSES[stat.name]?.[stat.type];
-    if (!bonus) {
-        // Default to percentage point addition for unknown stats
-        const ppBonus = stars === 6 ? 7 : 5;
-        return stat.value + ppBonus;
-    }
-
-    const bonusValue = stars === 6 ? bonus.value6Star : bonus.value5Star;
-
-    switch (bonus.type) {
-        case 'multiply':
-            return Math.round(stat.value * bonusValue);
-        case 'add':
-            return stat.value + bonusValue;
-        case 'addPercentagePoints':
-            return stat.value + bonusValue;
-        default:
-            return stat.value;
-    }
-}
-
-/**
- * Reverse the calibration bonus to get the base (uncalibrated) stat value.
- * This is used to calculate what the stat would be without calibration.
- */
-function reverseCalibrationStatValue(stat: Stat, stars: number): number {
-    const bonus = CALIBRATION_BONUSES[stat.name]?.[stat.type];
-    if (!bonus) {
-        // Default to subtracting percentage points for unknown stats
-        const ppBonus = stars === 6 ? 7 : 5;
-        return stat.value - ppBonus;
-    }
-
-    const bonusValue = stars === 6 ? bonus.value6Star : bonus.value5Star;
-
-    switch (bonus.type) {
-        case 'multiply':
-            // If calibrated = original * multiplier, then original = calibrated / multiplier
-            return Math.round(stat.value / bonusValue);
-        case 'add':
-            // If calibrated = original + bonus, then original = calibrated - bonus
-            return stat.value - bonusValue;
-        case 'addPercentagePoints':
-            // If calibrated = original + pp, then original = calibrated - pp
-            return stat.value - bonusValue;
-        default:
-            return stat.value;
-    }
-}
-
-/**
- * Get the base (uncalibrated) main stat for a gear piece.
- * The stored mainStat value should always be the base value, regardless of calibration status.
- * Calibration metadata only indicates which ship it's calibrated to.
- */
-function getBaseMainStat(gear: GearPiece): Stat | null {
-    // Always return the stored mainStat as-is - it should always be the base value
-    // Calibration is just metadata about which ship it's calibrated to
-    return gear.mainStat;
-}
-
-/**
- * Get the calibrated main stat for a gear piece.
- * Returns the main stat with calibration bonus applied.
- */
-export function getCalibratedMainStat(gear: GearPiece): Stat | null {
-    if (!gear.mainStat || !isCalibrationEligible(gear)) {
-        return gear.mainStat;
-    }
-
-    // Always calculate from base stat to ensure consistency
-    const baseStat = getBaseMainStat(gear);
-    if (!baseStat) return null;
-
-    return {
-        ...baseStat,
-        value: calculateCalibratedStatValue(baseStat, gear.stars),
-    };
-}
+// Re-export the pure calibration functions so existing imports from this module continue to work
+export { isCalibrationEligible, getCalibratedMainStat };
 
 /**
  * Create a copy of the gear piece with calibration stats applied to main stat.

@@ -1,4 +1,4 @@
-import { Stat } from '../types/stats';
+import type { Stat } from '../types/stats';
 import { RarityName } from './rarities';
 
 export interface ImplantData {

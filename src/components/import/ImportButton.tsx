@@ -8,7 +8,7 @@ import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
-import { Checkbox } from '../ui';
+import { Checkbox } from '../ui/Checkbox';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { trackDataImport } from '../../services/usageTracking';
 import {

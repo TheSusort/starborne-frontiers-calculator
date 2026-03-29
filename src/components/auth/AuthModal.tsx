@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { Modal } from '../ui/layout/Modal';
-import { Button, Input } from '../ui';
+import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 
 interface AuthModalProps {
     isOpen: boolean;

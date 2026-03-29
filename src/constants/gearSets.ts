@@ -1,4 +1,4 @@
-import { GearSetBonus } from '../types/gear';
+import type { GearSetBonus } from '../types/gear';
 import { ImplantName } from './implants';
 
 export const GEAR_SETS: Record<string, GearSetBonus> = {
