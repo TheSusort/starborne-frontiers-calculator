@@ -1,5 +1,5 @@
-import { RarityName } from './rarities';
 import { Stat } from '../types/stats';
+import { RarityName } from './rarities';
 
 export interface ImplantData {
     id?: string;

@@ -6,11 +6,11 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { Button, Input, Modal } from '../ui';
 import { ShipDisplay } from '../ship/ShipDisplay';
-import { GearPieceDisplay } from './GearPieceDisplay';
 import { StatList } from '../stats/StatList';
 import { RARITY_ORDER } from '../../constants';
 import { isCalibrationEligible } from '../../utils/gear/calibrationCalculator';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { GearPieceDisplay } from './GearPieceDisplay';
 
 interface CalibrationModalProps {
     isOpen: boolean;

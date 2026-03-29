@@ -1,11 +1,7 @@
+import { v4 as uuidv4 } from 'uuid';
 import { ExportedPlayData } from '../types/exportedPlayData';
-import { EngineeringStats } from '../types/stats';
-import { Ship, Refit } from '../types/ship';
-import { GearPiece } from '../types/gear';
-import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
-import { RarityName } from '../constants/rarities';
-import { GearSetName } from '../constants/gearSets';
 import {
+    EngineeringStats,
     StatType,
     StatName,
     Stat,
@@ -13,10 +9,12 @@ import {
     FlexibleStats,
     PercentageOnlyStats,
 } from '../types/stats';
+import { Ship, Refit, AffinityName } from '../types/ship';
+import { GearPiece } from '../types/gear';
+import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
+import { GearSetName } from '../constants/gearSets';
 import { ShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
-import { AffinityName } from '../types/ship';
-import { v4 as uuidv4 } from 'uuid';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
 
 interface ImportResult {
@@ -43,13 +41,13 @@ const transformEngineeringStats = (data: ExportedPlayData['Engineering']): Engin
             acc: Record<string, { shipType: ShipTypeName; stats: Stat[] }>,
             stat: ExportedPlayData['Engineering'][0]
         ) => {
-            if (!acc[stat.Type.toUpperCase() as ShipTypeName]) {
-                acc[stat.Type.toUpperCase() as ShipTypeName] = {
-                    shipType: stat.Type.toUpperCase() as ShipTypeName,
+            if (!acc[stat.Type.toUpperCase()]) {
+                acc[stat.Type.toUpperCase()] = {
+                    shipType: stat.Type.toUpperCase(),
                     stats: [],
                 };
             }
-            acc[stat.Type.toUpperCase() as ShipTypeName].stats.push({
+            acc[stat.Type.toUpperCase()].stats.push({
                 name: getStatName(stat.Attribute) as StatName,
                 value: getPercentageStatValue(stat.Level, stat.ModifierType, stat.Attribute),
                 type: getStatType(stat.ModifierType, stat.Attribute),
@@ -158,10 +156,10 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
         return {
             id: unit.Id,
             name: unit.Name,
-            rarity: unit.Rarity.toLowerCase() as RarityName,
-            faction: getFaction(unit.Faction) as FactionName,
-            type: unit.ShipType.toUpperCase() as ShipTypeName,
-            affinity: getAffinity(unit.Affinity) as AffinityName,
+            rarity: unit.Rarity.toLowerCase(),
+            faction: getFaction(unit.Faction),
+            type: unit.ShipType.toUpperCase(),
+            affinity: getAffinity(unit.Affinity),
             level: unit.Level,
             rank: unit.Rank,
             baseStats,
@@ -202,7 +200,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 slot,
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase() as RarityName,
+                rarity: item.Rarity.toLowerCase(),
                 mainStat: createStat(mainStatName, mainStatValue, mainStatType),
                 subStats: item.SubStats.map((stat) =>
                     createStat(
@@ -244,10 +242,10 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
         } else {
             implants.push({
                 id: item.Id,
-                slot: item.Slot.toLowerCase() as GearSlotName,
+                slot: item.Slot.toLowerCase(),
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase() as RarityName,
+                rarity: item.Rarity.toLowerCase(),
                 mainStat: null,
                 subStats: [...item.MainStats, ...item.SubStats].map((stat) =>
                     createStat(

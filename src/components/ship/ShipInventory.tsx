@@ -2,8 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
-import { ShipCard } from './ShipCard';
-import { ShipComparisonPanel } from './ShipComparisonPanel';
 import {
     FACTIONS,
     GearSlotName,
@@ -22,6 +20,8 @@ import { Pagination } from '../ui';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
+import { ShipComparisonPanel } from './ShipComparisonPanel';
+import { ShipCard } from './ShipCard';
 
 const ITEMS_PER_PAGE = 48;
 

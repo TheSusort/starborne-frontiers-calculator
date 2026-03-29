@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { GearPiece } from '../types/gear';
-import { useStorage } from './useStorage';
 import { StorageKey } from '../constants/storage';
 import { simulateUpgrade } from '../utils/gear/potentialCalculator';
 import { StatName, StatType } from '../types/stats';
 import { useInventory } from '../contexts/InventoryProvider';
+import { useStorage } from './useStorage';
 
 interface Upgrade {
     mainStat: {

@@ -54,7 +54,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                 addNotification('info', `Unequipped ${slot} from ship ${previousShip}`);
             }
 
-            equipGear(ship.id, slot as GearSlotName, gearId);
+            equipGear(ship.id, slot, gearId);
         });
 
         addNotification('success', 'Loadout equipped successfully');
@@ -104,8 +104,8 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         {Object.entries(GEAR_SLOTS).map(([key, _]) => (
                             <GearSlot
                                 key={key}
-                                slotKey={key as GearSlotName}
-                                gear={gearLookup[equipment[key as GearSlotName] || '']}
+                                slotKey={key}
+                                gear={gearLookup[equipment[key] || '']}
                                 hoveredGear={hoveredGear}
                                 onSelect={setSelectedSlot}
                                 onHover={setHoveredGear}

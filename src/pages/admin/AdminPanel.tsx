@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
-import { PageLayout, Select, Tabs, CollapsibleForm, Button, Input } from '../../components/ui';
+import {
+    PageLayout,
+    Select,
+    Tabs,
+    CollapsibleForm,
+    Button,
+    Input,
+    StatCard,
+} from '../../components/ui';
 import { UsageChart } from '../../components/admin/UsageChart';
 import { AllUsersTable } from '../../components/admin/AllUsersTable';
-import { StatCard } from '../../components/ui';
 import { GrowthChart } from '../../components/admin/GrowthChart';
 import { TableSizesTable } from '../../components/admin/TableSizesTable';
 import { TemplateProposalsTable } from '../../components/admin/TemplateProposalsTable';

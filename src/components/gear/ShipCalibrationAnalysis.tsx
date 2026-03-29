@@ -3,14 +3,13 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { ShipTypeName, GEAR_SLOTS } from '../../constants';
 import { ShipSelector } from '../ship/ShipSelector';
-import { RoleSelector } from '../ui';
+import { RoleSelector, Button } from '../ui';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useShips } from '../../contexts/ShipsContext';
 import { analyzeShipCalibrationImpact } from '../../utils/gear/calibrationCalculator';
 import { GearPieceDisplay } from './GearPieceDisplay';
-import { Button } from '../ui';
 
 interface Props {
     onEdit?: (piece: GearPiece) => void;

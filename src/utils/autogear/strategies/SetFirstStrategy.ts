@@ -5,8 +5,7 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
-import { BaseStats } from '../../../types/stats';
-import { EngineeringStat } from '../../../types/stats';
+import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
 
 interface SetGroup {
@@ -284,7 +283,7 @@ export class SetFirstStrategy extends BaseStrategy {
         statBonuses?: StatBonus[]
     ): Promise<void> {
         for (const slotKey of Object.keys(GEAR_SLOTS)) {
-            const slot = slotKey as GearSlotName;
+            const slot = slotKey;
             if (usedSlots.has(slot)) {
                 this.incrementProgress();
                 continue;

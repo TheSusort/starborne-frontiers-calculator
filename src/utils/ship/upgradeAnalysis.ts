@@ -1,12 +1,12 @@
 import { GearPiece } from '../../types/gear';
 import { GearSlotName, GEAR_SLOTS } from '../../constants/gearTypes';
-import { SlotContribution } from './statDistribution';
 import { UpgradeSuggestion } from '../../types/analysis';
-import { analyzeGearQuality } from './gearSuggestions';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { ShipTypeName } from '../../constants/shipTypes';
+import { analyzeGearQuality } from './gearSuggestions';
+import { SlotContribution } from './statDistribution';
 
 const DESIRED_SETS: Record<ShipTypeName, string[]> = {
     ATTACKER: ['ATTACK', 'CRITICAL', 'ABYSSAL_ASSULT', 'AMBUSH', 'PIERCER'],
@@ -139,13 +139,13 @@ export function analyzeUpgrades(
         if (
             a.priority !== undefined &&
             b.priority !== undefined &&
-            GEAR_SLOTS[a.slotName].expectedContribution - a.priority! !==
-                GEAR_SLOTS[b.slotName].expectedContribution - b.priority!
+            GEAR_SLOTS[a.slotName].expectedContribution - a.priority !==
+                GEAR_SLOTS[b.slotName].expectedContribution - b.priority
         ) {
             return (
                 GEAR_SLOTS[b.slotName].expectedContribution -
-                b.priority! -
-                (GEAR_SLOTS[a.slotName].expectedContribution - a.priority!)
+                b.priority -
+                (GEAR_SLOTS[a.slotName].expectedContribution - a.priority)
             );
         }
 

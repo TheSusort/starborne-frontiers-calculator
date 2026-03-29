@@ -99,7 +99,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 >
                     {row.map((pos) => {
                         const shipPosition = formation.find((s) => s.position === pos);
-                        const ship = getShipForPosition(pos as Position);
+                        const ship = getShipForPosition(pos);
                         const fullShip = ship && isFullShip(ship) ? ship : null;
                         const template = ship ? getTemplateData(ship.name) : null;
                         const rawImageKey = fullShip?.imageKey || template?.imageKey;
@@ -113,7 +113,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         return (
                             <div
                                 key={pos}
-                                onMouseEnter={() => setHoveredPosition(pos as Position)}
+                                onMouseEnter={() => setHoveredPosition(pos)}
                                 onMouseLeave={() =>
                                     setHoveredPosition((prev) => (prev === pos ? null : prev))
                                 }
@@ -121,9 +121,9 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 <HexButton
                                     onClick={(e) => {
                                         if (e.ctrlKey || e.metaKey) {
-                                            onRemoveShip?.(pos as Position);
+                                            onRemoveShip?.(pos);
                                         } else {
-                                            onPositionSelect?.(pos as Position);
+                                            onPositionSelect?.(pos);
                                         }
                                     }}
                                     isActive={!!ship}

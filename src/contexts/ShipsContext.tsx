@@ -1,16 +1,16 @@
 import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
-import { Ship, AffinityName } from '../types/ship';
-import { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
-import { supabase } from '../config/supabase';
-import { useAuth } from './AuthProvider';
-import { useNotification } from '../hooks/useNotification';
 import { v4 as uuidv4 } from 'uuid';
+import { useNotification } from '../hooks/useNotification';
+import { supabase } from '../config/supabase';
+import { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
+import { Ship, AffinityName } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { useAuth } from './AuthProvider';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -677,7 +677,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const equipment = { ...ship.equipment };
                 Object.entries(equipment).forEach(([key, value]) => {
                     if (value === gearId) {
-                        equipment[key as GearSlotName] = undefined;
+                        equipment[key] = undefined;
                     }
                 });
                 return {
@@ -741,7 +741,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 gearAssignments.forEach(({ gearId }) => {
                     Object.entries(equipment).forEach(([key, value]) => {
                         if (value === gearId) {
-                            equipment[key as GearSlotName] = undefined;
+                            equipment[key] = undefined;
                         }
                     });
                 });
@@ -973,7 +973,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     const assignedShipId = gearAssignments.get(gearId);
                     if (assignedShipId && assignedShipId !== ship.id) {
                         // Remove conflicting gear
-                        ship.equipment[slot as GearSlotName] = undefined;
+                        ship.equipment[slot] = undefined;
                     }
                 }
             });

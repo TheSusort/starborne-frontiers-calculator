@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNotification } from './useNotification';
 import { StorageKeyType } from '../constants/storage';
+import { useNotification } from './useNotification';
 
 interface StorageConfig<T> {
     key: StorageKeyType;

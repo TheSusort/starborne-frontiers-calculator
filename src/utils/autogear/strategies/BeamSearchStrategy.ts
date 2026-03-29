@@ -5,8 +5,7 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
-import { BaseStats } from '../../../types/stats';
-import { EngineeringStat } from '../../../types/stats';
+import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore } from '../scoring';
 
 interface GearConfiguration {
@@ -49,7 +48,7 @@ export class BeamSearchStrategy extends BaseStrategy {
         //   - Each configuration tries each available piece for that slot
         let totalOperations = 0;
         Object.keys(GEAR_SLOTS).forEach((slotKey) => {
-            const slotName = slotKey as GearSlotName;
+            const slotName = slotKey;
             const slotGear = availableInventory.filter((gear) => gear.slot === slotName);
             totalOperations += slotGear.length * this.BEAM_WIDTH;
         });
@@ -64,7 +63,7 @@ export class BeamSearchStrategy extends BaseStrategy {
         ];
 
         for (const [slotKey] of Object.entries(GEAR_SLOTS)) {
-            const slotName = slotKey as GearSlotName;
+            const slotName = slotKey;
             configurations = await this.processSlot(
                 slotName,
                 configurations,

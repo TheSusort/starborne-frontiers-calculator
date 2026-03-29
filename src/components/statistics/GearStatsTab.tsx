@@ -1,12 +1,11 @@
 import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { GearSetName } from '../../constants';
 import { RarityName } from '../../constants/rarities';
-import { Select } from '../ui';
-import { StatCard } from '../ui';
+import { Select, StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { GearSnapshot } from '../../types/statisticsSnapshot';
@@ -156,9 +155,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                         </label>
                         <Select
                             value={setFilter}
-                            onChange={(value) =>
-                                setSetFilter(value as GearSetName | 'all' | 'none')
-                            }
+                            onChange={(value) => setSetFilter(value)}
                             options={[
                                 { value: 'all', label: 'All Sets' },
                                 { value: 'none', label: 'No Set' },
@@ -194,7 +191,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value as RarityName | 'all')}
+                            onChange={(value) => setRarityFilter(value)}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

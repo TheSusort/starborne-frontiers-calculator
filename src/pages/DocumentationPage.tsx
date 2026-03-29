@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { PageLayout } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
-import { Link, useLocation } from 'react-router-dom';
 
 const DocumentationPage: React.FC = () => {
     const location = useLocation();

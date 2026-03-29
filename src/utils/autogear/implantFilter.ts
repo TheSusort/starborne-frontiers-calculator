@@ -125,9 +125,9 @@ export function filterTopImplantsPerSlot(
 
     for (const item of inventory) {
         if (item.slot.startsWith('implant_')) {
-            const existing = implantsBySlot.get(item.slot as GearSlotName) || [];
+            const existing = implantsBySlot.get(item.slot) || [];
             existing.push(item);
-            implantsBySlot.set(item.slot as GearSlotName, existing);
+            implantsBySlot.set(item.slot, existing);
         } else {
             gear.push(item);
         }

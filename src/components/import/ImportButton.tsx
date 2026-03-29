@@ -10,7 +10,6 @@ import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
 import { Checkbox } from '../ui';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
-import { HangarNameModal } from './HangarNameModal';
 import { trackDataImport } from '../../services/usageTracking';
 import {
     extractLevel60Ships,
@@ -18,11 +17,11 @@ import {
 } from '../../utils/shipTemplateComparison';
 import { submitTemplateProposal } from '../../services/shipTemplateProposalService';
 import { supabase } from '../../config/supabase';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName } from '../../constants/shipTypes';
-import { AffinityName } from '../../types/ship';
+import { HangarNameModal } from './HangarNameModal';
 
 export const ImportButton: React.FC<{
     className?: string;

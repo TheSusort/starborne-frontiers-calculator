@@ -8,8 +8,6 @@ import {
     IMPLANT_SLOTS,
     ImplantSlotName,
 } from '../../constants';
-import { ShipDisplay } from './ShipDisplay';
-import { ShipDisplayImage } from './ShipDisplayImage';
 import { GearSlot } from '../gear/GearSlot';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { Modal } from '../ui/layout/Modal';
@@ -19,6 +17,8 @@ import { Button, Tooltip } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
 import { StatDisplay } from '../stats/StatDisplay';
+import { ShipDisplayImage } from './ShipDisplayImage';
+import { ShipDisplay } from './ShipDisplay';
 
 interface Props {
     ship: Ship;
@@ -61,7 +61,7 @@ export const ShipCard: React.FC<Props> = ({
     onAddToComparison,
     isInComparison,
 }) => {
-    const [selectedSlot, setSelectedSlot] = useState<(GearSlotName | ImplantSlotName) | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingGear, setPendingGear] = useState<GearPiece | null>(null);
     const [expanded, setExpanded] = useState(false);
@@ -100,7 +100,7 @@ export const ShipCard: React.FC<Props> = ({
             // Check if this is an implant slot
             if (selectedSlot.startsWith('implant_')) {
                 if (onEquipImplant) {
-                    onEquipImplant(ship.id, selectedSlot as ImplantSlotName, gear.id);
+                    onEquipImplant(ship.id, selectedSlot, gear.id);
                     setSelectedSlot(null);
                     addNotification(
                         'success',
@@ -108,7 +108,7 @@ export const ShipCard: React.FC<Props> = ({
                     );
                 }
             } else {
-                onEquipGear(ship.id, selectedSlot as GearSlotName, gear.id);
+                onEquipGear(ship.id, selectedSlot, gear.id);
                 setSelectedSlot(null);
                 addNotification('success', `Equipped ${gear.slot} on ${ship.name}`);
             }
@@ -120,7 +120,7 @@ export const ShipCard: React.FC<Props> = ({
             // Check if this is an implant slot
             if (selectedSlot.startsWith('implant_')) {
                 if (onEquipImplant) {
-                    onEquipImplant(ship.id, selectedSlot as ImplantSlotName, pendingGear.id);
+                    onEquipImplant(ship.id, selectedSlot, pendingGear.id);
                     setSelectedSlot(null);
                     addNotification(
                         'success',
@@ -129,7 +129,7 @@ export const ShipCard: React.FC<Props> = ({
                     setPendingGear(null);
                 }
             } else {
-                onEquipGear(ship.id, selectedSlot as GearSlotName, pendingGear.id);
+                onEquipGear(ship.id, selectedSlot, pendingGear.id);
                 setSelectedSlot(null);
                 addNotification('success', `Equipped ${pendingGear.slot} on ${ship.name}`);
                 setPendingGear(null);
@@ -157,10 +157,8 @@ export const ShipCard: React.FC<Props> = ({
                                 {Object.entries(GEAR_SLOTS).map(([key, _]) => (
                                     <GearSlot
                                         key={key}
-                                        slotKey={key as GearSlotName}
-                                        gear={
-                                            gearLookup[ship.equipment?.[key as GearSlotName] || '']
-                                        }
+                                        slotKey={key}
+                                        gear={gearLookup[ship.equipment?.[key] || '']}
                                         hoveredGear={hoveredGear}
                                         onSelect={setSelectedSlot}
                                         onRemove={(slot) => onRemoveGear(ship.id, slot)}
@@ -173,13 +171,11 @@ export const ShipCard: React.FC<Props> = ({
                                     {Object.entries(IMPLANT_SLOTS).map(([implant, _]) => (
                                         <GearSlot
                                             key={implant}
-                                            slotKey={implant as ImplantSlotName}
+                                            slotKey={implant}
                                             gear={getGearPiece(ship.implants?.[implant] || '')}
                                             hoveredGear={hoveredGear}
                                             onSelect={setSelectedSlot}
-                                            onRemove={(slot) =>
-                                                onRemoveImplant(ship.id, slot as ImplantSlotName)
-                                            }
+                                            onRemove={(slot) => onRemoveImplant(ship.id, slot)}
                                             onHover={onHoverGear}
                                         />
                                     ))}
@@ -191,8 +187,7 @@ export const ShipCard: React.FC<Props> = ({
                             {/* Expanded Gear View */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                 {Object.entries(GEAR_SLOTS).map(([key, _]) => {
-                                    const gear =
-                                        gearLookup[ship.equipment?.[key as GearSlotName] || ''];
+                                    const gear = gearLookup[ship.equipment?.[key] || ''];
                                     if (!gear) return null;
                                     return (
                                         <div key={key} className="flex justify-center">

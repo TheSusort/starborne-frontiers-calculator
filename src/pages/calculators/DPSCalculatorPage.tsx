@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import { calculateCritMultiplier, calculateDamageReduction } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
@@ -9,7 +10,6 @@ import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
-import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';

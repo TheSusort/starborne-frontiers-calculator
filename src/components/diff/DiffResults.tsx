@@ -1,8 +1,8 @@
 import React from 'react';
 import { DiffResult } from '../../types/diff';
+import { groupResults, getDiffSummary } from '../../utils/diff/groupingUtils';
 import { DiffSummaryComponent } from './DiffSummary';
 import { DiffGroupComponent } from './DiffGroup';
-import { groupResults, getDiffSummary } from '../../utils/diff/groupingUtils';
 
 interface DiffResultsProps {
     diffResults: DiffResult[];

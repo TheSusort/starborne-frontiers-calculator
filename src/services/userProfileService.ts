@@ -1,11 +1,8 @@
 import { supabase } from '../config/supabase';
 import type { GearSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
-import type { RarityName } from '../constants/rarities';
 import type { GearSetName } from '../constants/gearSets';
-import type { FactionName } from '../constants/factions';
-import type { AffinityName } from '../types/ship';
-import type { Ship } from '../types/ship';
+import type { AffinityName, Ship } from '../types/ship';
 import type {
     Stat,
     StatName,
@@ -485,7 +482,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                                   value: statsData.mainStat.value,
                                   type: (statsData.mainStat.type === 'percentage'
                                       ? 'percentage'
-                                      : 'flat') as 'flat' | 'percentage',
+                                      : 'flat') as StatType,
                                   id: statsData.mainStat.id || '',
                               }
                             : undefined,
@@ -517,7 +514,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                                   value: statsData.mainStat.value,
                                   type: (statsData.mainStat.type === 'percentage'
                                       ? 'percentage'
-                                      : 'flat') as 'flat' | 'percentage',
+                                      : 'flat') as StatType,
                                   id: statsData.mainStat.id || '',
                               }
                             : undefined,
@@ -530,9 +527,9 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             return {
                 id: data.id,
                 name: data.name,
-                rarity: data.rarity as RarityName,
-                faction: data.faction as FactionName,
-                type: data.type as ShipTypeName,
+                rarity: data.rarity,
+                faction: data.faction,
+                type: data.type,
                 affinity: data.affinity as AffinityName,
                 rank: data.rank,
                 level: data.level,
@@ -553,7 +550,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 equipment:
                     data.ship_equipment?.reduce(
                         (acc: Record<GearSlotName, string>, eq) => {
-                            acc[eq.slot as GearSlotName] = eq.gear_id;
+                            acc[eq.slot] = eq.gear_id;
                             return acc;
                         },
                         {} as Record<GearSlotName, string>
@@ -592,10 +589,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     // Convert internal gear piece to actual GearPiece type
                     return {
                         id: internalGear.id,
-                        slot: internalGear.slot as GearSlotName,
+                        slot: internalGear.slot,
                         level: internalGear.level,
                         stars: internalGear.stars,
-                        rarity: internalGear.rarity as RarityName,
+                        rarity: internalGear.rarity,
                         setBonus: internalGear.setBonus as GearSetName | null,
                         mainStat: internalGear.mainStat
                             ? internalGear.mainStat.type === 'percentage'
@@ -624,7 +621,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 [],
                 customGetGearPiece,
                 getEngineeringStatsForShipType,
-                ship.type as ShipTypeName
+                ship.type
             );
 
             return {

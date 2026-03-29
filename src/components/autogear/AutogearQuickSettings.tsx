@@ -4,11 +4,11 @@ import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
-import { AutogearConfigList } from './AutogearConfigList';
-import { CommunityRecommendations } from './CommunityRecommendations';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
+import { CommunityRecommendations } from './CommunityRecommendations';
+import { AutogearConfigList } from './AutogearConfigList';
 
 interface AutogearQuickSettingsProps {
     selectedShips: (Ship | null)[];

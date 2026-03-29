@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../config/supabase';
 import { LocalEncounterNote, SharedEncounterNote, Position } from '../types/encounters';
 import { useAuth } from '../contexts/AuthProvider';
-import { useNotification } from './useNotification';
 import { useShips } from '../contexts/ShipsContext';
+import { useNotification } from './useNotification';
 
 interface RawEncounterFormation {
     note_id: string;

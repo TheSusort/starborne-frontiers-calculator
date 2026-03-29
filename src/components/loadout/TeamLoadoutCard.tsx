@@ -3,10 +3,10 @@ import { TeamLoadout } from '../../types/loadout';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { Button, CloseIcon } from '../ui';
-import { LoadoutCard } from './LoadoutCard';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearSlotName } from '../../constants';
 import { useNotification } from '../../hooks/useNotification';
+import { LoadoutCard } from './LoadoutCard';
 
 interface TeamLoadoutCardProps {
     teamLoadout: TeamLoadout;
@@ -44,7 +44,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                     }
                 }
 
-                equipGear(shipLoadout.shipId, slot as GearSlotName, gearId);
+                equipGear(shipLoadout.shipId, slot, gearId);
             });
         });
 

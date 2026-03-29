@@ -189,4 +189,5 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
 } satisfies Record<string, GearSetBonus>;
 
+// eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents -- ImplantName intentionally kept for clarity even though currently subsumed
 export type GearSetName = keyof typeof GEAR_SETS | ImplantName;

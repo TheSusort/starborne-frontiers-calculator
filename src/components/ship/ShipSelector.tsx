@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
-import { ShipDisplay } from './ShipDisplay';
 import { RARITY_ORDER, SHIP_TYPES, FACTIONS } from '../../constants';
+import { ShipDisplay } from './ShipDisplay';
 
 interface ShipSelectorProps {
     selected: Ship | null;

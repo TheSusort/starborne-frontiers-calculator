@@ -1,9 +1,14 @@
-import { BaseStats, EngineeringStat, PERCENTAGE_ONLY_STATS, Stat } from '../../types/stats';
+import {
+    BaseStats,
+    EngineeringStat,
+    PERCENTAGE_ONLY_STATS,
+    Stat,
+    PercentageOnlyStats,
+} from '../../types/stats';
 import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GearSlotName } from '../../constants/gearTypes';
-import { PercentageOnlyStats } from '../../types/stats';
 import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationCalculator';
 
 // Cache for gear piece stats to avoid recalculating

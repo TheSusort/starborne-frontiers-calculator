@@ -40,7 +40,7 @@ const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats
         (acc, stat) => {
             if (!acc[stat.ship_type]) {
                 acc[stat.ship_type] = {
-                    shipType: stat.ship_type as ShipTypeName, // Added type assertion
+                    shipType: stat.ship_type, // Added type assertion
                     stats: [],
                 };
             }

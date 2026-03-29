@@ -48,14 +48,14 @@ export function analyzeStatDistribution(
 
     // First pass: calculate absolute scores
     Object.entries(GEAR_SLOTS).forEach(([slot]) => {
-        const gearId = equipment[slot as GearSlotName];
+        const gearId = equipment[slot];
         if (!gearId) return;
 
         const gear = getGearPiece(gearId);
         if (!gear) return;
 
         const equipmentWithoutSlot = { ...equipment };
-        delete equipmentWithoutSlot[slot as GearSlotName];
+        delete equipmentWithoutSlot[slot];
         const scoreWithoutSlot = calculateTotalScore(
             ship,
             equipmentWithoutSlot,
@@ -99,7 +99,7 @@ export function analyzeStatDistribution(
         });
 
         contributions.push({
-            slotName: slot as GearSlotName,
+            slotName: slot,
             absoluteScore: slotScore,
             relativeScore: 0, // Will be calculated in second pass
             primaryStats: statContributions

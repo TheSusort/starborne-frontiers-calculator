@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
 import { ShipTypeName } from '../../constants';
 import { RarityName } from '../../constants/rarities';
-import { Select } from '../ui';
-import { StatCard } from '../ui';
+import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ShipsSnapshot } from '../../types/statisticsSnapshot';
@@ -102,7 +101,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                         </label>
                         <Select
                             value={roleFilter}
-                            onChange={(value) => setRoleFilter(value as ShipTypeName | 'all')}
+                            onChange={(value) => setRoleFilter(value)}
                             options={[
                                 { value: 'all', label: 'All Roles' },
                                 { value: 'ATTACKER', label: 'Attacker' },
@@ -118,7 +117,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value as RarityName | 'all')}
+                            onChange={(value) => setRarityFilter(value)}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

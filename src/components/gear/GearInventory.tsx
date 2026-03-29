@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
-import { GearPieceDisplay } from './GearPieceDisplay';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
 import { Pagination } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
 import { useShips } from '../../contexts/ShipsContext';
+import { GearPieceDisplay } from './GearPieceDisplay';
 
 const ITEMS_PER_PAGE = 48;
 

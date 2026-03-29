@@ -76,9 +76,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
             if (!shipElement) return;
 
             // Find the expandable stats panel
-            const statsPanel = shipElement.querySelector(
-                '[data-stats-panel]'
-            ) as HTMLElement | null;
+            const statsPanel = shipElement.querySelector<HTMLElement>('[data-stats-panel]');
 
             try {
                 // Expand parent to fit content

@@ -1,17 +1,17 @@
 import { useCallback, useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
     LocalEncounterNote,
     ShipPosition,
     Position,
     SharedShipPosition,
 } from '../types/encounters';
-import { useNotification } from './useNotification';
 import { supabase } from '../config/supabase';
 import { useAuth } from '../contexts/AuthProvider';
 import { useShips } from '../contexts/ShipsContext';
-import { useStorage } from './useStorage';
 import { StorageKey } from '../constants/storage';
-import { v4 as uuidv4 } from 'uuid';
+import { useStorage } from './useStorage';
+import { useNotification } from './useNotification';
 
 interface RawEncounterFormation {
     note_id: string;

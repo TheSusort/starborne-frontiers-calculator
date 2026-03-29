@@ -2,9 +2,9 @@ import React, { createContext, useContext, useCallback, useState, useEffect } fr
 import { SavedAutogearConfig } from '../types/autogear';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
-import { useAuth } from './AuthProvider';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
+import { useAuth } from './AuthProvider';
 
 interface AutogearConfigContextType {
     savedConfigs: Record<string, SavedAutogearConfig>;

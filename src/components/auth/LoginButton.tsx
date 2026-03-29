@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
-import { AuthModal } from './AuthModal';
 import { Button } from '../ui/Button';
 import { UserIcon } from '../ui/icons';
+import { AuthModal } from './AuthModal';
 
 export const LoginButton: React.FC = () => {
     const { user, signOut } = useAuth();

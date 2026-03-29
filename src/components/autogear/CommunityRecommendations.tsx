@@ -3,14 +3,14 @@ import { Ship } from '../../types/ship';
 import { SavedAutogearConfig } from '../../types/autogear';
 import { AutogearSuggestion } from '../../types/autogearSuggestion';
 import { CommunityRecommendation, AIRecommendation } from '../../types/communityRecommendation';
+import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
+import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendations';
+import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { RecommendationHeader } from './RecommendationHeader';
 import { RecommendationContent } from './RecommendationContent';
 import { AlternativeRecommendations } from './AlternativeRecommendations';
 import { CommunityActions } from './CommunityActions';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
-import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
-import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendations';
-import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 
 /**
  * Convert CommunityRecommendation to AIRecommendation format for AlternativeRecommendations

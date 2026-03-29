@@ -1,7 +1,7 @@
 import React from 'react';
 import { parseSkillText, extractSkillNames } from '../../utils/skillTextParser';
-import { BuffTooltip } from './BuffTooltip';
 import { ClockIcon } from '../ui/icons';
+import { BuffTooltip } from './BuffTooltip';
 
 interface SkillTooltipProps {
     skillText: string;

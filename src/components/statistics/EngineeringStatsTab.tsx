@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { EngineeringStat } from '../../types/stats';
 import { StatCard } from '../ui';
 import { calculateEngineeringStatistics } from '../../utils/statistics/engineeringStats';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { EngineeringLeaderboards } from '../engineering/EngineeringLeaderboards';
 import { useThemeColors } from '../../hooks/useThemeColors';

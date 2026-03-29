@@ -1,13 +1,12 @@
-import { BaseStats } from '../../types/stats';
+import { BaseStats, EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearSlotName, STAT_NORMALIZERS, ShipTypeName, GEAR_SETS } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
-import { EngineeringStat } from '../../types/stats';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
-import { performanceTracker } from './performanceTimer';
 import { RarityName } from '../../constants/rarities';
+import { performanceTracker } from './performanceTimer';
 import { applyArenaModifiers } from './arenaModifiers';
 
 // Simple cache for gear combinations
@@ -104,7 +103,7 @@ function getArcaneSiegeBaseMultiplier(
     }
 
     // Return the multiplier based on implant rarity
-    const rarity = arcaneSiegeImplant.rarity as RarityName;
+    const rarity = arcaneSiegeImplant.rarity;
     const multiplier = ARCANE_SIEGE_MULTIPLIERS[rarity] || 0;
     arcaneSiegeCache.set(cacheKey, multiplier);
     return multiplier;
@@ -237,7 +236,7 @@ export function calculatePriorityScore(
     // Get base score from role-specific calculation
     let baseScore = 0;
     if (shipRole) {
-        switch (shipRole as ShipTypeName) {
+        switch (shipRole) {
             case 'ATTACKER':
                 baseScore = calculateAttackerScore(stats, statBonuses, arcaneSiegeMultiplier);
                 break;

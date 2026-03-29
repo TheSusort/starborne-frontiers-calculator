@@ -33,7 +33,7 @@ export const StatCard: React.FC<StatCardProps> = ({
 }) => {
     const renderDelta = () => {
         if (previousValue === undefined) return null;
-        const current = typeof value === 'number' ? value : parseFloat(value as string);
+        const current = typeof value === 'number' ? value : parseFloat(value);
         if (isNaN(current)) return null;
 
         const rawDelta = current - previousValue;

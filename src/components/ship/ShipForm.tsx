@@ -1,19 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
 import { Button, Input, Select, CloseIcon } from '../ui';
-import {
-    FACTIONS,
-    RARITIES,
-    SHIP_TYPES,
-    RarityName,
-    STATS,
-    ShipTypeName,
-    FactionName,
-} from '../../constants';
+import { FACTIONS, RARITIES, SHIP_TYPES, STATS } from '../../constants';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { useNotification } from '../../hooks/useNotification';
-import { AffinityName } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 
 interface Props {
@@ -87,7 +78,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
         };
 
         try {
-            await onSubmit(ship as Ship);
+            onSubmit(ship as Ship);
             setName('');
             setBaseStats(initialBaseStats);
             setFaction('');
@@ -118,7 +109,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setBaseStats(data.baseStats);
             setFaction(data.faction);
             setType(data.type);
-            setRarity(data.rarity as RarityName);
+            setRarity(data.rarity);
             setAffinity(data.affinity as AffinityName);
             addNotification('success', 'Ship data fetched successfully');
         } catch (err) {
@@ -214,7 +205,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <Select
                     label="Faction"
                     value={faction}
-                    onChange={(value) => setFaction(value as FactionName)}
+                    onChange={(value) => setFaction(value)}
                     options={factionOptions}
                     noDefaultSelection
                     defaultOption="Select Faction"
@@ -223,7 +214,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                 <Select
                     label="Type"
                     value={type}
-                    onChange={(value) => setType(value as ShipTypeName)}
+                    onChange={(value) => setType(value)}
                     options={shipTypeOptions}
                     noDefaultSelection
                     defaultOption="Select Type"
@@ -243,7 +234,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             <Select
                 label="Rarity"
                 value={rarity}
-                onChange={(value) => setRarity(value as RarityName)}
+                onChange={(value) => setRarity(value)}
                 options={rarityOptions}
                 noDefaultSelection
                 defaultOption="Select Rarity"

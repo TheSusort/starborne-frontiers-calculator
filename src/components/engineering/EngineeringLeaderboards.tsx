@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../../contexts/AuthProvider';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
+import { useAuth } from '../../contexts/AuthProvider';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {

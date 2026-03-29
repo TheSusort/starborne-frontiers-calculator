@@ -1,6 +1,6 @@
-import { SimulationSummary } from './simulationCalculator';
 import { GEAR_SETS } from '../../constants';
 import { ENEMY_COUNT } from '../../constants/simulation';
+import { SimulationSummary } from './simulationCalculator';
 
 /**
  * Calculates shield generated based on simulation data

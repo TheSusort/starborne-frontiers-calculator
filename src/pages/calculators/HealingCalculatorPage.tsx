@@ -1,8 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloseIcon, PageLayout } from '../../components/ui';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import {
     LineChart,
     Line,
@@ -15,6 +11,10 @@ import {
     Scatter,
     ZAxis,
 } from 'recharts';
+import { CloseIcon, PageLayout } from '../../components/ui';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Select } from '../../components/ui/Select';
 import { BaseChart, ChartTooltip } from '../../components/ui/charts';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';

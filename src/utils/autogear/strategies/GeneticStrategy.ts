@@ -291,9 +291,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         Object.entries(equipment).forEach(([slot, gearId]) => {
             if (slot.startsWith('implant_')) {
-                implantsOnly[slot as GearSlotName] = gearId;
+                implantsOnly[slot] = gearId;
             } else {
-                gearOnly[slot as GearSlotName] = gearId;
+                gearOnly[slot] = gearId;
             }
         });
 
@@ -341,7 +341,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const allSlots = new Set([
             ...Object.keys(parent1.equipment),
             ...Object.keys(parent2.equipment),
-        ]) as Set<GearSlotName>;
+        ]);
 
         // Use weighted crossover based on parent fitness
         const totalFitness = parent1.fitness + parent2.fitness;

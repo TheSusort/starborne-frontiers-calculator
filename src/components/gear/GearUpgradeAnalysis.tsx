@@ -9,7 +9,6 @@ import {
     GEAR_SETS,
 } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
-import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button, Input, ProgressBar, Select, CheckboxGroup } from '../ui';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { useNotification } from '../../hooks/useNotification';
@@ -21,6 +20,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { GEAR_ANALYSIS_TUTORIAL } from '../../constants/tutorialSteps';
+import { GearPieceDisplay } from './GearPieceDisplay';
 
 interface Props {
     inventory: GearPiece[];
@@ -106,9 +106,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
         // Iterate through all results and update any gear pieces that have changed
         Object.keys(updatedResults).forEach((role) => {
-            const roleResults = updatedResults[role as ShipTypeName];
+            const roleResults = updatedResults[role];
             Object.keys(roleResults).forEach((slot) => {
-                const slotResults = roleResults[slot as GearSlotName | 'all'];
+                const slotResults = roleResults[slot];
 
                 slotResults.forEach((result, index) => {
                     const updatedPiece = inventoryMap.get(result.piece.id);
@@ -169,11 +169,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         const slotResults: Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>> = {};
         for (const [slotName, _] of slotEntries) {
             await new Promise((resolve) => setTimeout(resolve, 0));
-            slotResults[slotName as GearSlotName] = analyzePotentialUpgrades(
+            slotResults[slotName] = analyzePotentialUpgrades(
                 filteredInventory,
                 role,
                 6,
-                slotName as GearSlotName,
+                slotName,
                 selectedRarity,
                 simulationCount,
                 selectedStats,
@@ -562,7 +562,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             <Select
                                 label="Ship (Optional)"
                                 value={selectedShipId}
-                                onChange={(value) => setSelectedShipId(value as string | 'none')}
+                                onChange={(value) => setSelectedShipId(value)}
                                 options={[
                                     { value: 'none', label: 'None (Use dummy values)' },
                                     ...ships
@@ -581,7 +581,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             <Select
                                 label="Role Filter"
                                 value={selectedRole}
-                                onChange={(value) => setSelectedRole(value as ShipTypeName | 'all')}
+                                onChange={(value) => setSelectedRole(value)}
                                 options={[
                                     { value: 'all', label: 'All Roles' },
                                     ...shipRoles.map((role) => ({
@@ -828,9 +828,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                             <Tabs
                                 tabs={slotTabs}
                                 activeTab={selectedSlot}
-                                onChange={(tab) =>
-                                    handleSlotChange(role, tab as GearSlotName | 'all')
-                                }
+                                onChange={(tab) => handleSlotChange(role, tab)}
                             />
                             {currentResults.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

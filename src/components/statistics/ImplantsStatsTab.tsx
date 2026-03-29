@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from 'react';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
-import { Select } from '../ui';
-import { StatCard } from '../ui';
+import { Select, StatCard } from '../ui';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { ImplantsSnapshot } from '../../types/statisticsSnapshot';
@@ -122,7 +121,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value as RarityName | 'all')}
+                            onChange={(value) => setRarityFilter(value)}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

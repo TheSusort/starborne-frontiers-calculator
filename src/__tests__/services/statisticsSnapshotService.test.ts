@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// eslint-disable-next-line import/order
 import {
     getSnapshotList,
     getSnapshot,

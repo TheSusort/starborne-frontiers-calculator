@@ -60,10 +60,10 @@ export const UpgradeSuggestions: React.FC<Props> = ({ suggestions }) => {
                             {suggestion.priority && (
                                 <span className="block text-xs w-full">
                                     {suggestion.priority.toFixed(1)}% is a{' '}
-                                    {suggestion.priority! <
+                                    {suggestion.priority <
                                     GEAR_SLOTS[suggestion.slotName].expectedContribution - 5
                                         ? 'very'
-                                        : suggestion.priority! <
+                                        : suggestion.priority <
                                             GEAR_SLOTS[suggestion.slotName].expectedContribution - 2
                                           ? ''
                                           : 'fairly'}{' '}

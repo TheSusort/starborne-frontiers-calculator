@@ -5,8 +5,7 @@ import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants'
 import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon, UnlockedLockIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
-import { ImplantName } from '../../constants/implants';
-import IMPLANTS from '../../constants/implants';
+import IMPLANTS, { ImplantName } from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { Tooltip } from '../ui/layout/Tooltip';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
@@ -193,7 +192,7 @@ export const GearPieceDisplay = memo(
                             )}
                             {isImplant && mode !== 'subcompact' && (
                                 <span className={`${small ? 'ps-6' : 'ps-8'} text-xs`}>
-                                    {IMPLANT_SLOTS[gear.slot as keyof typeof IMPLANT_SLOTS]?.label}
+                                    {IMPLANT_SLOTS[gear.slot]?.label}
                                 </span>
                             )}
                         </div>
@@ -272,7 +271,7 @@ export const GearPieceDisplay = memo(
                                             isCalibrationActive &&
                                             !showCalibratedPreview &&
                                             displayMainStat
-                                                ? [displayMainStat as Stat]
+                                                ? [displayMainStat]
                                                 : upgrade?.mainStat &&
                                                     !isMaxLevel &&
                                                     !showCalibratedPreview

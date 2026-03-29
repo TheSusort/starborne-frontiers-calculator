@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
@@ -11,7 +12,7 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, GearSlotName, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { GEAR_SETS, SHIP_TYPES, GEAR_SLOTS, ShipTypeName } from '../../constants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
@@ -19,8 +20,6 @@ import { SimulationResults } from '../../components/simulation/SimulationResults
 import { useNotification } from '../../hooks/useNotification';
 import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
 import { MilestoneModal } from '../../components/ui/MilestoneModal';
-import { GEAR_SLOTS } from '../../constants';
-import { useSearchParams } from 'react-router-dom';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -691,7 +690,7 @@ export const AutogearPage: React.FC = () => {
         // Apply gear updates using equipMultipleGear (handles moving gear from other ships)
         if (gearSuggestions.length > 0) {
             const gearAssignments = gearSuggestions.map((suggestion) => ({
-                slot: suggestion.slotName as GearSlotName,
+                slot: suggestion.slotName,
                 gearId: suggestion.gearId,
             }));
             await equipMultipleGear(shipId, gearAssignments);
@@ -703,7 +702,7 @@ export const AutogearPage: React.FC = () => {
             if (currentShip) {
                 const newImplants = { ...currentShip.implants };
                 implantSuggestions.forEach((suggestion) => {
-                    newImplants[suggestion.slotName as GearSlotName] = suggestion.gearId;
+                    newImplants[suggestion.slotName] = suggestion.gearId;
                 });
                 await updateShip(shipId, { implants: newImplants });
             }

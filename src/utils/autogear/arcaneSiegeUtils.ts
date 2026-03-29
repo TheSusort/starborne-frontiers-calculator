@@ -25,7 +25,7 @@ export function getArcaneSiegeInfo(
         if (!implantId) continue;
         const implant = getGearPiece(implantId);
         if (implant?.setBonus === 'ARCANE_SIEGE') {
-            const rarity = implant.rarity as RarityName;
+            const rarity = implant.rarity;
             const multiplier = ARCANE_SIEGE_MULTIPLIERS[rarity] || 0;
             return { hasImplant: true, multiplier, rarity };
         }

@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Button, ConfirmModal } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { StorageKey, StorageKeyType } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
-import { GearSlotName } from '../../constants';
-import { v4 as uuidv4 } from 'uuid';
 
 const BACKUP_KEYS = Object.values(StorageKey);
 
@@ -168,7 +167,7 @@ export const BackupRestoreData: React.FC = () => {
                     // Check if this is a legacy key
                     const normalizedKey = LEGACY_KEY_MAP[key] || key;
 
-                    if (BACKUP_KEYS.includes(normalizedKey as StorageKeyType)) {
+                    if (BACKUP_KEYS.includes(normalizedKey)) {
                         try {
                             // Parse the data
                             const parsedData = JSON.parse(value);
@@ -236,7 +235,7 @@ export const BackupRestoreData: React.FC = () => {
                                             Object.entries(loadout.equipment).map(
                                                 ([slot, gearId]) => ({
                                                     loadout_id: loadout.id,
-                                                    slot: slot as GearSlotName,
+                                                    slot: slot,
                                                     gear_id: gearId,
                                                 })
                                             )
@@ -293,7 +292,7 @@ export const BackupRestoreData: React.FC = () => {
                                                         ([slot, gearId]) => ({
                                                             team_loadout_id: teamLoadout.id,
                                                             position,
-                                                            slot: slot as GearSlotName,
+                                                            slot: slot,
                                                             gear_id: gearId,
                                                         })
                                                     )

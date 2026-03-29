@@ -1,9 +1,9 @@
 import React from 'react';
 import { Loadout } from '../../types/loadout';
-import { LoadoutCard } from './LoadoutCard';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearPiece } from '../../types/gear';
 import { GearSlotName } from '../../constants';
+import { LoadoutCard } from './LoadoutCard';
 
 interface LoadoutListProps {
     loadouts: Loadout[];
@@ -47,7 +47,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
                             getGearPiece={getGearPiece}
                             onEquip={() => {
                                 Object.entries(loadout.equipment).forEach(([slot, gearId]) => {
-                                    equipGear(loadout.shipId, slot as GearSlotName, gearId);
+                                    equipGear(loadout.shipId, slot, gearId);
                                 });
                             }}
                             onUpdate={(equipment) => onUpdate(loadout.id, equipment)}

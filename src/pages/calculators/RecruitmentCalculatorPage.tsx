@@ -372,11 +372,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             <Select
                                                 label="Select Faction"
                                                 value={factionEventFaction}
-                                                onChange={(value) =>
-                                                    setFactionEventFaction(
-                                                        value as FactionName | ''
-                                                    )
-                                                }
+                                                onChange={(value) => setFactionEventFaction(value)}
                                                 options={Object.entries(FACTIONS).map(
                                                     ([key, faction]) => ({
                                                         value: key,

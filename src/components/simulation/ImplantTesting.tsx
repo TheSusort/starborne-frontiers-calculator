@@ -38,7 +38,7 @@ export const ImplantTesting: React.FC<ImplantTestingProps> = ({
                             slotKey={slotKey}
                             gear={
                                 temporaryImplants[slotKey]
-                                    ? getGearPiece(temporaryImplants[slotKey]!)
+                                    ? getGearPiece(temporaryImplants[slotKey])
                                     : undefined
                             }
                             hoveredGear={hoveredGear}

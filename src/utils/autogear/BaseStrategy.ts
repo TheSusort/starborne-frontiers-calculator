@@ -1,9 +1,9 @@
-import { AutogearStrategy } from './AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { EngineeringStat } from '../../types/stats';
+import { AutogearStrategy } from './AutogearStrategy';
 
 export abstract class BaseStrategy implements AutogearStrategy {
     abstract name: string;

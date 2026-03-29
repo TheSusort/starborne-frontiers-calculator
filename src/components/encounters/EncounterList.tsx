@@ -1,10 +1,10 @@
 import { toBlob } from 'html-to-image';
 import { EncounterNote, SharedEncounterNote } from '../../types/encounters';
 import { Button, CloseIcon, EditIcon, CopyIcon, ShareIcon } from '../ui';
-import FormationGrid from './FormationGrid';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons';
+import FormationGrid from './FormationGrid';
 
 const FONT_URL =
     'https://fonts.googleapis.com/css2?family=Electrolize:wght@400;500;600;700&display=swap';

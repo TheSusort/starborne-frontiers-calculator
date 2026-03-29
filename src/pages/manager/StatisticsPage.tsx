@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { PageLayout, Tabs } from '../../components/ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -9,7 +10,6 @@ import { ImplantsStatsTab } from '../../components/statistics/ImplantsStatsTab';
 import { EngineeringStatsTab } from '../../components/statistics/EngineeringStatsTab';
 import { SnapshotSelector } from '../../components/statistics/SnapshotSelector';
 import { useStatisticsSnapshot } from '../../hooks/useStatisticsSnapshot';
-import { Link } from 'react-router-dom';
 
 export const StatisticsPage: React.FC = () => {
     const { ships, loading: shipsLoading } = useShips();

@@ -196,10 +196,10 @@ const compareKeyProperties = (
                 const equipment1 = obj1 as Equipment;
                 const equipment2 = obj2 as Equipment;
                 const oldUnitName = equipment1[prop]
-                    ? unitNameMap1.get(equipment1[prop]!) || equipment1[prop]
+                    ? unitNameMap1.get(equipment1[prop]) || equipment1[prop]
                     : 'None';
                 const newUnitName = equipment2[prop]
-                    ? unitNameMap2.get(equipment2[prop]!) || equipment2[prop]
+                    ? unitNameMap2.get(equipment2[prop]) || equipment2[prop]
                     : 'None';
                 const equipmentName =
                     `${equipment1.Rank} ★ ${equipment1.Name}` ||

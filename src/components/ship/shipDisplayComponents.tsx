@@ -1,4 +1,5 @@
 import React, { memo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AffinityName, Ship } from '../../types/ship';
 import {
     SHIP_TYPES,
@@ -16,8 +17,8 @@ import {
     InfoIcon,
     Tooltip,
     CalibrationIcon,
+    CopyIcon,
 } from '../ui';
-import { Link, useNavigate } from 'react-router-dom';
 import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
 import { GearIcon } from '../ui/icons/GearIcon';
@@ -29,12 +30,11 @@ import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
 import { TrophyIcon } from '../ui/icons/TrophyIcon';
 import { Image } from '../ui/Image';
-import IMPLANTS, { ImplantName } from '../../constants/implants';
+import IMPLANTS from '../../constants/implants';
 import { ImageIcon } from '../ui/icons/ImageIcon';
 import { StatBreakdown as StatsBreakdownType } from '../../utils/ship/statsCalculator';
 import { StatList } from '../stats/StatList';
 import { StatBreakdown } from '../stats/StatBreakdown';
-import { CopyIcon } from '../ui';
 
 export type PanelVariant = 'default' | 'compact';
 
@@ -452,7 +452,7 @@ export const ImplantsDisplay: React.FC<ImplantsDisplayProps> = ({ ship, getGearP
                         if (!implantId) return null;
                         const gear = getGearPiece(implantId);
                         if (!gear?.setBonus) return null;
-                        const implant = IMPLANTS[gear.setBonus as ImplantName];
+                        const implant = IMPLANTS[gear.setBonus];
                         if (!implant?.imageKey) return null;
                         const rarity = gear.rarity || 'common';
                         return (
@@ -482,9 +482,7 @@ export const ImplantsDisplay: React.FC<ImplantsDisplayProps> = ({ ship, getGearP
                     targetElement={implantTooltipRefs.current[hoveredImplantSlot]}
                 >
                     <GearPieceDisplay
-                        gear={
-                            getGearPiece(ship.implants[hoveredImplantSlot] as string) as GearPiece
-                        }
+                        gear={getGearPiece(ship.implants[hoveredImplantSlot]) as GearPiece}
                         mode="subcompact"
                         small
                     />

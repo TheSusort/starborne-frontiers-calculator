@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { supabase as defaultSupabase } from '../config/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase as defaultSupabase } from '../config/supabase';
 import { StorageKey } from '../constants/storage';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
@@ -687,7 +687,7 @@ export const syncMigratedDataToSupabase = async (
                             .map(([slot, gearId]) => ({
                                 loadout_id: loadout.id,
                                 slot,
-                                gear_id: gearId as string,
+                                gear_id: gearId,
                             }))
                     );
 
@@ -792,7 +792,7 @@ export const syncMigratedDataToSupabase = async (
                                         team_loadout_id: teamLoadout.id,
                                         ship_id: ship.shipId,
                                         slot,
-                                        gear_id: gearId as string,
+                                        gear_id: gearId,
                                     }))
                             )
                     );

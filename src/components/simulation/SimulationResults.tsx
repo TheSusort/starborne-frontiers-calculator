@@ -1,6 +1,9 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { ShipTypeName, SHIP_TYPES } from '../../constants';
+import { Ship } from '../../types/ship';
+import { GearSuggestion } from '../../types/autogear';
+import { GearPiece } from '../../types/gear';
 import { AttackerStats } from './AttackerStats';
 import { DefenderStats } from './DefenderStats';
 import { DebufferStats } from './DebufferStats';
@@ -11,10 +14,6 @@ import { SupporterStats } from './SupporterStats';
 import { SupporterBufferStats } from './SupporterBufferStats';
 import { SupporterOffensiveStats } from './SupporterOffensiveStats';
 import { SupporterShieldStats } from './SupporterShieldStats';
-
-import { Ship } from '../../types/ship';
-import { GearSuggestion } from '../../types/autogear';
-import { GearPiece } from '../../types/gear';
 
 interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
@@ -36,13 +35,11 @@ const normalizeRole = (role: ShipTypeName | null): ShipTypeName | null => {
 
     // If it's already a key (uppercase), return it
     if (role in SHIP_TYPES) {
-        return role as ShipTypeName;
+        return role;
     }
 
     // Otherwise, find the key by matching the display name
-    const foundKey = Object.keys(SHIP_TYPES).find(
-        (key) => SHIP_TYPES[key as ShipTypeName].name === role
-    ) as ShipTypeName | undefined;
+    const foundKey = Object.keys(SHIP_TYPES).find((key) => SHIP_TYPES[key].name === role);
 
     return foundKey || null;
 };

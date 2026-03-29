@@ -1,6 +1,6 @@
 import React from 'react';
-import { Modal } from './Modal';
 import { Button } from '../';
+import { Modal } from './Modal';
 
 interface ConfirmModalProps {
     isOpen: boolean;

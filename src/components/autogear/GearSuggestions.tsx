@@ -130,12 +130,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 'implant_minor_gamma',
                                                 'implant_minor_sigma',
                                             ].map((slot) => {
-                                                const suggestion = getSuggestionForSlot(
-                                                    slot as GearSlotName
-                                                );
+                                                const suggestion = getSuggestionForSlot(slot);
                                                 const gearId =
-                                                    suggestion?.gearId ??
-                                                    ship.implants?.[slot as GearSlotName];
+                                                    suggestion?.gearId ?? ship.implants?.[slot];
                                                 const gear = gearId
                                                     ? getGearPiece(gearId)
                                                     : undefined;
@@ -146,7 +143,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                     >
                                                         {gear ? (
                                                             <GearSlot
-                                                                slotKey={slot as GearSlotName}
+                                                                slotKey={slot}
                                                                 gear={gear}
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
@@ -167,12 +164,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 const suggestion =
                                                     slot === 'implant_ultimate'
                                                         ? null
-                                                        : getSuggestionForSlot(
-                                                              slot as GearSlotName
-                                                          );
+                                                        : getSuggestionForSlot(slot);
                                                 const gearId =
-                                                    suggestion?.gearId ??
-                                                    ship.implants?.[slot as GearSlotName];
+                                                    suggestion?.gearId ?? ship.implants?.[slot];
                                                 const gear = gearId
                                                     ? getGearPiece(gearId)
                                                     : undefined;
@@ -183,7 +177,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                     >
                                                         {gear ? (
                                                             <GearSlot
-                                                                slotKey={slot as GearSlotName}
+                                                                slotKey={slot}
                                                                 gear={gear}
                                                                 hoveredGear={hoveredGear}
                                                                 onHover={onHover}
@@ -208,12 +202,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 'implant_minor_gamma',
                                                 'implant_minor_sigma',
                                             ].map((slot) => {
-                                                const suggestion = getSuggestionForSlot(
-                                                    slot as GearSlotName
-                                                );
+                                                const suggestion = getSuggestionForSlot(slot);
                                                 const gearId =
-                                                    suggestion?.gearId ??
-                                                    ship.implants?.[slot as GearSlotName];
+                                                    suggestion?.gearId ?? ship.implants?.[slot];
                                                 const gear = gearId
                                                     ? getGearPiece(gearId)
                                                     : undefined;
@@ -240,12 +231,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                                 const suggestion =
                                                     slot === 'implant_ultimate'
                                                         ? null
-                                                        : getSuggestionForSlot(
-                                                              slot as GearSlotName
-                                                          );
+                                                        : getSuggestionForSlot(slot);
                                                 const gearId =
-                                                    suggestion?.gearId ??
-                                                    ship.implants?.[slot as GearSlotName];
+                                                    suggestion?.gearId ?? ship.implants?.[slot];
                                                 const gear = gearId
                                                     ? getGearPiece(gearId)
                                                     : undefined;

@@ -131,7 +131,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             if (!allowedTypes.includes(subStat.type)) {
                 return {
                     ...subStat,
-                    type: allowedTypes[0] as StatType,
+                    type: allowedTypes[0],
                 };
             }
 
@@ -149,7 +149,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             level,
             shipId: editingPiece?.shipId || '',
         };
-        await onSubmit(piece as GearPiece);
+        onSubmit(piece as GearPiece);
         setSubStats([]);
         setStars(1);
         setLevel(0);
@@ -180,14 +180,14 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Set Bonus"
                     value={setBonus}
-                    onChange={(value) => setSetBonus(value as GearSetName)}
+                    onChange={(value) => setSetBonus(value)}
                     options={setOptions}
                 />
 
                 <Select
                     label="Slot"
                     value={slot}
-                    onChange={(value) => setSlot(value as GearSlotName)}
+                    onChange={(value) => setSlot(value)}
                     options={gearTypeOptions}
                 />
 
@@ -213,7 +213,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <Select
                     label="Rarity"
                     value={rarity}
-                    onChange={(value) => setRarity(value as RarityName)}
+                    onChange={(value) => setRarity(value)}
                     options={rarityOptions}
                 />
 
@@ -225,7 +225,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                         onChange={(value) => handleMainStatChange({ name: value as StatName })}
                         options={getAvailableMainStats(slot).map((stat) => ({
                             value: stat,
-                            label: STATS[stat as StatName].label,
+                            label: STATS[stat].label,
                         }))}
                         data-testid="main-stat-select"
                     />

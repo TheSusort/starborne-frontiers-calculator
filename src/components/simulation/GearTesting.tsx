@@ -38,7 +38,7 @@ export const GearTesting: React.FC<GearTestingProps> = ({
                             slotKey={slotKey}
                             gear={
                                 temporaryGear[slotKey]
-                                    ? getGearPiece(temporaryGear[slotKey]!)
+                                    ? getGearPiece(temporaryGear[slotKey])
                                     : undefined
                             }
                             hoveredGear={hoveredGear}

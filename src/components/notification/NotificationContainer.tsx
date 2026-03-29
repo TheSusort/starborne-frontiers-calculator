@@ -1,6 +1,6 @@
 import React from 'react';
-import { NotificationItem } from './NotificationItem';
 import { useNotification } from '../../hooks/useNotification';
+import { NotificationItem } from './NotificationItem';
 
 export const NotificationContainer: React.FC = () => {
     const { notifications, removeNotification } = useNotification();

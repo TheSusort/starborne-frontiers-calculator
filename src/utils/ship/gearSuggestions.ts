@@ -3,9 +3,9 @@ import { Ship } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { ShipTypeName } from '../../constants/shipTypes';
-import { SlotContribution } from './statDistribution';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { UpgradeReason } from '../../types/analysis';
+import { SlotContribution } from './statDistribution';
 
 interface GearQualityCheck {
     reasons: UpgradeReason[];

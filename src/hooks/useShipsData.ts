@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
-import { Ship } from '../types/ship';
-import { RarityName } from '../constants/rarities';
-import { FactionName } from '../constants/factions';
-import { ShipTypeName } from '../constants/shipTypes';
-import { AffinityName } from '../types/ship';
+import { Ship, AffinityName } from '../types/ship';
 
 interface ShipTemplate {
     id: string;
@@ -41,9 +37,9 @@ interface ShipTemplate {
 const transformShipTemplate = (template: ShipTemplate): Ship => ({
     id: template.id,
     name: template.name,
-    rarity: template.rarity.toLowerCase() as RarityName,
-    faction: template.faction as FactionName,
-    type: template.type as ShipTypeName,
+    rarity: template.rarity.toLowerCase(),
+    faction: template.faction,
+    type: template.type,
     baseStats: {
         hp: template.base_stats.hp,
         attack: template.base_stats.attack,

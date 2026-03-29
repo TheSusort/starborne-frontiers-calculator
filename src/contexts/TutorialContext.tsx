@@ -8,8 +8,8 @@ import React, {
     useMemo,
 } from 'react';
 import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/tutorialSteps';
-import { useAuth } from './AuthProvider';
 import { supabase } from '../config/supabase';
+import { useAuth } from './AuthProvider';
 
 const STORAGE_KEY = 'tutorial_completed_groups';
 

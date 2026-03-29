@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Position, ShipPosition, EncounterNote, SharedShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import { ShipSelector } from '../ship/ShipSelector';
-import FormationGrid from './FormationGrid';
 import { Button, Input, Textarea } from '../ui';
+import FormationGrid from './FormationGrid';
 interface EncounterFormProps {
     onSubmit: (encounter: EncounterNote) => void;
     initialEncounter?: EncounterNote | null;
@@ -51,7 +51,7 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
             description,
             isPublic,
         };
-        await onSubmit(encounterData as EncounterNote);
+        onSubmit(encounterData as EncounterNote);
         setName('');
         setFormation([]);
         setDescription('');

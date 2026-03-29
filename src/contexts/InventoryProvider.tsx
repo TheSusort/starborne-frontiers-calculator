@@ -1,15 +1,15 @@
 import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { useAuth } from './AuthProvider';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
-import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from './AuthProvider';
 
 interface InventoryContextType {
     inventory: GearPiece[];

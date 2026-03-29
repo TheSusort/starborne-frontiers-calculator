@@ -1,19 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { Button, PageLayout } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { SHIP_TYPES, ShipTypeName } from '../../constants';
+import { SHIP_TYPES, ShipTypeName, GearSlotName, ImplantSlotName } from '../../constants';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { SimulationSettings } from '../../components/simulation/SimulationSettings';
-import { useSearchParams } from 'react-router-dom';
 import { GearTesting } from '../../components/simulation/GearTesting';
 import { Modal } from '../../components/ui/layout/Modal';
 import { GearInventory } from '../../components/gear/GearInventory';
 import { useNotification } from '../../hooks/useNotification';
-import { GearSlotName, ImplantSlotName } from '../../constants';
 import { GearPiece } from '../../types/gear';
 import { ImplantTesting } from '../../components/simulation/ImplantTesting';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
@@ -60,12 +59,10 @@ export const SimulationPage: React.FC = () => {
     const normalizeRoleForSimulation = (role: ShipTypeName): ShipTypeName => {
         // If it's already a key (uppercase), return it
         if (role in SHIP_TYPES) {
-            return role as ShipTypeName;
+            return role;
         }
         // Otherwise, find the key by matching the display name
-        const foundKey = Object.keys(SHIP_TYPES).find(
-            (key) => SHIP_TYPES[key as ShipTypeName].name === role
-        ) as ShipTypeName | undefined;
+        const foundKey = Object.keys(SHIP_TYPES).find((key) => SHIP_TYPES[key].name === role);
         return foundKey || 'ATTACKER';
     };
 
@@ -118,7 +115,7 @@ export const SimulationPage: React.FC = () => {
         if (!selectedShip) return;
 
         const gearAssignments = Object.entries(temporaryGear).map(([slot, gearId]) => ({
-            slot: slot as GearSlotName,
+            slot: slot,
             gearId: gearId || '',
         }));
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Button, InfoIcon, Tooltip } from '../';
 import { Link } from 'react-router-dom';
+import { Button, InfoIcon, Tooltip } from '../';
 import { TutorialReplayButton } from '../../tutorial/TutorialReplayButton';
 
 interface PageLayoutProps {

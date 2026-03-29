@@ -1,6 +1,6 @@
-import { StatName } from './stats';
 import { ShipTypeName } from '../constants';
 import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
+import { StatName } from './stats';
 
 export interface StatPriority {
     stat: StatName;

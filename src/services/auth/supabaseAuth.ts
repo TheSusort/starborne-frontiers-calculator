@@ -1,6 +1,6 @@
-import { AuthService, AuthUser } from './types';
-import { supabase } from '../../config/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../../config/supabase';
+import { AuthService, AuthUser } from './types';
 
 export class SupabaseAuthService implements AuthService {
     private convertSupabaseUser(user: SupabaseUser | null): AuthUser | null {

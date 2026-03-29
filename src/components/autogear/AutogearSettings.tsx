@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
-import { StatBonusForm } from './StatBonusForm';
 import {
     Button,
     Select,
@@ -22,6 +21,7 @@ import { ShipTypeName, STATS } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
+import { StatBonusForm } from './StatBonusForm';
 
 function formatRuleSummary(rule: {
     factions: string[] | null;

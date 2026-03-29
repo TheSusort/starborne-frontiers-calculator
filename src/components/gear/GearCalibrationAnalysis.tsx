@@ -6,9 +6,9 @@ import {
     CalibrationResult,
     isCalibrationEligible,
 } from '../../utils/gear/calibrationCalculator';
-import { GearPieceDisplay } from './GearPieceDisplay';
 import { Button, ProgressBar } from '../ui';
 import { Tabs } from '../ui/layout/Tabs';
+import { GearPieceDisplay } from './GearPieceDisplay';
 import { ShipCalibrationAnalysis } from './ShipCalibrationAnalysis';
 
 interface Props {
@@ -65,9 +65,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
 
         // Iterate through all results and update any gear pieces that have changed
         Object.keys(updatedResults).forEach((role) => {
-            const roleResults = updatedResults[role as ShipTypeName];
+            const roleResults = updatedResults[role];
             Object.keys(roleResults).forEach((slot) => {
-                const slotResults = roleResults[slot as GearSlotName | 'all'];
+                const slotResults = roleResults[slot];
 
                 slotResults.forEach((result, index) => {
                     const updatedPiece = inventoryMap.get(result.piece.id);
@@ -122,11 +122,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         for (const [slotName] of slotEntries) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             const slotInventory = eligibleInventory.filter((p) => p.slot === slotName);
-            slotResults[slotName as GearSlotName] = analyzeCalibrationPotential(
-                slotInventory,
-                role,
-                6
-            );
+            slotResults[slotName] = analyzeCalibrationPotential(slotInventory, role, 6);
             completedSteps++;
             setOptimizationProgress({
                 current: completedSteps,
@@ -289,9 +285,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                                 <Tabs
                                     tabs={slotTabs}
                                     activeTab={selectedSlot}
-                                    onChange={(tab) =>
-                                        handleSlotChange(role, tab as GearSlotName | 'all')
-                                    }
+                                    onChange={(tab) => handleSlotChange(role, tab)}
                                 />
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {currentResults.map((result, index) => (

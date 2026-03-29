@@ -1,12 +1,17 @@
 import { GearPiece } from '../../types/gear';
-import { Stat, StatName, BaseStats } from '../../types/stats';
+import {
+    Stat,
+    StatName,
+    BaseStats,
+    PERCENTAGE_ONLY_STATS,
+    PercentageOnlyStats,
+    EngineeringStat,
+} from '../../types/stats';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { PERCENTAGE_ONLY_STATS, PercentageOnlyStats } from '../../types/stats';
 import { Ship } from '../../types/ship';
-import { EngineeringStat } from '../../types/stats';
 
 /**
  * Calibration stat increases by main stat type and star level.

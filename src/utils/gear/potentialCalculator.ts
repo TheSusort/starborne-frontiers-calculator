@@ -7,16 +7,16 @@ import {
     StatName,
     StatType,
     EngineeringStat,
+    BaseStats,
 } from '../../types/stats';
-import { calculateMainStatValue } from './mainStatValueFetcher';
 import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
-import { BaseStats } from '../../types/stats';
 import { calculateTotalStats, clearGearStatsCache, StatBreakdown } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 import { Ship } from '../../types/ship';
+import { calculateMainStatValue } from './mainStatValueFetcher';
 import { isCalibrationEligible, getCalibratedMainStat } from './calibrationCalculator';
 
 const UPGRADE_LEVELS = {
@@ -590,7 +590,7 @@ export function analyzePotentialUpgrades(
         const slotsToCache = new Set<GearSlotName>();
         eligiblePieces.forEach((piece) => {
             if (piece.slot && !piece.slot.includes('implant')) {
-                slotsToCache.add(piece.slot as GearSlotName);
+                slotsToCache.add(piece.slot);
             }
         });
 

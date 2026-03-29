@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { APP_NAME, CURRENT_VERSION } from '../../../constants';
-import { Offcanvas } from './Offcanvas';
 import logo from '/favicon.ico?url';
+import { Sun, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { LoginButton } from '../../auth/LoginButton';
 import { MenuIcon } from '../icons/MenuIcon';
 import { ChevronDownIcon } from '../icons';
-import { Sun, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { APP_NAME, CURRENT_VERSION } from '../../../constants';
 import { useAuth } from '../../../contexts/AuthProvider';
-import { Tooltip } from './Tooltip';
 import { ImportButton } from '../../import/ImportButton';
 import { isAdmin } from '../../../services/adminService';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { Offcanvas } from './Offcanvas';
+import { Tooltip } from './Tooltip';
 
 // Define the type for navigation items
 type NavigationItem = {

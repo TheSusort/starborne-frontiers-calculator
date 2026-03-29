@@ -5,8 +5,7 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
-import { BaseStats } from '../../../types/stats';
-import { EngineeringStat } from '../../../types/stats';
+import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
 
 /**
@@ -96,7 +95,7 @@ export class TwoPassStrategy extends BaseStrategy {
 
         // Process each slot independently
         Object.entries(GEAR_SLOTS).forEach(([slotKey, _]) => {
-            const slotName = slotKey as GearSlotName;
+            const slotName = slotKey;
             let bestScore = -Infinity;
             let bestGearId: string | undefined;
 

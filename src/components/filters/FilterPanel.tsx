@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CloseIcon, CheckboxGroup, Offcanvas, FilterIcon, Button, Input } from '../ui';
-import { SortConfig, SortOption, SortPanel } from './SortPanel';
 import { SearchIcon } from '../ui/icons/SearchIcon';
 import { ListIcon } from '../ui/icons/ListIcon';
 import { ImageIcon } from '../ui/icons/ImageIcon';
-
-import { RangeFilter } from './RangeFilter';
-import { StatFilter } from './StatFilter';
 import { StatFilter as StatFilterType } from '../../hooks/usePersistedFilters';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
+import { RangeFilter } from './RangeFilter';
+import { StatFilter } from './StatFilter';
+import { SortConfig, SortOption, SortPanel } from './SortPanel';
 
 export interface FilterOption {
     label: string;

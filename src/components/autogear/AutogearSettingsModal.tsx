@@ -1,11 +1,11 @@
 import React from 'react';
 import { Modal } from '../ui/layout/Modal';
-import { AutogearSettings } from './AutogearSettings';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
+import { AutogearSettings } from './AutogearSettings';
 
 interface AutogearSettingsModalProps {
     isOpen: boolean;

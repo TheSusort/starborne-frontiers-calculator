@@ -231,7 +231,7 @@ export const LeaderboardPage: React.FC = () => {
                         ship.equipment,
                         [],
                         customGetGearPiece,
-                        () => ({ shipType: ship.type as ShipTypeName, stats: [] }),
+                        () => ({ shipType: ship.type, stats: [] }),
                         selectedRole || ship.type // Use the selected role or the ship's actual type
                     );
 
@@ -284,7 +284,7 @@ export const LeaderboardPage: React.FC = () => {
                     entry.ship.equipment,
                     [],
                     customGetGearPiece,
-                    () => ({ shipType: entry.ship.type as ShipTypeName, stats: [] }),
+                    () => ({ shipType: entry.ship.type, stats: [] }),
                     selectedRole || entry.ship.type
                 );
 
@@ -368,9 +368,7 @@ export const LeaderboardPage: React.FC = () => {
                                     })),
                                 ]}
                                 value={selectedRole || ''}
-                                onChange={(value) =>
-                                    setSelectedRole(value === '' ? null : (value as ShipTypeName))
-                                }
+                                onChange={(value) => setSelectedRole(value === '' ? null : value)}
                                 className="min-w-48"
                             />
                         </div>
