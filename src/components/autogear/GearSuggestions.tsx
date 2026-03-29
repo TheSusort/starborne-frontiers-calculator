@@ -272,13 +272,15 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                         <Button
                             variant="secondary"
                             title={ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'}
-                            onClick={async (e) => {
+                            onClick={(e) => {
                                 e.stopPropagation();
-                                try {
-                                    await onLockEquipment(ship);
-                                } catch (error) {
-                                    console.error('Failed to update lock state:', error);
-                                }
+                                void (async () => {
+                                    try {
+                                        await onLockEquipment(ship);
+                                    } catch (error) {
+                                        console.error('Failed to update lock state:', error);
+                                    }
+                                })();
                             }}
                         >
                             {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}

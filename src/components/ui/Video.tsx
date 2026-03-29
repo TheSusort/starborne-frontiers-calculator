@@ -42,7 +42,7 @@ export const Video = memo(
                 play: () => {
                     if (!videoRef.current) return;
                     setIsPlaying(true);
-                    videoRef.current.play();
+                    void videoRef.current.play();
                 },
                 pause: () => {
                     if (videoRef.current) {

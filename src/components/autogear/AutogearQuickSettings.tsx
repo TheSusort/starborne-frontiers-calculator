@@ -89,7 +89,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                                 variant="secondary"
                                                 onClick={(event) => {
                                                     event.stopPropagation();
-                                                    navigate(`/ships/${ship.id}`, {
+                                                    void navigate(`/ships/${ship.id}`, {
                                                         state: {
                                                             from: '/autogear',
                                                             shipId: ship.id,

@@ -120,7 +120,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
                         <FileUpload
-                            onFileSelect={(file) => handleFileUpload(file, 1)}
+                            onFileSelect={(file) => void handleFileUpload(file, 1)}
                             label="First JSON File (Original)"
                             disabled={isCalculating}
                         />
@@ -133,7 +133,7 @@ const JsonDiffCalculatorPage: React.FC = () => {
 
                     <div>
                         <FileUpload
-                            onFileSelect={(file) => handleFileUpload(file, 2)}
+                            onFileSelect={(file) => void handleFileUpload(file, 2)}
                             label="Second JSON File (New)"
                             disabled={isCalculating}
                         />

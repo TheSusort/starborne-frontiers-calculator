@@ -260,7 +260,9 @@ export const BackupRestoreData: React.FC = () => {
                                         id: teamLoadout.id,
                                         user_id: user.id,
                                         name: teamLoadout.name,
-                                        created_at: new Date(teamLoadout.createdAt).toISOString(),
+                                        created_at: new Date(
+                                            teamLoadout.createdAt as string | number | Date
+                                        ).toISOString(),
                                     }));
 
                                     await supabase.from('team_loadouts').insert(teamLoadoutRecords);
@@ -410,7 +412,7 @@ export const BackupRestoreData: React.FC = () => {
                         ref={fileInputRef}
                         type="file"
                         accept=".json"
-                        onChange={handleRestore}
+                        onChange={(e) => void handleRestore(e)}
                         className="hidden"
                     />
                     <Button
@@ -449,7 +451,7 @@ export const BackupRestoreData: React.FC = () => {
             <ConfirmModal
                 isOpen={showDeleteConfirm}
                 onClose={() => setShowDeleteConfirm(false)}
-                onConfirm={handleDeleteAccount}
+                onConfirm={() => void handleDeleteAccount()}
                 title="Delete Account"
                 message="Are you sure you want to delete your account? This action cannot be undone and will delete all your data."
                 confirmLabel="Delete Account"

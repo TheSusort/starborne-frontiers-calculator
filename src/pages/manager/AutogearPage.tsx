@@ -185,7 +185,7 @@ export const AutogearPage: React.FC = () => {
     };
 
     useEffect(() => {
-        getActiveSeason().then(setActiveSeason);
+        void getActiveSeason().then(setActiveSeason);
     }, []);
 
     // useEffect hooks
@@ -250,7 +250,7 @@ export const AutogearPage: React.FC = () => {
     useEffect(() => {
         if (rerunAfterLock) {
             setRerunAfterLock(false);
-            handleAutogear();
+            void handleAutogear();
         }
     }, [rerunAfterLock]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -358,7 +358,7 @@ export const AutogearPage: React.FC = () => {
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
                 useArenaModifiers: shipConfig.useArenaModifiers,
             };
-            saveConfig(config);
+            void saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
 
             // eslint-disable-next-line no-console
@@ -668,7 +668,7 @@ export const AutogearPage: React.FC = () => {
             // Store the ship ID for the confirm action
             setCurrentEquippingShipId(shipId);
         } else {
-            applyGearSuggestionsForShip(shipId);
+            void applyGearSuggestionsForShip(shipId);
         }
     };
 
@@ -805,7 +805,7 @@ export const AutogearPage: React.FC = () => {
                                 setShipSettings(selectedShips[index]);
                                 setShowSettingsModal(true);
                             }}
-                            onFindOptimalGear={handleAutogear}
+                            onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
                         />
                     </div>
@@ -842,7 +842,9 @@ export const AutogearPage: React.FC = () => {
                                                         handleEquipSuggestionsForShip(shipId)
                                                     }
                                                     onLockEquipment={handleLockEquipment}
-                                                    onLockShip={handleLockShipAndRerun}
+                                                    onLockShip={(...args) =>
+                                                        void handleLockShipAndRerun(...args)
+                                                    }
                                                     ship={ship}
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
                                                     isPrinting={isPrinting}
@@ -1122,7 +1124,7 @@ export const AutogearPage: React.FC = () => {
                             });
                         }
                     }}
-                    onFindOptimalGear={handleAutogear}
+                    onFindOptimalGear={(...args) => void handleAutogear(...args)}
                     onIgnoreEquippedChange={(ignoreEquipped) => {
                         if (shipSettings) {
                             updateShipConfig(shipSettings.id, { ignoreEquipped });
@@ -1219,7 +1221,7 @@ export const AutogearPage: React.FC = () => {
                     }}
                     onResetConfig={() => {
                         if (shipSettings) {
-                            resetConfig(shipSettings.id);
+                            void resetConfig(shipSettings.id);
                             updateShipConfig(shipSettings.id, {
                                 shipRole: 'ATTACKER' as ShipTypeName,
                                 statPriorities: [],
@@ -1245,7 +1247,7 @@ export const AutogearPage: React.FC = () => {
                     onClose={() => setShowConfirmModal(false)}
                     onConfirm={() => {
                         if (currentEquippingShipId) {
-                            applyGearSuggestionsForShip(currentEquippingShipId);
+                            void applyGearSuggestionsForShip(currentEquippingShipId);
                         }
                     }}
                     title="Move Gear"

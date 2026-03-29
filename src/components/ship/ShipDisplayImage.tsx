@@ -249,7 +249,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                         onRemove={onRemove}
                                         onAddToComparison={onAddToComparison}
                                         isInComparison={isInComparison}
-                                        onCopyAsImage={createAndCopyImage}
+                                        onCopyAsImage={() => void createAndCopyImage()}
                                         showCalibrateGear
                                     />
                                 )}

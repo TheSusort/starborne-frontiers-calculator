@@ -96,7 +96,7 @@ export const useShipsData = () => {
             }
         };
 
-        fetchShips();
+        void fetchShips();
     }, []);
 
     const fetchSingleShip = async (shipName: string): Promise<Ship | null> => {
@@ -111,7 +111,7 @@ export const useShipsData = () => {
                 throw fetchError;
             }
 
-            return transformShipTemplate(data);
+            return transformShipTemplate(data as ShipTemplate);
         } catch (err) {
             console.error('Failed to fetch single ship:', err);
             return null;

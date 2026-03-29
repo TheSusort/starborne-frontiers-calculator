@@ -30,7 +30,7 @@ export const QuickStartCard: React.FC<QuickStartCardProps> = ({
         <div
             className={`card hover:border-primary/50 transition-colors group ${className}`}
             onMouseEnter={() => {
-                videoRef.current?.play();
+                void videoRef.current?.play();
                 setIsPlaying(true);
             }}
             onMouseLeave={() => {

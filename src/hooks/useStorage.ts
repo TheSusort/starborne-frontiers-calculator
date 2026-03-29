@@ -100,7 +100,7 @@ export function useStorage<T>(config: StorageConfig<T>) {
             getFromIndexedDB(key)
                 .then((storedData) => {
                     if (storedData) {
-                        setLocalData(storedData);
+                        setLocalData(storedData as T);
                     }
                 })
                 .catch((error) => {

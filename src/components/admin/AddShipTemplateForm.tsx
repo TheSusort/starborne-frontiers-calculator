@@ -124,7 +124,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
     }));
 
     return (
-        <form onSubmit={handleSubmit} className="card">
+        <form onSubmit={(e) => void handleSubmit(e)} className="card">
             <h3 className="text-xl font-semibold mb-4">
                 {mode === 'edit' ? 'Edit Ship Template' : 'Add New Ship Template'}
             </h3>

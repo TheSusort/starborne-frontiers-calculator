@@ -467,7 +467,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                                                     size="xs"
                                                     onClick={(e) => {
                                                         e.preventDefault();
-                                                        handleLevelUp(statName);
+                                                        void handleLevelUp(statName);
                                                     }}
                                                     title={`Level up ${STATS[statName].label}`}
                                                 >

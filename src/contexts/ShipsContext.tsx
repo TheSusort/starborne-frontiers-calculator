@@ -333,7 +333,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Initial load and reload on auth changes
     useEffect(() => {
-        loadShips();
+        void loadShips();
     }, [user?.id, loadShips]);
 
     useEffect(() => {
@@ -378,7 +378,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }));
             if (JSON.stringify(updatedShips) !== JSON.stringify(localShips)) {
                 setLocalShips(updatedShips);
-                setStorageShips(updatedShips);
+                void setStorageShips(updatedShips);
             }
         }
     }, [localShips, setStorageShips]);
@@ -402,7 +402,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 id: tempId,
             };
             setLocalShips((prev) => [...prev, optimisticShip]);
-            setStorageShips([...localShips, optimisticShip]);
+            void setStorageShips([...localShips, optimisticShip]);
 
             if (!user?.id) return getShipById(tempId) as Ship;
 
@@ -488,11 +488,11 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     }
                 }
 
-                return getShipById(insertedShip.id) as Ship;
+                return getShipById(insertedShip.id as string) as Ship;
             } catch (error) {
                 // Revert optimistic update on error
                 setLocalShips((prev) => prev.filter((s) => s.id !== tempId));
-                setStorageShips(localShips.filter((s) => s.id !== tempId));
+                void setStorageShips(localShips.filter((s) => s.id !== tempId));
                 console.error('Error adding ship:', error);
                 addNotification('error', 'Failed to add ship');
                 throw error;
@@ -508,7 +508,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 ship.id === id ? { ...ship, ...updates } : ship
             );
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -636,7 +636,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             // Optimistic update
             const updatedShips = localShips.filter((ship) => ship.id !== id);
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -686,7 +686,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 };
             });
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -751,7 +751,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 };
             });
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -804,7 +804,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     : ship
             );
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -843,7 +843,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     : ship
             );
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -891,7 +891,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 return ship;
             });
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -927,7 +927,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     : ship
             );
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 
@@ -980,7 +980,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
 
         setLocalShips(updatedShips);
-        setStorageShips(updatedShips);
+        void setStorageShips(updatedShips);
     }, [localShips, setStorageShips]);
 
     const unequipAllEquipment = useCallback(
@@ -995,7 +995,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     : ship
             );
             setLocalShips(updatedShips);
-            setStorageShips(updatedShips);
+            void setStorageShips(updatedShips);
 
             if (!user?.id) return;
 

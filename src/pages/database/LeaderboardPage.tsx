@@ -117,7 +117,7 @@ export const LeaderboardPage: React.FC = () => {
                                     : undefined,
                                 subStats: (statsData.subStats || []).map(createStat),
                             };
-                            shipGearMap.set(eq.gear_id, gearPiece);
+                            shipGearMap.set(eq.gear_id as string, gearPiece);
                         }
                     });
 
@@ -151,7 +151,7 @@ export const LeaderboardPage: React.FC = () => {
                                     : undefined,
                                 subStats: (statsData.subStats || []).map(createStat),
                             };
-                            shipImplantMap.set(implant.slot, implantPiece);
+                            shipImplantMap.set(implant.slot as string, implantPiece);
                         }
                     });
 
@@ -259,7 +259,7 @@ export const LeaderboardPage: React.FC = () => {
             }
         };
 
-        fetchLeaderboardData();
+        void fetchLeaderboardData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [shipName, user?.id]);
 
@@ -305,7 +305,7 @@ export const LeaderboardPage: React.FC = () => {
     };
 
     const handleBackClick = () => {
-        navigate('/ships/index');
+        void navigate('/ships/index');
     };
 
     if (loading) {

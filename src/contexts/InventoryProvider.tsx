@@ -299,7 +299,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // Initial load and reload on auth changes
     useEffect(() => {
-        loadInventory();
+        void loadInventory();
     }, [user?.id, loadInventory]);
 
     useEffect(() => {
@@ -353,7 +353,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Optimistic update using local state
                 setLocalInventory((prev) => [...prev, optimisticGear]);
-                syncToStorage([...localInventory, optimisticGear]);
+                void syncToStorage([...localInventory, optimisticGear]);
 
                 if (!user?.id) return optimisticGear;
 
@@ -396,7 +396,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             } catch (error) {
                 // Revert optimistic update on error
                 setLocalInventory((prev) => prev.filter((g) => g.id !== tempId));
-                syncToStorage(localInventory.filter((g) => g.id !== tempId));
+                void syncToStorage(localInventory.filter((g) => g.id !== tempId));
                 console.error('Error adding gear:', error);
                 addNotification('error', 'Failed to add gear');
                 throw error;
@@ -427,7 +427,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     gear.id === id ? updatedPiece : gear
                 );
                 setLocalInventory(updatedInventory);
-                syncToStorage(updatedInventory);
+                void syncToStorage(updatedInventory);
 
                 if (!user?.id) return;
 
@@ -489,7 +489,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 // Optimistic update using local state
                 const updatedInventory = localInventory.filter((gear) => gear.id !== id);
                 setLocalInventory(updatedInventory);
-                syncToStorage(updatedInventory);
+                void syncToStorage(updatedInventory);
 
                 if (user?.id) {
                     // Delete gear record (this will cascade delete related records)

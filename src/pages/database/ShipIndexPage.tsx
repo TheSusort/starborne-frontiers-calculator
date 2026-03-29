@@ -385,7 +385,7 @@ export const ShipIndexPage: React.FC = () => {
                                                                 variant="secondary"
                                                                 size="xs"
                                                                 onClick={() =>
-                                                                    copySkillText(
+                                                                    void copySkillText(
                                                                         ship.name,
                                                                         'Active',
                                                                         ship.activeSkillText!
@@ -430,7 +430,7 @@ export const ShipIndexPage: React.FC = () => {
                                                                 variant="secondary"
                                                                 size="xs"
                                                                 onClick={() =>
-                                                                    copySkillText(
+                                                                    void copySkillText(
                                                                         ship.name,
                                                                         'Charge',
                                                                         ship.chargeSkillText!
@@ -478,7 +478,7 @@ export const ShipIndexPage: React.FC = () => {
                                                                 variant="secondary"
                                                                 size="xs"
                                                                 onClick={() =>
-                                                                    copySkillText(
+                                                                    void copySkillText(
                                                                         ship.name,
                                                                         'Passive',
                                                                         ship.firstPassiveSkillText!
@@ -527,7 +527,7 @@ export const ShipIndexPage: React.FC = () => {
                                                                 variant="secondary"
                                                                 size="xs"
                                                                 onClick={() =>
-                                                                    copySkillText(
+                                                                    void copySkillText(
                                                                         ship.name,
                                                                         'Passive R2',
                                                                         ship.secondPassiveSkillText!
@@ -576,7 +576,7 @@ export const ShipIndexPage: React.FC = () => {
                                                                 variant="secondary"
                                                                 size="xs"
                                                                 onClick={() =>
-                                                                    copySkillText(
+                                                                    void copySkillText(
                                                                         ship.name,
                                                                         'Passive R4',
                                                                         ship.thirdPassiveSkillText!

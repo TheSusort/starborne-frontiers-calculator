@@ -208,7 +208,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                         </span>
                         <Button
                             variant="primary"
-                            onClick={handleAnalyze}
+                            onClick={() => void handleAnalyze()}
                             disabled={isLoading || eligibleCount === 0}
                         >
                             {isLoading ? 'Analyzing...' : 'Analyze Calibration'}

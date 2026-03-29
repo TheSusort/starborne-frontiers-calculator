@@ -75,7 +75,7 @@ export const useEncounterNotes = () => {
                 if (error) throw error;
 
                 const transformedEncounters = data.map(transformEncounterNote);
-                setEncounters(transformedEncounters);
+                void setEncounters(transformedEncounters);
             }
         } catch (error) {
             console.error('Error loading encounters:', error);
@@ -87,7 +87,7 @@ export const useEncounterNotes = () => {
 
     // Initial load and reload on auth changes
     useEffect(() => {
-        loadEncounters();
+        void loadEncounters();
     }, [loadEncounters]);
 
     // Ensure encounter formations are properly initialized
@@ -99,7 +99,7 @@ export const useEncounterNotes = () => {
             }));
 
             if (JSON.stringify(updatedEncounters) !== JSON.stringify(encounters)) {
-                setEncounters(updatedEncounters);
+                void setEncounters(updatedEncounters);
             }
         }
     }, [encounters, setEncounters]);
@@ -118,7 +118,7 @@ export const useEncounterNotes = () => {
             };
 
             // Optimistic update
-            setEncounters((prev) => [...prev, optimisticEncounter]);
+            void setEncounters((prev) => [...prev, optimisticEncounter]);
 
             if (!user?.id) return optimisticEncounter;
 
@@ -176,7 +176,7 @@ export const useEncounterNotes = () => {
                 addNotification('success', 'Encounter added successfully');
             } catch (error) {
                 // Revert optimistic update on error
-                setEncounters((prev) => prev.filter((e) => e.id !== tempId));
+                void setEncounters((prev) => prev.filter((e) => e.id !== tempId));
                 console.error('Error adding encounter:', error);
                 addNotification('error', 'Failed to add encounter');
                 throw error;
@@ -194,7 +194,7 @@ export const useEncounterNotes = () => {
             };
 
             // Optimistic update
-            setEncounters((prev) =>
+            void setEncounters((prev) =>
                 prev.map((e) => (e.id === encounter.id ? updatedEncounter : e))
             );
 
@@ -254,7 +254,7 @@ export const useEncounterNotes = () => {
     const deleteEncounter = useCallback(
         async (encounterId: string) => {
             // Optimistic update
-            setEncounters((prev) => prev.filter((e) => e.id !== encounterId));
+            void setEncounters((prev) => prev.filter((e) => e.id !== encounterId));
 
             if (!user?.id) return;
 

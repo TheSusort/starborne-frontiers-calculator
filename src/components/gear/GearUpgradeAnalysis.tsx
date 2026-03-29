@@ -361,7 +361,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                         <div className="flex gap-2">
                             <Button
                                 variant="primary"
-                                onClick={handleAnalyze}
+                                onClick={() => void handleAnalyze()}
                                 disabled={isLoading}
                                 data-tutorial="gear-analysis-run-button"
                             >
@@ -526,14 +526,14 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                         <div className="space-x-4">
                             <Button
                                 variant="primary"
-                                onClick={handleSimulateUpgrades}
+                                onClick={() => void handleSimulateUpgrades()}
                                 disabled={isLoading}
                             >
                                 Simulate Upgrades
                             </Button>
                             <Button
                                 variant="secondary"
-                                onClick={handleClearUpgrades}
+                                onClick={() => void handleClearUpgrades()}
                                 disabled={isLoading}
                             >
                                 Clear Simulations

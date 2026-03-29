@@ -189,14 +189,17 @@ export const GearPage: React.FC = () => {
                 tutorialGroupId={inventory.length > 0 ? GEAR_TABS_TUTORIAL.id : undefined}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingPiece}>
-                    <GearPieceForm onSubmit={handleSavePiece} editingPiece={editingPiece} />
+                    <GearPieceForm
+                        onSubmit={(piece) => void handleSavePiece(piece)}
+                        editingPiece={editingPiece}
+                    />
                 </CollapsibleForm>
 
                 <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
                 {activeTab === 'inventory' && (
                     <GearInventory
                         inventory={inventory}
-                        onRemove={handleRemovePiece}
+                        onRemove={(id) => void handleRemovePiece(id)}
                         onEdit={handleEditPiece}
                         onCalibrate={handleOpenCalibration}
                         maxItems={inventory.length}
@@ -235,7 +238,9 @@ export const GearPage: React.FC = () => {
                         setShowDeleteConfirm(false);
                         setPendingDeleteId(null);
                     }}
-                    onConfirm={() => pendingDeleteId && handleDeleteGearPiece(pendingDeleteId)}
+                    onConfirm={() => {
+                        if (pendingDeleteId) void handleDeleteGearPiece(pendingDeleteId);
+                    }}
                     title="Delete Gear Piece"
                     message={
                         pendingDeletePieceEquipped
@@ -250,7 +255,7 @@ export const GearPage: React.FC = () => {
                     isOpen={calibrationModalOpen}
                     onClose={handleCloseCalibration}
                     gear={calibratingGear}
-                    onConfirm={handleConfirmCalibration}
+                    onConfirm={(gearId, shipId) => void handleConfirmCalibration(gearId, shipId)}
                     initialShipId={calibrationInitialShipId}
                 />
             </PageLayout>

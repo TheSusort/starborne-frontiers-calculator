@@ -27,7 +27,7 @@ export const AllUsersTable: React.FC = () => {
     }, [search, sortBy, sortDirection, currentPage]);
 
     useEffect(() => {
-        loadUsers();
+        void loadUsers();
     }, [loadUsers]);
 
     const handleSort = (field: string) => {

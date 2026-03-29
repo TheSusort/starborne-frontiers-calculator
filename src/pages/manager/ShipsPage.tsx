@@ -126,21 +126,24 @@ export const ShipsPage: React.FC = () => {
                 tutorialGroupId={ships.length > 0 ? SHIPS_INITIAL_TUTORIAL.id : undefined}
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
-                    <ShipForm onSubmit={handleSaveShip} editingShip={editingShip} />
+                    <ShipForm
+                        onSubmit={(ship) => void handleSaveShip(ship)}
+                        editingShip={editingShip}
+                    />
                 </CollapsibleForm>
 
                 <ShipInventory
                     ships={ships}
-                    onRemove={handleShipDelete}
+                    onRemove={(id) => void handleShipDelete(id)}
                     onEdit={(ship) => {
                         setEditingShip(ship);
                         setIsFormVisible(true);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     onLockEquipment={handleLockEquipment}
-                    onEquipGear={equipGear}
-                    onRemoveGear={removeGear}
-                    onUnequipAll={handleUnequipAll}
+                    onEquipGear={(shipId, slot, gearId) => void equipGear(shipId, slot, gearId)}
+                    onRemoveGear={(shipId, slot) => void removeGear(shipId, slot)}
+                    onUnequipAll={(shipId) => void handleUnequipAll(shipId)}
                     availableGear={inventory}
                 />
 
@@ -150,7 +153,7 @@ export const ShipsPage: React.FC = () => {
                         setShowDeleteConfirm(false);
                         setPendingDeleteShip(null);
                     }}
-                    onConfirm={confirmShipDelete}
+                    onConfirm={() => void confirmShipDelete()}
                     title="Delete Ship"
                     message={
                         pendingDeleteShip?.equipment &&

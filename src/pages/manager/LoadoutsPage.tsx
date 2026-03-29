@@ -68,7 +68,7 @@ export const LoadoutsPage: React.FC = () => {
                         <CollapsibleForm isVisible={showForm}>
                             <LoadoutForm
                                 onSubmit={(loadout) => {
-                                    addLoadout(loadout);
+                                    void addLoadout(loadout);
                                     setShowForm(false);
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                     addNotification('success', 'Loadout created successfully');
@@ -79,8 +79,8 @@ export const LoadoutsPage: React.FC = () => {
 
                         <LoadoutList
                             loadouts={loadouts}
-                            onUpdate={updateLoadout}
-                            onDelete={deleteLoadout}
+                            onUpdate={(...args) => void updateLoadout(...args)}
+                            onDelete={(...args) => void deleteLoadout(...args)}
                             getGearPiece={getGearPiece}
                             availableGear={inventory}
                         />
@@ -91,7 +91,7 @@ export const LoadoutsPage: React.FC = () => {
                             <TeamLoadoutForm
                                 onSubmit={(teamLoadout) => {
                                     try {
-                                        addTeamLoadout(teamLoadout);
+                                        void addTeamLoadout(teamLoadout);
                                         setShowForm(false);
                                         window.scrollTo({ top: 0, behavior: 'smooth' });
                                         addNotification(
@@ -119,8 +119,8 @@ export const LoadoutsPage: React.FC = () => {
                                     ships={ships}
                                     availableGear={inventory}
                                     getGearPiece={getGearPiece}
-                                    onUpdate={updateTeamLoadout}
-                                    onDelete={deleteTeamLoadout}
+                                    onUpdate={(...args) => void updateTeamLoadout(...args)}
+                                    onDelete={(...args) => void deleteTeamLoadout(...args)}
                                 />
                             ))}
 

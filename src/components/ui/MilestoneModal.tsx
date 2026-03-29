@@ -377,13 +377,13 @@ export const MilestoneModal: React.FC<Props> = ({ isOpen, onClose, milestoneCoun
             const end = Date.now() + duration;
 
             const frame = () => {
-                confetti({
+                void confetti({
                     particleCount: 3,
                     angle: 60,
                     spread: 55,
                     origin: { x: 0, y: 0.6 },
                 });
-                confetti({
+                void confetti({
                     particleCount: 3,
                     angle: 120,
                     spread: 55,

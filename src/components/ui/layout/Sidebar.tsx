@@ -238,7 +238,7 @@ export const Sidebar: React.FC = () => {
         audio.addEventListener('ended', () => {
             trackIndexRef.current = (trackIndexRef.current + 1) % tracksRef.current.length;
             audio.src = tracksRef.current[trackIndexRef.current];
-            audio.play();
+            void audio.play();
         });
         audioRef.current = audio;
         return () => {
@@ -266,7 +266,7 @@ export const Sidebar: React.FC = () => {
                 setIsUserAdmin(false);
             }
         };
-        checkAdmin();
+        void checkAdmin();
     }, [user?.id]);
 
     // Memoize the isActive function to maintain stable reference
@@ -362,7 +362,7 @@ export const Sidebar: React.FC = () => {
                                         if (isPlaying) {
                                             audioRef.current.pause();
                                         } else {
-                                            audioRef.current.play();
+                                            void audioRef.current.play();
                                         }
                                         setIsPlaying(!isPlaying);
                                     }
@@ -448,7 +448,7 @@ export const Sidebar: React.FC = () => {
                                         if (isPlaying) {
                                             audioRef.current.pause();
                                         } else {
-                                            audioRef.current.play();
+                                            void audioRef.current.play();
                                         }
                                         setIsPlaying(!isPlaying);
                                     }

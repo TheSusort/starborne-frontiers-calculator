@@ -128,7 +128,7 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
             }
         };
 
-        fetchLeaderboards();
+        void fetchLeaderboards();
     }, [user?.id]);
 
     // Prepare leaderboard chart data

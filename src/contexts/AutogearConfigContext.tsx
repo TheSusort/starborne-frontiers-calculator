@@ -62,7 +62,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
                 }
 
                 if (data) {
-                    setSavedConfigs(transformConfigs(data));
+                    void setSavedConfigs(transformConfigs(data as RawAutogearConfig[]));
                 }
             }
         } catch (error) {
@@ -75,7 +75,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
 
     // Initial load and reload on auth changes
     useEffect(() => {
-        loadConfigs();
+        void loadConfigs();
     }, [user?.id, loadConfigs]);
 
     // Clear data on sign out
@@ -83,7 +83,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setSavedConfigs({});
+                void setSavedConfigs({});
             }
         };
 
@@ -115,7 +115,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
     const saveConfig = useCallback(
         async (config: SavedAutogearConfig) => {
             const oldConfigs = { ...savedConfigs }; // Preserve old configs for potential rollback
-            setSavedConfigs((prev) => ({
+            void setSavedConfigs((prev) => ({
                 ...prev,
                 [config.shipId]: config,
             })); // Optimistic update
@@ -138,7 +138,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
 
                 addNotification('success', 'Configuration saved successfully');
             } catch (error) {
-                setSavedConfigs(oldConfigs); // Revert optimistic update on error
+                void setSavedConfigs(oldConfigs); // Revert optimistic update on error
                 console.error('Error saving autogear config:', error);
                 addNotification('error', 'Failed to save configuration');
                 throw error;
@@ -157,7 +157,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
     const resetConfig = useCallback(
         async (shipId: string) => {
             const oldConfigs = { ...savedConfigs }; // Preserve old configs
-            setSavedConfigs((prev) => {
+            void setSavedConfigs((prev) => {
                 const newConfigs = { ...prev };
                 delete newConfigs[shipId];
                 return newConfigs;
@@ -176,7 +176,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
 
                 addNotification('success', 'Configuration reset successfully');
             } catch (error) {
-                setSavedConfigs(oldConfigs); // Revert optimistic update on error
+                void setSavedConfigs(oldConfigs); // Revert optimistic update on error
                 console.error('Error resetting autogear config:', error);
                 addNotification('error', 'Failed to reset configuration');
                 throw error;

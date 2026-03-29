@@ -88,7 +88,9 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 }
 
                 if (data) {
-                    setEngineeringStats(transformEngineeringStats(data));
+                    void setEngineeringStats(
+                        transformEngineeringStats(data as RawEngineeringStat[])
+                    );
                 }
             }
         } catch (error) {
@@ -101,14 +103,14 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
 
     // Initial load and reload on auth changes
     useEffect(() => {
-        loadEngineeringStats();
+        void loadEngineeringStats();
     }, [user?.id, loadEngineeringStats]);
 
     useEffect(() => {
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setEngineeringStats({
+                void setEngineeringStats({
                     stats: [],
                 });
             }
@@ -142,7 +144,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
     const saveEngineeringStats = useCallback(
         async (statsToSave: EngineeringStats) => {
             const oldStats = { ...engineeringStats }; // Preserve old stats for potential rollback
-            setEngineeringStats(statsToSave); // Optimistic update
+            void setEngineeringStats(statsToSave); // Optimistic update
 
             if (!user?.id) return;
 
@@ -176,7 +178,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
 
                 addNotification('success', 'Engineering stats saved successfully');
             } catch (error) {
-                setEngineeringStats(oldStats); // Revert optimistic update on error
+                void setEngineeringStats(oldStats); // Revert optimistic update on error
                 console.error('Error saving engineering stats:', error);
                 addNotification('error', 'Failed to save engineering stats');
                 throw error;
@@ -188,7 +190,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
     const deleteEngineeringStats = useCallback(
         async (shipTypeToDelete: string) => {
             const oldStats = { ...engineeringStats }; // Preserve old stats
-            setEngineeringStats((prev) => ({
+            void setEngineeringStats((prev) => ({
                 stats: prev.stats.filter((stat) => stat.shipType !== shipTypeToDelete),
             })); // Optimistic update
 
@@ -205,7 +207,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
 
                 addNotification('success', 'Engineering stats deleted successfully');
             } catch (error) {
-                setEngineeringStats(oldStats); // Revert optimistic update on error
+                void setEngineeringStats(oldStats); // Revert optimistic update on error
                 console.error('Error deleting engineering stats:', error);
                 addNotification('error', 'Failed to delete engineering stats');
                 throw error;

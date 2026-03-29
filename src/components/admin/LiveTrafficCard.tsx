@@ -15,8 +15,8 @@ export const LiveTrafficCard: React.FC = () => {
             setLoading(false);
         };
 
-        fetchTraffic();
-        const interval = setInterval(fetchTraffic, REFRESH_INTERVAL);
+        void fetchTraffic();
+        const interval = setInterval(() => void fetchTraffic(), REFRESH_INTERVAL);
 
         return () => clearInterval(interval);
     }, []);

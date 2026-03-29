@@ -44,7 +44,7 @@ const SharedEncountersPage: React.FC = () => {
                     encounters={filteredEncounters}
                     isReadOnly
                     showVotes={true}
-                    onVote={voteEncounter}
+                    onVote={(id, vote) => void voteEncounter(id, vote)}
                 />
             </PageLayout>
         </>

@@ -39,10 +39,10 @@ export function startHeartbeat(userId: string | null): void {
     currentUserId = userId;
 
     // Send immediately on start
-    sendHeartbeat();
+    void sendHeartbeat();
 
     // Then send every 30 seconds
-    intervalId = window.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+    intervalId = window.setInterval(() => void sendHeartbeat(), HEARTBEAT_INTERVAL);
 }
 
 export function updateHeartbeatUser(userId: string | null): void {

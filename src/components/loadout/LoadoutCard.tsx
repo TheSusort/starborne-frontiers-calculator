@@ -54,7 +54,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                 addNotification('info', `Unequipped ${slot} from ship ${previousShip}`);
             }
 
-            equipGear(ship.id, slot, gearId);
+            void equipGear(ship.id, slot, gearId);
         });
 
         addNotification('success', 'Loadout equipped successfully');

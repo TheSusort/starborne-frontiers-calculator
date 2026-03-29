@@ -54,12 +54,12 @@ export const ShipDetailsPage: React.FC = () => {
         if (state?.from === '/autogear' && state?.shipId) {
             return {
                 label: 'Back to Autogear',
-                onClick: () => navigate(`/autogear?shipId=${state.shipId}`),
+                onClick: () => void navigate(`/autogear?shipId=${state.shipId}`),
             };
         }
         return {
             label: 'Back to Ships',
-            onClick: () => navigate('/ships'),
+            onClick: () => void navigate('/ships'),
         };
     };
 
@@ -137,12 +137,14 @@ export const ShipDetailsPage: React.FC = () => {
             >
                 <CollapsibleForm isVisible={isFormVisible || !!editingShip}>
                     <ShipForm
-                        onSubmit={async (updatedShip) => {
-                            await updateShip(updatedShip.id, updatedShip);
-                            setIsFormVisible(false);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            setEditingShip(undefined);
-                            addNotification('success', 'Ship saved successfully');
+                        onSubmit={(updatedShip) => {
+                            void (async () => {
+                                await updateShip(updatedShip.id, updatedShip);
+                                setIsFormVisible(false);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                setEditingShip(undefined);
+                                addNotification('success', 'Ship saved successfully');
+                            })();
                         }}
                         editingShip={editingShip}
                     />
@@ -158,8 +160,8 @@ export const ShipDetailsPage: React.FC = () => {
                                 availableGear={availableGear}
                                 getGearPiece={getGearPiece}
                                 onRemove={(id) => {
-                                    deleteShip(id);
-                                    navigate('/ships');
+                                    void deleteShip(id);
+                                    void navigate('/ships');
                                 }}
                                 onLockEquipment={async (ship) => {
                                     await toggleEquipmentLock(ship.id);
@@ -167,15 +169,15 @@ export const ShipDetailsPage: React.FC = () => {
                                 onEquipGear={(_, slot, gearId) => {
                                     const updatedShip = { ...ship };
                                     updatedShip.equipment[slot] = gearId;
-                                    updateShip(updatedShip.id, updatedShip);
+                                    void updateShip(updatedShip.id, updatedShip);
                                 }}
                                 onRemoveGear={(_, slot) => {
                                     const updatedShip = { ...ship };
                                     delete updatedShip.equipment[slot];
-                                    updateShip(updatedShip.id, updatedShip);
+                                    void updateShip(updatedShip.id, updatedShip);
                                 }}
                                 onUnequipAll={() => {
-                                    unequipAllEquipment(ship.id);
+                                    void unequipAllEquipment(ship.id);
                                 }}
                                 onHoverGear={setHoveredGear}
                                 onEdit={() => {
@@ -184,10 +186,10 @@ export const ShipDetailsPage: React.FC = () => {
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
                                 onEquipImplant={(_, slot, gearId) => {
-                                    equipImplant(ship.id, slot, gearId);
+                                    void equipImplant(ship.id, slot, gearId);
                                 }}
                                 onRemoveImplant={(_, slot) => {
-                                    removeImplant(ship.id, slot);
+                                    void removeImplant(ship.id, slot);
                                 }}
                             />
                         </div>

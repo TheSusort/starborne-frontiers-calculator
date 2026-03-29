@@ -106,7 +106,7 @@ export function useStatisticsSnapshot({
             setLoading(false);
         };
 
-        init();
+        void init();
     }, [user?.id, allContextsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load selected snapshot data
@@ -123,7 +123,7 @@ export function useStatisticsSnapshot({
             setLoading(false);
         };
 
-        loadSnapshot();
+        void loadSnapshot();
     }, [user?.id, selectedMonth]);
 
     return {

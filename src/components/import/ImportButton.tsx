@@ -268,7 +268,7 @@ export const ImportButton: React.FC<{
                 <input
                     type="file"
                     accept=".json"
-                    onChange={handleFileUpload}
+                    onChange={(e) => void handleFileUpload(e)}
                     style={{ display: 'none' }}
                     id="import-file-input"
                 />
@@ -297,7 +297,7 @@ export const ImportButton: React.FC<{
                     ) as HTMLInputElement;
                     if (fileInput) fileInput.value = '';
                 }}
-                onSubmit={handleHangarNameSubmit}
+                onSubmit={(name: string) => void handleHangarNameSubmit(name)}
                 loading={uploadingToCubedweb}
                 fileSize={selectedFile?.size}
             />

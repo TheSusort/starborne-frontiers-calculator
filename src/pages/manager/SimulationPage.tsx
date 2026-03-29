@@ -119,7 +119,7 @@ export const SimulationPage: React.FC = () => {
             gearId: gearId || '',
         }));
 
-        equipMultipleGear(selectedShip.id, gearAssignments);
+        void equipMultipleGear(selectedShip.id, gearAssignments);
         addNotification('success', 'Gear changes saved successfully');
     };
 
@@ -256,7 +256,7 @@ export const SimulationPage: React.FC = () => {
                                             return next;
                                         });
                                     }}
-                                    onSaveChanges={handleSaveImplantChanges}
+                                    onSaveChanges={() => void handleSaveImplantChanges()}
                                     onResetChanges={handleResetImplantChanges}
                                     hasChanges={hasImplantChanges()}
                                 />

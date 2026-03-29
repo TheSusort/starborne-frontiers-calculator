@@ -290,7 +290,12 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
             </div>
 
             <div className="flex justify-end">
-                <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => void handleSave()}
+                    disabled={saving}
+                >
                     {saving ? 'Saving...' : isEdit ? 'Update Rule' : 'Save Rule'}
                 </Button>
             </div>
@@ -382,7 +387,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                         <Button
                             variant="secondary"
                             size="sm"
-                            onClick={handleSaveName}
+                            onClick={() => void handleSaveName()}
                             disabled={savingName || !editName.trim()}
                         >
                             {savingName ? '...' : 'Save'}
@@ -402,7 +407,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                         <Button
                             variant="secondary"
                             size="sm"
-                            onClick={handleSaveEndDate}
+                            onClick={() => void handleSaveEndDate()}
                             disabled={savingEndDate}
                         >
                             {savingEndDate ? '...' : 'Save'}
@@ -410,7 +415,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                         <Button
                             variant="danger"
                             size="sm"
-                            onClick={handleClearEndDate}
+                            onClick={() => void handleClearEndDate()}
                             disabled={savingEndDate}
                         >
                             Clear
@@ -473,7 +478,7 @@ const SeasonDetail: React.FC<SeasonDetailProps> = ({ season, onChanged }) => {
                                         <Button
                                             variant="danger"
                                             size="sm"
-                                            onClick={() => handleDeleteRule(rule)}
+                                            onClick={() => void handleDeleteRule(rule)}
                                         >
                                             Delete
                                         </Button>
@@ -609,7 +614,11 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold">Arena Season Modifiers</h3>
                     {hasActive && (
-                        <Button variant="danger" size="sm" onClick={handleDeactivateAll}>
+                        <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => void handleDeactivateAll()}
+                        >
                             Deactivate All
                         </Button>
                     )}
@@ -621,12 +630,12 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                         onChange={(e) => setNewSeasonName(e.target.value)}
                         placeholder="New season name..."
                         onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreateSeason();
+                            if (e.key === 'Enter') void handleCreateSeason();
                         }}
                     />
                     <Button
                         variant="primary"
-                        onClick={handleCreateSeason}
+                        onClick={() => void handleCreateSeason()}
                         disabled={creating || !newSeasonName.trim()}
                     >
                         {creating ? 'Creating...' : 'Create'}
@@ -688,7 +697,9 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                                                     <Button
                                                         variant="secondary"
                                                         size="sm"
-                                                        onClick={() => handleDeactivate(season)}
+                                                        onClick={() =>
+                                                            void handleDeactivate(season)
+                                                        }
                                                         disabled={actionLoading === season.id}
                                                     >
                                                         Deactivate
@@ -697,7 +708,7 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                                                     <Button
                                                         variant="primary"
                                                         size="sm"
-                                                        onClick={() => handleActivate(season)}
+                                                        onClick={() => void handleActivate(season)}
                                                         disabled={actionLoading === season.id}
                                                     >
                                                         Activate
@@ -706,7 +717,7 @@ export const ArenaModifiersTab: React.FC<ArenaModifiersTabProps> = ({
                                                 <Button
                                                     variant="danger"
                                                     size="sm"
-                                                    onClick={() => handleDelete(season)}
+                                                    onClick={() => void handleDelete(season)}
                                                     disabled={actionLoading === season.id}
                                                 >
                                                     Delete

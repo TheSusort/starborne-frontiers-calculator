@@ -171,7 +171,7 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
             <Dropdown.Item
                 onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/autogear?shipId=${ship.id}`);
+                    void navigate(`/autogear?shipId=${ship.id}`);
                 }}
             >
                 <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
             <Dropdown.Item
                 onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/simulation?shipId=${ship.id}`);
+                    void navigate(`/simulation?shipId=${ship.id}`);
                 }}
             >
                 <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
             <Dropdown.Item
                 onClick={(e) => {
                     e.stopPropagation();
-                    navigate(`/damage?shipId=${ship.id}`);
+                    void navigate(`/damage?shipId=${ship.id}`);
                 }}
             >
                 <div className="flex items-center gap-2">
@@ -208,7 +208,7 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
                 <Dropdown.Item
                     onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/gear?tab=calibration&subTab=ship&shipId=${ship.id}`);
+                        void navigate(`/gear?tab=calibration&subTab=ship&shipId=${ship.id}`);
                     }}
                 >
                     <div className="flex items-center gap-2">
@@ -290,13 +290,15 @@ export const LockEquipmentButton: React.FC<LockEquipmentButtonProps> = ({
         variant="secondary"
         size="sm"
         title={ship.equipmentLocked ? 'Unlock equipment' : 'Lock equipment'}
-        onClick={async (e) => {
+        onClick={(e) => {
             e.stopPropagation();
-            try {
-                await onLockEquipment(ship);
-            } catch (error) {
-                console.error('Failed to update lock state:', error);
-            }
+            void (async () => {
+                try {
+                    await onLockEquipment(ship);
+                } catch (error) {
+                    console.error('Failed to update lock state:', error);
+                }
+            })();
         }}
     >
         {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
@@ -325,7 +327,7 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
     const navigate = useNavigate();
 
     const handleLeaderboardClick = (shipName: string) => {
-        navigate(`/ships/leaderboard/${encodeURIComponent(shipName)}`);
+        void navigate(`/ships/leaderboard/${encodeURIComponent(shipName)}`);
     };
 
     if (onBioClick || showLeaderboard) {
@@ -371,7 +373,7 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
                 <Dropdown.Item
                     onClick={(e) => {
                         e.stopPropagation();
-                        if (!isAdded) onQuickAdd(ship);
+                        if (!isAdded) void onQuickAdd(ship);
                     }}
                     className={isAdded ? 'text-theme-text-secondary' : ''}
                 >
@@ -417,7 +419,9 @@ export const QuickAddButtons: React.FC<QuickAddButtonsProps> = ({
                 </Button>
             )}
             <Button
-                onClick={() => !isAdded && onQuickAdd(ship)}
+                onClick={() => {
+                    if (!isAdded) void onQuickAdd(ship);
+                }}
                 disabled={isAdded}
                 variant="secondary"
                 size="sm"

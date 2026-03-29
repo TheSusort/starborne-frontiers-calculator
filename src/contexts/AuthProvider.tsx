@@ -46,41 +46,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         };
 
-        const unsubscribe = authService.onAuthStateChanged(async (user) => {
-            const previousUser = currentUser;
-            setUser(user);
-            setCurrentUser(user);
+        const unsubscribe = authService.onAuthStateChanged((user) => {
+            void (async () => {
+                const previousUser = currentUser;
+                setUser(user);
+                setCurrentUser(user);
 
-            // Update heartbeat tracking with user ID
-            updateHeartbeatUser(user?.id ?? null);
-            setLoading(false);
+                // Update heartbeat tracking with user ID
+                updateHeartbeatUser(user?.id ?? null);
+                setLoading(false);
 
-            if (user) {
-                // Check if this is a new user
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('created_at')
-                    .eq('id', user.id)
-                    .single();
+                if (user) {
+                    // Check if this is a new user
+                    const { data: userData, error: userError } = await supabase
+                        .from('users')
+                        .select('created_at')
+                        .eq('id', user.id)
+                        .single();
 
-                if (userError && userError.code === 'PGRST116') {
-                    // User doesn't exist in the database yet - this is a new user
-                    await migrateDataForNewUser();
-                } else if (userData) {
-                    // User exists, check if they need migration
-                    const userCreatedAt = new Date(userData.created_at);
-                    const now = new Date();
-                    const isNewUser = now.getTime() - userCreatedAt.getTime() < 5000; // 5 second window
-
-                    if (isNewUser) {
+                    if (userError && userError.code === 'PGRST116') {
+                        // User doesn't exist in the database yet - this is a new user
                         await migrateDataForNewUser();
+                    } else if (userData) {
+                        // User exists, check if they need migration
+                        const userCreatedAt = new Date(userData.created_at as string);
+                        const now = new Date();
+                        const isNewUser = now.getTime() - userCreatedAt.getTime() < 5000; // 5 second window
+
+                        if (isNewUser) {
+                            await migrateDataForNewUser();
+                        }
                     }
+                } else if (previousUser) {
+                    // Only dispatch signout event if we had a previous user
+                    // This prevents wiping data during the transition from unauthenticated to authenticated
+                    window.dispatchEvent(new Event('app:signout'));
                 }
-            } else if (previousUser) {
-                // Only dispatch signout event if we had a previous user
-                // This prevents wiping data during the transition from unauthenticated to authenticated
-                window.dispatchEvent(new Event('app:signout'));
-            }
+            })();
         });
 
         return () => {

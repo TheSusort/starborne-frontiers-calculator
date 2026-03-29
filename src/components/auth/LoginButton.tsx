@@ -18,20 +18,20 @@ export const LoginButton: React.FC = () => {
                         src={user.photoURL}
                         alt={user.displayName || user.email || 'User'}
                         className="w-10 h-10 cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => navigate('/profile')}
+                        onClick={() => void navigate('/profile')}
                         title="View Profile"
                     />
                 ) : (
                     <div
                         className="w-8 h-8 bg-dark-lighter flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => navigate('/profile')}
+                        onClick={() => void navigate('/profile')}
                         title="View Profile"
                     >
                         <UserIcon className="w-5 h-5 text-theme-text" />
                     </div>
                 )}
                 <Button
-                    onClick={() => signOut()}
+                    onClick={() => void signOut()}
                     fullWidth
                     variant="secondary"
                     type="button"

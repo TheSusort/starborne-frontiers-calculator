@@ -148,7 +148,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6 card">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6 card">
             <h2 className="text-2xl font-bold ">{editingShip ? 'Edit Ship' : 'Create New Ship'}</h2>
 
             {/* Ship Name with Fetch button */}
@@ -174,7 +174,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
                             variant="primary"
                             onClick={(e) => {
                                 e.preventDefault();
-                                handleFetchData();
+                                void handleFetchData();
                             }}
                             disabled={!name || isLoading}
                             className="relative"

@@ -44,7 +44,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                     }
                 }
 
-                equipGear(shipLoadout.shipId, slot, gearId);
+                void equipGear(shipLoadout.shipId, slot, gearId);
             });
         });
 

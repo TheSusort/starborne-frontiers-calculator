@@ -70,7 +70,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 {!showEmailForm ? (
                     <div className="flex flex-col gap-3">
                         <Button
-                            onClick={handleGoogleSignIn}
+                            onClick={() => void handleGoogleSignIn()}
                             variant="secondary"
                             fullWidth
                             className="flex items-center gap-2 justify-center"
@@ -103,7 +103,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                         </Button>
                     </div>
                 ) : (
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
                         <div>
                             <Input
                                 label="Email"

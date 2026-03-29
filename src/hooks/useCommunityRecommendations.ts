@@ -216,7 +216,7 @@ export const useCommunityRecommendations = ({
 
         // Get user's vote on this alternative
         if (alt.id) {
-            CommunityRecommendationService.getUserVote(alt.id).then((vote) => {
+            void CommunityRecommendationService.getUserVote(alt.id).then((vote) => {
                 setUserVote(vote);
             });
         }
@@ -291,7 +291,7 @@ export const useCommunityRecommendations = ({
     useEffect(() => {
         if (selectedShip?.name && selectedShip.name !== lastShipName && !isFetchingRef.current) {
             setLastShipName(selectedShip.name);
-            fetchRecommendation();
+            void fetchRecommendation();
         }
     }, [selectedShip?.name, lastShipName, fetchRecommendation]);
 

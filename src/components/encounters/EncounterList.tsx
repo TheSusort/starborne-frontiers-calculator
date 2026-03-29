@@ -189,7 +189,7 @@ export const EncounterList = ({
                                     <Button
                                         variant="secondary"
                                         size="sm"
-                                        onClick={() => createAndCopyImage(encounter.id)}
+                                        onClick={() => void createAndCopyImage(encounter.id)}
                                         aria-label="Copy as Image"
                                     >
                                         <CopyIcon />

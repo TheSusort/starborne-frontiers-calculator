@@ -33,7 +33,7 @@ function loadCompletedGroups(): Set<string> {
     try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
-            return new Set(JSON.parse(stored));
+            return new Set(JSON.parse(stored) as string[]);
         }
     } catch {
         // ignore
@@ -111,7 +111,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const merged = new Set([...prev, ...remoteGroups]);
                 // If Supabase had fewer, push the merged set back
                 if (merged.size > remoteGroups.length) {
-                    saveCompletedGroupsToSupabase(user.id, merged);
+                    void saveCompletedGroupsToSupabase(user.id, merged);
                 }
                 saveCompletedGroups(merged);
                 return merged;
@@ -119,7 +119,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             supabaseLoadedRef.current = true;
         };
 
-        loadAndMerge();
+        void loadAndMerge();
 
         return () => {
             cancelled = true;
@@ -131,7 +131,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         saveCompletedGroups(completedGroups);
 
         if (user?.id && supabaseLoadedRef.current && completedGroups.size > 0) {
-            saveCompletedGroupsToSupabase(user.id, completedGroups);
+            void saveCompletedGroupsToSupabase(user.id, completedGroups);
         }
     }, [completedGroups, user?.id]);
 
@@ -258,7 +258,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pendingGroupsRef.current = [];
         localStorage.removeItem(STORAGE_KEY);
         if (user?.id) {
-            saveCompletedGroupsToSupabase(user.id, new Set());
+            void saveCompletedGroupsToSupabase(user.id, new Set());
         }
     }, [user?.id]);
 

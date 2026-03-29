@@ -180,7 +180,7 @@ export async function getUserStats(userId: string): Promise<UserStats> {
         const points = stat.type === 'flat' ? stat.value / 2.0 : stat.value;
         engineeringPoints += points;
 
-        const levelInt = Math.floor(level);
+        const levelInt = Math.floor(level as number);
         if (levelInt >= 0 && levelInt <= 20) {
             engineeringTokens += tokenCosts[levelInt];
         }

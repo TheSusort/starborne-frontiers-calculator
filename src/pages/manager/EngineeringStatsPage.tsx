@@ -44,7 +44,7 @@ export const EngineeringStatsPage: React.FC = () => {
                 .filter((s) => s.shipType !== stats.shipType)
                 .concat(stats),
         };
-        saveEngineeringStats(newEngStats);
+        void saveEngineeringStats(newEngStats);
         if (editingStats) {
             addNotification('success', 'Engineering stats updated successfully');
         } else {
@@ -113,7 +113,7 @@ export const EngineeringStatsPage: React.FC = () => {
                                     setEditingStats(stat);
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
-                                onDelete={handleDelete}
+                                onDelete={(...args) => void handleDelete(...args)}
                             />
                         </div>
                     </>

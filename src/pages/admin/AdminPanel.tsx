@@ -198,7 +198,7 @@ export const AdminPanel: React.FC = () => {
     useEffect(() => {
         const checkAdminAndLoadData = async () => {
             if (!user) {
-                navigate('/');
+                void navigate('/');
                 return;
             }
 
@@ -207,7 +207,7 @@ export const AdminPanel: React.FC = () => {
             setIsUserAdmin(adminStatus);
 
             if (!adminStatus) {
-                navigate('/');
+                void navigate('/');
                 return;
             }
 
@@ -216,7 +216,7 @@ export const AdminPanel: React.FC = () => {
             setLoading(false);
         };
 
-        checkAdminAndLoadData();
+        void checkAdminAndLoadData();
     }, [user, navigate, loadData]);
 
     if (loading) {
@@ -572,7 +572,7 @@ export const AdminPanel: React.FC = () => {
                 {activeTab === 'arena' && (
                     <ArenaModifiersTab
                         seasons={arenaSeasons}
-                        onSeasonsChange={() => getAllSeasons().then(setArenaSeasons)}
+                        onSeasonsChange={() => void getAllSeasons().then(setArenaSeasons)}
                     />
                 )}
             </div>

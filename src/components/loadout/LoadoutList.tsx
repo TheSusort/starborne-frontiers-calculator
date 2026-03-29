@@ -47,7 +47,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
                             getGearPiece={getGearPiece}
                             onEquip={() => {
                                 Object.entries(loadout.equipment).forEach(([slot, gearId]) => {
-                                    equipGear(loadout.shipId, slot, gearId);
+                                    void equipGear(loadout.shipId, slot, gearId);
                                 });
                             }}
                             onUpdate={(equipment) => onUpdate(loadout.id, equipment)}

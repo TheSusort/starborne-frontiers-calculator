@@ -75,7 +75,7 @@ export const ProfilePage: React.FC = () => {
             }
         };
 
-        loadProfileData();
+        void loadProfileData();
     }, [user?.id, addNotification]);
 
     // Load ship rankings asynchronously (separate from main page load)
@@ -100,7 +100,7 @@ export const ProfilePage: React.FC = () => {
 
         // Load ship rankings after a short delay to let the page render first
         const timer = setTimeout(() => {
-            loadShipRankings();
+            void loadShipRankings();
         }, 100);
 
         return () => clearTimeout(timer);
@@ -232,7 +232,7 @@ export const ProfilePage: React.FC = () => {
                             <Input
                                 label="Username"
                                 value={username}
-                                onChange={(e) => handleUsernameChange(e.target.value)}
+                                onChange={(e) => void handleUsernameChange(e.target.value)}
                                 placeholder="Enter username (3-20 characters)"
                                 error={usernameError || undefined}
                                 helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
@@ -255,7 +255,7 @@ export const ProfilePage: React.FC = () => {
 
                             <div className="flex justify-end pt-2">
                                 <Button
-                                    onClick={handleSave}
+                                    onClick={() => void handleSave()}
                                     disabled={
                                         !hasChanges || saving || checkingUsername || !!usernameError
                                     }

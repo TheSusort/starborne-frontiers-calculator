@@ -95,7 +95,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                         <Button
                                             variant="primary"
                                             size="sm"
-                                            onClick={() => handleApprove(proposal.id)}
+                                            onClick={() => void handleApprove(proposal.id)}
                                             disabled={processing === proposal.id}
                                         >
                                             {processing === proposal.id
@@ -105,7 +105,7 @@ export const TemplateProposalsTable: React.FC<TemplateProposalsTableProps> = ({
                                         <Button
                                             variant="danger"
                                             size="sm"
-                                            onClick={() => handleReject(proposal.id)}
+                                            onClick={() => void handleReject(proposal.id)}
                                             disabled={processing === proposal.id}
                                         >
                                             Reject

@@ -163,7 +163,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                                     handleSelectAlternative(originalAlt);
                                 }
                             }}
-                            onBackToMain={handleBackToMain}
+                            onBackToMain={() => void handleBackToMain()}
                         />
 
                         <CommunityActions
@@ -171,7 +171,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                             userVote={userVote}
                             canShare={canShare}
                             showShareForm={showShareForm}
-                            onVote={handleVote}
+                            onVote={(voteType) => void handleVote(voteType)}
                             onToggleShareForm={() => setShowShareForm(!showShareForm)}
                         />
                     </div>

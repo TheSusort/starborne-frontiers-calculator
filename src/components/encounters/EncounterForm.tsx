@@ -87,7 +87,7 @@ const EncounterForm: React.FC<EncounterFormProps> = ({ onSubmit, initialEncounte
 
     return (
         <div className="space-y-4">
-            <form onSubmit={handleSubmit} className="bg-dark-light space-y-4">
+            <form onSubmit={(e) => void handleSubmit(e)} className="bg-dark-light space-y-4">
                 <div className="flex items-end space-x-2 w-full">
                     <Input
                         label="Encounter Name"

@@ -36,7 +36,7 @@ const EncounterNotesPage: React.FC = () => {
 
     const handleSubmit = async (encounter: EncounterNote) => {
         if (editingEncounter) {
-            updateEncounter(encounter);
+            void updateEncounter(encounter);
             setEditingEncounter(null);
             addNotification('success', 'Encounter Updated');
         } else {
@@ -54,7 +54,7 @@ const EncounterNotesPage: React.FC = () => {
                     return pos;
                 }),
             };
-            addEncounter(localEncounter);
+            void addEncounter(localEncounter);
             addNotification('success', 'Encounter Added');
         }
         setIsFormVisible(false);
@@ -72,7 +72,7 @@ const EncounterNotesPage: React.FC = () => {
 
     const handleConfirmDelete = async () => {
         if (deletingEncounterId) {
-            deleteEncounter(deletingEncounterId);
+            void deleteEncounter(deletingEncounterId);
             if (editingEncounter?.id === deletingEncounterId) {
                 setEditingEncounter(null);
                 setIsFormVisible(false);
@@ -85,7 +85,7 @@ const EncounterNotesPage: React.FC = () => {
         try {
             if (encounter.isPublic) {
                 await unshareEncounter(encounter.id);
-                updateEncounter({
+                void updateEncounter({
                     ...encounter,
                     isPublic: false,
                 });
@@ -105,7 +105,7 @@ const EncounterNotesPage: React.FC = () => {
                     }),
                 };
                 await shareEncounter(localEncounter);
-                updateEncounter({
+                void updateEncounter({
                     ...encounter,
                     isPublic: true,
                 });
@@ -145,7 +145,7 @@ const EncounterNotesPage: React.FC = () => {
                             {editingEncounter ? 'Edit Encounter' : 'Add New Encounter'}
                         </h2>
                         <EncounterForm
-                            onSubmit={handleSubmit}
+                            onSubmit={(...args) => void handleSubmit(...args)}
                             initialEncounter={editingEncounter}
                         />
                     </div>
@@ -155,13 +155,13 @@ const EncounterNotesPage: React.FC = () => {
                     encounters={encounters}
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
-                    onShareToggle={handleShareToggle}
+                    onShareToggle={(...args) => void handleShareToggle(...args)}
                 />
 
                 <ConfirmModal
                     isOpen={!!deletingEncounterId}
                     onClose={() => setDeletingEncounterId(null)}
-                    onConfirm={handleConfirmDelete}
+                    onConfirm={() => void handleConfirmDelete()}
                     title="Delete Encounter"
                     message="Are you sure you want to delete this encounter? This action cannot be undone."
                     confirmLabel="Delete"

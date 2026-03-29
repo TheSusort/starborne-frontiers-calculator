@@ -130,8 +130,8 @@ export const useLoadouts = () => {
                 if (teamLoadoutError) throw teamLoadoutError;
 
                 // Update both Supabase and localStorage through useStorage
-                setLoadouts(loadoutData.map(transformLoadout));
-                setTeamLoadouts(teamLoadoutData.map(transformTeamLoadout));
+                void setLoadouts(loadoutData.map(transformLoadout));
+                void setTeamLoadouts(teamLoadoutData.map(transformTeamLoadout));
             }
         } catch (error) {
             console.error('Error loading loadouts:', error);
@@ -142,7 +142,7 @@ export const useLoadouts = () => {
     }, [user?.id, addNotification, setLoadouts, setTeamLoadouts]);
 
     useEffect(() => {
-        loadLoadouts();
+        void loadLoadouts();
     }, [loadLoadouts]);
 
     const addLoadout = useCallback(
@@ -159,7 +159,7 @@ export const useLoadouts = () => {
             };
 
             // Optimistically update UI
-            setLoadouts((prev) => [...prev, newLoadout]);
+            void setLoadouts((prev) => [...prev, newLoadout]);
 
             // If user is not authenticated, we're done (data is already saved to localStorage)
             if (!user?.id) {
@@ -198,13 +198,13 @@ export const useLoadouts = () => {
                 if (equipmentError) throw equipmentError;
 
                 // Update local state with the server-generated ID
-                setLoadouts((prev) =>
+                void setLoadouts((prev) =>
                     prev.map((item) =>
                         item.id === newLoadout.id
                             ? {
                                   ...item,
                                   id: loadoutData.id,
-                                  createdAt: new Date(loadoutData.created_at).getTime(),
+                                  createdAt: new Date(loadoutData.created_at as string).getTime(),
                               }
                             : item
                     )
@@ -215,7 +215,7 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error adding loadout:', error);
                 // Revert optimistic update
-                setLoadouts((prev) => prev.filter((item) => item.id !== newLoadout.id));
+                void setLoadouts((prev) => prev.filter((item) => item.id !== newLoadout.id));
                 addNotification('error', 'Failed to add loadout');
                 throw error;
             }
@@ -229,7 +229,7 @@ export const useLoadouts = () => {
             const originalLoadouts = [...loadouts];
 
             // Optimistically update UI
-            setLoadouts((prev) =>
+            void setLoadouts((prev) =>
                 prev.map((loadout) =>
                     loadout.id === id ? { ...loadout, equipment: { ...equipment } } : loadout
                 )
@@ -268,7 +268,7 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error updating loadout:', error);
                 // Revert optimistic update
-                setLoadouts(originalLoadouts);
+                void setLoadouts(originalLoadouts);
                 addNotification('error', 'Failed to update loadout');
                 throw error;
             }
@@ -282,7 +282,7 @@ export const useLoadouts = () => {
             const originalLoadouts = [...loadouts];
 
             // Optimistically update UI
-            setLoadouts((prev) => prev.filter((loadout) => loadout.id !== id));
+            void setLoadouts((prev) => prev.filter((loadout) => loadout.id !== id));
 
             // If user is not authenticated, we're done (data already saved to localStorage)
             if (!user?.id) {
@@ -304,7 +304,7 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error deleting loadout:', error);
                 // Revert optimistic update
-                setLoadouts(originalLoadouts);
+                void setLoadouts(originalLoadouts);
                 addNotification('error', 'Failed to delete loadout');
                 throw error;
             }
@@ -344,7 +344,7 @@ export const useLoadouts = () => {
             };
 
             // Optimistically update UI
-            setTeamLoadouts((prev) => [...prev, newTeamLoadout]);
+            void setTeamLoadouts((prev) => [...prev, newTeamLoadout]);
 
             // If user is not authenticated, we're done (data already saved to localStorage)
             if (!user?.id) {
@@ -411,10 +411,10 @@ export const useLoadouts = () => {
                 if (fetchError) throw fetchError;
 
                 // Update local state with the complete data from Supabase
-                setTeamLoadouts((prev) =>
+                void setTeamLoadouts((prev) =>
                     prev.map((item) =>
                         item.id === newTeamLoadout.id
-                            ? transformTeamLoadout(completeTeamLoadout)
+                            ? transformTeamLoadout(completeTeamLoadout as RawTeamLoadout)
                             : item
                     )
                 );
@@ -424,7 +424,9 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error adding team loadout:', error);
                 // Revert optimistic update
-                setTeamLoadouts((prev) => prev.filter((item) => item.id !== newTeamLoadout.id));
+                void setTeamLoadouts((prev) =>
+                    prev.filter((item) => item.id !== newTeamLoadout.id)
+                );
                 addNotification('error', 'Failed to add team loadout');
                 throw error;
             }
@@ -442,7 +444,7 @@ export const useLoadouts = () => {
             const originalTeamLoadouts = [...teamLoadouts];
 
             // Optimistically update UI
-            setTeamLoadouts((prev) =>
+            void setTeamLoadouts((prev) =>
                 prev.map((teamLoadout) =>
                     teamLoadout.id === id
                         ? { ...teamLoadout, shipLoadouts: [...shipLoadouts] }
@@ -518,9 +520,11 @@ export const useLoadouts = () => {
                 if (fetchError) throw fetchError;
 
                 // Update local state with the complete data from Supabase
-                setTeamLoadouts((prev) =>
+                void setTeamLoadouts((prev) =>
                     prev.map((item) =>
-                        item.id === id ? transformTeamLoadout(completeTeamLoadout) : item
+                        item.id === id
+                            ? transformTeamLoadout(completeTeamLoadout as RawTeamLoadout)
+                            : item
                     )
                 );
 
@@ -528,7 +532,7 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error updating team loadout:', error);
                 // Revert optimistic update
-                setTeamLoadouts(originalTeamLoadouts);
+                void setTeamLoadouts(originalTeamLoadouts);
                 addNotification('error', 'Failed to update team loadout');
                 throw error;
             }
@@ -542,7 +546,7 @@ export const useLoadouts = () => {
             const originalTeamLoadouts = [...teamLoadouts];
 
             // Optimistically update UI
-            setTeamLoadouts((prev) => prev.filter((teamLoadout) => teamLoadout.id !== id));
+            void setTeamLoadouts((prev) => prev.filter((teamLoadout) => teamLoadout.id !== id));
 
             // If user is not authenticated, we're done (data already saved to localStorage)
             if (!user?.id) {
@@ -564,7 +568,7 @@ export const useLoadouts = () => {
             } catch (error) {
                 console.error('Error deleting team loadout:', error);
                 // Revert optimistic update
-                setTeamLoadouts(originalTeamLoadouts);
+                void setTeamLoadouts(originalTeamLoadouts);
                 addNotification('error', 'Failed to delete team loadout');
                 throw error;
             }

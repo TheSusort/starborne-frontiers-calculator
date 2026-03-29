@@ -67,7 +67,7 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <Input
                 label="Title"
                 value={title}

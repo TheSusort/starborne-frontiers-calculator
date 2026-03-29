@@ -102,7 +102,7 @@ export const useSharedEncounters = () => {
     }, [user?.id, addNotification]);
 
     useEffect(() => {
-        fetchSharedEncounters();
+        void fetchSharedEncounters();
     }, [fetchSharedEncounters]);
 
     const shareEncounter = async (encounter: LocalEncounterNote) => {
