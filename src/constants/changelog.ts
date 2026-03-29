@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.48.0';
+export const CURRENT_VERSION = '1.49.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.49.0',
+        date: '2026-03-29',
+        changes: [
+            'Statistics charts now show rarity color-coded stacked bars — see the breakdown by rarity across gear sets, main stats, star levels, level distribution, gear slots, implant types, and implant set bonuses',
+            'Refits by Rarity chart on the Ships tab is now color-coded by rarity',
+            'Fixed labels across all statistics tabs — ship roles, factions, gear sets, gear slots, main stats, and implant set bonuses now display proper names instead of internal keys',
+        ],
+    },
     {
         version: '1.48.0',
         date: '2026-03-26',
