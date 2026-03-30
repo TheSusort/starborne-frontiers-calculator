@@ -27,28 +27,24 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     onEdit,
     onDelete,
 }) => {
-    const { equipGear } = useShips();
+    const { equipMultipleGear } = useShips();
     const { addNotification } = useNotification();
 
-    const handleEquipTeam = () => {
-        teamLoadout.shipLoadouts.forEach((shipLoadout) => {
-            Object.entries(shipLoadout.equipment).forEach(([slot, gearId]) => {
-                const gear = getGearPiece(gearId);
-                if (!gear) {
-                    addNotification('error', `Gear piece ${gearId} not found in inventory`);
-                    return;
-                }
-
-                if (gear.shipId && gear.shipId !== shipLoadout.shipId) {
-                    const previousShip = ships.find((s) => s.id === gear.shipId);
-                    if (previousShip) {
-                        addNotification('info', `Unequipped ${slot} from ${previousShip.name}`);
+    const handleEquipTeam = async () => {
+        for (const shipLoadout of teamLoadout.shipLoadouts) {
+            const gearAssignments = Object.entries(shipLoadout.equipment)
+                .filter(([, gearId]) => {
+                    const gear = getGearPiece(gearId);
+                    if (!gear) {
+                        addNotification('error', `Gear piece ${gearId} not found in inventory`);
+                        return false;
                     }
-                }
+                    return true;
+                })
+                .map(([slot, gearId]) => ({ slot: slot, gearId }));
 
-                void equipGear(shipLoadout.shipId, slot, gearId);
-            });
-        });
+            await equipMultipleGear(shipLoadout.shipId, gearAssignments);
+        }
 
         addNotification('success', 'Team loadout equipped successfully');
     };
@@ -84,7 +80,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                         title="Equip team loadout"
                         variant="secondary"
                         size="sm"
-                        onClick={handleEquipTeam}
+                        onClick={() => void handleEquipTeam()}
                     >
                         Equip Team
                     </Button>

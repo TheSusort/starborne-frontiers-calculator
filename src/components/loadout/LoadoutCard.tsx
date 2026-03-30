@@ -40,26 +40,24 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
     const [expanded, setExpanded] = useState(false);
     const gearLookup = useGearLookup(equipment, getGearPiece);
     const activeSets = useGearSets(equipment, gearLookup);
-    const { equipGear } = useShips();
+    const { equipMultipleGear } = useShips();
     const { addNotification } = useNotification();
 
     const handleEquipLoadout = () => {
         if (!onEquip) return;
 
-        Object.entries(equipment).forEach(([slot, gearId]) => {
-            const gear = getGearPiece(gearId);
-            if (!gear) {
-                addNotification('error', `Gear piece ${gearId} not found in inventory`);
-                return;
-            }
+        const gearAssignments = Object.entries(equipment)
+            .filter(([, gearId]) => {
+                const gear = getGearPiece(gearId);
+                if (!gear) {
+                    addNotification('error', `Gear piece ${gearId} not found in inventory`);
+                    return false;
+                }
+                return true;
+            })
+            .map(([slot, gearId]) => ({ slot: slot, gearId }));
 
-            if (gear.shipId && gear.shipId !== ship.id) {
-                const previousShip = gear.shipId;
-                addNotification('info', `Unequipped ${slot} from ship ${previousShip}`);
-            }
-
-            void equipGear(ship.id, slot, gearId);
-        });
+        void equipMultipleGear(ship.id, gearAssignments);
 
         addNotification('success', 'Loadout equipped successfully');
         onEquip();
