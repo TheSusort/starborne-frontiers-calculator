@@ -83,6 +83,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                         aria-label="Equip team loadout"
                         title="Equip team loadout"
                         variant="secondary"
+                        size="sm"
                         onClick={handleEquipTeam}
                     >
                         Equip Team
