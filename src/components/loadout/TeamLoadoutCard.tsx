@@ -2,7 +2,7 @@ import React from 'react';
 import { TeamLoadout } from '../../types/loadout';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { Button, CloseIcon } from '../ui';
+import { Button, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearSlotName } from '../../constants';
 import { useNotification } from '../../hooks/useNotification';
@@ -14,6 +14,7 @@ interface TeamLoadoutCardProps {
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
     onUpdate: (id: string, shipLoadouts: TeamLoadout['shipLoadouts']) => void;
+    onEdit: (teamLoadout: TeamLoadout) => void;
     onDelete: (id: string) => void;
 }
 
@@ -23,6 +24,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     availableGear,
     getGearPiece,
     onUpdate,
+    onEdit,
     onDelete,
 }) => {
     const { equipGear } = useShips();
@@ -64,15 +66,23 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     };
 
     return (
-        <div className="border-b border-dark-border pb-8">
+        <div className="card">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium ">{teamLoadout.name}</h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    <Button
+                        aria-label="Edit team loadout"
+                        title="Edit team loadout"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onEdit(teamLoadout)}
+                    >
+                        <EditIcon />
+                    </Button>
                     <Button
                         aria-label="Equip team loadout"
                         title="Equip team loadout"
                         variant="secondary"
-                        size="sm"
                         onClick={handleEquipTeam}
                     >
                         Equip Team

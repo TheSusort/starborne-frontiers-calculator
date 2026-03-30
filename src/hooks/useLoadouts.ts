@@ -224,14 +224,25 @@ export const useLoadouts = () => {
     );
 
     const updateLoadout = useCallback(
-        async (id: string, equipment: Record<GearSlotName, string>) => {
+        async (
+            id: string,
+            equipment: Record<GearSlotName, string>,
+            updates?: { name?: string; shipId?: string }
+        ) => {
             // Create backup of current state for potential rollback
             const originalLoadouts = [...loadouts];
 
             // Optimistically update UI
             void setLoadouts((prev) =>
                 prev.map((loadout) =>
-                    loadout.id === id ? { ...loadout, equipment: { ...equipment } } : loadout
+                    loadout.id === id
+                        ? {
+                              ...loadout,
+                              equipment: { ...equipment },
+                              ...(updates?.name !== undefined && { name: updates.name }),
+                              ...(updates?.shipId !== undefined && { shipId: updates.shipId }),
+                          }
+                        : loadout
                 )
             );
 
@@ -243,6 +254,20 @@ export const useLoadouts = () => {
 
             // Otherwise, sync with Supabase
             try {
+                // Update loadout metadata if provided
+                if (updates?.name !== undefined || updates?.shipId !== undefined) {
+                    const updateData: Record<string, string> = {};
+                    if (updates.name !== undefined) updateData.name = updates.name;
+                    if (updates.shipId !== undefined) updateData.ship_id = updates.shipId;
+
+                    const { error: updateError } = await supabase
+                        .from('loadouts')
+                        .update(updateData)
+                        .eq('id', id);
+
+                    if (updateError) throw updateError;
+                }
+
                 // Delete existing equipment
                 const { error: deleteError } = await supabase
                     .from('loadout_equipment')
@@ -435,7 +460,11 @@ export const useLoadouts = () => {
     );
 
     const updateTeamLoadout = useCallback(
-        async (id: string, shipLoadouts: TeamLoadout['shipLoadouts']) => {
+        async (
+            id: string,
+            shipLoadouts: TeamLoadout['shipLoadouts'],
+            updates?: { name?: string }
+        ) => {
             if (!validateTeamLoadout(shipLoadouts)) {
                 throw new Error('Invalid team loadout: Duplicate gear pieces detected');
             }
@@ -447,7 +476,11 @@ export const useLoadouts = () => {
             void setTeamLoadouts((prev) =>
                 prev.map((teamLoadout) =>
                     teamLoadout.id === id
-                        ? { ...teamLoadout, shipLoadouts: [...shipLoadouts] }
+                        ? {
+                              ...teamLoadout,
+                              shipLoadouts: [...shipLoadouts],
+                              ...(updates?.name !== undefined && { name: updates.name }),
+                          }
                         : teamLoadout
                 )
             );
@@ -460,6 +493,16 @@ export const useLoadouts = () => {
 
             // Otherwise, sync with Supabase
             try {
+                // Update team loadout name if provided
+                if (updates?.name !== undefined) {
+                    const { error: updateError } = await supabase
+                        .from('team_loadouts')
+                        .update({ name: updates.name })
+                        .eq('id', id);
+
+                    if (updateError) throw updateError;
+                }
+
                 // Delete existing records
                 const { error: deleteShipsError } = await supabase
                     .from('team_loadout_ships')

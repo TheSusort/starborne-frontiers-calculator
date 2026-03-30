@@ -7,6 +7,7 @@ import { LoadoutCard } from './LoadoutCard';
 
 interface LoadoutListProps {
     loadouts: Loadout[];
+    onEdit: (loadout: Loadout) => void;
     onUpdate: (id: string, equipment: Record<GearSlotName, string>) => void;
     onDelete: (id: string) => void;
     getGearPiece: (gearId: string) => GearPiece | undefined;
@@ -15,6 +16,7 @@ interface LoadoutListProps {
 
 export const LoadoutList: React.FC<LoadoutListProps> = ({
     loadouts,
+    onEdit,
     onUpdate,
     onDelete,
     getGearPiece,
@@ -51,6 +53,7 @@ export const LoadoutList: React.FC<LoadoutListProps> = ({
                                 });
                             }}
                             onUpdate={(equipment) => onUpdate(loadout.id, equipment)}
+                            onEdit={() => onEdit(loadout)}
                             onDelete={() => onDelete(loadout.id)}
                         />
                     </div>

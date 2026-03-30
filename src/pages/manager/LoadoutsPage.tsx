@@ -9,11 +9,14 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { useShips } from '../../contexts/ShipsContext';
 import { Loader } from '../../components/ui/Loader';
+import { Loadout, TeamLoadout } from '../../types/loadout';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
 export const LoadoutsPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
+    const [editingLoadout, setEditingLoadout] = useState<Loadout | null>(null);
+    const [editingTeamLoadout, setEditingTeamLoadout] = useState<TeamLoadout | null>(null);
     const [activeTab, setActiveTab] = useState<'individual' | 'team'>('individual');
     const {
         loadouts,
@@ -47,7 +50,11 @@ export const LoadoutsPage: React.FC = () => {
                     label: showForm
                         ? 'Hide Form'
                         : `New ${activeTab === 'individual' ? 'Loadout' : 'Team'}`,
-                    onClick: () => setShowForm(!showForm),
+                    onClick: () => {
+                        setShowForm(!showForm);
+                        setEditingLoadout(null);
+                        setEditingTeamLoadout(null);
+                    },
                     variant: showForm ? 'secondary' : 'primary',
                 }}
             >
@@ -60,25 +67,62 @@ export const LoadoutsPage: React.FC = () => {
                     onChange={(tab) => {
                         setActiveTab(tab as 'individual' | 'team');
                         setShowForm(false);
+                        setEditingLoadout(null);
+                        setEditingTeamLoadout(null);
                     }}
                 />
 
                 {activeTab === 'individual' ? (
                     <>
-                        <CollapsibleForm isVisible={showForm}>
+                        <CollapsibleForm isVisible={showForm || editingLoadout !== null}>
                             <LoadoutForm
+                                key={editingLoadout?.id || 'create'}
                                 onSubmit={(loadout) => {
-                                    void addLoadout(loadout);
+                                    if (editingLoadout) {
+                                        void updateLoadout(editingLoadout.id, loadout.equipment, {
+                                            name: loadout.name,
+                                            shipId: loadout.shipId,
+                                        });
+                                        setEditingLoadout(null);
+                                        addNotification('success', 'Loadout updated successfully');
+                                    } else {
+                                        void addLoadout(loadout);
+                                        addNotification('success', 'Loadout created successfully');
+                                    }
                                     setShowForm(false);
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    addNotification('success', 'Loadout created successfully');
                                 }}
-                                existingNames={existingLoadoutNames}
+                                existingNames={existingLoadoutNames.filter(
+                                    (n) => n !== editingLoadout?.name
+                                )}
+                                initialValues={
+                                    editingLoadout
+                                        ? {
+                                              name: editingLoadout.name,
+                                              ship: ships.find(
+                                                  (s) => s.id === editingLoadout.shipId
+                                              )!,
+                                          }
+                                        : undefined
+                                }
+                                onCancel={
+                                    editingLoadout
+                                        ? () => {
+                                              setEditingLoadout(null);
+                                              setShowForm(false);
+                                          }
+                                        : undefined
+                                }
                             />
                         </CollapsibleForm>
 
                         <LoadoutList
                             loadouts={loadouts}
+                            onEdit={(loadout) => {
+                                setEditingLoadout(loadout);
+                                setShowForm(false);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
                             onUpdate={(...args) => void updateLoadout(...args)}
                             onDelete={(...args) => void deleteLoadout(...args)}
                             getGearPiece={getGearPiece}
@@ -87,27 +131,62 @@ export const LoadoutsPage: React.FC = () => {
                     </>
                 ) : (
                     <>
-                        <CollapsibleForm isVisible={showForm}>
+                        <CollapsibleForm isVisible={showForm || editingTeamLoadout !== null}>
                             <TeamLoadoutForm
+                                key={editingTeamLoadout?.id || 'create'}
                                 onSubmit={(teamLoadout) => {
                                     try {
-                                        void addTeamLoadout(teamLoadout);
+                                        if (editingTeamLoadout) {
+                                            void updateTeamLoadout(
+                                                editingTeamLoadout.id,
+                                                teamLoadout.shipLoadouts,
+                                                { name: teamLoadout.name }
+                                            );
+                                            setEditingTeamLoadout(null);
+                                            addNotification(
+                                                'success',
+                                                'Team loadout updated successfully'
+                                            );
+                                        } else {
+                                            void addTeamLoadout(teamLoadout);
+                                            addNotification(
+                                                'success',
+                                                'Team loadout created successfully'
+                                            );
+                                        }
                                         setShowForm(false);
                                         window.scrollTo({ top: 0, behavior: 'smooth' });
-                                        addNotification(
-                                            'success',
-                                            'Team loadout created successfully'
-                                        );
                                     } catch (error) {
                                         addNotification(
                                             'error',
                                             error instanceof Error
                                                 ? error.message
-                                                : 'Failed to create team loadout'
+                                                : 'Failed to save team loadout'
                                         );
                                     }
                                 }}
-                                existingNames={existingTeamNames}
+                                existingNames={existingTeamNames.filter(
+                                    (n) => n !== editingTeamLoadout?.name
+                                )}
+                                initialValues={
+                                    editingTeamLoadout
+                                        ? {
+                                              name: editingTeamLoadout.name,
+                                              ships: editingTeamLoadout.shipLoadouts.map(
+                                                  (sl) =>
+                                                      ships.find((s) => s.id === sl.shipId) || null
+                                              ),
+                                          }
+                                        : undefined
+                                }
+                                onCancel={
+                                    editingTeamLoadout
+                                        ? () => {
+                                              setEditingTeamLoadout(null);
+                                              setShowForm(false);
+                                          }
+                                        : undefined
+                                }
                             />
                         </CollapsibleForm>
 
@@ -120,6 +199,11 @@ export const LoadoutsPage: React.FC = () => {
                                     availableGear={inventory}
                                     getGearPiece={getGearPiece}
                                     onUpdate={(...args) => void updateTeamLoadout(...args)}
+                                    onEdit={(tl) => {
+                                        setEditingTeamLoadout(tl);
+                                        setShowForm(false);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
                                     onDelete={(...args) => void deleteTeamLoadout(...args)}
                                 />
                             ))}

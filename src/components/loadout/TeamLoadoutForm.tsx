@@ -8,18 +8,26 @@ import { TeamLoadout } from '../../types/loadout';
 interface TeamLoadoutFormProps {
     onSubmit: (loadout: Omit<TeamLoadout, 'id' | 'createdAt'>) => void;
     existingNames: string[];
+    initialValues?: {
+        name: string;
+        ships: (Ship | null)[];
+    };
+    onCancel?: () => void;
 }
 
-export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, existingNames }) => {
-    const [name, setName] = useState('');
-    const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([
-        null,
-        null,
-        null,
-        null,
-        null,
-    ]);
+export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({
+    onSubmit,
+    existingNames,
+    initialValues,
+    onCancel,
+}) => {
+    const [name, setName] = useState(initialValues?.name || '');
+    const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>(
+        initialValues?.ships || [null, null, null, null, null]
+    );
     const [error, setError] = useState<string | null>(null);
+
+    const isEditing = !!initialValues;
 
     const handleShipSelect = (ship: Ship, position: number) => {
         const newSelectedShips = [...selectedShips];
@@ -33,8 +41,10 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
 
         if (selectedShips.some((ship) => !ship)) return;
 
-        // Check for duplicate name
-        if (existingNames.includes(name.trim())) {
+        const trimmedName = name.trim();
+        const nameChanged = initialValues ? trimmedName !== initialValues.name : true;
+
+        if (nameChanged && existingNames.includes(trimmedName)) {
             setError('A team loadout with this name already exists');
             return;
         }
@@ -46,7 +56,7 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
         }));
 
         onSubmit({
-            name,
+            name: trimmedName,
             shipLoadouts,
         });
 
@@ -79,12 +89,22 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({ onSubmit, exis
             ))}
 
             <div className="flex justify-end gap-2">
+                {onCancel && (
+                    <Button
+                        aria-label="Cancel"
+                        type="button"
+                        variant="secondary"
+                        onClick={onCancel}
+                    >
+                        Cancel
+                    </Button>
+                )}
                 <Button
-                    aria-label="Create team loadout"
+                    aria-label={isEditing ? 'Save team loadout' : 'Create team loadout'}
                     type="submit"
                     disabled={selectedShips.some((ship) => !ship) || !name}
                 >
-                    Create Team Loadout
+                    {isEditing ? 'Save Team Loadout' : 'Create Team Loadout'}
                 </Button>
             </div>
         </form>

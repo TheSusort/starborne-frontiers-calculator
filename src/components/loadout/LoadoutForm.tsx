@@ -11,12 +11,24 @@ interface LoadoutFormProps {
         equipment: Record<GearSlotName, string>;
     }) => void;
     existingNames: string[];
+    initialValues?: {
+        name: string;
+        ship: Ship;
+    };
+    onCancel?: () => void;
 }
 
-export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingNames }) => {
-    const [name, setName] = useState('');
-    const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
+export const LoadoutForm: React.FC<LoadoutFormProps> = ({
+    onSubmit,
+    existingNames,
+    initialValues,
+    onCancel,
+}) => {
+    const [name, setName] = useState(initialValues?.name || '');
+    const [selectedShip, setSelectedShip] = useState<Ship | null>(initialValues?.ship || null);
     const [error, setError] = useState<string | null>(null);
+
+    const isEditing = !!initialValues;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,13 +36,16 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
 
         if (!selectedShip) return;
 
-        if (existingNames.includes(name.trim())) {
+        const trimmedName = name.trim();
+        const nameChanged = initialValues ? trimmedName !== initialValues.name : true;
+
+        if (nameChanged && existingNames.includes(trimmedName)) {
             setError('A loadout with this name already exists');
             return;
         }
 
         onSubmit({
-            name: name.trim(),
+            name: trimmedName,
             shipId: selectedShip.id,
             equipment: selectedShip.equipment as Record<GearSlotName, string>,
         });
@@ -64,12 +79,22 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({ onSubmit, existingName
             </div>
 
             <div className="flex justify-end gap-2">
+                {onCancel && (
+                    <Button
+                        aria-label="Cancel"
+                        type="button"
+                        variant="secondary"
+                        onClick={onCancel}
+                    >
+                        Cancel
+                    </Button>
+                )}
                 <Button
-                    aria-label="Create loadout"
+                    aria-label={isEditing ? 'Save loadout' : 'Create loadout'}
                     type="submit"
                     disabled={!selectedShip || !name.trim()}
                 >
-                    Create Loadout
+                    {isEditing ? 'Save Loadout' : 'Create Loadout'}
                 </Button>
             </div>
         </form>
