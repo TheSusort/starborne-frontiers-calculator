@@ -39,6 +39,7 @@ interface Props {
     viewMode?: 'list' | 'image';
     onAddToComparison?: (shipId: string) => void;
     isInComparison?: boolean;
+    onSaveAsLoadout?: (ship: Ship) => void;
 }
 
 export const ShipCard: React.FC<Props> = ({
@@ -60,6 +61,7 @@ export const ShipCard: React.FC<Props> = ({
     viewMode = 'list',
     onAddToComparison,
     isInComparison,
+    onSaveAsLoadout,
 }) => {
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -149,6 +151,7 @@ export const ShipCard: React.FC<Props> = ({
                 variant={variant}
                 onAddToComparison={onAddToComparison}
                 isInComparison={isInComparison}
+                onSaveAsLoadout={onSaveAsLoadout}
             >
                 <div className="p-4 bg-dark">
                     {!expanded ? (

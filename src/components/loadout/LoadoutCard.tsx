@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
-import { Modal, Button, CloseIcon, CheckIcon, EditIcon } from '../ui';
+import { Modal, ConfirmModal, Button, CloseIcon, CheckIcon, EditIcon } from '../ui';
 import { GearInventory } from '../gear/GearInventory';
 import { useGearLookup, useGearSets } from '../../hooks/useGear';
 import { useShips } from '../../contexts/ShipsContext';
 import { useNotification } from '../../hooks/useNotification';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { StatList } from '../stats/StatList';
 
 interface LoadoutCardProps {
     name?: string;
@@ -38,12 +41,53 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
     const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
     const [expanded, setExpanded] = useState(false);
+    const [showConflictConfirm, setShowConflictConfirm] = useState(false);
     const gearLookup = useGearLookup(equipment, getGearPiece);
     const activeSets = useGearSets(equipment, gearLookup);
-    const { equipMultipleGear } = useShips();
+    const { equipMultipleGear, getShipFromGearId } = useShips();
     const { addNotification } = useNotification();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
 
-    const handleEquipLoadout = () => {
+    const staleGearSlots = useMemo(
+        () => Object.entries(equipment).filter(([, gearId]) => gearId && !getGearPiece(gearId)),
+        [equipment, getGearPiece]
+    );
+
+    const loadoutStats = useMemo(
+        () =>
+            calculateTotalStats(
+                ship.baseStats,
+                equipment,
+                getGearPiece,
+                ship.refits,
+                ship.implants,
+                getEngineeringStatsForShipType(ship.type),
+                ship.id
+            ),
+        [ship, equipment, getGearPiece, getEngineeringStatsForShipType]
+    );
+
+    const getGearConflicts = () => {
+        const conflicts: { slot: string; gearName: string; currentShipName: string }[] = [];
+        Object.entries(equipment).forEach(([slot, gearId]) => {
+            const gear = getGearPiece(gearId);
+            if (!gear) return;
+            const currentShip = getShipFromGearId(gearId);
+            if (currentShip && currentShip.id !== ship.id) {
+                const mainStatLabel = gear.mainStat
+                    ? `${gear.mainStat.name} ${gear.slot}`
+                    : gear.slot;
+                conflicts.push({
+                    slot,
+                    gearName: mainStatLabel,
+                    currentShipName: currentShip.name,
+                });
+            }
+        });
+        return conflicts;
+    };
+
+    const equipLoadout = () => {
         if (!onEquip) return;
 
         const gearAssignments = Object.entries(equipment)
@@ -61,6 +105,16 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
 
         addNotification('success', 'Loadout equipped successfully');
         onEquip();
+    };
+
+    const handleEquipLoadout = () => {
+        if (!onEquip) return;
+        const conflicts = getGearConflicts();
+        if (conflicts.length > 0) {
+            setShowConflictConfirm(true);
+        } else {
+            equipLoadout();
+        }
     };
 
     return (
@@ -114,6 +168,12 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                 <div
                     className={`p-4 mt-3 -mx-3 bg-dark border-t ${RARITIES[ship.rarity || 'common'].borderColor}`}
                 >
+                    {staleGearSlots.length > 0 && (
+                        <div className="mb-3 px-2 py-1.5 bg-yellow-900/30 border border-yellow-700/50 text-yellow-400 text-xs rounded">
+                            {staleGearSlots.length} gear piece
+                            {staleGearSlots.length > 1 ? 's' : ''} no longer in inventory
+                        </div>
+                    )}
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
                         {Object.entries(GEAR_SLOTS).map(([key, _]) => (
                             <GearSlot
@@ -230,9 +290,38 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                                 ))}
                             </div>
                         )}
+
+                        <div className="border-t border-dark-lighter mt-3 pt-3">
+                            <StatList stats={loadoutStats.final} />
+                        </div>
                     </div>
                 </ShipDisplay>
             </Modal>
+
+            <ConfirmModal
+                isOpen={showConflictConfirm}
+                onClose={() => setShowConflictConfirm(false)}
+                onConfirm={() => {
+                    equipLoadout();
+                    setShowConflictConfirm(false);
+                }}
+                title="Gear Conflicts"
+                confirmLabel="Equip Anyway"
+                message={
+                    <div className="space-y-2">
+                        <p>The following gear will be unequipped from other ships:</p>
+                        <ul className="list-disc pl-4 space-y-1 text-sm">
+                            {getGearConflicts().map((c) => (
+                                <li key={c.slot}>
+                                    <span className="text-theme-text">{c.gearName}</span>
+                                    {' from '}
+                                    <span className="text-theme-text">{c.currentShipName}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                }
+            />
 
             <Modal
                 isOpen={selectedSlot !== null}

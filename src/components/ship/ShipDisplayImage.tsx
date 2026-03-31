@@ -53,6 +53,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
         onAddToComparison,
         isInComparison,
         onBioClick,
+        onSaveAsLoadout,
     }) => {
         const panelStyles = PANEL_VARIANTS[panelVariant];
         const hasVideo = hasShipVideo(ship.rarity, ship.imageKey);
@@ -250,6 +251,7 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                                         onAddToComparison={onAddToComparison}
                                         isInComparison={isInComparison}
                                         onCopyAsImage={() => void createAndCopyImage()}
+                                        onSaveAsLoadout={onSaveAsLoadout}
                                         showCalibrateGear
                                     />
                                 )}

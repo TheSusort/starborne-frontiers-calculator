@@ -1,8 +1,22 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.49.0';
+export const CURRENT_VERSION = '1.50.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.50.0',
+        date: '2026-03-31',
+        changes: [
+            'Loadout cards now have an Expand button that opens a modal showing full gear details and calculated stats',
+            'Added Edit button to individual and team loadouts — opens the form pre-filled with the current name and ship for quick updates',
+            'Added per-ship Equip button on team loadout cards to equip individual ships without equipping the whole team',
+            'Fixed loadout equipping — gear assignments are now atomic (previously, rapid individual equip calls could race and overwrite each other)',
+            'Gear conflict warning when equipping a loadout — a confirmation dialog lists which gear will be unequipped from other ships before proceeding',
+            'New "Save as loadout" action in the ship card dropdown menu — quickly snapshot a ship\'s current gear as a named loadout',
+            'Expanded loadout modal now shows full stat totals (base + gear + engineering + refits + implants)',
+            'Stale gear detection — loadout cards show a warning when gear pieces no longer exist in inventory',
+        ],
+    },
     {
         version: '1.49.0',
         date: '2026-03-29',

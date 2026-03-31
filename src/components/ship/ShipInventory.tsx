@@ -16,7 +16,9 @@ import { SortConfig } from '../filters/SortPanel';
 import { FilterState, usePersistedFilters } from '../../hooks/usePersistedFilters';
 import { usePersistedViewMode } from '../../hooks/usePersistedViewMode';
 import { useShipComparison } from '../../hooks/useShipComparison';
-import { Pagination } from '../ui';
+import { Pagination, Modal, Button, Input } from '../ui';
+import { useLoadouts } from '../../hooks/useLoadouts';
+import { useNotification } from '../../hooks/useNotification';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
@@ -69,6 +71,35 @@ export const ShipInventory: React.FC<Props> = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = usePersistedViewMode('ship-inventory-view-mode');
+    const [saveLoadoutShip, setSaveLoadoutShip] = useState<Ship | null>(null);
+    const [loadoutName, setLoadoutName] = useState('');
+    const [loadoutNameError, setLoadoutNameError] = useState<string | null>(null);
+    const { loadouts, addLoadout } = useLoadouts();
+    const { addNotification } = useNotification();
+    const existingLoadoutNames = loadouts.map((l) => l.name);
+
+    const handleSaveAsLoadout = (ship: Ship) => {
+        setSaveLoadoutShip(ship);
+        setLoadoutName(`${ship.name} Loadout`);
+        setLoadoutNameError(null);
+    };
+
+    const handleConfirmSaveLoadout = () => {
+        if (!saveLoadoutShip) return;
+        const trimmed = loadoutName.trim();
+        if (existingLoadoutNames.includes(trimmed)) {
+            setLoadoutNameError('A loadout with this name already exists');
+            return;
+        }
+        void addLoadout({
+            name: trimmed,
+            shipId: saveLoadoutShip.id,
+            equipment: saveLoadoutShip.equipment as Record<GearSlotName, string>,
+        });
+        addNotification('success', `Loadout "${trimmed}" saved`);
+        setSaveLoadoutShip(null);
+    };
+
     const {
         comparisonShips,
         addToComparison,
@@ -392,6 +423,7 @@ export const ShipInventory: React.FC<Props> = ({
                         onUnequipAll={onUnequipAll}
                         onHoverGear={setHoveredGear}
                         viewMode={viewMode}
+                        onSaveAsLoadout={handleSaveAsLoadout}
                     />
                 )}
             />
@@ -424,6 +456,7 @@ export const ShipInventory: React.FC<Props> = ({
                                     viewMode={viewMode}
                                     onAddToComparison={addToComparison}
                                     isInComparison={isInComparison(ship.id)}
+                                    onSaveAsLoadout={handleSaveAsLoadout}
                                 />
                             </div>
                         ))}
@@ -436,6 +469,47 @@ export const ShipInventory: React.FC<Props> = ({
                     />
                 </>
             )}
+            <Modal
+                isOpen={saveLoadoutShip !== null}
+                onClose={() => setSaveLoadoutShip(null)}
+                title="Save as Loadout"
+            >
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        handleConfirmSaveLoadout();
+                    }}
+                    className="space-y-4"
+                >
+                    <Input
+                        label="Loadout Name"
+                        value={loadoutName}
+                        onChange={(e) => {
+                            setLoadoutName(e.target.value);
+                            setLoadoutNameError(null);
+                        }}
+                        error={loadoutNameError || undefined}
+                        required
+                    />
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            aria-label="Cancel"
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setSaveLoadoutShip(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            aria-label="Save loadout"
+                            type="submit"
+                            disabled={!loadoutName.trim()}
+                        >
+                            Save Loadout
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
         </div>
     );
 };

@@ -31,6 +31,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         contentClassName,
         onAddToComparison,
         isInComparison,
+        onSaveAsLoadout,
     }) => {
         const { getGearPiece } = useInventory();
         const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -134,6 +135,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
                                     onAddToComparison={onAddToComparison}
                                     isInComparison={isInComparison}
                                     onCopyAsImage={() => void createAndCopyImage()}
+                                    onSaveAsLoadout={onSaveAsLoadout}
                                     showCalibrateGear
                                 />
                             )}

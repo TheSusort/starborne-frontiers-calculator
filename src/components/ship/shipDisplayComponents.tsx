@@ -54,6 +54,7 @@ export interface ShipDisplayProps {
     onAddToComparison?: (shipId: string) => void;
     isInComparison?: boolean;
     onBioClick?: (shipName: string) => void;
+    onSaveAsLoadout?: (ship: Ship) => void;
 }
 
 export const ShipIcon = memo(
@@ -134,6 +135,7 @@ interface ShipActionsDropdownProps {
     onAddToComparison?: (shipId: string) => void;
     isInComparison?: boolean;
     onCopyAsImage?: () => void;
+    onSaveAsLoadout?: (ship: Ship) => void;
     showCalibrateGear?: boolean;
 }
 
@@ -144,6 +146,7 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
     onAddToComparison,
     isInComparison,
     onCopyAsImage,
+    onSaveAsLoadout,
     showCalibrateGear = false,
 }) => {
     const navigate = useNavigate();
@@ -228,6 +231,20 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
                     <div className="flex items-center gap-2">
                         <ImageIcon />
                         <span>Copy as image</span>
+                    </div>
+                </Dropdown.Item>
+            )}
+
+            {onSaveAsLoadout && Object.keys(ship.equipment || {}).length > 0 && (
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onSaveAsLoadout(ship);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <CopyIcon />
+                        <span>Save as loadout</span>
                     </div>
                 </Dropdown.Item>
             )}

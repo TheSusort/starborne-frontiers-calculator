@@ -9,6 +9,7 @@ import { analyzeStatDistribution } from '../../utils/ship/statDistribution';
 import { useShips } from '../../contexts/ShipsContext';
 import { PageLayout } from '../../components/ui/layout/PageLayout';
 import { GearPiece } from '../../types/gear';
+import { GearSlotName } from '../../constants';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ShipForm } from '../../components/ship/ShipForm';
 import { useNotification } from '../../hooks/useNotification';
@@ -18,6 +19,8 @@ import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useOrphanSetPieces, useGearLookup } from '../../hooks/useGear';
 import { StatDistributionChart } from '../../components/stats/StatDistributionChart';
 import { Loader } from '../../components/ui/Loader';
+import { Modal, Button, Input } from '../../components/ui';
+import { useLoadouts } from '../../hooks/useLoadouts';
 import Seo from '../../components/seo/Seo';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { SHIP_DETAILS_TUTORIAL } from '../../constants/tutorialSteps';
@@ -44,6 +47,11 @@ export const ShipDetailsPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { startGroup, hasCompletedGroup } = useTutorial();
+    const { loadouts, addLoadout } = useLoadouts();
+    const [saveLoadoutShip, setSaveLoadoutShip] = useState<Ship | null>(null);
+    const [loadoutName, setLoadoutName] = useState('');
+    const [loadoutNameError, setLoadoutNameError] = useState<string | null>(null);
+    const existingLoadoutNames = loadouts.map((l) => l.name);
     const ship = ships.find((s) => s.id === shipId);
     const gearLookup = useGearLookup(ship?.equipment || {}, getGearPiece);
     const orphanSetPieces = useOrphanSetPieces(ship || ({} as Ship), gearLookup);
@@ -191,6 +199,11 @@ export const ShipDetailsPage: React.FC = () => {
                                 onRemoveImplant={(_, slot) => {
                                     void removeImplant(ship.id, slot);
                                 }}
+                                onSaveAsLoadout={(s) => {
+                                    setSaveLoadoutShip(s);
+                                    setLoadoutName(`${s.name} Loadout`);
+                                    setLoadoutNameError(null);
+                                }}
                             />
                         </div>
 
@@ -230,6 +243,60 @@ export const ShipDetailsPage: React.FC = () => {
                     </div>
                 </div>
             </PageLayout>
+
+            <Modal
+                isOpen={saveLoadoutShip !== null}
+                onClose={() => setSaveLoadoutShip(null)}
+                title="Save as Loadout"
+            >
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!saveLoadoutShip) return;
+                        const trimmed = loadoutName.trim();
+                        if (existingLoadoutNames.includes(trimmed)) {
+                            setLoadoutNameError('A loadout with this name already exists');
+                            return;
+                        }
+                        void addLoadout({
+                            name: trimmed,
+                            shipId: saveLoadoutShip.id,
+                            equipment: saveLoadoutShip.equipment as Record<GearSlotName, string>,
+                        });
+                        addNotification('success', `Loadout "${trimmed}" saved`);
+                        setSaveLoadoutShip(null);
+                    }}
+                    className="space-y-4"
+                >
+                    <Input
+                        label="Loadout Name"
+                        value={loadoutName}
+                        onChange={(e) => {
+                            setLoadoutName(e.target.value);
+                            setLoadoutNameError(null);
+                        }}
+                        error={loadoutNameError || undefined}
+                        required
+                    />
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            aria-label="Cancel"
+                            type="button"
+                            variant="secondary"
+                            onClick={() => setSaveLoadoutShip(null)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            aria-label="Save loadout"
+                            type="submit"
+                            disabled={!loadoutName.trim()}
+                        >
+                            Save Loadout
+                        </Button>
+                    </div>
+                </form>
+            </Modal>
         </>
     );
 };
