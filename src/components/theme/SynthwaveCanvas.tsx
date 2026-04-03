@@ -65,7 +65,6 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
     const gridPulseRef = useRef(-1);
     const sunCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const lastSunDrawRef = useRef(-1);
-    const lastFrameTimeRef = useRef(0);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -206,13 +205,6 @@ export const SynthwaveCanvas = memo(({ animate = true }: { animate?: boolean }) 
         };
 
         const render = (time: number) => {
-            // Throttle to ~30fps
-            if (animate && time - lastFrameTimeRef.current < 33) {
-                animationRef.current = requestAnimationFrame(render);
-                return;
-            }
-            lastFrameTimeRef.current = time;
-
             const w = canvas.offsetWidth;
             const h = canvas.offsetHeight;
             const horizonY = h * 0.45;
