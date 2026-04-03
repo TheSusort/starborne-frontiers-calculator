@@ -139,6 +139,7 @@ export const EncounterList = ({
                                 <h3 className="text-lg font-medium text-white">{encounter.name}</h3>
                                 <div
                                     className="flex gap-2"
+                                    data-hide-on-capture="true"
                                     {...(isFirst
                                         ? { 'data-tutorial': 'encounters-card-actions' }
                                         : {})}
