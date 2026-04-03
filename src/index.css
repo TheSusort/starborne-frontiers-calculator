@@ -290,7 +290,6 @@
             inset 0 0 0.5em 0 rgb(var(--color-primary) / 0.4),
             0 0 0.5em 0 rgb(var(--color-primary) / 0.4);
         text-shadow: 0 0 0.5em rgb(var(--color-primary) / 0.5);
-        animation: neon-border-flicker 4s linear infinite;
         clip-path: none;
         position: relative;
     }
@@ -298,14 +297,13 @@
     [data-theme='synthwave'] [data-variant='primary']::before {
         content: '';
         position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 100%;
-        opacity: 0.5;
-        filter: blur(1em);
-        transform: translateY(75%) rotateX(90deg) scale(1, 0.35);
-        background: rgb(var(--color-primary));
+        bottom: -4px;
+        left: 10%;
+        right: 10%;
+        height: 4px;
+        border-radius: 50%;
+        background: transparent;
+        box-shadow: 0 0 12px 6px rgb(var(--color-primary) / 0.4);
         pointer-events: none;
     }
 
@@ -317,33 +315,10 @@
             0 0 1em 0 rgb(var(--color-primary) / 0.6),
             0 0 2em 0 rgb(var(--color-primary) / 0.3);
         text-shadow: 0 0 0.5em rgb(var(--color-primary));
-        animation: none;
     }
 
     [data-theme='synthwave'] [data-variant='primary']:hover::before {
-        filter: blur(1.5em);
-        opacity: 0.8;
-    }
-
-    @keyframes neon-border-flicker {
-        0% {
-            opacity: 0.9;
-        }
-        2% {
-            opacity: 1;
-        }
-        4% {
-            opacity: 0.85;
-        }
-        8% {
-            opacity: 1;
-        }
-        70% {
-            opacity: 0.9;
-        }
-        100% {
-            opacity: 1;
-        }
+        box-shadow: 0 0 16px 8px rgb(var(--color-primary) / 0.6);
     }
 
     /* Synthwave: Sidebar bottom accent */
@@ -396,6 +371,7 @@
         mix-blend-mode: screen;
         filter: grayscale(1) sepia(1) hue-rotate(-30deg) saturate(4) brightness(0.8);
         animation: vhs-glitch-r 4s steps(1) infinite;
+        will-change: transform, opacity;
     }
 
     [data-theme='synthwave'] .chromatic-layer-c {
@@ -403,6 +379,7 @@
         mix-blend-mode: screen;
         filter: grayscale(1) sepia(1) hue-rotate(150deg) saturate(4) brightness(0.8);
         animation: vhs-glitch-c 4s steps(1) infinite;
+        will-change: transform, opacity;
     }
 
     @keyframes vhs-glitch-r {
@@ -614,8 +591,6 @@
         background-clip: text;
         -webkit-text-fill-color: transparent;
         text-shadow: none;
-        filter: drop-shadow(0 0 6px rgb(var(--color-primary) / 0.4))
-            drop-shadow(0 0 15px rgb(var(--color-primary) / 0.2));
         animation: none;
     }
 
@@ -633,6 +608,7 @@
         [data-theme='synthwave'] h1,
         [data-theme='synthwave'] h2 {
             animation: shimmer-text 4s linear infinite;
+            will-change: background-position;
         }
     }
 
@@ -651,6 +627,7 @@
             );
             pointer-events: none;
             z-index: 50;
+            will-change: transform;
         }
 
         /* Synthwave: Sunset gradient at top */
@@ -669,6 +646,7 @@
             );
             pointer-events: none;
             z-index: 0;
+            will-change: transform;
         }
     }
 
