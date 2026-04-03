@@ -108,10 +108,10 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                             equipment={shipLoadout.equipment}
                             availableGear={availableGear}
                             getGearPiece={getGearPiece}
+                            onEquip={() => {}}
                             onUpdate={(equipment) =>
                                 handleUpdateShipLoadout(shipLoadout.position, equipment)
                             }
-                            showControls={false}
                         />
                     );
                 })}
