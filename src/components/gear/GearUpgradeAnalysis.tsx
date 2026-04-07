@@ -148,14 +148,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         completedSteps: number
     ): Promise<number> => {
         // Determine simulation count based on filters
-        // Reduced simulation counts for better performance while maintaining reasonable accuracy
-        let simulationCount = 5; // Default for rare+ (reduced from 20)
+        let simulationCount = 10; // Default for rare+
         if (selectedRarity === 'legendary') {
-            simulationCount = 20; // High accuracy for legendary pieces (reduced from 80)
+            simulationCount = 40; // High accuracy for legendary pieces
         } else if (selectedRarity === 'epic') {
-            simulationCount = 10; // Medium accuracy for epic pieces (reduced from 40)
-        } else if (maxLevel !== 16) {
-            simulationCount = 5; // Increased accuracy when level filter is applied (reduced from 40)
+            simulationCount = 20; // Medium accuracy for epic pieces
         }
 
         // Filter inventory by maxLevel
@@ -273,10 +270,13 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     const handleAnalyze = async () => {
         setIsLoading(true);
 
-        // Clear baseline cache at the start of a new analysis session
-        // This ensures we start fresh, but the cache persists across calls within the session
-        const { baselineStatsCache } = await import('../../utils/gear/potentialCalculator');
+        // Clear baseline caches at the start of a new analysis session
+        // This ensures we start fresh, but the caches persist across calls within the session
+        const { baselineStatsCache, baselineBreakdownCache } = await import(
+            '../../utils/gear/potentialCalculator'
+        );
         baselineStatsCache.clear();
+        baselineBreakdownCache.clear();
 
         // Filter roles based on selection
         const rolesToProcess =
@@ -502,7 +502,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                     >
                         Click &quot;Analyze Gear&quot; to find the 6 best gear upgrades for each
                         ship role. The analysis simulates upgrading each piece to level 16 multiple
-                        times and averages the results (20 runs for rare+, 40 runs for epic+, 80
+                        times and averages the results (10 runs for rare+, 20 runs for epic+, 40
                         runs for legendary). Use the rarity and level filters to narrow your search.
                         {selectedShip && (
                             <span className="block mt-2 text-cyan-400">

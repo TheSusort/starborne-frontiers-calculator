@@ -12,12 +12,73 @@ import {
 import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
-import { calculateTotalStats, clearGearStatsCache, StatBreakdown } from '../ship/statsCalculator';
+import { calculateTotalStats, StatBreakdown } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 import { Ship } from '../../types/ship';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { isCalibrationEligible, getCalibratedMainStat } from './calibrationCalculator';
+
+// Role-specific base stats representing typical ship base stats (before gear).
+// Using midpoints of known ranges so percentage gear stats are weighted correctly.
+const ROLE_BASE_STATS: Partial<Record<ShipTypeName, BaseStats>> = {
+    ATTACKER: {
+        hp: 22000,
+        attack: 6250,
+        defence: 5000,
+        hacking: 0,
+        security: 0,
+        speed: 130,
+        crit: 20,
+        critDamage: 80,
+        healModifier: 0,
+        defensePenetration: 0,
+    },
+    DEFENDER: {
+        hp: 25000,
+        attack: 3000,
+        defence: 5000,
+        hacking: 0,
+        security: 90,
+        speed: 110,
+        crit: 10,
+        critDamage: 20,
+        healModifier: 0,
+        defensePenetration: 0,
+    },
+    DEBUFFER: {
+        hp: 16500,
+        attack: 4400,
+        defence: 2500,
+        hacking: 200,
+        security: 33,
+        speed: 125,
+        crit: 12,
+        critDamage: 20,
+        healModifier: 0,
+        defensePenetration: 0,
+    },
+    SUPPORTER: {
+        hp: 20000,
+        attack: 3000,
+        defence: 3250,
+        hacking: 0,
+        security: 0,
+        speed: 99,
+        crit: 12,
+        critDamage: 22,
+        healModifier: 0,
+        defensePenetration: 0,
+    },
+};
+
+// Map variant roles to their base role for dummy stats
+function getBaseRoleStats(role: ShipTypeName): BaseStats {
+    if (role.startsWith('DEFENDER')) return ROLE_BASE_STATS.DEFENDER!;
+    if (role.startsWith('DEBUFFER')) return ROLE_BASE_STATS.DEBUFFER!;
+    if (role.startsWith('SUPPORTER')) return ROLE_BASE_STATS.SUPPORTER!;
+    return ROLE_BASE_STATS.ATTACKER!;
+}
 
 const UPGRADE_LEVELS = {
     rare: {
@@ -82,9 +143,6 @@ export function simulateUpgrade(
     piece: GearPiece,
     targetLevel: number = 16
 ): { piece: GearPiece; cost: number } {
-    // Clear the gear stats cache to ensure fresh calculations for this simulation
-    clearGearStatsCache();
-
     if (piece.level >= targetLevel || piece.stars < 3) return { piece, cost: 0 };
 
     const config = UPGRADE_LEVELS[piece.rarity as keyof typeof UPGRADE_LEVELS];
@@ -174,33 +232,6 @@ export function calculateUpgradeCost(piece: GearPiece, targetLevel: number): num
 
     return Math.round(cost);
 }
-// Helper function to calculate ship stats without a specific piece slot
-function _calculateShipBaselineStats(
-    ship: Ship,
-    slotToRemove: GearSlotName | undefined,
-    getGearPiece: (id: string) => GearPiece | undefined,
-    getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
-): BaseStats {
-    const equipmentWithoutSlot: Partial<Record<GearSlotName, string>> = { ...ship.equipment };
-
-    // Remove gear from the slot being analyzed (if analyzing a specific slot and it has gear)
-    if (slotToRemove && equipmentWithoutSlot[slotToRemove]) {
-        delete equipmentWithoutSlot[slotToRemove];
-    }
-
-    const breakdown = calculateTotalStats(
-        ship.baseStats,
-        equipmentWithoutSlot,
-        getGearPiece,
-        ship.refits || [],
-        ship.implants || {},
-        getEngineeringStatsForShipType(ship.type),
-        ship.id
-    );
-
-    return breakdown.final;
-}
-
 function calculateGearStats(
     piece: GearPiece,
     ship?: Ship,
@@ -209,7 +240,8 @@ function calculateGearStats(
     getEngineeringStatsForShipType?: (shipType: ShipTypeName) => EngineeringStat | undefined,
     includePiece: boolean = true,
     cachedBaseline?: BaseStats | null,
-    _logPerformance: boolean = false
+    overrideBaseCrit?: number,
+    shipRole?: ShipTypeName
 ): BaseStats {
     // If ship is provided, use ship's actual stats and equipment
     if (ship && getGearPiece && getEngineeringStatsForShipType) {
@@ -334,11 +366,13 @@ function calculateGearStats(
                 );
 
                 if (bonusCountAfter > bonusCountBefore && GEAR_SETS[setType]?.stats) {
+                    // Halve the set bonus contribution for 4-piece sets since they're harder to complete
+                    const setScaleFactor = (GEAR_SETS[setType]?.minPieces || 2) >= 4 ? 0.5 : 1;
                     // New set bonus activated - apply it
                     for (let i = 0; i < bonusCountAfter - bonusCountBefore; i++) {
                         GEAR_SETS[setType].stats.forEach((stat) =>
                             addStatModifier(
-                                stat,
+                                { ...stat, value: stat.value * setScaleFactor },
                                 incrementalBreakdown.afterSets,
                                 incrementalBreakdown.afterEngineering
                             )
@@ -367,35 +401,31 @@ function calculateGearStats(
         return breakdown.final;
     }
 
-    // Fallback to original dummy-based calculation
-    // Calculate total crit from this gear piece for crit-capping
-    let totalGearCrit = 0;
-    if (piece.mainStat?.name === 'crit') {
-        totalGearCrit += piece.mainStat.value;
-    }
-    piece.subStats?.forEach((stat) => {
-        if (stat.name === 'crit') {
-            totalGearCrit += stat.value;
-        }
-    });
+    // Fallback to dummy-based calculation using role-specific base stats
+    const roleStats = shipRole ? getBaseRoleStats(shipRole) : ROLE_BASE_STATS.ATTACKER!;
 
-    // Adjust base crit so that final crit = 100% (crit-capped)
-    // Base crit = 100 - gear crit, ensuring the piece is evaluated as if it brings you to 100% crit
-    const baseCrit = Math.max(0, 100 - totalGearCrit);
+    // Use overrideBaseCrit if provided (ensures consistent baseline across current vs upgraded comparisons)
+    // Otherwise calculate from this piece's crit
+    let baseCrit: number;
+    if (overrideBaseCrit !== undefined) {
+        baseCrit = overrideBaseCrit;
+    } else {
+        let totalGearCrit = 0;
+        if (piece.mainStat?.name === 'crit') {
+            totalGearCrit += piece.mainStat.value;
+        }
+        piece.subStats?.forEach((stat) => {
+            if (stat.name === 'crit') {
+                totalGearCrit += stat.value;
+            }
+        });
+        baseCrit = Math.max(0, 100 - totalGearCrit);
+    }
 
     const breakdown = calculateTotalStats(
-        // Empty base stats with adjusted crit for crit-capping
         {
-            hp: 30000,
-            attack: 8000,
-            defence: 8000,
-            hacking: 200,
-            security: 200,
-            speed: 150,
+            ...roleStats,
             crit: baseCrit,
-            critDamage: 150,
-            healModifier: 0,
-            defensePenetration: 0,
         },
         // Single piece of gear
         { [piece.slot]: piece.id },
@@ -412,26 +442,29 @@ function calculateGearStats(
     // This is for ranking purposes - in reality, set bonus only applies with minPieces
     if (piece.setBonus && GEAR_SETS[piece.setBonus]) {
         const setBonus = GEAR_SETS[piece.setBonus];
+        // Halve the set bonus contribution for 4-piece sets since they're harder to complete
+        const setScaleFactor = (setBonus.minPieces || 2) >= 4 ? 0.5 : 1;
         if (setBonus.stats) {
             // Use the base stats (afterEngineering) for percentage calculations
             // This matches how addStatModifier works in calculateTotalStats
             const baseStats = breakdown.afterEngineering;
             setBonus.stats.forEach((stat) => {
+                const scaledValue = stat.value * setScaleFactor;
                 const isPercentageOnlyStat = PERCENTAGE_ONLY_STATS.includes(
                     stat.name as PercentageOnlyStats
                 );
 
                 if (isPercentageOnlyStat) {
                     // For percentage-only stats (crit, critDamage, etc.), add directly
-                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + stat.value;
+                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + scaledValue;
                 } else if (stat.type === 'percentage') {
                     // For percentage stats on flexible stats (attack, hp, etc.), calculate from base
                     const baseValue = baseStats[stat.name] || 0;
-                    const bonus = baseValue * (stat.value / 100);
+                    const bonus = baseValue * (scaledValue / 100);
                     breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + bonus;
                 } else {
                     // For flat stats, add directly
-                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + stat.value;
+                    breakdown.final[stat.name] = (breakdown.final[stat.name] || 0) + scaledValue;
                 }
             });
         }
@@ -496,28 +529,12 @@ export const baselineStatsCache = new Map<string, BaseStats>();
 
 // Cache for baseline breakdown (full StatBreakdown) - much more efficient for incremental calculations
 // Key: `${shipId}_${slot}_breakdown`
-const baselineBreakdownCache = new Map<string, StatBreakdown>();
+// Persists across calls within an analysis session so "all" can reuse breakdowns from individual slots
+export const baselineBreakdownCache = new Map<string, StatBreakdown>();
 
 // Cache for gear stats calculations
 // Key: `${pieceId}_${includePiece}_${slot || 'all'}`
 const gearStatsCache = new Map<string, BaseStats>();
-
-// Cache for calculateTotalStats results when using ship
-// Key: `${shipId}_${equipmentKey}_${pieceStatsSignature}`
-// This caches the expensive calculateTotalStats calls
-const totalStatsCache = new Map<string, BaseStats>();
-
-// Helper to create a signature for a piece's stats (for caching)
-function _getPieceStatsSignature(piece: GearPiece): string {
-    const mainStat = piece.mainStat
-        ? `${piece.mainStat.name}_${piece.mainStat.type}_${piece.mainStat.value}`
-        : 'none';
-    const subStats = piece.subStats
-        .map((s) => `${s.name}_${s.type}_${s.value}`)
-        .sort()
-        .join('|');
-    return `${mainStat}|${subStats}|${piece.level}|${piece.stars}`;
-}
 
 export function analyzePotentialUpgrades(
     inventory: GearPiece[],
@@ -533,13 +550,8 @@ export function analyzePotentialUpgrades(
     getGearPiece?: (id: string) => GearPiece | undefined,
     getEngineeringStatsForShipType?: (shipType: ShipTypeName) => EngineeringStat | undefined
 ): PotentialResult[] {
-    // Clear the gear stats cache to ensure we get fresh calculations for each simulation
-    clearGearStatsCache();
-    // Don't clear baseline cache - it should persist across calls so "all" can use cached baselines from individual slots
-    // Clear gearStatsCache, totalStatsCache, and baselineBreakdownCache for this analysis
+    // Clear per-call caches; baseline caches persist across calls so "all" can reuse individual slot results
     gearStatsCache.clear();
-    totalStatsCache.clear();
-    baselineBreakdownCache.clear();
     const rarityOrder = ['rare', 'epic', 'legendary'];
     const minRarityIndex = rarityOrder.indexOf(minRarity);
     const eligibleRarities = rarityOrder.slice(minRarityIndex);
@@ -626,6 +638,23 @@ export function analyzePotentialUpgrades(
         // Use cached baseline if available (for specific slot analysis or "all" analysis)
         let currentStats: BaseStats;
 
+        // For the dummy path, compute baseCrit once from the CURRENT piece's crit.
+        // This same baseCrit is used for both current and upgraded comparisons so that
+        // crit improvements are properly weighted (upgraded piece with more crit scores higher).
+        let pieceCritBaseline: number | undefined;
+        if (!ship) {
+            let totalGearCrit = 0;
+            if (piece.mainStat?.name === 'crit') {
+                totalGearCrit += piece.mainStat.value;
+            }
+            piece.subStats?.forEach((stat) => {
+                if (stat.name === 'crit') {
+                    totalGearCrit += stat.value;
+                }
+            });
+            pieceCritBaseline = Math.max(0, 100 - totalGearCrit);
+        }
+
         // Try to get cached baseline for this piece's slot (works for both specific slot and "all" analysis)
         let pieceBaseline: BaseStats | null = null;
         if (ship && piece.slot && !piece.slot.includes('implant')) {
@@ -654,7 +683,9 @@ export function analyzePotentialUpgrades(
                     getGearPiece,
                     getEngineeringStatsForShipType,
                     false, // Don't include the piece for current stats
-                    pieceBaseline || cachedBaselineStats
+                    pieceBaseline || cachedBaselineStats,
+                    pieceCritBaseline,
+                    shipRole
                 );
                 gearStatsCache.set(cacheKey, currentStats);
             }
@@ -689,7 +720,9 @@ export function analyzePotentialUpgrades(
                 getGearPiece,
                 getEngineeringStatsForShipType,
                 true, // Include the upgraded piece for potential stats
-                upgradedPieceBaseline || cachedBaselineStats
+                upgradedPieceBaseline || cachedBaselineStats,
+                pieceCritBaseline, // Same baseline crit as current piece for fair comparison
+                shipRole
             );
 
             let potentialScore = 0;
