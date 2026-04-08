@@ -960,7 +960,8 @@ export const AutogearPage: React.FC = () => {
                                                         )
                                                     </h4>
                                                     <p className="text-xs text-theme-text-secondary mb-4">
-                                                        Damage calculated against 15k enemy defense
+                                                        Damage calculated using skill damage of 100%
+                                                        against 15k enemy defense
                                                     </p>
                                                     <SimulationResults
                                                         currentSimulation={

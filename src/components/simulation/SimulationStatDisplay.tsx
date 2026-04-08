@@ -73,11 +73,30 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
                 <>
                     <span className="ml-2 text-blue-400">(if shielded)</span>
                     {arcaneSiegeInfo.shieldedDamage !== null && (
-                        <span className="ml-2 text-blue-400">
-                            {formatValue
-                                ? formatValue(arcaneSiegeInfo.shieldedDamage)
-                                : arcaneSiegeInfo.shieldedDamage.toLocaleString()}
-                        </span>
+                        <>
+                            <span className="ml-2 text-blue-400">
+                                {formatValue
+                                    ? formatValue(arcaneSiegeInfo.shieldedDamage)
+                                    : arcaneSiegeInfo.shieldedDamage.toLocaleString()}
+                            </span>
+                            {currentValue !== undefined && currentValue > 0 && (
+                                <span
+                                    className={`ml-2 ${
+                                        arcaneSiegeInfo.shieldedDamage > currentValue
+                                            ? 'text-green-500'
+                                            : 'text-red-500'
+                                    }`}
+                                >
+                                    (
+                                    {formatComparison(
+                                        arcaneSiegeInfo.shieldedDamage,
+                                        currentValue,
+                                        'percentage'
+                                    )}
+                                    )
+                                </span>
+                            )}
+                        </>
                     )}
                 </>
             )}
