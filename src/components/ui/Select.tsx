@@ -16,6 +16,8 @@ interface Props {
     id?: string;
     'data-testid'?: string;
     helpLabel?: string;
+    searchable?: boolean;
+    searchPlaceholder?: string;
 }
 
 export const Select: React.FC<Props> = ({
@@ -31,9 +33,13 @@ export const Select: React.FC<Props> = ({
     id,
     'data-testid': testId,
     helpLabel,
+    searchable = false,
+    searchPlaceholder = 'Search...',
 }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
+    const searchInputRef = useRef<HTMLInputElement>(null);
     const selectId = id || `select-${Math.random().toString(36).substring(2, 15)}`;
     const [showHelpTooltip, setShowHelpTooltip] = useState(false);
     const infoIconRef = useRef<HTMLDivElement>(null);
@@ -52,6 +58,21 @@ export const Select: React.FC<Props> = ({
         value === '' && noDefaultSelection
             ? defaultOption
             : options.find((opt) => opt.value === value)?.label || defaultOption;
+
+    const filteredOptions =
+        searchable && searchQuery
+            ? options.filter((opt) => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+            : options;
+
+    useEffect(() => {
+        if (isOpen && searchable) {
+            // Small delay to ensure the dropdown is rendered
+            requestAnimationFrame(() => searchInputRef.current?.focus());
+        }
+        if (!isOpen) {
+            setSearchQuery('');
+        }
+    }, [isOpen, searchable]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -167,6 +188,24 @@ export const Select: React.FC<Props> = ({
                     `}
                     role="listbox"
                 >
+                    {searchable && isOpen && (
+                        <div className="sticky top-0 bg-dark-lighter border-b border-dark-border p-2">
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        setIsOpen(false);
+                                    }
+                                    e.stopPropagation();
+                                }}
+                                placeholder={searchPlaceholder}
+                                className="w-full px-3 py-1.5 text-sm bg-dark border border-dark-border focus:outline-none focus:ring-1 focus:ring-primary text-theme-text"
+                            />
+                        </div>
+                    )}
                     {noDefaultSelection && (
                         <div
                             role="option"
@@ -188,8 +227,8 @@ export const Select: React.FC<Props> = ({
                             {defaultOption}
                         </div>
                     )}
-                    {options.map((option, index) => {
-                        const prevGroup = index > 0 ? options[index - 1].group : undefined;
+                    {filteredOptions.map((option, index) => {
+                        const prevGroup = index > 0 ? filteredOptions[index - 1].group : undefined;
                         const showGroupHeader = option.group && option.group !== prevGroup;
                         return (
                             <React.Fragment key={option.value}>

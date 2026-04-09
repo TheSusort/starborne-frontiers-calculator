@@ -573,6 +573,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                         })),
                                 ]}
                                 helpLabel="Select a ship to analyze upgrades using its actual stats, gear, implants, and engineering. Leave as 'None' to use generic dummy values."
+                                searchable
+                                searchPlaceholder="Search ships..."
                             />
                         </div>
 
