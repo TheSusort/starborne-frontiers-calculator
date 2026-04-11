@@ -277,6 +277,17 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
         const { gear, implants } = transformInventory(data.Equipment);
         const ships = transformShips(data.Units);
 
+        // Build set of valid ship IDs for calibration validation
+        const validShipIds = new Set(ships.map((s) => s.id));
+
+        // Strip calibration references to ships that don't exist in the import
+        // (e.g. ship was sold, or deduplicated away during transformShips)
+        for (const g of gear) {
+            if (g.calibration?.shipId && !validShipIds.has(g.calibration.shipId)) {
+                delete g.calibration;
+            }
+        }
+
         // Build lookup maps for O(1) per-ship equipment assignment
         const gearByShip = new Map<string, GearPiece[]>();
         for (const g of gear) {

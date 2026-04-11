@@ -291,10 +291,22 @@ export const syncMigratedDataToSupabase = async (
                     }
                 }
 
+                // Clear calibration on all existing inventory items before upserting
+                // (avoids FK issues when ships are deleted/re-inserted in Step 2)
+                const { error: clearCalibrationError } = await supabase
+                    .from('inventory_items')
+                    .update({ calibration_ship_id: null })
+                    .eq('user_id', userId)
+                    .not('calibration_ship_id', 'is', null);
+
+                if (clearCalibrationError) throw clearCalibrationError;
+
                 for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
                     const batch = validInventory.slice(i, i + BATCH_SIZE);
 
                     // Prepare batch of inventory items with stats JSONB
+                    // Note: calibration_ship_id is intentionally omitted to avoid FK
+                    // issues during upsert. It's set separately in Step 2b after ships exist.
                     const inventoryItems = batch.map((item) => ({
                         id: item.id,
                         user_id: userId,
@@ -303,7 +315,6 @@ export const syncMigratedDataToSupabase = async (
                         stars: item.stars,
                         rarity: item.rarity,
                         set_bonus: item.setBonus,
-                        calibration_ship_id: null, // Set after ships are inserted (FK dependency)
                         stats: {
                             mainStat: item.mainStat
                                 ? {
@@ -548,8 +559,13 @@ export const syncMigratedDataToSupabase = async (
 
         // Step 2b: Update calibration_ship_id on inventory items (deferred from Step 1 due to FK dependency on ships)
         if (inventory.length > 0) {
+            // Build set of valid ship IDs to avoid FK violations
+            const validShipIds = new Set(ships.map((s) => s.id));
             const calibratedItems = inventory.filter(
-                (item) => !!item.id && !!item.calibration?.shipId
+                (item) =>
+                    !!item.id &&
+                    !!item.calibration?.shipId &&
+                    validShipIds.has(item.calibration.shipId)
             );
             for (let i = 0; i < calibratedItems.length; i += BATCH_SIZE) {
                 const batch = calibratedItems.slice(i, i + BATCH_SIZE);
