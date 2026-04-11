@@ -16,7 +16,13 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import { Buff, DoTApplicationConfig, DEFAULT_DOT_CONFIG } from '../../types/calculator';
+import {
+    Buff,
+    DoTApplicationConfig,
+    DoTApplicationEntry,
+    DoTType,
+    DEFAULT_DOT_CONFIG,
+} from '../../types/calculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 
 // Define the type for a ship configuration
@@ -34,24 +40,29 @@ interface ShipConfig {
     chargedDoTs: DoTApplicationConfig;
 }
 
-const CORROSION_TIER_OPTIONS = [
-    { value: '0', label: 'None' },
-    { value: '3', label: 'I (3%)' },
-    { value: '6', label: 'II (6%)' },
-    { value: '9', label: 'III (9%)' },
+const DOT_TYPE_OPTIONS = [
+    { value: 'corrosion', label: 'Corrosion' },
+    { value: 'inferno', label: 'Inferno' },
+    { value: 'bomb', label: 'Bomb' },
 ];
-const INFERNO_TIER_OPTIONS = [
-    { value: '0', label: 'None' },
-    { value: '15', label: 'I (15%)' },
-    { value: '30', label: 'II (30%)' },
-    { value: '45', label: 'III (45%)' },
-];
-const BOMB_TIER_OPTIONS = [
-    { value: '0', label: 'None' },
-    { value: '100', label: 'I (100%)' },
-    { value: '200', label: 'II (200%)' },
-    { value: '300', label: 'III (300%)' },
-];
+
+const TIER_OPTIONS_BY_TYPE: Record<string, { value: string; label: string }[]> = {
+    corrosion: [
+        { value: '3', label: 'I (3%)' },
+        { value: '6', label: 'II (6%)' },
+        { value: '9', label: 'III (9%)' },
+    ],
+    inferno: [
+        { value: '15', label: 'I (15%)' },
+        { value: '30', label: 'II (30%)' },
+        { value: '45', label: 'III (45%)' },
+    ],
+    bomb: [
+        { value: '100', label: 'I (100%)' },
+        { value: '200', label: 'II (200%)' },
+        { value: '300', label: 'III (300%)' },
+    ],
+};
 
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -128,6 +139,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [buffs, setBuffs] = useState<Buff[]>([]);
     const [nextBuffId, setNextBuffId] = useState(1);
+    const nextDoTIdRef = useRef(1);
 
     // Clear shipId from URL after initialization to avoid re-triggering
     useEffect(() => {
@@ -211,15 +223,60 @@ const DPSCalculatorPage: React.FC = () => {
         );
     };
 
-    const updateDoTConfig = (
+    const addDoTEntry = (configId: string, dotField: 'activeDoTs' | 'chargedDoTs') => {
+        const id = nextDoTIdRef.current;
+        nextDoTIdRef.current += 1;
+        setConfigs((prevConfigs) =>
+            prevConfigs.map((c) =>
+                c.id === configId
+                    ? {
+                          ...c,
+                          [dotField]: [
+                              ...c[dotField],
+                              {
+                                  id: id.toString(),
+                                  type: 'inferno' as const,
+                                  tier: 15,
+                                  stacks: 1,
+                                  duration: 2,
+                              },
+                          ],
+                      }
+                    : c
+            )
+        );
+    };
+
+    const removeDoTEntry = (
         configId: string,
         dotField: 'activeDoTs' | 'chargedDoTs',
-        key: keyof DoTApplicationConfig,
-        value: number
+        dotId: string
     ) => {
         setConfigs((prev) =>
             prev.map((c) =>
-                c.id === configId ? { ...c, [dotField]: { ...c[dotField], [key]: value } } : c
+                c.id === configId
+                    ? { ...c, [dotField]: c[dotField].filter((d) => d.id !== dotId) }
+                    : c
+            )
+        );
+    };
+
+    const updateDoTEntry = (
+        configId: string,
+        dotField: 'activeDoTs' | 'chargedDoTs',
+        dotId: string,
+        updates: Partial<DoTApplicationEntry>
+    ) => {
+        setConfigs((prev) =>
+            prev.map((c) =>
+                c.id === configId
+                    ? {
+                          ...c,
+                          [dotField]: c[dotField].map((d) =>
+                              d.id === dotId ? { ...d, ...updates } : d
+                          ),
+                      }
+                    : c
             )
         );
     };
@@ -526,226 +583,258 @@ const DPSCalculatorPage: React.FC = () => {
                                         </div>
 
                                         {/* DoTs — Active Skill */}
-                                        <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-2">
-                                            DoTs — Active Skill
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide">
+                                                DoTs — Active Skill
+                                            </div>
+                                            <Button
+                                                variant="secondary"
+                                                size="xs"
+                                                onClick={() => addDoTEntry(config.id, 'activeDoTs')}
+                                            >
+                                                Add DoT
+                                            </Button>
                                         </div>
-                                        <div className="space-y-3 mb-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Select
-                                                    label="Corrosion Tier"
-                                                    options={CORROSION_TIER_OPTIONS}
-                                                    value={String(config.activeDoTs.corrosionTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'corrosionTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.activeDoTs.corrosionStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'corrosionStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
+                                        {config.activeDoTs.length === 0 ? (
+                                            <p className="text-sm text-theme-text-secondary mb-4">
+                                                No DoTs configured
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2 mb-4">
+                                                {config.activeDoTs.map((dot) => (
+                                                    <div
+                                                        key={dot.id}
+                                                        className="flex items-end gap-2"
+                                                    >
+                                                        <Select
+                                                            label="Type"
+                                                            options={DOT_TYPE_OPTIONS}
+                                                            value={dot.type}
+                                                            onChange={(v) => {
+                                                                const newType = v as DoTType;
+                                                                const firstTier = parseInt(
+                                                                    TIER_OPTIONS_BY_TYPE[newType][0]
+                                                                        .value
+                                                                );
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'activeDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        type: newType,
+                                                                        tier: firstTier,
+                                                                        duration: 2,
+                                                                    }
+                                                                );
+                                                            }}
+                                                        />
+                                                        <Select
+                                                            label="Tier"
+                                                            options={
+                                                                TIER_OPTIONS_BY_TYPE[dot.type] || []
+                                                            }
+                                                            value={String(dot.tier)}
+                                                            onChange={(v) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'activeDoTs',
+                                                                    dot.id,
+                                                                    { tier: parseInt(v) }
+                                                                )
+                                                            }
+                                                        />
+                                                        <Input
+                                                            label="Stacks"
+                                                            type="number"
+                                                            min="0"
+                                                            value={dot.stacks}
+                                                            onChange={(e) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'activeDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        stacks:
+                                                                            parseInt(
+                                                                                e.target.value
+                                                                            ) || 0,
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="w-20"
+                                                        />
+                                                        <Input
+                                                            label={
+                                                                dot.type === 'bomb'
+                                                                    ? 'Countdown'
+                                                                    : 'Duration'
+                                                            }
+                                                            type="number"
+                                                            min="1"
+                                                            value={dot.duration}
+                                                            onChange={(e) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'activeDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        duration: Math.max(
+                                                                            1,
+                                                                            parseInt(
+                                                                                e.target.value
+                                                                            ) || 1
+                                                                        ),
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="w-20"
+                                                        />
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                removeDoTEntry(
+                                                                    config.id,
+                                                                    'activeDoTs',
+                                                                    dot.id
+                                                                )
+                                                            }
+                                                            aria-label="Remove DoT"
+                                                        >
+                                                            <CloseIcon />
+                                                        </Button>
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Select
-                                                    label="Inferno Tier"
-                                                    options={INFERNO_TIER_OPTIONS}
-                                                    value={String(config.activeDoTs.infernoTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'infernoTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.activeDoTs.infernoStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'infernoStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <Select
-                                                    label="Bomb Tier"
-                                                    options={BOMB_TIER_OPTIONS}
-                                                    value={String(config.activeDoTs.bombTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'bombTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.activeDoTs.bombStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'bombStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Countdown"
-                                                    type="number"
-                                                    min="1"
-                                                    value={config.activeDoTs.bombCountdown}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'activeDoTs',
-                                                            'bombCountdown',
-                                                            Math.max(
-                                                                1,
-                                                                parseInt(e.target.value) || 1
-                                                            )
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
+                                        )}
 
                                         {/* DoTs — Charged Skill */}
-                                        <div className="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">
-                                            DoTs — Charged Skill
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="text-xs font-semibold text-purple-400 uppercase tracking-wide">
+                                                DoTs — Charged Skill
+                                            </div>
+                                            <Button
+                                                variant="secondary"
+                                                size="xs"
+                                                onClick={() =>
+                                                    addDoTEntry(config.id, 'chargedDoTs')
+                                                }
+                                            >
+                                                Add DoT
+                                            </Button>
                                         </div>
-                                        <div className="space-y-3">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Select
-                                                    label="Corrosion Tier"
-                                                    options={CORROSION_TIER_OPTIONS}
-                                                    value={String(config.chargedDoTs.corrosionTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'corrosionTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.chargedDoTs.corrosionStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'corrosionStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
+                                        {config.chargedDoTs.length === 0 ? (
+                                            <p className="text-sm text-theme-text-secondary">
+                                                No DoTs configured
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {config.chargedDoTs.map((dot) => (
+                                                    <div
+                                                        key={dot.id}
+                                                        className="flex items-end gap-2"
+                                                    >
+                                                        <Select
+                                                            label="Type"
+                                                            options={DOT_TYPE_OPTIONS}
+                                                            value={dot.type}
+                                                            onChange={(v) => {
+                                                                const newType = v as DoTType;
+                                                                const firstTier = parseInt(
+                                                                    TIER_OPTIONS_BY_TYPE[newType][0]
+                                                                        .value
+                                                                );
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'chargedDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        type: newType,
+                                                                        tier: firstTier,
+                                                                        duration: 2,
+                                                                    }
+                                                                );
+                                                            }}
+                                                        />
+                                                        <Select
+                                                            label="Tier"
+                                                            options={
+                                                                TIER_OPTIONS_BY_TYPE[dot.type] || []
+                                                            }
+                                                            value={String(dot.tier)}
+                                                            onChange={(v) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'chargedDoTs',
+                                                                    dot.id,
+                                                                    { tier: parseInt(v) }
+                                                                )
+                                                            }
+                                                        />
+                                                        <Input
+                                                            label="Stacks"
+                                                            type="number"
+                                                            min="0"
+                                                            value={dot.stacks}
+                                                            onChange={(e) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'chargedDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        stacks:
+                                                                            parseInt(
+                                                                                e.target.value
+                                                                            ) || 0,
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="w-20"
+                                                        />
+                                                        <Input
+                                                            label={
+                                                                dot.type === 'bomb'
+                                                                    ? 'Countdown'
+                                                                    : 'Duration'
+                                                            }
+                                                            type="number"
+                                                            min="1"
+                                                            value={dot.duration}
+                                                            onChange={(e) =>
+                                                                updateDoTEntry(
+                                                                    config.id,
+                                                                    'chargedDoTs',
+                                                                    dot.id,
+                                                                    {
+                                                                        duration: Math.max(
+                                                                            1,
+                                                                            parseInt(
+                                                                                e.target.value
+                                                                            ) || 1
+                                                                        ),
+                                                                    }
+                                                                )
+                                                            }
+                                                            className="w-20"
+                                                        />
+                                                        <Button
+                                                            variant="danger"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                removeDoTEntry(
+                                                                    config.id,
+                                                                    'chargedDoTs',
+                                                                    dot.id
+                                                                )
+                                                            }
+                                                            aria-label="Remove DoT"
+                                                        >
+                                                            <CloseIcon />
+                                                        </Button>
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <Select
-                                                    label="Inferno Tier"
-                                                    options={INFERNO_TIER_OPTIONS}
-                                                    value={String(config.chargedDoTs.infernoTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'infernoTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.chargedDoTs.infernoStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'infernoStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-4">
-                                                <Select
-                                                    label="Bomb Tier"
-                                                    options={BOMB_TIER_OPTIONS}
-                                                    value={String(config.chargedDoTs.bombTier)}
-                                                    onChange={(v) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'bombTier',
-                                                            parseInt(v)
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Stacks / use"
-                                                    type="number"
-                                                    min="0"
-                                                    value={config.chargedDoTs.bombStacks}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'bombStacks',
-                                                            parseInt(e.target.value) || 0
-                                                        )
-                                                    }
-                                                />
-                                                <Input
-                                                    label="Countdown"
-                                                    type="number"
-                                                    min="1"
-                                                    value={config.chargedDoTs.bombCountdown}
-                                                    onChange={(e) =>
-                                                        updateDoTConfig(
-                                                            config.id,
-                                                            'chargedDoTs',
-                                                            'bombCountdown',
-                                                            Math.max(
-                                                                1,
-                                                                parseInt(e.target.value) || 1
-                                                            )
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
+                                        )}
                                     </CollapsibleAccordion>
 
                                     {(() => {

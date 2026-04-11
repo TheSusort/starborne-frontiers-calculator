@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { DEFAULT_DOT_CONFIG } from '../../../types/calculator';
 
 describe('simulateDPS', () => {
     const baseInput = {
@@ -11,8 +10,8 @@ describe('simulateDPS', () => {
         activeMultiplier: 100,
         chargedMultiplier: 0,
         chargeCount: 0,
-        activeDoTs: { ...DEFAULT_DOT_CONFIG },
-        chargedDoTs: { ...DEFAULT_DOT_CONFIG },
+        activeDoTs: [],
+        chargedDoTs: [],
         enemyDefense: 0,
         enemyHp: 500000,
         rounds: 3,
@@ -107,30 +106,33 @@ describe('simulateDPS', () => {
     });
 
     describe('corrosion', () => {
-        it('accumulates stacks and ticks each round', () => {
+        it('accumulates stacks with expiry based on duration', () => {
             const result = simulateDPS({
                 ...baseInput,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 3, corrosionStacks: 1 },
-                rounds: 3,
+                activeDoTs: [{ id: '1', type: 'corrosion', tier: 3, stacks: 1, duration: 2 }],
+                rounds: 4,
             });
+            // r1: +1 stack (rem 2), tick 1 stack = 1*0.03*500000=15000, expire rem->1. End: 1 stack
             expect(result.rounds[0].corrosionDamage).toBe(15000);
-            expect(result.rounds[0].activeCorrosionStacks).toBe(1);
+            // r2: +1 stack (rem 2), tick 2 stacks = 30000, expire r1 rem->0 (removed), r2 rem->1. End: 1 stack
             expect(result.rounds[1].corrosionDamage).toBe(30000);
-            expect(result.rounds[1].activeCorrosionStacks).toBe(2);
-            expect(result.rounds[2].corrosionDamage).toBe(45000);
+            // r3: +1 stack (rem 2), tick 2 stacks = 30000 (steady state). End: 1 stack
+            expect(result.rounds[2].corrosionDamage).toBe(30000);
+            // r4: steady state
+            expect(result.rounds[3].corrosionDamage).toBe(30000);
         });
 
         it('is not affected by enemy defense', () => {
             const noDef = simulateDPS({
                 ...baseInput,
                 enemyDefense: 0,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 6, corrosionStacks: 2 },
+                activeDoTs: [{ id: '1', type: 'corrosion', tier: 6, stacks: 2, duration: 2 }],
                 rounds: 1,
             });
             const withDef = simulateDPS({
                 ...baseInput,
                 enemyDefense: 15000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 6, corrosionStacks: 2 },
+                activeDoTs: [{ id: '1', type: 'corrosion', tier: 6, stacks: 2, duration: 2 }],
                 rounds: 1,
             });
             expect(noDef.rounds[0].corrosionDamage).toBe(withDef.rounds[0].corrosionDamage);
@@ -138,22 +140,26 @@ describe('simulateDPS', () => {
     });
 
     describe('inferno', () => {
-        it('deals damage based on attacker attack per stack', () => {
+        it('deals damage with expiry', () => {
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, infernoTier: 30, infernoStacks: 1 },
-                rounds: 2,
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 2 }],
+                rounds: 3,
             });
+            // r1: 1 stack = 1*0.30*10000=3000, expire rem->1
             expect(result.rounds[0].infernoDamage).toBe(3000);
+            // r2: 2 stacks = 6000, expire r1 stack
             expect(result.rounds[1].infernoDamage).toBe(6000);
+            // r3: 2 stacks = 6000 steady state
+            expect(result.rounds[2].infernoDamage).toBe(6000);
         });
 
         it('scales with attack buff but not outgoing damage buff', () => {
             const withAtkBuff = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, infernoTier: 30, infernoStacks: 1 },
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 2 }],
                 buffs: [{ id: '1', stat: 'attack', value: 50 }],
                 rounds: 1,
             });
@@ -162,7 +168,7 @@ describe('simulateDPS', () => {
             const withOutgoingBuff = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, infernoTier: 30, infernoStacks: 1 },
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 2 }],
                 buffs: [{ id: '1', stat: 'outgoingDamage', value: 50 }],
                 rounds: 1,
             });
@@ -175,12 +181,7 @@ describe('simulateDPS', () => {
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 100,
-                    bombStacks: 1,
-                    bombCountdown: 2,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 2 }],
                 rounds: 4,
             });
             expect(result.rounds[0].bombDamage).toBe(0);
@@ -193,24 +194,14 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 attack: 10000,
                 enemyDefense: 0,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 200,
-                    bombStacks: 1,
-                    bombCountdown: 1,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 200, stacks: 1, duration: 1 }],
                 rounds: 1,
             });
             const withDef = simulateDPS({
                 ...baseInput,
                 attack: 10000,
                 enemyDefense: 15000,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 200,
-                    bombStacks: 1,
-                    bombCountdown: 1,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 200, stacks: 1, duration: 1 }],
                 rounds: 1,
             });
             expect(noDef.rounds[0].bombDamage).toBe(withDef.rounds[0].bombDamage);
@@ -220,12 +211,7 @@ describe('simulateDPS', () => {
             const withAtkBuff = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 100,
-                    bombStacks: 1,
-                    bombCountdown: 1,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 1 }],
                 buffs: [{ id: '1', stat: 'attack', value: 50 }],
                 rounds: 1,
             });
@@ -237,23 +223,13 @@ describe('simulateDPS', () => {
             const noBuff = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 100,
-                    bombStacks: 1,
-                    bombCountdown: 1,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 1 }],
                 rounds: 1,
             });
             const withBuff = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: {
-                    ...DEFAULT_DOT_CONFIG,
-                    bombTier: 100,
-                    bombStacks: 1,
-                    bombCountdown: 1,
-                },
+                activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 1 }],
                 buffs: [{ id: '1', stat: 'outgoingDamage', value: 50 }],
                 rounds: 1,
             });
@@ -268,16 +244,19 @@ describe('simulateDPS', () => {
                 activeMultiplier: 100,
                 chargedMultiplier: 200,
                 chargeCount: 2,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, infernoTier: 15, infernoStacks: 1 },
-                chargedDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 9, corrosionStacks: 3 },
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 15, stacks: 1, duration: 2 }],
+                chargedDoTs: [{ id: '2', type: 'corrosion', tier: 9, stacks: 3, duration: 2 }],
                 rounds: 3,
             });
+            // r1: active, +1 inferno (rem 2). Expire: rem->1. End: 1 inferno, 0 corrosion
             expect(result.rounds[0].activeInfernoStacks).toBe(1);
             expect(result.rounds[0].activeCorrosionStacks).toBe(0);
-            expect(result.rounds[1].activeInfernoStacks).toBe(2);
+            // r2: active, +1 inferno (rem 2). Expire: r1 rem->0 (removed), r2 rem->1. End: 1 inferno, 0 corrosion
+            expect(result.rounds[1].activeInfernoStacks).toBe(1);
             expect(result.rounds[1].activeCorrosionStacks).toBe(0);
+            // r3: charged, +3 corrosion (rem 2). r2 inferno ticks then expires (rem->0). End: 0 inferno, 3 corrosion
             expect(result.rounds[2].action).toBe('charged');
-            expect(result.rounds[2].activeInfernoStacks).toBe(2);
+            expect(result.rounds[2].activeInfernoStacks).toBe(0);
             expect(result.rounds[2].activeCorrosionStacks).toBe(3);
         });
 
@@ -288,14 +267,32 @@ describe('simulateDPS', () => {
                 chargedMultiplier: 200,
                 chargeCount: 2,
                 enemyHp: 100000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 3, corrosionStacks: 1 },
-                chargedDoTs: { ...DEFAULT_DOT_CONFIG, corrosionTier: 9, corrosionStacks: 1 },
+                activeDoTs: [{ id: '1', type: 'corrosion', tier: 3, stacks: 1, duration: 2 }],
+                chargedDoTs: [{ id: '2', type: 'corrosion', tier: 9, stacks: 1, duration: 2 }],
                 rounds: 4,
             });
+            // r1: +1 tier3 (rem 2), tick 1*0.03*100000=3000, expire rem->1
             expect(result.rounds[0].corrosionDamage).toBe(3000);
+            // r2: +1 tier3 (rem 2), tick (1+1)*0.03*100000=6000, expire r1 tier3 (rem->0)
             expect(result.rounds[1].corrosionDamage).toBe(6000);
-            expect(result.rounds[2].corrosionDamage).toBe(15000);
-            expect(result.rounds[3].corrosionDamage).toBe(18000);
+            // r3: charged, +1 tier9 (rem 2), tick 1*0.03*100000 + 1*0.09*100000=12000, expire r2 tier3 (rem->0)
+            expect(result.rounds[2].corrosionDamage).toBe(12000);
+            // r4: active, +1 tier3 (rem 2), tick 1*0.09*100000 + 1*0.03*100000=12000, expire r3 tier9 (rem->0)
+            expect(result.rounds[3].corrosionDamage).toBe(12000);
+        });
+
+        it('supports multiple DoT entries per skill', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: [
+                    { id: '1', type: 'inferno', tier: 15, stacks: 1, duration: 2 },
+                    { id: '2', type: 'inferno', tier: 30, stacks: 1, duration: 2 },
+                ],
+                rounds: 1,
+            });
+            // 1 stack at 15% + 1 stack at 30% = 1500 + 3000 = 4500
+            expect(result.rounds[0].infernoDamage).toBe(4500);
         });
     });
 
@@ -304,10 +301,45 @@ describe('simulateDPS', () => {
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
-                activeDoTs: { ...DEFAULT_DOT_CONFIG, infernoTier: 30, infernoStacks: 2 },
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 2, duration: 2 }],
                 rounds: 1,
             });
             expect(result.rounds[0].infernoDamage).toBe(6000);
+        });
+    });
+
+    describe('DoT duration and expiry', () => {
+        it('stacks expire after their duration', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 1 }],
+                rounds: 3,
+            });
+            // Duration 1: each stack ticks once then expires
+            expect(result.rounds[0].infernoDamage).toBe(3000);
+            expect(result.rounds[0].activeInfernoStacks).toBe(0); // expired after ticking
+            expect(result.rounds[1].infernoDamage).toBe(3000);
+            expect(result.rounds[2].infernoDamage).toBe(3000);
+        });
+
+        it('longer duration allows more overlap', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: [{ id: '1', type: 'inferno', tier: 15, stacks: 1, duration: 3 }],
+                rounds: 5,
+            });
+            // r1: 1 stack = 1500
+            expect(result.rounds[0].infernoDamage).toBe(1500);
+            // r2: 2 stacks = 3000
+            expect(result.rounds[1].infernoDamage).toBe(3000);
+            // r3: 3 stacks = 4500 (max overlap with duration 3)
+            expect(result.rounds[2].infernoDamage).toBe(4500);
+            // r4: 3 stacks = 4500 (steady state, r1 expired)
+            expect(result.rounds[3].infernoDamage).toBe(4500);
+            // r5: steady
+            expect(result.rounds[4].infernoDamage).toBe(4500);
         });
     });
 });

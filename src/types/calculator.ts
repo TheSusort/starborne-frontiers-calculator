@@ -4,22 +4,16 @@ export interface Buff {
     value: number;
 }
 
-export interface DoTApplicationConfig {
-    corrosionStacks: number;
-    corrosionTier: 0 | 3 | 6 | 9;
-    infernoStacks: number;
-    infernoTier: 0 | 15 | 30 | 45;
-    bombStacks: number;
-    bombTier: 0 | 100 | 200 | 300;
-    bombCountdown: number;
+export type DoTType = 'corrosion' | 'inferno' | 'bomb';
+
+export interface DoTApplicationEntry {
+    id: string;
+    type: DoTType;
+    tier: number; // 3/6/9 for corrosion, 15/30/45 for inferno, 100/200/300 for bomb
+    stacks: number; // stacks applied per use
+    duration: number; // rounds before expiry (corrosion/inferno), or countdown for bombs
 }
 
-export const DEFAULT_DOT_CONFIG: DoTApplicationConfig = {
-    corrosionStacks: 0,
-    corrosionTier: 0,
-    infernoStacks: 0,
-    infernoTier: 0,
-    bombStacks: 0,
-    bombTier: 0,
-    bombCountdown: 2,
-};
+export type DoTApplicationConfig = DoTApplicationEntry[];
+
+export const DEFAULT_DOT_CONFIG: DoTApplicationConfig = [];

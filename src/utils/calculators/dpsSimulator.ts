@@ -46,9 +46,10 @@ export interface DPSSimulationResult {
     summary: DPSSimulationSummary;
 }
 
-interface DoTEntry {
+interface ActiveDoTStack {
     stacks: number;
     tier: number;
+    remainingRounds: number;
 }
 
 interface PendingBomb {
@@ -71,21 +72,21 @@ function calculateBuffTotals(buffs: Buff[]) {
     return { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff };
 }
 
-function addDoTStacks(entries: DoTEntry[], stacks: number, tier: number): void {
-    const existing = entries.find((e) => e.tier === tier);
-    if (existing) {
-        existing.stacks += stacks;
-    } else {
-        entries.push({ stacks, tier });
-    }
-}
-
-function tickDoTEntries(entries: DoTEntry[], baseValue: number): number {
+function tickDoTStacks(entries: ActiveDoTStack[], baseValue: number): number {
     return entries.reduce((sum, e) => sum + e.stacks * (e.tier / 100) * baseValue, 0);
 }
 
-function totalStacks(entries: DoTEntry[]): number {
+function totalStacks(entries: ActiveDoTStack[]): number {
     return entries.reduce((sum, e) => sum + e.stacks, 0);
+}
+
+function expireStacks(entries: ActiveDoTStack[]): void {
+    for (let i = entries.length - 1; i >= 0; i--) {
+        entries[i].remainingRounds -= 1;
+        if (entries[i].remainingRounds <= 0) {
+            entries.splice(i, 1);
+        }
+    }
 }
 
 export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
@@ -130,8 +131,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
 
     let charges = 0;
     let cumulativeDamage = 0;
-    const corrosionEntries: DoTEntry[] = [];
-    const infernoEntries: DoTEntry[] = [];
+    const corrosionEntries: ActiveDoTStack[] = [];
+    const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
 
     let totalDirectDamage = 0;
@@ -160,26 +161,45 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             }
         }
 
+        // Step 1: Calculate direct damage
         const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
         const directDamage = baseDamage * (multiplier / 100) * (1 + outgoingDamageBuff / 100);
 
-        if (dotsConfig.corrosionTier > 0 && dotsConfig.corrosionStacks > 0) {
-            addDoTStacks(corrosionEntries, dotsConfig.corrosionStacks, dotsConfig.corrosionTier);
-        }
-        if (dotsConfig.infernoTier > 0 && dotsConfig.infernoStacks > 0) {
-            addDoTStacks(infernoEntries, dotsConfig.infernoStacks, dotsConfig.infernoTier);
-        }
-        if (dotsConfig.bombTier > 0 && dotsConfig.bombStacks > 0) {
-            pendingBombs.push({
-                countdown: Math.max(1, dotsConfig.bombCountdown),
-                damagePerStack: effectiveAttack * (dotsConfig.bombTier / 100),
-                stacks: dotsConfig.bombStacks,
-            });
+        // Step 3: Apply new DoT stacks from this round's skill
+        for (const dot of dotsConfig) {
+            if (dot.stacks <= 0 || dot.tier <= 0) continue;
+            if (dot.type === 'corrosion') {
+                corrosionEntries.push({
+                    stacks: dot.stacks,
+                    tier: dot.tier,
+                    remainingRounds: dot.duration,
+                });
+            } else if (dot.type === 'inferno') {
+                infernoEntries.push({
+                    stacks: dot.stacks,
+                    tier: dot.tier,
+                    remainingRounds: dot.duration,
+                });
+            } else if (dot.type === 'bomb') {
+                pendingBombs.push({
+                    countdown: Math.max(1, dot.duration),
+                    damagePerStack: effectiveAttack * (dot.tier / 100),
+                    stacks: dot.stacks,
+                });
+            }
         }
 
-        const corrosionDamage = tickDoTEntries(corrosionEntries, enemyHp);
-        const infernoDamage = tickDoTEntries(infernoEntries, effectiveAttack);
+        // Step 4: Tick corrosion (scales with enemy HP)
+        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp);
 
+        // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
+        const infernoDamage = tickDoTStacks(infernoEntries, effectiveAttack);
+
+        // Expire DoT stacks after ticking
+        expireStacks(corrosionEntries);
+        expireStacks(infernoEntries);
+
+        // Step 6: Process bombs
         let bombDamage = 0;
         for (let i = pendingBombs.length - 1; i >= 0; i--) {
             pendingBombs[i].countdown -= 1;
@@ -197,6 +217,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         totalInfernoDamage += infernoDamage;
         totalBombDamage += bombDamage;
 
+        // Report stacks after expiry (state going into next round)
         roundData.push({
             round: r,
             action,
