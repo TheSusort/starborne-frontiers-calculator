@@ -32,7 +32,6 @@ interface ShipConfig {
     chargeCount: number;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
-    advancedOpen: boolean;
 }
 
 const CORROSION_TIER_OPTIONS = [
@@ -93,7 +92,6 @@ const DPSCalculatorPage: React.FC = () => {
                             chargeCount: 0,
                             activeDoTs: { ...DEFAULT_DOT_CONFIG },
                             chargedDoTs: { ...DEFAULT_DOT_CONFIG },
-                            advancedOpen: false,
                         },
                     ],
                     nextId: 2,
@@ -114,16 +112,16 @@ const DPSCalculatorPage: React.FC = () => {
                     chargeCount: 0,
                     activeDoTs: { ...DEFAULT_DOT_CONFIG },
                     chargedDoTs: { ...DEFAULT_DOT_CONFIG },
-                    advancedOpen: false,
                 },
             ],
             nextId: 2,
         };
     };
 
-    const initial = getInitialConfig();
-    const [configs, setConfigs] = useState<ShipConfig[]>(initial.configs);
-    const [nextId, setNextId] = useState(initial.nextId);
+    const [initialState] = useState(getInitialConfig);
+    const [configs, setConfigs] = useState<ShipConfig[]>(initialState.configs);
+    const [nextId, setNextId] = useState(initialState.nextId);
+    const [openAdvanced, setOpenAdvanced] = useState<Set<string>>(new Set());
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
     const [rounds, setRounds] = useState(20);
@@ -169,27 +167,29 @@ const DPSCalculatorPage: React.FC = () => {
 
     // Add a new ship configuration
     const addConfig = () => {
-        const newConfig: ShipConfig = {
-            id: nextId.toString(),
-            name: `Ship ${nextId}`,
-            attack: 15000,
-            crit: 100,
-            critDamage: 150,
-            defensePenetration: 0,
-            activeMultiplier: 100,
-            chargedMultiplier: 0,
-            chargeCount: 0,
-            activeDoTs: { ...DEFAULT_DOT_CONFIG },
-            chargedDoTs: { ...DEFAULT_DOT_CONFIG },
-            advancedOpen: false,
-        };
-        setConfigs([...configs, newConfig]);
+        const id = nextId.toString();
+        setConfigs((prev) => [
+            ...prev,
+            {
+                id,
+                name: `Ship ${nextId}`,
+                attack: 15000,
+                crit: 100,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 0,
+                chargeCount: 0,
+                activeDoTs: { ...DEFAULT_DOT_CONFIG },
+                chargedDoTs: { ...DEFAULT_DOT_CONFIG },
+            },
+        ]);
         setNextId(nextId + 1);
     };
 
     // Remove a ship configuration
     const removeConfig = (id: string) => {
-        setConfigs(configs.filter((config) => config.id !== id));
+        setConfigs((prev) => prev.filter((config) => config.id !== id));
     };
 
     // Update a ship configuration
@@ -203,9 +203,8 @@ const DPSCalculatorPage: React.FC = () => {
             | 'defensePenetration'
             | 'activeMultiplier'
             | 'chargedMultiplier'
-            | 'chargeCount'
-            | 'advancedOpen',
-        value: string | number | boolean
+            | 'chargeCount',
+        value: string | number
     ) => {
         setConfigs((prev) =>
             prev.map((config) => (config.id === id ? { ...config, [field]: value } : config))
@@ -466,19 +465,20 @@ const DPSCalculatorPage: React.FC = () => {
                                     <button
                                         className="w-full flex justify-between items-center p-2 mt-4 bg-dark-lighter border border-dark-border hover:bg-dark-lighter/80"
                                         onClick={() =>
-                                            updateConfig(
-                                                config.id,
-                                                'advancedOpen',
-                                                !config.advancedOpen
-                                            )
+                                            setOpenAdvanced((prev) => {
+                                                const next = new Set(prev);
+                                                if (next.has(config.id)) next.delete(config.id);
+                                                else next.add(config.id);
+                                                return next;
+                                            })
                                         }
                                     >
                                         <span className="font-semibold text-sm">Advanced</span>
                                         <span className="text-theme-text-secondary text-xs">
-                                            {config.advancedOpen ? '▼' : '▶'}
+                                            {openAdvanced.has(config.id) ? '▼' : '▶'}
                                         </span>
                                     </button>
-                                    <CollapsibleAccordion isOpen={config.advancedOpen}>
+                                    <CollapsibleAccordion isOpen={openAdvanced.has(config.id)}>
                                         {/* Skills section */}
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                                             Skills
