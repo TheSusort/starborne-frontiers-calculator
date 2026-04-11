@@ -10,7 +10,7 @@ import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTab
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
-import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
+import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
@@ -520,7 +520,8 @@ const DPSCalculatorPage: React.FC = () => {
                                         />
                                     </div>
 
-                                    <div
+                                    <Button
+                                        variant="link"
                                         onClick={() =>
                                             setOpenAdvanced((prev) => {
                                                 const next = new Set(prev);
@@ -529,16 +530,16 @@ const DPSCalculatorPage: React.FC = () => {
                                                 return next;
                                             })
                                         }
-                                        className="card hover:bg-dark-lighter transition-colors cursor-pointer border-none mt-4 !p-2"
+                                        className="w-full flex justify-between items-center mt-4"
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <span className="flex items-center gap-2">
                                             <ChevronDownIcon
-                                                className={`w-4 h-4 text-theme-text-secondary flex-shrink-0 transition-transform duration-200 ${openAdvanced.has(config.id) ? 'rotate-180' : ''}`}
+                                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openAdvanced.has(config.id) ? 'rotate-180' : ''}`}
                                             />
-                                            <span className="font-semibold text-sm">Advanced</span>
-                                        </div>
-                                    </div>
-                                    <CollapsibleAccordion isOpen={openAdvanced.has(config.id)}>
+                                            {openAdvanced.has(config.id) ? 'Hide' : 'Show'} Advanced
+                                        </span>
+                                    </Button>
+                                    <CollapsibleForm isVisible={openAdvanced.has(config.id)}>
                                         {/* Skills section */}
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                                             Skills
@@ -838,7 +839,7 @@ const DPSCalculatorPage: React.FC = () => {
                                                 ))}
                                             </div>
                                         )}
-                                    </CollapsibleAccordion>
+                                    </CollapsibleForm>
 
                                     {(() => {
                                         const sim = simResults.get(config.id);
