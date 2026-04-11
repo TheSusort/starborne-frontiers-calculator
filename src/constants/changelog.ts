@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.50.0';
+export const CURRENT_VERSION = '1.51.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.51.0',
+        date: '2026-04-11',
+        changes: [
+            'Expanded DPS calculator with multi-round simulation — compare burst vs ramping ships over configurable combat rounds',
+            'Added active/charged skill cycle with charge count support',
+            'Added DoT support: corrosion, inferno, and bombs with configurable tiers, stacks, and duration',
+            'New round-by-round cumulative damage chart with per-source tooltip breakdown',
+        ],
+    },
     {
         version: '1.50.0',
         date: '2026-03-31',
