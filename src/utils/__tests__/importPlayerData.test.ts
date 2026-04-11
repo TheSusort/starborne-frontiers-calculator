@@ -401,6 +401,25 @@ describe('importPlayerData', () => {
             expect(gearPiece!.calibration).toBeUndefined();
         });
 
+        it('preserves calibration on gear not equipped to any ship', async () => {
+            const unit = makeUnit({ Id: 'ship-1' });
+            const gear = makeGearItem({
+                Id: 'gear-1',
+                EquippedOnUnit: null,
+                CalibratedForUnitId: 'ship-1',
+            });
+
+            const result = await importPlayerData(
+                makeExportData({ Units: [unit], Equipment: [gear] })
+            );
+
+            expect(result.success).toBe(true);
+            const gearPiece = result.data!.inventory.find((i) => i.id === 'gear-1');
+            expect(gearPiece!.shipId).toBeUndefined();
+            expect(gearPiece!.calibration).toBeDefined();
+            expect(gearPiece!.calibration!.shipId).toBe('ship-1');
+        });
+
         it('preserves calibration for surviving ship when other copies are deduped', async () => {
             // Two identical ships — ship-1 is kept
             const unit1 = makeUnit({ Id: 'ship-1' });
