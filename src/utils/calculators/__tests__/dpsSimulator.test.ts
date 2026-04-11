@@ -215,6 +215,50 @@ describe('simulateDPS', () => {
             });
             expect(noDef.rounds[0].bombDamage).toBe(withDef.rounds[0].bombDamage);
         });
+
+        it('scales with attack buff', () => {
+            const withAtkBuff = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: {
+                    ...DEFAULT_DOT_CONFIG,
+                    bombTier: 100,
+                    bombStacks: 1,
+                    bombCountdown: 1,
+                },
+                buffs: [{ id: '1', stat: 'attack', value: 50 }],
+                rounds: 1,
+            });
+            // effectiveAttack = 10000 * 1.5 = 15000, bomb = 1 * 15000 = 15000
+            expect(withAtkBuff.rounds[0].bombDamage).toBe(15000);
+        });
+
+        it('is not affected by outgoing damage buff', () => {
+            const noBuff = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: {
+                    ...DEFAULT_DOT_CONFIG,
+                    bombTier: 100,
+                    bombStacks: 1,
+                    bombCountdown: 1,
+                },
+                rounds: 1,
+            });
+            const withBuff = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                activeDoTs: {
+                    ...DEFAULT_DOT_CONFIG,
+                    bombTier: 100,
+                    bombStacks: 1,
+                    bombCountdown: 1,
+                },
+                buffs: [{ id: '1', stat: 'outgoingDamage', value: 50 }],
+                rounds: 1,
+            });
+            expect(noBuff.rounds[0].bombDamage).toBe(withBuff.rounds[0].bombDamage);
+        });
     });
 
     describe('mixed DoTs on active vs charged', () => {
