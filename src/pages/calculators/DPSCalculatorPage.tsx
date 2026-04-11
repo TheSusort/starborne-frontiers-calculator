@@ -1,78 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout } from '../../components/ui';
-import { calculateCritMultiplier, calculateDamageReduction } from '../../utils/autogear/scoring';
+import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
+import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
+import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-
-// Calculate DPS with variable enemy defense, buffs, and skill multiplier
-const calculateDPSWithDefense = (
-    attack: number,
-    crit: number,
-    critDamage: number,
-    enemyDefense: number,
-    defensePenetration: number,
-    skillMultiplier: number,
-    buffs: Buff[]
-): number => {
-    // Calculate buff totals
-    const attackBuff = buffs
-        .filter((b) => b.stat === 'attack')
-        .reduce((sum, b) => sum + b.value, 0);
-    const critBuff = buffs.filter((b) => b.stat === 'crit').reduce((sum, b) => sum + b.value, 0);
-    const critDamageBuff = buffs
-        .filter((b) => b.stat === 'critDamage')
-        .reduce((sum, b) => sum + b.value, 0);
-    const outgoingDamageBuff = buffs
-        .filter((b) => b.stat === 'outgoingDamage')
-        .reduce((sum, b) => sum + b.value, 0);
-
-    // Apply buffs
-    const effectiveAttack = attack * (1 + attackBuff / 100);
-    const effectiveCrit = Math.min(100, crit + critBuff); // Cap at 100%
-    const effectiveCritDamage = critDamage + critDamageBuff;
-
-    const critMultiplier = calculateCritMultiplier({
-        attack: effectiveAttack,
-        crit: effectiveCrit,
-        critDamage: effectiveCritDamage,
-        defence: 0,
-        hp: 0,
-        hacking: 0,
-        security: 0,
-        speed: 0,
-        healModifier: 0,
-    });
-
-    // Apply defense penetration to enemy defense
-    const effectiveDefense = enemyDefense * (1 - defensePenetration / 100);
-
-    // Calculate damage reduction based on effective defense
-    const damageReduction = calculateDamageReduction(effectiveDefense);
-
-    // Calculate base DPS with damage reduction
-    const baseDPS = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
-
-    // Apply skill multiplier and outgoing damage buff
-    return baseDPS * (skillMultiplier / 100) * (1 + outgoingDamageBuff / 100);
-};
-
-// Define the type for a buff
-interface Buff {
-    id: string;
-    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
-    value: number;
-}
+import { Buff, DoTApplicationConfig, DEFAULT_DOT_CONFIG } from '../../types/calculator';
+import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -82,9 +27,32 @@ interface ShipConfig {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    skillMultiplier: number;
-    dps?: number;
+    activeMultiplier: number;
+    chargedMultiplier: number;
+    chargeCount: number;
+    activeDoTs: DoTApplicationConfig;
+    chargedDoTs: DoTApplicationConfig;
+    advancedOpen: boolean;
 }
+
+const CORROSION_TIER_OPTIONS = [
+    { value: '0', label: 'None' },
+    { value: '3', label: 'I (3%)' },
+    { value: '6', label: 'II (6%)' },
+    { value: '9', label: 'III (9%)' },
+];
+const INFERNO_TIER_OPTIONS = [
+    { value: '0', label: 'None' },
+    { value: '15', label: 'I (15%)' },
+    { value: '30', label: 'II (30%)' },
+    { value: '45', label: 'III (45%)' },
+];
+const BOMB_TIER_OPTIONS = [
+    { value: '0', label: 'None' },
+    { value: '100', label: 'I (100%)' },
+    { value: '200', label: 'II (200%)' },
+    { value: '300', label: 'III (300%)' },
+];
 
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -120,7 +88,12 @@ const DPSCalculatorPage: React.FC = () => {
                             crit: Math.round(final.crit),
                             critDamage: Math.round(final.critDamage),
                             defensePenetration: Math.round(final.defensePenetration || 0),
-                            skillMultiplier: 100,
+                            activeMultiplier: 100,
+                            chargedMultiplier: 0,
+                            chargeCount: 0,
+                            activeDoTs: { ...DEFAULT_DOT_CONFIG },
+                            chargedDoTs: { ...DEFAULT_DOT_CONFIG },
+                            advancedOpen: false,
                         },
                     ],
                     nextId: 2,
@@ -136,7 +109,12 @@ const DPSCalculatorPage: React.FC = () => {
                     crit: 100,
                     critDamage: 125,
                     defensePenetration: 0,
-                    skillMultiplier: 100,
+                    activeMultiplier: 100,
+                    chargedMultiplier: 0,
+                    chargeCount: 0,
+                    activeDoTs: { ...DEFAULT_DOT_CONFIG },
+                    chargedDoTs: { ...DEFAULT_DOT_CONFIG },
+                    advancedOpen: false,
                 },
             ],
             nextId: 2,
@@ -147,6 +125,8 @@ const DPSCalculatorPage: React.FC = () => {
     const [configs, setConfigs] = useState<ShipConfig[]>(initial.configs);
     const [nextId, setNextId] = useState(initial.nextId);
     const [enemyDefense, setEnemyDefense] = useState(10000);
+    const [enemyHp, setEnemyHp] = useState(500000);
+    const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [buffs, setBuffs] = useState<Buff[]>([]);
     const [nextBuffId, setNextBuffId] = useState(1);
@@ -161,50 +141,31 @@ const DPSCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    // Calculate DPS for all configs on initial render
-    useEffect(() => {
-        // Skip the first render to avoid infinite loop
-        // Calculate initial values
-        const initialConfigs = configs.map((config) => {
-            const dps = calculateDPSWithDefense(
-                config.attack,
-                config.crit,
-                config.critDamage,
-                enemyDefense,
-                config.defensePenetration,
-                config.skillMultiplier,
-                buffs
-            );
-            return {
-                ...config,
-                dps,
-            };
-        });
-        setConfigs(initialConfigs);
-        return;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Empty dependency array - we only want this to run once
-
-    // Recalculate DPS when enemy defense or buffs change
-    useEffect(() => {
-        setConfigs((prevConfigs) =>
-            prevConfigs.map((config) => {
-                const dps = calculateDPSWithDefense(
-                    config.attack,
-                    config.crit,
-                    config.critDamage,
+    // Simulate DPS for all configs
+    const simResults = useMemo(() => {
+        const map = new Map<string, DPSSimulationResult>();
+        configs.forEach((config) => {
+            map.set(
+                config.id,
+                simulateDPS({
+                    attack: config.attack,
+                    crit: config.crit,
+                    critDamage: config.critDamage,
+                    defensePenetration: config.defensePenetration,
+                    activeMultiplier: config.activeMultiplier,
+                    chargedMultiplier: config.chargedMultiplier,
+                    chargeCount: config.chargeCount,
+                    activeDoTs: config.activeDoTs,
+                    chargedDoTs: config.chargedDoTs,
                     enemyDefense,
-                    config.defensePenetration,
-                    config.skillMultiplier,
-                    buffs
-                );
-                return {
-                    ...config,
-                    dps,
-                };
-            })
-        );
-    }, [enemyDefense, buffs]);
+                    enemyHp,
+                    rounds,
+                    buffs,
+                })
+            );
+        });
+        return map;
+    }, [configs, enemyDefense, enemyHp, rounds, buffs]);
 
     // Add a new ship configuration
     const addConfig = () => {
@@ -215,27 +176,14 @@ const DPSCalculatorPage: React.FC = () => {
             crit: 100,
             critDamage: 150,
             defensePenetration: 0,
-            skillMultiplier: 100,
+            activeMultiplier: 100,
+            chargedMultiplier: 0,
+            chargeCount: 0,
+            activeDoTs: { ...DEFAULT_DOT_CONFIG },
+            chargedDoTs: { ...DEFAULT_DOT_CONFIG },
+            advancedOpen: false,
         };
-
-        // Calculate DPS for the new config
-        const dps = calculateDPSWithDefense(
-            newConfig.attack,
-            newConfig.crit,
-            newConfig.critDamage,
-            enemyDefense,
-            newConfig.defensePenetration,
-            newConfig.skillMultiplier,
-            buffs
-        );
-
-        setConfigs([
-            ...configs,
-            {
-                ...newConfig,
-                dps,
-            },
-        ]);
+        setConfigs([...configs, newConfig]);
         setNextId(nextId + 1);
     };
 
@@ -247,42 +195,34 @@ const DPSCalculatorPage: React.FC = () => {
     // Update a ship configuration
     const updateConfig = (
         id: string,
-        field: 'name' | 'attack' | 'crit' | 'critDamage' | 'defensePenetration' | 'skillMultiplier',
-        value: string | number
+        field:
+            | 'name'
+            | 'attack'
+            | 'crit'
+            | 'critDamage'
+            | 'defensePenetration'
+            | 'activeMultiplier'
+            | 'chargedMultiplier'
+            | 'chargeCount'
+            | 'advancedOpen',
+        value: string | number | boolean
     ) => {
-        const updatedConfigs = configs.map((config) => {
-            if (config.id === id) {
-                const updatedConfig = { ...config, [field]: value };
+        setConfigs((prev) =>
+            prev.map((config) => (config.id === id ? { ...config, [field]: value } : config))
+        );
+    };
 
-                // Recalculate DPS if any relevant stat changed
-                if (
-                    field === 'attack' ||
-                    field === 'crit' ||
-                    field === 'critDamage' ||
-                    field === 'defensePenetration' ||
-                    field === 'skillMultiplier'
-                ) {
-                    const dps = calculateDPSWithDefense(
-                        updatedConfig.attack,
-                        updatedConfig.crit,
-                        updatedConfig.critDamage,
-                        enemyDefense,
-                        updatedConfig.defensePenetration,
-                        updatedConfig.skillMultiplier,
-                        buffs
-                    );
-                    return {
-                        ...updatedConfig,
-                        dps,
-                    };
-                }
-
-                return updatedConfig;
-            }
-            return config;
-        });
-
-        setConfigs(updatedConfigs);
+    const updateDoTConfig = (
+        configId: string,
+        dotField: 'activeDoTs' | 'chargedDoTs',
+        key: keyof DoTApplicationConfig,
+        value: number
+    ) => {
+        setConfigs((prev) =>
+            prev.map((c) =>
+                c.id === configId ? { ...c, [dotField]: { ...c[dotField], [key]: value } } : c
+            )
+        );
     };
 
     // Buff management functions
@@ -304,35 +244,27 @@ const DPSCalculatorPage: React.FC = () => {
         setBuffs(buffs.map((buff) => (buff.id === id ? { ...buff, [field]: value } : buff)));
     };
 
-    // Find the config with the highest DPS
-    const bestConfig = configs.reduce(
-        (best, current) => {
-            if (!best || (current.dps && best.dps && current.dps > best.dps)) {
-                return current;
-            }
-            return best;
-        },
-        null as ShipConfig | null
-    );
+    // Find the config with the highest total damage
+    const bestConfig = configs.reduce<ShipConfig | null>((best, current) => {
+        if (!best) return current;
+        const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
+        const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
+        return currentDmg > bestDmg ? current : best;
+    }, null);
 
-    // Find the second best config
     const secondBestConfig = configs
         .filter((config) => config.id !== bestConfig?.id)
-        .reduce(
-            (best, current) => {
-                if (!best || (current.dps && best.dps && current.dps > best.dps)) {
-                    return current;
-                }
-                return best;
-            },
-            null as ShipConfig | null
-        );
+        .reduce<ShipConfig | null>((best, current) => {
+            if (!best) return current;
+            const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
+            const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
+            return currentDmg > bestDmg ? current : best;
+        }, null);
 
-    // Calculate how much better the best is compared to second best
+    const bestDmg = simResults.get(bestConfig?.id ?? '')?.summary.totalDamage;
+    const secondBestDmg = simResults.get(secondBestConfig?.id ?? '')?.summary.totalDamage;
     const bestVsSecondPercentage =
-        bestConfig?.dps && secondBestConfig?.dps
-            ? ((bestConfig.dps - secondBestConfig.dps) / secondBestConfig.dps) * 100
-            : null;
+        bestDmg && secondBestDmg ? ((bestDmg - secondBestDmg) / secondBestDmg) * 100 : null;
 
     const toggleViewMode = () => {
         setViewMode(viewMode === 'table' ? 'heatmap' : 'table');
@@ -343,7 +275,7 @@ const DPSCalculatorPage: React.FC = () => {
             <Seo {...SEO_CONFIG.damage} />
             <PageLayout
                 title="DPS Calculator"
-                description="Compare damage per hit calculations for different ship configurations."
+                description="Compare damage output across different ship configurations and combat scenarios."
                 action={{
                     label: 'Add Ship',
                     onClick: addConfig,
@@ -352,15 +284,35 @@ const DPSCalculatorPage: React.FC = () => {
             >
                 <div className="space-y-6">
                     <div className="card">
-                        <h3 className="text-lg font-bold mb-4">Enemy Defense</h3>
-                        <Input
-                            label="Enemy Defense"
-                            type="number"
-                            value={enemyDefense}
-                            onChange={(e) => setEnemyDefense(parseInt(e.target.value) || 0)}
-                        />
+                        <h3 className="text-lg font-bold mb-4">Combat Settings</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Input
+                                label="Enemy Defense"
+                                type="number"
+                                value={enemyDefense}
+                                onChange={(e) => setEnemyDefense(parseInt(e.target.value) || 0)}
+                            />
+                            <Input
+                                label="Enemy HP"
+                                type="number"
+                                value={enemyHp}
+                                onChange={(e) => setEnemyHp(parseInt(e.target.value) || 0)}
+                            />
+                            <Input
+                                label="Rounds"
+                                type="number"
+                                min="1"
+                                max="50"
+                                value={rounds}
+                                onChange={(e) =>
+                                    setRounds(
+                                        Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
+                                    )
+                                }
+                            />
+                        </div>
                         <p className="text-sm text-theme-text-secondary mt-2">
-                            Common defense value that all ships will be calculated against
+                            Shared combat settings applied to all ship configurations
                         </p>
                     </div>
 
@@ -509,88 +461,440 @@ const DPSCalculatorPage: React.FC = () => {
                                                 )
                                             }
                                         />
-                                        <Input
-                                            label="Skill Multiplier (%)"
-                                            type="number"
-                                            min="0"
-                                            value={config.skillMultiplier}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'skillMultiplier',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
                                     </div>
 
-                                    <div className="mt-4 pt-4 border-t border-dark-border">
-                                        <div className="flex justify-between mb-2">
-                                            <span className="text-theme-text-secondary">
-                                                Crit Multiplier:
-                                            </span>
-                                            <span>
-                                                {calculateCritMultiplier({
-                                                    attack: config.attack,
-                                                    crit: config.crit,
-                                                    critDamage: config.critDamage,
-                                                    hp: 0,
-                                                    defence: 0,
-                                                    hacking: 0,
-                                                    security: 0,
-                                                    speed: 0,
-                                                    healModifier: 0,
-                                                }).toFixed(2)}
-                                                x
-                                            </span>
+                                    <button
+                                        className="w-full flex justify-between items-center p-2 mt-4 bg-dark-lighter border border-dark-border hover:bg-dark-lighter/80"
+                                        onClick={() =>
+                                            updateConfig(
+                                                config.id,
+                                                'advancedOpen',
+                                                !config.advancedOpen
+                                            )
+                                        }
+                                    >
+                                        <span className="font-semibold text-sm">Advanced</span>
+                                        <span className="text-theme-text-secondary text-xs">
+                                            {config.advancedOpen ? '▼' : '▶'}
+                                        </span>
+                                    </button>
+                                    <CollapsibleAccordion isOpen={config.advancedOpen}>
+                                        {/* Skills section */}
+                                        <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
+                                            Skills
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-theme-text-secondary">DPS:</span>
-                                            <span
-                                                className={
-                                                    bestConfig && bestConfig.id === config.id
-                                                        ? 'text-primary font-bold'
-                                                        : ''
+                                        <div className="grid grid-cols-3 gap-4 mb-4">
+                                            <Input
+                                                label="Active (%)"
+                                                type="number"
+                                                min="0"
+                                                value={config.activeMultiplier}
+                                                onChange={(e) =>
+                                                    updateConfig(
+                                                        config.id,
+                                                        'activeMultiplier',
+                                                        parseInt(e.target.value) || 0
+                                                    )
                                                 }
-                                            >
-                                                {config.dps?.toLocaleString()}
-                                            </span>
+                                            />
+                                            <Input
+                                                label="Charged (%)"
+                                                type="number"
+                                                min="0"
+                                                value={config.chargedMultiplier}
+                                                onChange={(e) =>
+                                                    updateConfig(
+                                                        config.id,
+                                                        'chargedMultiplier',
+                                                        parseInt(e.target.value) || 0
+                                                    )
+                                                }
+                                            />
+                                            <Input
+                                                label="Charge Count"
+                                                type="number"
+                                                min="0"
+                                                value={config.chargeCount}
+                                                onChange={(e) =>
+                                                    updateConfig(
+                                                        config.id,
+                                                        'chargeCount',
+                                                        parseInt(e.target.value) || 0
+                                                    )
+                                                }
+                                            />
                                         </div>
-                                        {bestConfig &&
-                                            bestConfig.id !== config.id &&
-                                            bestConfig.dps &&
-                                            config.dps && (
-                                                <div className="flex justify-between mt-2">
+
+                                        {/* DoTs — Active Skill */}
+                                        <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide mb-2">
+                                            DoTs — Active Skill
+                                        </div>
+                                        <div className="space-y-3 mb-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Corrosion Tier"
+                                                    options={CORROSION_TIER_OPTIONS}
+                                                    value={String(config.activeDoTs.corrosionTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'corrosionTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.activeDoTs.corrosionStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'corrosionStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Inferno Tier"
+                                                    options={INFERNO_TIER_OPTIONS}
+                                                    value={String(config.activeDoTs.infernoTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'infernoTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.activeDoTs.infernoStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'infernoStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <Select
+                                                    label="Bomb Tier"
+                                                    options={BOMB_TIER_OPTIONS}
+                                                    value={String(config.activeDoTs.bombTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'bombTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.activeDoTs.bombStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'bombStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Countdown"
+                                                    type="number"
+                                                    min="1"
+                                                    value={config.activeDoTs.bombCountdown}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'activeDoTs',
+                                                            'bombCountdown',
+                                                            Math.max(
+                                                                1,
+                                                                parseInt(e.target.value) || 1
+                                                            )
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* DoTs — Charged Skill */}
+                                        <div className="text-xs font-semibold text-purple-400 uppercase tracking-wide mb-2">
+                                            DoTs — Charged Skill
+                                        </div>
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Corrosion Tier"
+                                                    options={CORROSION_TIER_OPTIONS}
+                                                    value={String(config.chargedDoTs.corrosionTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'corrosionTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.chargedDoTs.corrosionStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'corrosionStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <Select
+                                                    label="Inferno Tier"
+                                                    options={INFERNO_TIER_OPTIONS}
+                                                    value={String(config.chargedDoTs.infernoTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'infernoTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.chargedDoTs.infernoStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'infernoStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <Select
+                                                    label="Bomb Tier"
+                                                    options={BOMB_TIER_OPTIONS}
+                                                    value={String(config.chargedDoTs.bombTier)}
+                                                    onChange={(v) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'bombTier',
+                                                            parseInt(v)
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Stacks / use"
+                                                    type="number"
+                                                    min="0"
+                                                    value={config.chargedDoTs.bombStacks}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'bombStacks',
+                                                            parseInt(e.target.value) || 0
+                                                        )
+                                                    }
+                                                />
+                                                <Input
+                                                    label="Countdown"
+                                                    type="number"
+                                                    min="1"
+                                                    value={config.chargedDoTs.bombCountdown}
+                                                    onChange={(e) =>
+                                                        updateDoTConfig(
+                                                            config.id,
+                                                            'chargedDoTs',
+                                                            'bombCountdown',
+                                                            Math.max(
+                                                                1,
+                                                                parseInt(e.target.value) || 1
+                                                            )
+                                                        )
+                                                    }
+                                                />
+                                            </div>
+                                        </div>
+                                    </CollapsibleAccordion>
+
+                                    {(() => {
+                                        const sim = simResults.get(config.id);
+                                        if (!sim) return null;
+                                        const isBest = bestConfig?.id === config.id;
+                                        const hasDoTs =
+                                            sim.summary.totalCorrosionDamage > 0 ||
+                                            sim.summary.totalInfernoDamage > 0 ||
+                                            sim.summary.totalBombDamage > 0;
+
+                                        return (
+                                            <div className="mt-4 pt-4 border-t border-dark-border">
+                                                <div className="flex justify-between mb-2">
                                                     <span className="text-theme-text-secondary">
-                                                        Compared to best:
+                                                        Crit Multiplier:
                                                     </span>
-                                                    <span className="text-red-500">
-                                                        {(
-                                                            ((config.dps - bestConfig.dps) /
-                                                                bestConfig.dps) *
-                                                            100
-                                                        ).toFixed(2)}
-                                                        %
+                                                    <span>
+                                                        {calculateCritMultiplier({
+                                                            attack: config.attack,
+                                                            crit: config.crit,
+                                                            critDamage: config.critDamage,
+                                                            hp: 0,
+                                                            defence: 0,
+                                                            hacking: 0,
+                                                            security: 0,
+                                                            speed: 0,
+                                                            healModifier: 0,
+                                                        }).toFixed(2)}
+                                                        x
                                                     </span>
                                                 </div>
-                                            )}
-                                    </div>
-
-                                    {bestConfig && bestConfig.id === config.id && (
-                                        <div className="text-sm mt-2 text-center">
-                                            <span className="text-primary">
-                                                Best ship configuration
-                                            </span>
-                                            {bestVsSecondPercentage !== null && (
-                                                <span className="text-green-500 ml-2">
-                                                    +{bestVsSecondPercentage.toFixed(2)}% vs #2
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="text-theme-text-secondary">
+                                                        Avg Damage / Round:
+                                                    </span>
+                                                    <span
+                                                        className={
+                                                            isBest ? 'text-primary font-bold' : ''
+                                                        }
+                                                    >
+                                                        {sim.summary.avgDamagePerRound.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between mb-2">
+                                                    <span className="text-theme-text-secondary">
+                                                        Total Damage ({rounds} rounds):
+                                                    </span>
+                                                    <span
+                                                        className={
+                                                            isBest ? 'text-primary font-bold' : ''
+                                                        }
+                                                    >
+                                                        {sim.summary.totalDamage.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                {hasDoTs && (
+                                                    <div className="grid grid-cols-4 gap-1 mt-2">
+                                                        <div className="text-center p-1 bg-dark-lighter rounded">
+                                                            <div className="text-xs text-theme-text-secondary">
+                                                                Direct
+                                                            </div>
+                                                            <div className="text-xs">
+                                                                {sim.summary.totalDirectDamage.toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center p-1 bg-dark-lighter rounded">
+                                                            <div className="text-xs text-green-400">
+                                                                Corrosion
+                                                            </div>
+                                                            <div className="text-xs text-green-400">
+                                                                {sim.summary.totalCorrosionDamage.toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center p-1 bg-dark-lighter rounded">
+                                                            <div className="text-xs text-orange-400">
+                                                                Inferno
+                                                            </div>
+                                                            <div className="text-xs text-orange-400">
+                                                                {sim.summary.totalInfernoDamage.toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-center p-1 bg-dark-lighter rounded">
+                                                            <div className="text-xs text-red-400">
+                                                                Bomb
+                                                            </div>
+                                                            <div className="text-xs text-red-400">
+                                                                {sim.summary.totalBombDamage.toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {isBest && configs.length > 1 && (
+                                                    <div className="text-sm mt-2 text-center">
+                                                        <span className="text-primary">
+                                                            Best ship configuration
+                                                        </span>
+                                                        {bestVsSecondPercentage !== null && (
+                                                            <span className="text-green-500 ml-2">
+                                                                +{bestVsSecondPercentage.toFixed(2)}
+                                                                % vs #2
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {!isBest && bestConfig && (
+                                                    <div className="flex justify-between mt-2">
+                                                        <span className="text-theme-text-secondary">
+                                                            Compared to best:
+                                                        </span>
+                                                        <span className="text-red-500">
+                                                            {(
+                                                                ((sim.summary.totalDamage -
+                                                                    (simResults.get(bestConfig.id)
+                                                                        ?.summary.totalDamage ??
+                                                                        0)) /
+                                                                    (simResults.get(bestConfig.id)
+                                                                        ?.summary.totalDamage ??
+                                                                        1)) *
+                                                                100
+                                                            ).toFixed(2)}
+                                                            %
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         ))}
+                    </div>
+
+                    <div className="card">
+                        <h3 className="text-lg font-bold mb-2">Damage Over Time</h3>
+                        <p className="text-sm text-theme-text-secondary mb-4">
+                            Cumulative damage comparison across rounds. Burst ships climb fast then
+                            plateau; DoT ships ramp up over time.
+                        </p>
+                        <DPSRoundChart
+                            ships={configs
+                                .map((config) => ({
+                                    id: config.id,
+                                    name: config.name,
+                                    result: simResults.get(config.id)!,
+                                }))
+                                .filter((s) => s.result)}
+                            rounds={rounds}
+                        />
                     </div>
 
                     <div className="card">
@@ -634,24 +938,23 @@ const DPSCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
-                        <h2 className="text-xl font-bold mb-4">About DPS Calculation</h2>
+                        <h2 className="text-xl font-bold mb-4">About the Simulation</h2>
                         <p className="mb-2">
-                            DPS (Damage Per Second) is calculated based on your attack value, crit
-                            stats, and damage reduction using the formula:
+                            The simulator models combat round-by-round. Each round, your ship fires
+                            either its active or charged skill (if configured). Damage is calculated
+                            as:
                         </p>
-                        <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + (CritRate/100) × (CritDamage/100)) × (1 -
-                            DamageReduction/100)
+                        <p className="mb-2 font-mono bg-dark-lighter p-2 text-sm">
+                            Direct = Attack × CritMultiplier × (1 - DamageReduction%) ×
+                            SkillMultiplier% × (1 + OutgoingDmg%)
                         </p>
-                        <p className="mb-2">At 100% crit rate, the formula simplifies to:</p>
-                        <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            DPS = Attack × (1 + CritDamage/100) × (1 - DamageReduction/100)
+                        <p className="mb-2">
+                            DoT effects (corrosion, inferno, bombs) bypass enemy defense entirely.
+                            Corrosion deals a percentage of the target&apos;s HP per stack. Inferno
+                            and bombs deal a percentage of the attacker&apos;s attack stat. Bombs
+                            detonate after a countdown period.
                         </p>
-                        <p>
-                            The visualization shows that while both attack and crit damage increase
-                            your DPS linearly, the ideal balance depends on your current stats and
-                            available gear options.
-                        </p>
+                        <p>All DoTs stack permanently and tick on the turn they are applied.</p>
                     </div>
                 </div>
             </PageLayout>
