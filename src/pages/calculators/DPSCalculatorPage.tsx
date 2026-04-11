@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout } from '../../components/ui';
+import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -519,8 +520,7 @@ const DPSCalculatorPage: React.FC = () => {
                                         />
                                     </div>
 
-                                    <button
-                                        className="w-full flex justify-between items-center p-2 mt-4 bg-dark-lighter border border-dark-border hover:bg-dark-lighter/80"
+                                    <div
                                         onClick={() =>
                                             setOpenAdvanced((prev) => {
                                                 const next = new Set(prev);
@@ -529,12 +529,15 @@ const DPSCalculatorPage: React.FC = () => {
                                                 return next;
                                             })
                                         }
+                                        className="card hover:bg-dark-lighter transition-colors cursor-pointer border-none mt-4 !p-2"
                                     >
-                                        <span className="font-semibold text-sm">Advanced</span>
-                                        <span className="text-theme-text-secondary text-xs">
-                                            {openAdvanced.has(config.id) ? '▼' : '▶'}
-                                        </span>
-                                    </button>
+                                        <div className="flex items-center gap-2">
+                                            <ChevronDownIcon
+                                                className={`w-4 h-4 text-theme-text-secondary flex-shrink-0 transition-transform duration-200 ${openAdvanced.has(config.id) ? 'rotate-180' : ''}`}
+                                            />
+                                            <span className="font-semibold text-sm">Advanced</span>
+                                        </div>
+                                    </div>
                                     <CollapsibleAccordion isOpen={openAdvanced.has(config.id)}>
                                         {/* Skills section */}
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
