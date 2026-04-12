@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Input } from '../../components/ui/Input';
@@ -6,6 +7,10 @@ import { CloseIcon, PageLayout } from '../../components/ui';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 interface BuffDebuff {
     value: number;
@@ -26,18 +31,70 @@ interface DamageDeconstructionForm {
 }
 
 const DamageDeconstructionPage: React.FC = () => {
-    const [form, setForm] = useState<DamageDeconstructionForm>({
-        actualDamage: 0,
-        shipAttack: 0,
-        attackBuffs: [],
-        skillAttackPercent: 0,
-        isCrit: false,
-        critDamagePercent: 0,
-        defensePenetration: 0,
-        outgoingDamageBuffs: [],
-        enemyDefenseBuffs: [],
-        enemyIncomingDamageBuffs: [],
-    });
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const shipInitialized = useRef(false);
+
+    const getInitialForm = (): DamageDeconstructionForm => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const engineeringStats = ship.type
+                    ? getEngineeringStatsForShipType(ship.type)
+                    : undefined;
+                const statsBreakdown = calculateTotalStats(
+                    ship.baseStats,
+                    ship.equipment || {},
+                    getGearPiece,
+                    ship.refits,
+                    ship.implants,
+                    engineeringStats,
+                    ship.id
+                );
+                const final = statsBreakdown.final;
+                return {
+                    actualDamage: 0,
+                    shipAttack: Math.round(final.attack),
+                    attackBuffs: [],
+                    skillAttackPercent: 0,
+                    isCrit: false,
+                    critDamagePercent: Math.round(final.critDamage),
+                    defensePenetration: Math.round(final.defensePenetration || 0),
+                    outgoingDamageBuffs: [],
+                    enemyDefenseBuffs: [],
+                    enemyIncomingDamageBuffs: [],
+                };
+            }
+        }
+        return {
+            actualDamage: 0,
+            shipAttack: 0,
+            attackBuffs: [],
+            skillAttackPercent: 0,
+            isCrit: false,
+            critDamagePercent: 0,
+            defensePenetration: 0,
+            outgoingDamageBuffs: [],
+            enemyDefenseBuffs: [],
+            enemyIncomingDamageBuffs: [],
+        };
+    };
+
+    const [initialForm] = useState(getInitialForm);
+    const [form, setForm] = useState<DamageDeconstructionForm>(initialForm);
+
+    // Clear shipId from URL after initialization
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     const [results, setResults] = useState<{
         damageReduction: number;

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import { calculateDamageReduction, calculateEffectiveHP } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
@@ -7,6 +8,10 @@ import { DamageReductionChart } from '../../components/calculator/DamageReductio
 import { DamageReductionTable } from '../../components/calculator/DamageReductionTable';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -19,12 +24,62 @@ interface ShipConfig {
 }
 
 const DefenseCalculatorPage: React.FC = () => {
-    const [configs, setConfigs] = useState<ShipConfig[]>([
-        { id: '1', name: 'Ship 1', hp: 10000, defense: 5000 },
-    ]);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const shipInitialized = useRef(false);
+
+    const getInitialConfig = (): ShipConfig[] => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const engineeringStats = ship.type
+                    ? getEngineeringStatsForShipType(ship.type)
+                    : undefined;
+                const statsBreakdown = calculateTotalStats(
+                    ship.baseStats,
+                    ship.equipment || {},
+                    getGearPiece,
+                    ship.refits,
+                    ship.implants,
+                    engineeringStats,
+                    ship.id
+                );
+                const final = statsBreakdown.final;
+                const hp = Math.round(final.hp);
+                const defense = Math.round(final.defence);
+                return [
+                    {
+                        id: '1',
+                        name: ship.name,
+                        hp,
+                        defense,
+                        damageReduction: calculateDamageReduction(defense),
+                        effectiveHP: calculateEffectiveHP(hp, defense),
+                    },
+                ];
+            }
+        }
+        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000 }];
+    };
+
+    const [initialConfigs] = useState(getInitialConfig);
+    const [configs, setConfigs] = useState<ShipConfig[]>(initialConfigs);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
     const [showTable, setShowTable] = useState(false);
+
+    // Clear shipId from URL after initialization
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     // Calculate effective HP and damage reduction for all configs
     useEffect(() => {

@@ -18,6 +18,10 @@ import {
     Tooltip,
     CalibrationIcon,
     CopyIcon,
+    ClockIcon,
+    SearchIcon,
+    ShieldIcon,
+    HealingIcon,
 } from '../ui';
 import { MenuIcon } from '../ui/icons/MenuIcon';
 import { Dropdown } from '../ui/Dropdown';
@@ -195,17 +199,70 @@ export const ShipActionsDropdown: React.FC<ShipActionsDropdownProps> = ({
                 </div>
             </Dropdown.Item>
 
-            <Dropdown.Item
-                onClick={(e) => {
-                    e.stopPropagation();
-                    void navigate(`/damage?shipId=${ship.id}`);
-                }}
+            <Dropdown.Submenu
+                label={
+                    <div className="flex items-center gap-2">
+                        <TargetIcon />
+                        <span>Calculators</span>
+                    </div>
+                }
             >
-                <div className="flex items-center gap-2">
-                    <TargetIcon />
-                    <span>DPS Calculator</span>
-                </div>
-            </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate(`/damage?shipId=${ship.id}`);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <TargetIcon />
+                        <span>DPS Calculator</span>
+                    </div>
+                </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate(`/defense?shipId=${ship.id}`);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <ShieldIcon />
+                        <span>Defense Calculator</span>
+                    </div>
+                </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate(`/healing?shipId=${ship.id}`);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <HealingIcon />
+                        <span>Healing Calculator</span>
+                    </div>
+                </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate(`/damage-deconstruction?shipId=${ship.id}`);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <SearchIcon />
+                        <span>Hit Deconstruction</span>
+                    </div>
+                </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        void navigate(`/speed?shipId=${ship.id}`);
+                    }}
+                >
+                    <div className="flex items-center gap-2">
+                        <ClockIcon />
+                        <span>Speed Calculator</span>
+                    </div>
+                </Dropdown.Item>
+            </Dropdown.Submenu>
 
             {showCalibrateGear && (
                 <Dropdown.Item

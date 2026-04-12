@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     LineChart,
     Line,
@@ -18,6 +19,10 @@ import { Select } from '../../components/ui/Select';
 import { BaseChart, ChartTooltip } from '../../components/ui/charts';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 // Define the type for a healer configuration
 interface HealerConfig {
@@ -72,19 +77,70 @@ const comparisonChartOptions = [
 ];
 
 const HealingCalculatorPage: React.FC = () => {
-    const [configs, setConfigs] = useState<HealerConfig[]>([
-        {
-            id: '1',
-            name: 'Healer 1',
-            hp: 40000,
-            healPercent: 15,
-            crit: 50,
-            critDamage: 100,
-            healModifier: 20,
-        },
-    ]);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const shipInitialized = useRef(false);
+
+    const getInitialConfig = (): HealerConfig[] => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const engineeringStats = ship.type
+                    ? getEngineeringStatsForShipType(ship.type)
+                    : undefined;
+                const statsBreakdown = calculateTotalStats(
+                    ship.baseStats,
+                    ship.equipment || {},
+                    getGearPiece,
+                    ship.refits,
+                    ship.implants,
+                    engineeringStats,
+                    ship.id
+                );
+                const final = statsBreakdown.final;
+                return [
+                    {
+                        id: '1',
+                        name: ship.name,
+                        hp: Math.round(final.hp),
+                        healPercent: 15,
+                        crit: Math.round(final.crit),
+                        critDamage: Math.round(final.critDamage),
+                        healModifier: 0,
+                    },
+                ];
+            }
+        }
+        return [
+            {
+                id: '1',
+                name: 'Healer 1',
+                hp: 40000,
+                healPercent: 15,
+                crit: 50,
+                critDamage: 100,
+                healModifier: 20,
+            },
+        ];
+    };
+
+    const [initialConfigs] = useState(getInitialConfig);
+    const [configs, setConfigs] = useState<HealerConfig[]>(initialConfigs);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
+
+    // Clear shipId from URL after initialization
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
     const [activeComparisonChart, setActiveComparisonChart] = useState<
         'hp' | 'crit' | 'critDamage' | 'healModifier'
     >('hp');

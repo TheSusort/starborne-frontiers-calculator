@@ -1,9 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout, Tabs } from '../../components/ui';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 
 // Interface for a speed modifier
 interface SpeedModifier {
@@ -40,10 +45,50 @@ const calculateBaseSpeedRange = (
 };
 
 const SpeedCalculatorPage: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const { getGearPiece } = useInventory();
+    const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const shipInitialized = useRef(false);
+
+    const getInitialSpeed = (): number => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const engineeringStats = ship.type
+                    ? getEngineeringStatsForShipType(ship.type)
+                    : undefined;
+                const statsBreakdown = calculateTotalStats(
+                    ship.baseStats,
+                    ship.equipment || {},
+                    getGearPiece,
+                    ship.refits,
+                    ship.implants,
+                    engineeringStats,
+                    ship.id
+                );
+                return Math.round(statsBreakdown.final.speed);
+            }
+        }
+        return 120;
+    };
+
     const [activeMode, setActiveMode] = useState<'forward' | 'reverse'>('forward');
 
     // Mode 1 (Forward) state
-    const [baseSpeed, setBaseSpeed] = useState<number>(120);
+    const [initialSpeed] = useState(getInitialSpeed);
+    const [baseSpeed, setBaseSpeed] = useState<number>(initialSpeed);
+
+    // Clear shipId from URL after initialization
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
     const [modifiers, setModifiers] = useState<SpeedModifier[]>([{ id: '1', value: 30 }]);
     const [nextModifierId, setNextModifierId] = useState(2);
     const [finalSpeed, setFinalSpeed] = useState<number>(0);
