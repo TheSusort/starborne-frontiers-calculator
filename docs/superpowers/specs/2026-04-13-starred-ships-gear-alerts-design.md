@@ -26,9 +26,7 @@ Add `starred?: boolean` to the `Ship` type, following the same pattern as `equip
 - New context functions: `toggleStarred(shipId)` in `ShipsContext`
 - Persisted to Supabase for authenticated users, localStorage for unauthenticated
 
-**"Missing gear" definition:** A ship is considered "missing gear" if any of its 6 main equipment slots (weapon, hull, generator, sensor, software, thrusters) are empty. A slot is empty if the key is absent from the `equipment` record or the value is falsy.
-
-Implant slots are excluded from this check. Most ships don't have all 5 implant slots filled, which would cause persistent false positives for nearly every starred ship. Implant tracking can be revisited as a future enhancement.
+**"Missing gear" definition:** A ship is considered "missing gear" if any of its 6 main equipment slots (weapon, hull, generator, sensor, software, thrusters) or 5 implant slots (minor_alpha, minor_gamma, minor_sigma, major, ultimate) are empty. A slot is empty if the key is absent from the `equipment`/`implants` record or the value is falsy. Starred ships are expected to be fully kitted — all 11 slots filled.
 
 The `starred` field is preserved during data reimport, following the same behavior as `equipmentLocked` — existing ships retain their starred state when deduplicated during import.
 
@@ -53,7 +51,7 @@ A new `StarredShipAlerts` component rendered at the app layout level in `App.tsx
 **Position:** Fixed, bottom-right of the screen (`bottom-4 right-4`). Uses `z-40` to stay below modals (`z-60`/`z-80`), offcanvas (`z-70`), and tutorial overlay (`z-100+`), but above normal page content. On mobile (below `sm` breakpoint), renders as a compact bottom bar instead of a side panel.
 
 **Content:**
-- Lists all ships where `starred === true` AND at least one of the 6 main gear slots is empty
+- Lists all ships where `starred === true` AND at least one equipment or implant slot is empty
 - Each entry shows: ship name and number of empty gear slots (e.g., "Aurora — 3 empty slots")
 - Clicking an entry navigates to the autogear page with that ship pre-selected via `?shipId=`
 
