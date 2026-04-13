@@ -32,6 +32,7 @@ interface AutogearQuickSettingsProps {
         optimizeImplants: boolean;
     };
     onToggleStarred?: (shipId: string) => Promise<void>;
+    children?: React.ReactNode;
 }
 
 export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
@@ -43,6 +44,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onFindOptimalGear,
     getShipConfig,
     onToggleStarred,
+    children,
 }) => {
     const navigate = useNavigate();
     const [autoOpenIndex, setAutoOpenIndex] = useState<number | null>(null);
@@ -180,6 +182,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                     Find Optimal Gear
                 </Button>
             </div>
+            {children}
         </div>
     );
 };

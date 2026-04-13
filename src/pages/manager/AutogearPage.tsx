@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -161,7 +161,7 @@ export const AutogearPage: React.FC = () => {
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
     const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
     const [suggestionTargets, setSuggestionTargets] = useState<GearSuggestionTarget[]>([]);
-    const [pendingDonorShipIds, setPendingDonorShipIds] = useState<Set<string>>(new Set());
+    const pendingDonorShipIdsRef = useRef<Set<string>>(new Set());
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -666,7 +666,7 @@ export const AutogearPage: React.FC = () => {
 
         // Capture donor ship IDs before equipping (gear shipId gets updated during equip)
         const donorIds = new Set(gearMovements.map((m) => m.fromShip.id));
-        setPendingDonorShipIds(donorIds);
+        pendingDonorShipIdsRef.current = donorIds;
 
         if (gearMovements.length > 0) {
             setShowConfirmModal(true);
@@ -687,7 +687,7 @@ export const AutogearPage: React.FC = () => {
             // Store the ship ID for the confirm action
             setCurrentEquippingShipId(shipId);
         } else {
-            setPendingDonorShipIds(new Set());
+            pendingDonorShipIdsRef.current = new Set();
             void applyGearSuggestionsForShip(shipId);
         }
     };
@@ -733,10 +733,11 @@ export const AutogearPage: React.FC = () => {
         setCurrentEquippingShipId(null);
 
         // Build post-equip suggestion targets from pre-captured donor ship IDs
+        const donorIds = pendingDonorShipIdsRef.current;
         const targets: GearSuggestionTarget[] = [];
 
-        // Add donor ships (IDs captured before equipping)
-        pendingDonorShipIds.forEach((donorId) => {
+        // Add donor ships (IDs captured before equipping) — regardless of starred status
+        donorIds.forEach((donorId) => {
             if (donorId === shipId) return;
             const donorShip = getShipById(donorId);
             if (donorShip) {
@@ -749,18 +750,13 @@ export const AutogearPage: React.FC = () => {
 
         // Add starred ships with missing gear (excluding just-equipped ship and already-listed donors)
         ships.forEach((s) => {
-            if (
-                s.starred &&
-                s.id !== shipId &&
-                !pendingDonorShipIds.has(s.id) &&
-                hasEmptySlots(s)
-            ) {
+            if (s.starred && s.id !== shipId && !donorIds.has(s.id) && hasEmptySlots(s)) {
                 targets.push({ ship: s, emptySlotCount: getEmptySlotCount(s), isDonor: false });
             }
         });
 
         setSuggestionTargets(targets);
-        setPendingDonorShipIds(new Set());
+        pendingDonorShipIdsRef.current = new Set();
     };
 
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
@@ -862,14 +858,15 @@ export const AutogearPage: React.FC = () => {
                             onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
                             onToggleStarred={toggleStarred}
-                        />
-                        {suggestionTargets.length > 0 && (
-                            <GearSuggestionTargets
-                                targets={suggestionTargets}
-                                onSelectShip={handleSelectSuggestionTarget}
-                                onDismiss={() => setSuggestionTargets([])}
-                            />
-                        )}
+                        >
+                            {suggestionTargets.length > 0 && (
+                                <GearSuggestionTargets
+                                    targets={suggestionTargets}
+                                    onSelectShip={handleSelectSuggestionTarget}
+                                    onDismiss={() => setSuggestionTargets([])}
+                                />
+                            )}
+                        </AutogearQuickSettings>
                     </div>
 
                     {/* Show progress bar for any strategy when optimizing */}
