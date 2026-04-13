@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -164,7 +164,7 @@ export const AutogearPage: React.FC = () => {
         donorIds: Set<string>;
         equippedShipId: string;
     } | null>(null);
-    const pendingDonorShipIdsRef = useRef<Set<string>>(new Set());
+    const [pendingDonorShipIds, setPendingDonorShipIds] = useState<Set<string>>(new Set());
 
     // Compute suggestion targets reactively from the latest ships array.
     // This avoids stale closure issues — equipMultipleGear updates ships state,
@@ -679,12 +679,15 @@ export const AutogearPage: React.FC = () => {
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        // Create a list of gear movements
+        // Create a list of gear movements using gearToShipMap (the reliable source
+        // for current gear ownership, derived from ship.equipment records).
+        // gear.shipId is stale — it's only set during import and not updated on UI equips.
         const gearMovements = currentShipResults.suggestions
             .map((suggestion) => {
                 const gear = getGearPiece(suggestion.gearId);
-                if (gear?.shipId && gear.shipId !== shipId) {
-                    const previousShip = getShipById(gear.shipId);
+                const currentOwnerId = gearToShipMap.get(suggestion.gearId);
+                if (gear && currentOwnerId && currentOwnerId !== shipId) {
+                    const previousShip = getShipById(currentOwnerId);
                     if (previousShip) {
                         return {
                             fromShip: previousShip,
@@ -697,9 +700,9 @@ export const AutogearPage: React.FC = () => {
             })
             .filter((movement): movement is NonNullable<typeof movement> => movement !== null);
 
-        // Capture donor ship IDs before equipping (gear shipId gets updated during equip)
+        // Capture donor ship IDs before equipping
         const donorIds = new Set(gearMovements.map((m) => m.fromShip.id));
-        pendingDonorShipIdsRef.current = donorIds;
+        setPendingDonorShipIds(donorIds);
 
         if (gearMovements.length > 0) {
             setShowConfirmModal(true);
@@ -720,7 +723,6 @@ export const AutogearPage: React.FC = () => {
             // Store the ship ID for the confirm action
             setCurrentEquippingShipId(shipId);
         } else {
-            pendingDonorShipIdsRef.current = new Set();
             void applyGearSuggestionsForShip(shipId);
         }
     };
@@ -765,15 +767,12 @@ export const AutogearPage: React.FC = () => {
         setShowConfirmModal(false);
         setCurrentEquippingShipId(null);
 
-        // Store donor IDs and the equipped ship ID — the actual suggestion list is
-        // computed via useMemo from the latest ships array (after state flushes),
-        // so we just need to mark which ship IDs are donors.
-        // Copy the Set so clearing the ref doesn't mutate the state value.
+        // Trigger suggestion list computation. pendingDonorShipIds was set before
+        // the confirm modal, so it's available in this render cycle.
         setDonorContext({
-            donorIds: new Set(pendingDonorShipIdsRef.current),
+            donorIds: pendingDonorShipIds,
             equippedShipId: shipId,
         });
-        pendingDonorShipIdsRef.current = new Set();
     };
 
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
