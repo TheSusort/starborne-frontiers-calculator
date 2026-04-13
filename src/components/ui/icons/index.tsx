@@ -20,3 +20,5 @@ export * from './UserIcon';
 export * from './SearchIcon';
 export * from './ShareIcon';
 export * from './ShieldIcon';
+export * from './StarIcon';
+export * from './StarOutlineIcon';
