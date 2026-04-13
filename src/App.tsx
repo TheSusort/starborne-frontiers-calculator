@@ -295,7 +295,7 @@ const App: React.FC = () => {
                                                                 </ChunkErrorBoundary>
                                                             </div>
 
-                                                            <JokeCorner />
+                                                            {/* JokeCorner rendered in bottom-right stack below */}
                                                             <footer className="text-center text-xs mt-auto pt-5">
                                                                 Made with ❤️ by {AUTHOR} (
                                                                 <a
@@ -326,7 +326,10 @@ const App: React.FC = () => {
                                                         lastSeenVersion={lastSeenVersion}
                                                     />
                                                     <NotificationContainer />
-                                                    <StarredShipAlerts />
+                                                    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+                                                        <JokeCorner />
+                                                        <StarredShipAlerts />
+                                                    </div>
                                                     <TutorialOverlay />
                                                 </main>
                                             </TutorialProvider>

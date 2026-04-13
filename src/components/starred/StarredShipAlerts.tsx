@@ -45,7 +45,7 @@ export const StarredShipAlerts: React.FC = () => {
         return (
             <button
                 onClick={handleToggleMinimized}
-                className="fixed bottom-16 right-4 z-40 flex items-center gap-1.5 bg-dark border border-dark-border rounded-lg px-3 py-2 text-theme-text hover:bg-dark-lighter transition-colors"
+                className="flex items-center gap-1.5 bg-dark border border-dark-border rounded-lg px-3 py-2 text-theme-text hover:bg-dark-lighter transition-colors"
                 aria-label={`${alertShips.length} starred ships with missing gear`}
             >
                 <StarIcon className="w-4 h-4 text-yellow-400" />
@@ -56,7 +56,7 @@ export const StarredShipAlerts: React.FC = () => {
     }
 
     return (
-        <div className="fixed bottom-16 right-4 z-40 w-72 sm:w-80 bg-dark border border-dark-border rounded-lg shadow-lg flex flex-col max-h-80">
+        <div className="w-72 sm:w-80 bg-dark border border-dark-border rounded-lg shadow-lg flex flex-col max-h-80">
             <div className="flex items-center justify-between px-3 py-2 border-b border-dark-border shrink-0">
                 <div className="flex items-center gap-1.5">
                     <StarIcon className="w-4 h-4 text-yellow-400" />
