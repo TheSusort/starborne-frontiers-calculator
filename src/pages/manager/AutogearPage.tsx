@@ -38,6 +38,11 @@ import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
+import {
+    GearSuggestionTargets,
+    GearSuggestionTarget,
+} from '../../components/autogear/GearSuggestionTargets';
+import { getEmptySlotCount, hasEmptySlots } from '../../utils/ship/missingGear';
 
 interface UnmetPriority {
     stat: string;
@@ -155,6 +160,8 @@ export const AutogearPage: React.FC = () => {
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
     const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
+    const [suggestionTargets, setSuggestionTargets] = useState<GearSuggestionTarget[]>([]);
+    const [pendingDonorShipIds, setPendingDonorShipIds] = useState<Set<string>>(new Set());
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -297,6 +304,7 @@ export const AutogearPage: React.FC = () => {
         setOptimizationProgress(null);
         setShipResults({});
         setActiveTab(null);
+        setSuggestionTargets([]);
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
@@ -656,6 +664,10 @@ export const AutogearPage: React.FC = () => {
             })
             .filter((movement): movement is NonNullable<typeof movement> => movement !== null);
 
+        // Capture donor ship IDs before equipping (gear shipId gets updated during equip)
+        const donorIds = new Set(gearMovements.map((m) => m.fromShip.id));
+        setPendingDonorShipIds(donorIds);
+
         if (gearMovements.length > 0) {
             setShowConfirmModal(true);
             setModalMessage(
@@ -675,6 +687,7 @@ export const AutogearPage: React.FC = () => {
             // Store the ship ID for the confirm action
             setCurrentEquippingShipId(shipId);
         } else {
+            setPendingDonorShipIds(new Set());
             void applyGearSuggestionsForShip(shipId);
         }
     };
@@ -718,6 +731,36 @@ export const AutogearPage: React.FC = () => {
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
         setShowConfirmModal(false);
         setCurrentEquippingShipId(null);
+
+        // Build post-equip suggestion targets from pre-captured donor ship IDs
+        const targets: GearSuggestionTarget[] = [];
+
+        // Add donor ships (IDs captured before equipping)
+        pendingDonorShipIds.forEach((donorId) => {
+            if (donorId === shipId) return;
+            const donorShip = getShipById(donorId);
+            if (donorShip) {
+                const emptyCount = getEmptySlotCount(donorShip);
+                if (emptyCount > 0) {
+                    targets.push({ ship: donorShip, emptySlotCount: emptyCount, isDonor: true });
+                }
+            }
+        });
+
+        // Add starred ships with missing gear (excluding just-equipped ship and already-listed donors)
+        ships.forEach((s) => {
+            if (
+                s.starred &&
+                s.id !== shipId &&
+                !pendingDonorShipIds.has(s.id) &&
+                hasEmptySlots(s)
+            ) {
+                targets.push({ ship: s, emptySlotCount: getEmptySlotCount(s), isDonor: false });
+            }
+        });
+
+        setSuggestionTargets(targets);
+        setPendingDonorShipIds(new Set());
     };
 
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
@@ -760,6 +803,10 @@ export const AutogearPage: React.FC = () => {
         if (savedConfig) {
             updateShipConfig(ship.id, savedConfig);
         }
+    };
+
+    const handleSelectSuggestionTarget = (ship: Ship) => {
+        handleShipSelect(ship, 0);
     };
 
     const handleAddShip = () => {
@@ -906,6 +953,14 @@ export const AutogearPage: React.FC = () => {
                         )}
                     </div>
                 </div>
+
+                {suggestionTargets.length > 0 && (
+                    <GearSuggestionTargets
+                        targets={suggestionTargets}
+                        onSelectShip={handleSelectSuggestionTarget}
+                        onDismiss={() => setSuggestionTargets([])}
+                    />
+                )}
 
                 {/* Detailed Results Tabs */}
                 {Object.keys(shipResults).length > 0 && (
