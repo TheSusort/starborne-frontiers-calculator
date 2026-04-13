@@ -16,6 +16,7 @@ import { AutogearConfigProvider } from './contexts/AutogearConfigContext';
 import { TutorialProvider } from './contexts/TutorialContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TutorialOverlay } from './components/tutorial/TutorialOverlay';
+import { StarredShipAlerts } from './components/starred/StarredShipAlerts';
 import { Loader } from './components/ui/Loader';
 import ChunkErrorBoundary from './components/error/ChunkErrorBoundary';
 import { startHeartbeat } from './services/heartbeatService';
@@ -325,6 +326,7 @@ const App: React.FC = () => {
                                                         lastSeenVersion={lastSeenVersion}
                                                     />
                                                     <NotificationContainer />
+                                                    <StarredShipAlerts />
                                                     <TutorialOverlay />
                                                 </main>
                                             </TutorialProvider>
