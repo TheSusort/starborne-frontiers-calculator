@@ -5,6 +5,7 @@ import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useNotification } from '../../hooks/useNotification';
+import { StarToggleButton } from '../starred/StarToggleButton';
 import {
     ShipDisplayProps,
     ShipHeader,
@@ -25,6 +26,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         selected,
         onClick,
         children,
+        onToggleStarred,
         onLockEquipment,
         onQuickAdd,
         isAdded,
@@ -119,8 +121,11 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
                     className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}
                 >
                     <ShipHeader ship={ship} minWidth />
-                    {(onEdit || onRemove || onLockEquipment || onQuickAdd) && (
+                    {(onEdit || onRemove || onToggleStarred || onLockEquipment || onQuickAdd) && (
                         <div className="flex gap-1" data-hide-on-capture="true">
+                            {onToggleStarred && (
+                                <StarToggleButton ship={ship} onToggleStarred={onToggleStarred} />
+                            )}
                             {onLockEquipment && (
                                 <LockEquipmentButton
                                     ship={ship}

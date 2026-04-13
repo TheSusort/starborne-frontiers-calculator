@@ -73,8 +73,15 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships, updateShip } =
-        useShips();
+    const {
+        getShipById,
+        equipMultipleGear,
+        lockEquipment,
+        gearToShipMap,
+        ships,
+        updateShip,
+        toggleStarred,
+    } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -807,6 +814,7 @@ export const AutogearPage: React.FC = () => {
                             }}
                             onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
+                            onToggleStarred={toggleStarred}
                         />
                     </div>
 
@@ -849,6 +857,7 @@ export const AutogearPage: React.FC = () => {
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
                                                     isPrinting={isPrinting}
                                                     optimizeImplants={shipConfig.optimizeImplants}
+                                                    onToggleStarred={toggleStarred}
                                                 />
                                             </div>
 
