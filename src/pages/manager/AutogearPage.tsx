@@ -768,7 +768,11 @@ export const AutogearPage: React.FC = () => {
         // Store donor IDs and the equipped ship ID — the actual suggestion list is
         // computed via useMemo from the latest ships array (after state flushes),
         // so we just need to mark which ship IDs are donors.
-        setDonorContext({ donorIds: pendingDonorShipIdsRef.current, equippedShipId: shipId });
+        // Copy the Set so clearing the ref doesn't mutate the state value.
+        setDonorContext({
+            donorIds: new Set(pendingDonorShipIdsRef.current),
+            equippedShipId: shipId,
+        });
         pendingDonorShipIdsRef.current = new Set();
     };
 
