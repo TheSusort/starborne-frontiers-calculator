@@ -17,6 +17,7 @@ interface CalibrationModalProps {
     onClose: () => void;
     gear: GearPiece | null;
     onConfirm: (gearId: string, shipId: string) => void;
+    onRemoveCalibration?: (gearId: string) => void;
     initialShipId?: string | null;
 }
 
@@ -25,6 +26,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
     onClose,
     gear,
     onConfirm,
+    onRemoveCalibration,
     initialShipId,
 }) => {
     const { ships, getShipById } = useShips();
@@ -135,6 +137,15 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
     const handleConfirm = () => {
         if (gear && selectedShip) {
             onConfirm(gear.id, selectedShip.id);
+            setSelectedShip(null);
+            setSearch('');
+            onClose();
+        }
+    };
+
+    const handleRemoveCalibration = () => {
+        if (gear && onRemoveCalibration) {
+            onRemoveCalibration(gear.id);
             setSelectedShip(null);
             setSearch('');
             onClose();
@@ -286,17 +297,26 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({
                 )}
 
                 {/* Actions */}
-                <div className="flex justify-end gap-4 pt-4 border-t border-dark-border">
-                    <Button variant="secondary" onClick={handleClose}>
-                        Cancel
-                    </Button>
-                    <Button
-                        variant="primary"
-                        onClick={handleConfirm}
-                        disabled={!isEligible || !selectedShip}
-                    >
-                        {gear.calibration ? 'Recalibrate' : 'Calibrate'}
-                    </Button>
+                <div className="flex justify-between pt-4 border-t border-dark-border">
+                    {gear.calibration && onRemoveCalibration ? (
+                        <Button variant="danger" onClick={handleRemoveCalibration}>
+                            Remove Calibration
+                        </Button>
+                    ) : (
+                        <div />
+                    )}
+                    <div className="flex gap-4">
+                        <Button variant="secondary" onClick={handleClose}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleConfirm}
+                            disabled={!isEligible || !selectedShip}
+                        >
+                            {gear.calibration ? 'Recalibrate' : 'Calibrate'}
+                        </Button>
+                    </div>
                 </div>
             </div>
         </Modal>

@@ -165,6 +165,17 @@ export const GearPage: React.FC = () => {
         }
     };
 
+    const handleRemoveCalibration = async (gearId: string) => {
+        try {
+            await updateGearPiece(gearId, {
+                calibration: undefined,
+            });
+            addNotification('success', 'Calibration removed successfully');
+        } catch (error) {
+            addNotification('error', 'Failed to remove calibration');
+        }
+    };
+
     if (loading && inventory.length === 0) {
         return <Loader />;
     }
@@ -256,6 +267,7 @@ export const GearPage: React.FC = () => {
                     onClose={handleCloseCalibration}
                     gear={calibratingGear}
                     onConfirm={(gearId, shipId) => void handleConfirmCalibration(gearId, shipId)}
+                    onRemoveCalibration={(gearId) => void handleRemoveCalibration(gearId)}
                     initialShipId={calibrationInitialShipId}
                 />
             </PageLayout>
