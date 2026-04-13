@@ -863,6 +863,13 @@ export const AutogearPage: React.FC = () => {
                             getShipConfig={getShipConfig}
                             onToggleStarred={toggleStarred}
                         />
+                        {suggestionTargets.length > 0 && (
+                            <GearSuggestionTargets
+                                targets={suggestionTargets}
+                                onSelectShip={handleSelectSuggestionTarget}
+                                onDismiss={() => setSuggestionTargets([])}
+                            />
+                        )}
                     </div>
 
                     {/* Show progress bar for any strategy when optimizing */}
@@ -953,14 +960,6 @@ export const AutogearPage: React.FC = () => {
                         )}
                     </div>
                 </div>
-
-                {suggestionTargets.length > 0 && (
-                    <GearSuggestionTargets
-                        targets={suggestionTargets}
-                        onSelectShip={handleSelectSuggestionTarget}
-                        onDismiss={() => setSuggestionTargets([])}
-                    />
-                )}
 
                 {/* Detailed Results Tabs */}
                 {Object.keys(shipResults).length > 0 && (
