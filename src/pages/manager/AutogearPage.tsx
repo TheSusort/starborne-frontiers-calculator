@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -160,8 +160,41 @@ export const AutogearPage: React.FC = () => {
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
     const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
-    const [suggestionTargets, setSuggestionTargets] = useState<GearSuggestionTarget[]>([]);
+    const [donorContext, setDonorContext] = useState<{
+        donorIds: Set<string>;
+        equippedShipId: string;
+    } | null>(null);
     const pendingDonorShipIdsRef = useRef<Set<string>>(new Set());
+
+    // Compute suggestion targets reactively from the latest ships array.
+    // This avoids stale closure issues — equipMultipleGear updates ships state,
+    // and on the next render this memo picks up the updated equipment.
+    const suggestionTargets = useMemo<GearSuggestionTarget[]>(() => {
+        if (!donorContext) return [];
+        const { donorIds, equippedShipId } = donorContext;
+        const targets: GearSuggestionTarget[] = [];
+
+        // Add donor ships — regardless of starred status
+        donorIds.forEach((donorId) => {
+            if (donorId === equippedShipId) return;
+            const donorShip = ships.find((s) => s.id === donorId);
+            if (donorShip) {
+                const emptyCount = getEmptySlotCount(donorShip);
+                if (emptyCount > 0) {
+                    targets.push({ ship: donorShip, emptySlotCount: emptyCount, isDonor: true });
+                }
+            }
+        });
+
+        // Add starred ships with missing gear (excluding just-equipped ship and donors)
+        ships.forEach((s) => {
+            if (s.starred && s.id !== equippedShipId && !donorIds.has(s.id) && hasEmptySlots(s)) {
+                targets.push({ ship: s, emptySlotCount: getEmptySlotCount(s), isDonor: false });
+            }
+        });
+
+        return targets;
+    }, [donorContext, ships]);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -304,7 +337,7 @@ export const AutogearPage: React.FC = () => {
         setOptimizationProgress(null);
         setShipResults({});
         setActiveTab(null);
-        setSuggestionTargets([]);
+        setDonorContext(null);
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
@@ -732,30 +765,10 @@ export const AutogearPage: React.FC = () => {
         setShowConfirmModal(false);
         setCurrentEquippingShipId(null);
 
-        // Build post-equip suggestion targets from pre-captured donor ship IDs
-        const donorIds = pendingDonorShipIdsRef.current;
-        const targets: GearSuggestionTarget[] = [];
-
-        // Add donor ships (IDs captured before equipping) — regardless of starred status
-        donorIds.forEach((donorId) => {
-            if (donorId === shipId) return;
-            const donorShip = getShipById(donorId);
-            if (donorShip) {
-                const emptyCount = getEmptySlotCount(donorShip);
-                if (emptyCount > 0) {
-                    targets.push({ ship: donorShip, emptySlotCount: emptyCount, isDonor: true });
-                }
-            }
-        });
-
-        // Add starred ships with missing gear (excluding just-equipped ship and already-listed donors)
-        ships.forEach((s) => {
-            if (s.starred && s.id !== shipId && !donorIds.has(s.id) && hasEmptySlots(s)) {
-                targets.push({ ship: s, emptySlotCount: getEmptySlotCount(s), isDonor: false });
-            }
-        });
-
-        setSuggestionTargets(targets);
+        // Store donor IDs and the equipped ship ID — the actual suggestion list is
+        // computed via useMemo from the latest ships array (after state flushes),
+        // so we just need to mark which ship IDs are donors.
+        setDonorContext({ donorIds: pendingDonorShipIdsRef.current, equippedShipId: shipId });
         pendingDonorShipIdsRef.current = new Set();
     };
 
@@ -863,7 +876,7 @@ export const AutogearPage: React.FC = () => {
                                 <GearSuggestionTargets
                                     targets={suggestionTargets}
                                     onSelectShip={handleSelectSuggestionTarget}
-                                    onDismiss={() => setSuggestionTargets([])}
+                                    onDismiss={() => setDonorContext(null)}
                                 />
                             )}
                         </AutogearQuickSettings>
