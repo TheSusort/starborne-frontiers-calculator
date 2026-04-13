@@ -16,6 +16,7 @@ export interface Ship {
     equipment: Partial<Record<GearSlotName, string>>;
     implants: Partial<Record<GearSlotName, string>>;
     equipmentLocked?: boolean;
+    starred?: boolean;
     refits: Refit[];
     affinity?: AffinityName;
     imageKey?: string;
