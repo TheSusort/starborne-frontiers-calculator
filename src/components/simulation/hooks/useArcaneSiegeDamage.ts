@@ -27,6 +27,7 @@ export interface ArcaneSiegeDamageInfo {
     displayedDamageForCurrent: number;
     displayedDamageForSuggested: number;
     shieldedDamage: number | null;
+    currentShieldedDamage: number | null;
     currentDisplayedDamage?: number;
     suggestedDisplayedDamage?: number;
 }
@@ -136,6 +137,7 @@ export function useArcaneSiegeDamage({
             displayedDamageForCurrent,
             displayedDamageForSuggested,
             shieldedDamage,
+            currentShieldedDamage,
             currentDisplayedDamage,
             suggestedDisplayedDamage,
         };

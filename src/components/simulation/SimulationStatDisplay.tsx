@@ -4,6 +4,7 @@ interface ArcaneSiegeInfo {
     multiplier: number;
     isShielded: boolean;
     shieldedDamage: number | null;
+    comparisonBase?: number | null;
 }
 
 interface SimulationStatDisplayProps {
@@ -79,23 +80,25 @@ export const SimulationStatDisplay: React.FC<SimulationStatDisplayProps> = ({
                                     ? formatValue(arcaneSiegeInfo.shieldedDamage)
                                     : arcaneSiegeInfo.shieldedDamage.toLocaleString()}
                             </span>
-                            {currentValue !== undefined && currentValue > 0 && (
-                                <span
-                                    className={`ml-2 ${
-                                        arcaneSiegeInfo.shieldedDamage > currentValue
-                                            ? 'text-green-500'
-                                            : 'text-red-500'
-                                    }`}
-                                >
-                                    (
-                                    {formatComparison(
-                                        arcaneSiegeInfo.shieldedDamage,
-                                        currentValue,
-                                        'percentage'
-                                    )}
-                                    )
-                                </span>
-                            )}
+                            {arcaneSiegeInfo.comparisonBase != null &&
+                                arcaneSiegeInfo.comparisonBase > 0 && (
+                                    <span
+                                        className={`ml-2 ${
+                                            arcaneSiegeInfo.shieldedDamage >
+                                            arcaneSiegeInfo.comparisonBase
+                                                ? 'text-green-500'
+                                                : 'text-red-500'
+                                        }`}
+                                    >
+                                        (
+                                        {formatComparison(
+                                            arcaneSiegeInfo.shieldedDamage,
+                                            arcaneSiegeInfo.comparisonBase,
+                                            'percentage'
+                                        )}
+                                        )
+                                    </span>
+                                )}
                         </>
                     )}
                 </>

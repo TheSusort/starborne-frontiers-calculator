@@ -61,11 +61,16 @@ export const AverageDamage: React.FC<AverageDamageProps> = ({
                 suggestedValue={arcaneSiege.suggestedDisplayedDamage}
                 showComparison={showComparison}
                 arcaneSiegeInfo={
-                    arcaneSiege.hasImplant && showComparison && !arcaneSiege.isShieldSetActive
+                    arcaneSiege.hasImplant &&
+                    ((showComparison && !arcaneSiege.isShieldSetActive) ||
+                        (!showComparison && !arcaneSiege.isCurrentShieldSetActive))
                         ? {
                               multiplier: arcaneSiege.multiplier,
                               isShielded: false,
                               shieldedDamage: arcaneSiege.shieldedDamage,
+                              comparisonBase: showComparison
+                                  ? arcaneSiege.currentShieldedDamage
+                                  : undefined,
                           }
                         : undefined
                 }
