@@ -31,6 +31,7 @@ interface Props {
     onRemoveGear: (shipId: string, slot: GearSlotName, showNotification?: boolean) => void;
     onEdit?: (ship: Ship) => void;
     onRemove?: (id: string) => void;
+    onToggleStarred?: (shipId: string) => Promise<void>;
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onUnequipAll: (shipId: string) => void;
     onEquipImplant?: (shipId: string, slot: ImplantSlotName, gearId: string) => void;
@@ -50,6 +51,7 @@ export const ShipCard: React.FC<Props> = ({
     getGearPiece,
     onEdit,
     onRemove,
+    onToggleStarred,
     onLockEquipment,
     onEquipGear,
     onRemoveGear,
@@ -147,6 +149,7 @@ export const ShipCard: React.FC<Props> = ({
                 ship={ship}
                 onEdit={onEdit}
                 onRemove={onRemove}
+                onToggleStarred={onToggleStarred}
                 onLockEquipment={onLockEquipment}
                 variant={variant}
                 onAddToComparison={onAddToComparison}

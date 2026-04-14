@@ -33,6 +33,7 @@ interface ShipsContextType {
     removeImplant: (shipId: string, slot: ImplantSlotName) => Promise<void>;
     lockEquipment: (shipId: string, locked: boolean) => Promise<void>;
     toggleEquipmentLock: (shipId: string) => Promise<void>;
+    toggleStarred: (shipId: string) => Promise<void>;
     validateGearAssignments: () => void;
     unequipAllEquipment: (shipId: string) => Promise<void>;
     getShipFromGearId: (gearId: string) => Ship | undefined;
@@ -92,6 +93,7 @@ interface RawShipData {
     ship_base_stats: RawShipBaseStats;
     ship_equipment: RawShipEquipment[];
     equipment_locked: boolean;
+    starred: boolean;
     ship_refits: RawShipRefit[];
     ship_implants: RawShipImplant[];
     ship_templates: {
@@ -225,6 +227,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 {} as Record<GearSlotName, string>
             ),
             equipmentLocked: data.equipment_locked || false,
+            starred: data.starred || false,
             refits: data.ship_refits.map((refit) => ({
                 id: refit.id,
                 stats: refit.ship_refit_stats.map(createStat),
@@ -416,6 +419,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     rarity: newShip.rarity,
                     affinity: newShip.affinity,
                     equipment_locked: newShip.equipmentLocked,
+                    starred: newShip.starred,
                     copies: newShip.copies || 1,
                 };
 
@@ -523,6 +527,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         rarity: updates.rarity,
                         affinity: updates.affinity,
                         equipment_locked: updates.equipmentLocked,
+                        starred: updates.starred,
                     })
                     .eq('id', id)
                     .eq('user_id', user.id);
@@ -1027,6 +1032,40 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         [localShips, lockEquipment]
     );
 
+    const toggleStarred = useCallback(
+        async (shipId: string) => {
+            const ship = localShips.find((s) => s.id === shipId);
+            if (!ship) throw new Error('Ship not found');
+
+            const newStarred = !ship.starred;
+
+            // Optimistic update
+            const updatedShips = localShips.map((s) =>
+                s.id === shipId ? { ...s, starred: newStarred } : s
+            );
+            setLocalShips(updatedShips);
+            void setStorageShips(updatedShips);
+
+            if (!user?.id) return;
+
+            try {
+                const { error } = await supabase
+                    .from('ships')
+                    .update({ starred: newStarred })
+                    .eq('id', shipId)
+                    .eq('user_id', user.id);
+
+                if (error) throw error;
+            } catch (error) {
+                await loadShips();
+                console.error('Error updating starred state:', error);
+                addNotification('error', 'Failed to update starred state');
+                throw error;
+            }
+        },
+        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+    );
+
     const getShipFromGearId = useCallback(
         (gearId: string) => {
             const shipId = gearToShipMap.get(gearId);
@@ -1055,6 +1094,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 removeImplant,
                 lockEquipment,
                 toggleEquipmentLock,
+                toggleStarred,
                 validateGearAssignments,
                 unequipAllEquipment,
                 getShipFromGearId,

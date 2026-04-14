@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -12,13 +12,12 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, SHIP_TYPES, GEAR_SLOTS, ShipTypeName } from '../../constants';
+import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
-import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
 import { MilestoneModal } from '../../components/ui/MilestoneModal';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
@@ -38,6 +37,11 @@ import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
+import {
+    GearSuggestionTargets,
+    GearSuggestionTarget,
+} from '../../components/autogear/GearSuggestionTargets';
+import { getEmptySlotCount, hasEmptySlots } from '../../utils/ship/missingGear';
 
 interface UnmetPriority {
     stat: string;
@@ -73,8 +77,15 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece } = useGearUpgrades();
-    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships, updateShip } =
-        useShips();
+    const {
+        getShipById,
+        equipMultipleGear,
+        lockEquipment,
+        gearToShipMap,
+        ships,
+        updateShip,
+        toggleStarred,
+    } = useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -136,11 +147,8 @@ export const AutogearPage: React.FC = () => {
             index: number;
         };
     } | null>(null);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
-    const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
     const [rerunAfterLock, setRerunAfterLock] = useState(false);
     const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
@@ -148,6 +156,41 @@ export const AutogearPage: React.FC = () => {
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
     const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
+    const [donorContext, setDonorContext] = useState<{
+        donorIds: Set<string>;
+        equippedShipId: string;
+    } | null>(null);
+    const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+
+    // Compute suggestion targets reactively from the latest ships array.
+    // Always shows starred ships with missing gear. After equipping, also shows
+    // donor ships that lost gear (regardless of starred status).
+    const suggestionTargets = useMemo<GearSuggestionTarget[]>(() => {
+        const donorIds = donorContext?.donorIds ?? new Set<string>();
+        const equippedShipId = donorContext?.equippedShipId;
+        const targets: GearSuggestionTarget[] = [];
+
+        // Add donor ships — regardless of starred status
+        donorIds.forEach((donorId) => {
+            if (donorId === equippedShipId) return;
+            const donorShip = ships.find((s) => s.id === donorId);
+            if (donorShip) {
+                const emptyCount = getEmptySlotCount(donorShip);
+                if (emptyCount > 0) {
+                    targets.push({ ship: donorShip, emptySlotCount: emptyCount, isDonor: true });
+                }
+            }
+        });
+
+        // Add starred ships with missing gear (excluding just-equipped ship and donors)
+        ships.forEach((s) => {
+            if (s.starred && s.id !== equippedShipId && !donorIds.has(s.id) && hasEmptySlots(s)) {
+                targets.push({ ship: s, emptySlotCount: getEmptySlotCount(s), isDonor: false });
+            }
+        });
+
+        return targets;
+    }, [donorContext, ships]);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -290,6 +333,7 @@ export const AutogearPage: React.FC = () => {
         setOptimizationProgress(null);
         setShipResults({});
         setActiveTab(null);
+        setDonorContext(null);
 
         const startTime = performance.now();
         // eslint-disable-next-line no-console
@@ -631,48 +675,22 @@ export const AutogearPage: React.FC = () => {
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        // Create a list of gear movements
-        const gearMovements = currentShipResults.suggestions
-            .map((suggestion) => {
-                const gear = getGearPiece(suggestion.gearId);
-                if (gear?.shipId && gear.shipId !== shipId) {
-                    const previousShip = getShipById(gear.shipId);
-                    if (previousShip) {
-                        return {
-                            fromShip: previousShip,
-                            gear: gear,
-                            toShip: ship,
-                        };
-                    }
-                }
-                return null;
-            })
-            .filter((movement): movement is NonNullable<typeof movement> => movement !== null);
-
-        if (gearMovements.length > 0) {
-            setShowConfirmModal(true);
-            setModalMessage(
-                <div className="space-y-2 ">
-                    <p>The following gear will be moved:</p>
-                    <ul className="list-disc pl-4 space-y-1">
-                        {gearMovements.map((movement, index) => (
-                            <li key={index}>
-                                {GEAR_SLOTS[movement.gear.slot].label} from{' '}
-                                <span className="font-semibold">{movement.fromShip.name}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <p className="mt-4">Do you want to continue?</p>
-                </div>
-            );
-            // Store the ship ID for the confirm action
-            setCurrentEquippingShipId(shipId);
-        } else {
-            void applyGearSuggestionsForShip(shipId);
-        }
+        // Capture donor ship IDs before equipping, using gearToShipMap (the reliable
+        // source for current gear ownership — gear.shipId is stale from import).
+        const donorIds = new Set<string>();
+        currentShipResults.suggestions.forEach((suggestion) => {
+            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
+            if (currentOwnerId && currentOwnerId !== shipId) {
+                donorIds.add(currentOwnerId);
+            }
+        });
+        void applyGearSuggestionsForShip(shipId, donorIds);
     };
 
-    const applyGearSuggestionsForShip = async (shipId: string) => {
+    const applyGearSuggestionsForShip = async (
+        shipId: string,
+        donorIds: Set<string> = new Set()
+    ) => {
         const ship = selectedShips.find((s) => s?.id === shipId);
         if (!ship) return;
 
@@ -709,8 +727,13 @@ export const AutogearPage: React.FC = () => {
         }
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
-        setShowConfirmModal(false);
-        setCurrentEquippingShipId(null);
+
+        // Trigger suggestion list computation and un-dismiss if previously hidden.
+        setDonorContext({
+            donorIds,
+            equippedShipId: shipId,
+        });
+        setSuggestionsDismissed(false);
     };
 
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
@@ -753,6 +776,10 @@ export const AutogearPage: React.FC = () => {
         if (savedConfig) {
             updateShipConfig(ship.id, savedConfig);
         }
+    };
+
+    const handleSelectSuggestionTarget = (ship: Ship) => {
+        handleShipSelect(ship, 0);
     };
 
     const handleAddShip = () => {
@@ -807,7 +834,15 @@ export const AutogearPage: React.FC = () => {
                             }}
                             onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
-                        />
+                        >
+                            {suggestionTargets.length > 0 && !suggestionsDismissed && (
+                                <GearSuggestionTargets
+                                    targets={suggestionTargets}
+                                    onSelectShip={handleSelectSuggestionTarget}
+                                    onDismiss={() => setSuggestionsDismissed(true)}
+                                />
+                            )}
+                        </AutogearQuickSettings>
                     </div>
 
                     {/* Show progress bar for any strategy when optimizing */}
@@ -849,6 +884,7 @@ export const AutogearPage: React.FC = () => {
                                                     useUpgradedStats={shipConfig.useUpgradedStats}
                                                     isPrinting={isPrinting}
                                                     optimizeImplants={shipConfig.optimizeImplants}
+                                                    onToggleStarred={toggleStarred}
                                                 />
                                             </div>
 
@@ -1241,20 +1277,6 @@ export const AutogearPage: React.FC = () => {
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
-                />
-
-                <ConfirmModal
-                    isOpen={showConfirmModal}
-                    onClose={() => setShowConfirmModal(false)}
-                    onConfirm={() => {
-                        if (currentEquippingShipId) {
-                            void applyGearSuggestionsForShip(currentEquippingShipId);
-                        }
-                    }}
-                    title="Move Gear"
-                    message={modalMessage}
-                    confirmLabel="Move"
-                    cancelLabel="Cancel"
                 />
 
                 <MilestoneModal

@@ -7,6 +7,7 @@ import { GearSuggestion } from '../../types/autogear';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { Ship } from '../../types/ship';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
+import { StarToggleButton } from '../starred/StarToggleButton';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -20,6 +21,7 @@ interface GearSuggestionsProps {
     onLockShip?: (shipId: string) => void;
     isPrinting?: boolean;
     optimizeImplants?: boolean;
+    onToggleStarred?: (shipId: string) => Promise<void>;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -34,6 +36,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     onLockShip,
     isPrinting = false,
     optimizeImplants = false,
+    onToggleStarred,
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(false);
@@ -285,6 +288,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                         >
                             {ship.equipmentLocked ? <LockIcon /> : <UnlockedLockIcon />}
                         </Button>
+                    )}
+                    {onToggleStarred && ship && (
+                        <StarToggleButton ship={ship} onToggleStarred={onToggleStarred} />
                     )}
                     <Button
                         aria-label="Expand suggestions"

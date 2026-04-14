@@ -51,6 +51,7 @@ export interface ShipDisplayProps {
     selected?: boolean;
     onClick?: () => void;
     children?: React.ReactNode;
+    onToggleStarred?: (shipId: string) => Promise<void>;
     onLockEquipment?: (ship: Ship) => Promise<void>;
     onQuickAdd?: (ship: Ship) => Promise<void>;
     isAdded?: boolean;

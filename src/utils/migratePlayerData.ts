@@ -350,13 +350,17 @@ export const syncMigratedDataToSupabase = async (
                 // First, get existing ships to preserve equipment_locked state
                 const { data: existingShips } = await supabase
                     .from('ships')
-                    .select('id, equipment_locked, type')
+                    .select('id, equipment_locked, starred, type')
                     .eq('user_id', userId);
 
                 const existingShipsMap = new Map(
                     existingShips?.map((ship) => [
                         ship.id,
-                        { equipmentLocked: ship.equipment_locked, type: ship.type },
+                        {
+                            equipmentLocked: ship.equipment_locked,
+                            starred: ship.starred,
+                            type: ship.type,
+                        },
                     ]) || []
                 );
 
@@ -389,6 +393,7 @@ export const syncMigratedDataToSupabase = async (
                     affinity: ship.affinity,
                     equipment_locked:
                         existingShipsMap.get(ship.id)?.equipmentLocked ?? ship.equipmentLocked,
+                    starred: existingShipsMap.get(ship.id)?.starred ?? ship.starred,
                     copies: ship.copies,
                     rank: ship.rank,
                     level: ship.level,

@@ -32,6 +32,7 @@ export const ShipsPage: React.FC = () => {
         equipGear,
         removeGear,
         toggleEquipmentLock,
+        toggleStarred,
         unequipAllEquipment,
     } = useShips();
 
@@ -140,6 +141,7 @@ export const ShipsPage: React.FC = () => {
                         setIsFormVisible(true);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
+                    onToggleStarred={toggleStarred}
                     onLockEquipment={handleLockEquipment}
                     onEquipGear={(shipId, slot, gearId) => void equipGear(shipId, slot, gearId)}
                     onRemoveGear={(shipId, slot) => void removeGear(shipId, slot)}
