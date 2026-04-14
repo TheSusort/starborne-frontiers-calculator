@@ -12,13 +12,12 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, SHIP_TYPES, GEAR_SLOTS, ShipTypeName } from '../../constants';
+import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
-import { ConfirmModal } from '../../components/ui/layout/ConfirmModal';
 import { MilestoneModal } from '../../components/ui/MilestoneModal';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
@@ -148,11 +147,8 @@ export const AutogearPage: React.FC = () => {
             index: number;
         };
     } | null>(null);
-    const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [modalMessage, setModalMessage] = useState<React.ReactNode | null>(null);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
-    const [currentEquippingShipId, setCurrentEquippingShipId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<string | null>(null);
     const [rerunAfterLock, setRerunAfterLock] = useState(false);
     const [hasInitializedFromParams, setHasInitializedFromParams] = useState(false);
@@ -679,52 +675,18 @@ export const AutogearPage: React.FC = () => {
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        // Create a list of gear movements using gearToShipMap (the reliable source
-        // for current gear ownership, derived from ship.equipment records).
-        // gear.shipId is stale — it's only set during import and not updated on UI equips.
-        const gearMovements = currentShipResults.suggestions
-            .map((suggestion) => {
-                const gear = getGearPiece(suggestion.gearId);
-                const currentOwnerId = gearToShipMap.get(suggestion.gearId);
-                if (gear && currentOwnerId && currentOwnerId !== shipId) {
-                    const previousShip = getShipById(currentOwnerId);
-                    if (previousShip) {
-                        return {
-                            fromShip: previousShip,
-                            gear: gear,
-                            toShip: ship,
-                        };
-                    }
-                }
-                return null;
-            })
-            .filter((movement): movement is NonNullable<typeof movement> => movement !== null);
-
-        // Capture donor ship IDs before equipping
-        const donorIds = new Set(gearMovements.map((m) => m.fromShip.id));
+        // Capture donor ship IDs before equipping, using gearToShipMap (the reliable
+        // source for current gear ownership — gear.shipId is stale from import).
+        const donorIds = new Set<string>();
+        currentShipResults.suggestions.forEach((suggestion) => {
+            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
+            if (currentOwnerId && currentOwnerId !== shipId) {
+                donorIds.add(currentOwnerId);
+            }
+        });
         setPendingDonorShipIds(donorIds);
 
-        if (gearMovements.length > 0) {
-            setShowConfirmModal(true);
-            setModalMessage(
-                <div className="space-y-2 ">
-                    <p>The following gear will be moved:</p>
-                    <ul className="list-disc pl-4 space-y-1">
-                        {gearMovements.map((movement, index) => (
-                            <li key={index}>
-                                {GEAR_SLOTS[movement.gear.slot].label} from{' '}
-                                <span className="font-semibold">{movement.fromShip.name}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <p className="mt-4">Do you want to continue?</p>
-                </div>
-            );
-            // Store the ship ID for the confirm action
-            setCurrentEquippingShipId(shipId);
-        } else {
-            void applyGearSuggestionsForShip(shipId);
-        }
+        void applyGearSuggestionsForShip(shipId);
     };
 
     const applyGearSuggestionsForShip = async (shipId: string) => {
@@ -764,11 +726,8 @@ export const AutogearPage: React.FC = () => {
         }
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
-        setShowConfirmModal(false);
-        setCurrentEquippingShipId(null);
 
-        // Trigger suggestion list computation. pendingDonorShipIds was set before
-        // the confirm modal, so it's available in this render cycle.
+        // Trigger suggestion list computation.
         setDonorContext({
             donorIds: pendingDonorShipIds,
             equippedShipId: shipId,
@@ -1317,20 +1276,6 @@ export const AutogearPage: React.FC = () => {
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
-                />
-
-                <ConfirmModal
-                    isOpen={showConfirmModal}
-                    onClose={() => setShowConfirmModal(false)}
-                    onConfirm={() => {
-                        if (currentEquippingShipId) {
-                            void applyGearSuggestionsForShip(currentEquippingShipId);
-                        }
-                    }}
-                    title="Move Gear"
-                    message={modalMessage}
-                    confirmLabel="Move"
-                    cancelLabel="Cancel"
                 />
 
                 <MilestoneModal
