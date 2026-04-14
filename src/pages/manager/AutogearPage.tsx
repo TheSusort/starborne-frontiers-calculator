@@ -160,7 +160,6 @@ export const AutogearPage: React.FC = () => {
         donorIds: Set<string>;
         equippedShipId: string;
     } | null>(null);
-    const [pendingDonorShipIds, setPendingDonorShipIds] = useState<Set<string>>(new Set());
 
     // Compute suggestion targets reactively from the latest ships array.
     // This avoids stale closure issues — equipMultipleGear updates ships state,
@@ -684,12 +683,13 @@ export const AutogearPage: React.FC = () => {
                 donorIds.add(currentOwnerId);
             }
         });
-        setPendingDonorShipIds(donorIds);
-
-        void applyGearSuggestionsForShip(shipId);
+        void applyGearSuggestionsForShip(shipId, donorIds);
     };
 
-    const applyGearSuggestionsForShip = async (shipId: string) => {
+    const applyGearSuggestionsForShip = async (
+        shipId: string,
+        donorIds: Set<string> = new Set()
+    ) => {
         const ship = selectedShips.find((s) => s?.id === shipId);
         if (!ship) return;
 
@@ -729,7 +729,7 @@ export const AutogearPage: React.FC = () => {
 
         // Trigger suggestion list computation.
         setDonorContext({
-            donorIds: pendingDonorShipIds,
+            donorIds,
             equippedShipId: shipId,
         });
     };
