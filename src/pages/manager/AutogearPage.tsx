@@ -832,7 +832,6 @@ export const AutogearPage: React.FC = () => {
                             }}
                             onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
-                            onToggleStarred={toggleStarred}
                         >
                             {suggestionTargets.length > 0 && (
                                 <GearSuggestionTargets

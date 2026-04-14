@@ -4,7 +4,6 @@ import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
-import { StarToggleButton } from '../starred/StarToggleButton';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
@@ -31,7 +30,6 @@ interface AutogearQuickSettingsProps {
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
     };
-    onToggleStarred?: (shipId: string) => Promise<void>;
     children?: React.ReactNode;
 }
 
@@ -43,7 +41,6 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onOpenSettings,
     onFindOptimalGear,
     getShipConfig,
-    onToggleStarred,
     children,
 }) => {
     const navigate = useNavigate();
@@ -124,12 +121,6 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                         >
                                             <GearIcon />
                                         </Button>
-                                        {ship && onToggleStarred && (
-                                            <StarToggleButton
-                                                ship={ship}
-                                                onToggleStarred={onToggleStarred}
-                                            />
-                                        )}
                                         <Button
                                             variant="danger"
                                             size="sm"
