@@ -25,7 +25,7 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
     return (
         <div className="card space-y-3">
             <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-theme-text">Ships needing gear</h4>
+                <h4 className="text-sm font-semibold text-theme-text">Suggested Next Autogear</h4>
                 <button
                     onClick={onDismiss}
                     className="text-theme-text-secondary hover:text-theme-text p-1"
@@ -38,7 +38,7 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
                 {targets.map(({ ship, emptySlotCount, isDonor }) => (
                     <div
                         key={ship.id}
-                        className="flex items-center justify-between gap-2 p-2 bg-dark-lighter rounded"
+                        className="flex items-center justify-between gap-2 p-2 bg-dark-lighter"
                     >
                         <div className="flex items-center gap-2 min-w-0">
                             {ship.starred && (
@@ -50,7 +50,7 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
                             </span>
                             {isDonor && (
                                 <span className="text-xs text-yellow-500 whitespace-nowrap">
-                                    (donor)
+                                    (just removed gear)
                                 </span>
                             )}
                         </div>
