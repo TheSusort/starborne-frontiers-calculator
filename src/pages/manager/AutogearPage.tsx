@@ -160,13 +160,14 @@ export const AutogearPage: React.FC = () => {
         donorIds: Set<string>;
         equippedShipId: string;
     } | null>(null);
+    const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
 
     // Compute suggestion targets reactively from the latest ships array.
-    // This avoids stale closure issues — equipMultipleGear updates ships state,
-    // and on the next render this memo picks up the updated equipment.
+    // Always shows starred ships with missing gear. After equipping, also shows
+    // donor ships that lost gear (regardless of starred status).
     const suggestionTargets = useMemo<GearSuggestionTarget[]>(() => {
-        if (!donorContext) return [];
-        const { donorIds, equippedShipId } = donorContext;
+        const donorIds = donorContext?.donorIds ?? new Set<string>();
+        const equippedShipId = donorContext?.equippedShipId;
         const targets: GearSuggestionTarget[] = [];
 
         // Add donor ships — regardless of starred status
@@ -727,11 +728,12 @@ export const AutogearPage: React.FC = () => {
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
 
-        // Trigger suggestion list computation.
+        // Trigger suggestion list computation and un-dismiss if previously hidden.
         setDonorContext({
             donorIds,
             equippedShipId: shipId,
         });
+        setSuggestionsDismissed(false);
     };
 
     const getUnmetPriorities = (stats: BaseStats, shipId?: string): UnmetPriority[] => {
@@ -833,11 +835,11 @@ export const AutogearPage: React.FC = () => {
                             onFindOptimalGear={(...args) => void handleAutogear(...args)}
                             getShipConfig={getShipConfig}
                         >
-                            {suggestionTargets.length > 0 && (
+                            {suggestionTargets.length > 0 && !suggestionsDismissed && (
                                 <GearSuggestionTargets
                                     targets={suggestionTargets}
                                     onSelectShip={handleSelectSuggestionTarget}
-                                    onDismiss={() => setDonorContext(null)}
+                                    onDismiss={() => setSuggestionsDismissed(true)}
                                 />
                             )}
                         </AutogearQuickSettings>
