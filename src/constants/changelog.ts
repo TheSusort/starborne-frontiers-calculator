@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.51.0';
+export const CURRENT_VERSION = '1.52.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.52.0',
+        date: '2026-04-14',
+        changes: [
+            'Star your important ships to mark them as "always geared" — a persistent alert panel appears when starred ships have empty gear or implant slots',
+            'After equipping autogear suggestions, a "Suggested Next Autogear" list shows donor ships that lost gear and starred ships needing attention — click to select them as the next autogear target',
+            'Star toggle available on ship cards and autogear gear suggestions',
+            'Alert panel is minimizable and stacks above the joke corner',
+        ],
+    },
     {
         version: '1.51.0',
         date: '2026-04-11',
