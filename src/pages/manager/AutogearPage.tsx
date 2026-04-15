@@ -32,7 +32,6 @@ import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useAuth } from '../../contexts/AuthProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
-import { removeCalibrationStats } from '../../utils/gear/calibrationCalculator';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
@@ -506,21 +505,15 @@ export const AutogearPage: React.FC = () => {
             // eslint-disable-next-line no-console
             console.log(`Available inventory size for ${ship.name}: ${filteredInventory.length}`);
 
-            // Create calibration-aware gear getter for this ship
-            const baseGearGetter = shipConfig.useUpgradedStats
+            // Gear getter for this ship.
+            // Stored mainStat values are always BASE (uncalibrated) — the import
+            // pipeline normalises calibrated gear at import time.
+            // calculateTotalStats applies the calibration bonus only when
+            // gear.calibration.shipId === the target ship's id, so no reversal
+            // is needed here.
+            const getGearForShip = shipConfig.useUpgradedStats
                 ? getUpgradedGearPiece
                 : getGearPiece;
-            const getGearForShip = (id: string) => {
-                const gear = baseGearGetter(id);
-                if (!gear) return undefined;
-
-                // If calibrated to a DIFFERENT ship, reverse the bonus to get base stats
-                if (gear.calibration?.shipId && gear.calibration.shipId !== ship.id) {
-                    return removeCalibrationStats(gear);
-                }
-
-                return gear; // Calibrated to this ship or uncalibrated - use as-is
-            };
 
             performanceTracker.startTimer('FindOptimalGear');
             const newSuggestions = await Promise.resolve(

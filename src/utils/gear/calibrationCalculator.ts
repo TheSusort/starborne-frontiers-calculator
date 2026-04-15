@@ -41,8 +41,11 @@ export function applyCalibrationStats(gear: GearPiece): GearPiece {
 
 /**
  * Create a copy of the gear piece with calibration stats removed from main stat.
- * Used when scoring calibrated gear for ships other than the one it's calibrated to.
- * Since imported calibrated gear has boosted stats, this reverses the bonus to get base stats.
+ * Reverses the calibration bonus to get base stats.
+ *
+ * NOTE: The import pipeline already normalises calibrated gear to base stats
+ * (see importPlayerData.ts), so this function is only needed for gear objects
+ * whose mainStat has been explicitly boosted (e.g. via applyCalibrationStats).
  */
 export function removeCalibrationStats(gear: GearPiece): GearPiece {
     if (!isCalibrationEligible(gear) || !gear.calibration?.shipId) {

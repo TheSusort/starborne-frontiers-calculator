@@ -88,6 +88,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             onHover={onHover}
                                             onLockShip={onLockShip}
                                             excludeLockShipId={ship?.id}
+                                            suggestedForShipId={ship?.id}
                                         />
                                     </div>
                                 );
@@ -108,6 +109,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             small
                                             onLockShip={onLockShip}
                                             excludeLockShipId={ship?.id}
+                                            suggestedForShipId={ship?.id}
                                         />
                                     </div>
                                 );
@@ -290,7 +292,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                         </Button>
                     )}
                     {onToggleStarred && ship && (
-                        <StarToggleButton ship={ship} onToggleStarred={onToggleStarred} />
+                        <StarToggleButton ship={ship} onToggleStarred={onToggleStarred} size="md" />
                     )}
                     <Button
                         aria-label="Expand suggestions"

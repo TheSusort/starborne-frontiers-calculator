@@ -30,6 +30,11 @@ interface Props {
     small?: boolean;
     /** Show calibrated main stat value even if not actively calibrated */
     showCalibratedPreview?: boolean;
+    /** When set, determines calibration-active status based on this ship
+     *  instead of the currently-equipped ship. Used in autogear suggestions
+     *  so that calibrated gear shows base stats when suggested for a
+     *  different ship. */
+    suggestedForShipId?: string;
 }
 
 export const GearPieceDisplay = memo(
@@ -46,6 +51,7 @@ export const GearPieceDisplay = memo(
         className = '',
         small = false,
         showCalibratedPreview = false,
+        suggestedForShipId,
     }: Props) => {
         const { getShipFromGearId, getShipById, gearToShipMap } = useShips();
         const { getUpgrade } = useGearUpgrades();
@@ -76,8 +82,13 @@ export const GearPieceDisplay = memo(
 
         // Calibration-related computed values
         const isCalibrated = !!gear.calibration?.shipId;
+        // When displayed as a suggestion for a specific ship, check
+        // calibration against that ship instead of the currently-equipped one.
+        const calibrationTargetShipId = suggestedForShipId ?? equippedOnShipId;
         const isCalibrationActive =
-            isCalibrated && equippedOnShipId && gear.calibration?.shipId === equippedOnShipId;
+            isCalibrated &&
+            !!calibrationTargetShipId &&
+            gear.calibration?.shipId === calibrationTargetShipId;
         const calibratedShipName = useMemo(() => {
             if (gear.calibration?.shipId) {
                 const ship = getShipById(gear.calibration.shipId);
@@ -392,8 +403,11 @@ export const GearPieceDisplay = memo(
             return false;
         }
 
-        // Compare calibration
-        if (prevGear.calibration?.shipId !== nextGear.calibration?.shipId) {
+        // Compare calibration and suggestion target
+        if (
+            prevGear.calibration?.shipId !== nextGear.calibration?.shipId ||
+            prevProps.suggestedForShipId !== nextProps.suggestedForShipId
+        ) {
             return false;
         }
 
