@@ -18,6 +18,7 @@ export interface FilterState {
         types?: string[];
         equipped?: string;
         equipmentLocked?: boolean;
+        starred?: boolean;
         affinities?: string[];
         // New advanced filters
         levelRange?: {
@@ -40,6 +41,7 @@ const DEFAULT_STATE: FilterState = {
         types: [],
         equipped: '',
         equipmentLocked: false,
+        starred: false,
         affinities: [],
         levelRange: undefined,
         statFilters: [],

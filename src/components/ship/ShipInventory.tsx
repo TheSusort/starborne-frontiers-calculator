@@ -121,6 +121,7 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.rarities?.length ?? 0) > 0 ||
         (state.filters.affinities?.length ?? 0) > 0 ||
         state.filters.equipmentLocked ||
+        state.filters.starred ||
         searchQuery.length > 0;
 
     const setSelectedFactions = (factions: string[]) => {
@@ -151,10 +152,14 @@ export const ShipInventory: React.FC<Props> = ({
         }));
     };
 
-    const setEquipmentLocked = (locked: boolean) => {
+    const setShipStatus = (values: string[]) => {
         setState((prev: FilterState) => ({
             ...prev,
-            filters: { ...prev.filters, equipmentLocked: locked },
+            filters: {
+                ...prev.filters,
+                equipmentLocked: values.includes('locked'),
+                starred: values.includes('starred'),
+            },
         }));
     };
 
@@ -177,6 +182,7 @@ export const ShipInventory: React.FC<Props> = ({
                 (state.filters.affinities?.length ?? 0) === 0 ||
                 ((ship.affinity && state.filters.affinities?.includes(ship.affinity)) ?? false);
             const matchesEquipmentLocked = !state.filters.equipmentLocked || ship.equipmentLocked;
+            const matchesStarred = !state.filters.starred || ship.starred;
             const matchesSearch =
                 searchQuery === '' ||
                 ship.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -190,6 +196,7 @@ export const ShipInventory: React.FC<Props> = ({
                 matchesRarity &&
                 matchesAffinity &&
                 matchesEquipmentLocked &&
+                matchesStarred &&
                 matchesSearch
             );
         });
@@ -346,11 +353,17 @@ export const ShipInventory: React.FC<Props> = ({
             })),
         },
         {
-            id: 'equipmentLocked',
-            label: 'Equipment Lock',
-            values: state.filters.equipmentLocked ? ['true'] : [],
-            onChange: (values) => setEquipmentLocked(values.length > 0),
-            options: [{ value: 'true', label: 'Locked ships' }],
+            id: 'shipStatus',
+            label: 'Ship Status',
+            values: [
+                ...(state.filters.equipmentLocked ? ['locked'] : []),
+                ...(state.filters.starred ? ['starred'] : []),
+            ],
+            onChange: setShipStatus,
+            options: [
+                { value: 'locked', label: 'Locked' },
+                { value: 'starred', label: 'Starred' },
+            ],
         },
     ];
 
