@@ -2,7 +2,8 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
@@ -33,7 +34,7 @@ export class TwoPassStrategy extends BaseStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean
-    ): Promise<GearSuggestion[]> {
+    ): Promise<AutogearResult> {
         // Initialize progress tracking (slots * gear + potential set combinations)
         const totalOperations =
             Object.keys(GEAR_SLOTS).length * availableInventory.length +
@@ -71,13 +72,19 @@ export class TwoPassStrategy extends BaseStrategy {
         this.completeProgress();
 
         // Convert to suggestions
-        return Object.entries(finalEquipment)
+        const suggestions = Object.entries(finalEquipment)
             .filter((entry): entry is [string, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
                 score: 0, // Score will be calculated later
             }));
+
+        return {
+            suggestions,
+            hardRequirementsMet: true,
+            attempts: 1,
+        };
     }
 
     private async firstPass(

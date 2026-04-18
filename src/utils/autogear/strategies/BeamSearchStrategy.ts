@@ -2,7 +2,8 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
@@ -41,7 +42,7 @@ export class BeamSearchStrategy extends BaseStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean
-    ): Promise<GearSuggestion[]> {
+    ): Promise<AutogearResult> {
         // Calculate total operations:
         // For each slot:
         //   - We have BEAM_WIDTH configurations
@@ -83,13 +84,19 @@ export class BeamSearchStrategy extends BaseStrategy {
         this.completeProgress();
 
         const bestConfig = configurations[0];
-        return Object.entries(bestConfig.equipment)
+        const suggestions = Object.entries(bestConfig.equipment)
             .filter((entry): entry is [string, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
                 score: bestConfig.score,
             }));
+
+        return {
+            suggestions,
+            hardRequirementsMet: true,
+            attempts: 1,
+        };
     }
 
     private async processSlot(

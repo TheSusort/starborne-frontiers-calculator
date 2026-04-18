@@ -2,7 +2,8 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
@@ -39,7 +40,7 @@ export class SetFirstStrategy extends BaseStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[]
-    ): Promise<GearSuggestion[]> {
+    ): Promise<AutogearResult> {
         const setGroups = this.groupInventoryBySets(
             availableInventory,
             ship,
@@ -106,13 +107,19 @@ export class SetFirstStrategy extends BaseStrategy {
         // Ensure progress is complete
         this.completeProgress();
 
-        return Object.entries(equipment)
+        const suggestions = Object.entries(equipment)
             .filter((entry): entry is [string, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
                 score: 0,
             }));
+
+        return {
+            suggestions,
+            hardRequirementsMet: true,
+            attempts: 1,
+        };
     }
 
     private groupInventoryBySets(
