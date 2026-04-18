@@ -431,21 +431,26 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             arenaModifiers
         );
 
-        // Compute violation from the same post-modifier stats calculateTotalScore uses.
-        const totalStats = calculateTotalStats(
-            shipWithNewImplants.baseStats,
-            gearOnly,
-            getGearPiece,
-            shipWithNewImplants.refits,
-            shipWithNewImplants.implants,
-            getEngineeringStatsForShipType(shipWithNewImplants.type),
-            shipWithNewImplants.id
-        );
-        const statsForViolation =
-            arenaModifiers && Object.keys(arenaModifiers).length > 0
-                ? applyArenaModifiers(totalStats.final, arenaModifiers)
-                : totalStats.final;
-        const violation = calculateHardViolation(statsForViolation, priorities);
+        // Only compute violation when at least one priority is hard-flagged.
+        // Otherwise skip the extra calculateTotalStats call entirely.
+        let violation = 0;
+        const hasHardReqs = priorities.some((p) => p.hardRequirement);
+        if (hasHardReqs) {
+            const totalStats = calculateTotalStats(
+                shipWithNewImplants.baseStats,
+                gearOnly,
+                getGearPiece,
+                shipWithNewImplants.refits,
+                shipWithNewImplants.implants,
+                getEngineeringStatsForShipType(shipWithNewImplants.type),
+                shipWithNewImplants.id
+            );
+            const statsForViolation =
+                arenaModifiers && Object.keys(arenaModifiers).length > 0
+                    ? applyArenaModifiers(totalStats.final, arenaModifiers)
+                    : totalStats.final;
+            violation = calculateHardViolation(statsForViolation, priorities);
+        }
 
         performanceTracker.endTimer('CalculateFitness');
         return { fitness, violation };
