@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.52.0';
+export const CURRENT_VERSION = '1.53.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.53.0',
+        date: '2026-04-18',
+        changes: [
+            'Stat priorities can now be flagged as Hard Requirements — the autogear optimizer retries up to 5 times to meet them, and shows the closest-miss with needed-vs-got if no feasible combo exists',
+        ],
+    },
     {
         version: '1.52.0',
         date: '2026-04-14',
