@@ -903,6 +903,11 @@ export const AutogearPage: React.FC = () => {
                                                     isPrinting={isPrinting}
                                                     optimizeImplants={shipConfig.optimizeImplants}
                                                     onToggleStarred={toggleStarred}
+                                                    hardRequirementsMet={
+                                                        results.hardRequirementsMet
+                                                    }
+                                                    hardViolations={results.hardViolations}
+                                                    attempts={results.attempts}
                                                 />
                                             </div>
 

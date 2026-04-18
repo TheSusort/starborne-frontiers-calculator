@@ -8,6 +8,8 @@ import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { Ship } from '../../types/ship';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { StarToggleButton } from '../starred/StarToggleButton';
+import { HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
+import { STATS } from '../../constants/stats';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -22,6 +24,9 @@ interface GearSuggestionsProps {
     isPrinting?: boolean;
     optimizeImplants?: boolean;
     onToggleStarred?: (shipId: string) => Promise<void>;
+    hardRequirementsMet?: boolean;
+    hardViolations?: HardRequirementViolation[];
+    attempts?: number;
 }
 
 export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
@@ -37,6 +42,9 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     isPrinting = false,
     optimizeImplants = false,
     onToggleStarred,
+    hardRequirementsMet = true,
+    hardViolations,
+    attempts = 1,
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(false);
@@ -63,6 +71,32 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
             className={`pt-4 md:pt-0 ${expanded ? 'lg:min-w-[450px] xl:min-w-[650px]' : ''}`}
             data-tutorial="autogear-gear-suggestions"
         >
+            {!hardRequirementsMet && hardViolations && hardViolations.length > 0 && (
+                <div className="p-4 bg-red-900/40 border border-red-700 mb-4">
+                    <h4 className="text-lg font-semibold text-red-200 mb-2">
+                        Could not meet all hard requirements after 5 attempts
+                    </h4>
+                    <p className="text-red-100 mb-2">
+                        Closest result shown. Consider relaxing your hard requirements or acquiring
+                        gear that better fits them.
+                    </p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        {hardViolations.map((v, i) => (
+                            <li key={i} className="text-red-100 text-sm">
+                                {STATS[v.stat].label}: needed {v.kind} {v.limit.toLocaleString()},
+                                got {v.actual.toFixed(1)}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {hardRequirementsMet && attempts > 1 && (
+                <p className="text-xs text-theme-text-secondary mb-2">
+                    Found after {attempts} attempt{attempts === 1 ? '' : 's'}.
+                </p>
+            )}
+
             <div className="">
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
