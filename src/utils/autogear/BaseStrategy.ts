@@ -13,6 +13,8 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected totalOperations: number = 0;
     protected currentOperation: number = 0;
     protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
+    protected currentAttempt?: number;
+    protected maxAttempts?: number;
 
     abstract findOptimalGear(
         ship: Ship,
@@ -39,6 +41,8 @@ export abstract class BaseStrategy implements AutogearStrategy {
                 current,
                 total: this.totalOperations,
                 percentage,
+                attempt: this.currentAttempt,
+                maxAttempts: this.maxAttempts,
             });
         }
     }

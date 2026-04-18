@@ -1,4 +1,4 @@
-import { AutogearStrategy, AutogearResult } from '../AutogearStrategy';
+import { AutogearStrategy, AutogearResult, HardRequirementViolation } from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
@@ -104,15 +104,88 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         };
 
         const hasImplants = availableInventory.some((gear) => gear.slot.startsWith('implant_'));
-
-        // Initialize progress tracking (population size * generations)
         const populationSize = this.getPopulationSize(availableInventory.length, hasImplants);
         const generations = this.getGenerations(populationSize, hasImplants);
-        const totalOperations = populationSize * generations;
-        this.initializeProgress(totalOperations);
-
         const eliteSize = this.getEliteSize(populationSize);
 
+        const MAX_ATTEMPTS = 5;
+        const hasHardRequirements = priorities.some((p) => p.hardRequirement);
+        const attemptCount = hasHardRequirements ? MAX_ATTEMPTS : 1;
+
+        let overallBest: Individual | null = null;
+        let attempts = 0;
+
+        for (let attempt = 1; attempt <= attemptCount; attempt++) {
+            attempts = attempt;
+            this.initializeProgress(populationSize * generations);
+            this.emitAttemptProgress(attempt, attemptCount);
+
+            const bestOfThisRun = await this.runSingleGAPass(
+                ship,
+                priorities,
+                availableInventory,
+                cachedGetGearPiece,
+                getEngineeringStatsForShipType,
+                shipRole,
+                setPriorities,
+                statBonuses,
+                tryToCompleteSets,
+                arenaModifiers,
+                populationSize,
+                generations,
+                eliteSize
+            );
+
+            if (overallBest === null || compareIndividuals(bestOfThisRun, overallBest) < 0) {
+                overallBest = bestOfThisRun;
+            }
+            if (overallBest.violation === 0) break;
+        }
+
+        this.completeProgress();
+        performanceTracker.endTimer('GeneticAlgorithm');
+
+        const best = overallBest!;
+        const hardRequirementsMet = best.violation === 0;
+        const result: AutogearResult = {
+            suggestions: Object.entries(best.equipment)
+                .filter((entry): entry is [string, string] => entry[1] !== undefined)
+                .map(([slotName, gearId]) => ({
+                    slotName,
+                    gearId,
+                    score: best.fitness,
+                })),
+            hardRequirementsMet,
+            attempts,
+        };
+        if (!hardRequirementsMet) {
+            result.violations = this.computeViolations(
+                best.equipment,
+                ship,
+                priorities,
+                cachedGetGearPiece,
+                getEngineeringStatsForShipType,
+                arenaModifiers
+            );
+        }
+        return result;
+    }
+
+    private async runSingleGAPass(
+        ship: Ship,
+        priorities: StatPriority[],
+        availableInventory: GearPiece[],
+        cachedGetGearPiece: (id: string) => GearPiece | undefined,
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole: ShipTypeName | undefined,
+        setPriorities: SetPriority[] | undefined,
+        statBonuses: StatBonus[] | undefined,
+        tryToCompleteSets: boolean | undefined,
+        arenaModifiers: Record<string, number> | null | undefined,
+        populationSize: number,
+        generations: number,
+        eliteSize: number
+    ): Promise<Individual> {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
             availableInventory,
@@ -137,13 +210,11 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         );
         performanceTracker.endTimer('InitialEvaluation');
 
-        performanceTracker.startTimer('GeneticGenerations');
         let bestIndividual: Individual = population[0];
         let generationsWithoutImprovement = 0;
-        // Allow more generations without improvement (reduced from 50 to 15)
-        // This prevents premature convergence
         const maxGenerationsWithoutImprovement = Math.max(15, Math.floor(generations * 0.3));
 
+        performanceTracker.startTimer('GeneticGenerations');
         for (let generation = 0; generation < generations; generation++) {
             const newPopulation: Individual[] = [];
             newPopulation.push(...population.slice(0, eliteSize));
@@ -174,40 +245,80 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             );
             performanceTracker.endTimer('Evaluation');
 
-            // Check for improvement
             const currentBest = population[0];
             if (compareIndividuals(currentBest, bestIndividual) < 0) {
                 bestIndividual = currentBest;
                 generationsWithoutImprovement = 0;
             } else {
                 generationsWithoutImprovement++;
-                // Early termination if no improvement for several generations
                 if (generationsWithoutImprovement >= maxGenerationsWithoutImprovement) {
                     break;
                 }
             }
 
-            // Allow UI to update
             await new Promise((resolve) => setTimeout(resolve, 0));
         }
         performanceTracker.endTimer('GeneticGenerations');
 
-        // Ensure progress is complete
-        this.completeProgress();
+        return bestIndividual;
+    }
 
-        performanceTracker.endTimer('GeneticAlgorithm');
+    private computeViolations(
+        equipment: Partial<Record<GearSlotName, string>>,
+        ship: Ship,
+        priorities: StatPriority[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        arenaModifiers: Record<string, number> | null | undefined
+    ): HardRequirementViolation[] {
+        const gearOnly: Partial<Record<GearSlotName, string>> = {};
+        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
+        Object.entries(equipment).forEach(([slot, gearId]) => {
+            if (slot.startsWith('implant_')) implantsOnly[slot] = gearId;
+            else gearOnly[slot] = gearId;
+        });
+        const hasImplantSlots = Object.keys(implantsOnly).length > 0;
+        const shipForStats: Ship = hasImplantSlots ? { ...ship, implants: implantsOnly } : ship;
 
-        return {
-            suggestions: Object.entries(bestIndividual.equipment)
-                .filter((entry): entry is [string, string] => entry[1] !== undefined)
-                .map(([slotName, gearId]) => ({
-                    slotName,
-                    gearId,
-                    score: bestIndividual.fitness,
-                })),
-            hardRequirementsMet: bestIndividual.violation === 0,
-            attempts: 1,
-        };
+        const totalStats = calculateTotalStats(
+            shipForStats.baseStats,
+            gearOnly,
+            getGearPiece,
+            shipForStats.refits,
+            shipForStats.implants,
+            getEngineeringStatsForShipType(shipForStats.type),
+            shipForStats.id
+        );
+        const stats =
+            arenaModifiers && Object.keys(arenaModifiers).length > 0
+                ? applyArenaModifiers(totalStats.final, arenaModifiers)
+                : totalStats.final;
+
+        const violations: HardRequirementViolation[] = [];
+        for (const p of priorities) {
+            if (!p.hardRequirement) continue;
+            const value = stats[p.stat] || 0;
+            if (p.minLimit && value < p.minLimit) {
+                violations.push({ stat: p.stat, kind: 'min', limit: p.minLimit, actual: value });
+            }
+            if (p.maxLimit && value > p.maxLimit) {
+                violations.push({ stat: p.stat, kind: 'max', limit: p.maxLimit, actual: value });
+            }
+        }
+        return violations;
+    }
+
+    private emitAttemptProgress(attempt: number, maxAttempts: number): void {
+        this.currentAttempt = attempt;
+        this.maxAttempts = maxAttempts;
+        if (!this.progressCallback) return;
+        this.progressCallback({
+            current: 0,
+            total: this.totalOperations,
+            percentage: 0,
+            attempt,
+            maxAttempts,
+        });
     }
 
     private initializePopulation(
