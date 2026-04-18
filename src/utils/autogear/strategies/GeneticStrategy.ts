@@ -1,16 +1,20 @@
-import { AutogearStrategy } from '../AutogearStrategy';
+import { AutogearStrategy, AutogearResult } from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
-import { calculateTotalScore, clearScoreCache } from '../scoring';
+import { calculateTotalScore, calculateHardViolation, clearScoreCache } from '../scoring';
+import { calculateTotalStats } from '../../ship/statsCalculator';
+import { compareIndividuals } from '../individualComparator';
 import { BaseStrategy } from '../BaseStrategy';
 import { performanceTracker } from '../performanceTimer';
+import { applyArenaModifiers } from '../arenaModifiers';
 
 interface Individual {
     equipment: Partial<Record<GearSlotName, string>>;
     fitness: number;
+    violation: number;
 }
 
 /**
@@ -82,7 +86,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null
-    ): Promise<GearSuggestion[]> {
+    ): Promise<AutogearResult> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
 
@@ -134,7 +138,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         performanceTracker.endTimer('InitialEvaluation');
 
         performanceTracker.startTimer('GeneticGenerations');
-        let bestFitness = population[0]?.fitness || 0;
+        let bestIndividual: Individual = population[0];
         let generationsWithoutImprovement = 0;
         // Allow more generations without improvement (reduced from 50 to 15)
         // This prevents premature convergence
@@ -171,9 +175,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             performanceTracker.endTimer('Evaluation');
 
             // Check for improvement
-            const currentBestFitness = population[0]?.fitness || 0;
-            if (currentBestFitness > bestFitness) {
-                bestFitness = currentBestFitness;
+            const currentBest = population[0];
+            if (compareIndividuals(currentBest, bestIndividual) < 0) {
+                bestIndividual = currentBest;
                 generationsWithoutImprovement = 0;
             } else {
                 generationsWithoutImprovement++;
@@ -193,14 +197,17 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         performanceTracker.endTimer('GeneticAlgorithm');
 
-        const bestIndividual = population[0];
-        return Object.entries(bestIndividual.equipment)
-            .filter((entry): entry is [string, string] => entry[1] !== undefined)
-            .map(([slotName, gearId]) => ({
-                slotName,
-                gearId,
-                score: bestIndividual.fitness,
-            }));
+        return {
+            suggestions: Object.entries(bestIndividual.equipment)
+                .filter((entry): entry is [string, string] => entry[1] !== undefined)
+                .map(([slotName, gearId]) => ({
+                    slotName,
+                    gearId,
+                    score: bestIndividual.fitness,
+                })),
+            hardRequirementsMet: bestIndividual.violation === 0,
+            attempts: 1,
+        };
     }
 
     private initializePopulation(
@@ -225,7 +232,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 );
             });
 
-            population.push({ equipment, fitness: 0 });
+            population.push({ equipment, fitness: 0, violation: 0 });
         }
 
         return population;
@@ -247,7 +254,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         const result = population
             .map((individual) => {
-                const fitness = this.calculateFitness(
+                const { fitness, violation } = this.calculateFitness(
                     individual.equipment,
                     ship,
                     priorities,
@@ -259,13 +266,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     tryToCompleteSets,
                     arenaModifiers
                 );
-
-                return {
-                    ...individual,
-                    fitness,
-                };
+                return { ...individual, fitness, violation };
             })
-            .sort((a, b) => b.fitness - a.fitness);
+            .sort(compareIndividuals);
 
         performanceTracker.endTimer('EvaluatePopulation');
         return result;
@@ -282,7 +285,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null
-    ): number {
+    ): { fitness: number; violation: number } {
         performanceTracker.startTimer('CalculateFitness');
 
         // Split equipment into gear and implants for proper scoring
@@ -301,13 +304,10 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         // Otherwise, keep the ship's existing implants for scoring
         const hasImplantSlots = Object.keys(implantsOnly).length > 0;
         const shipWithNewImplants: Ship = hasImplantSlots
-            ? {
-                  ...ship,
-                  implants: implantsOnly,
-              }
+            ? { ...ship, implants: implantsOnly }
             : ship;
 
-        const result = calculateTotalScore(
+        const fitness = calculateTotalScore(
             shipWithNewImplants,
             gearOnly,
             priorities,
@@ -319,8 +319,25 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             tryToCompleteSets,
             arenaModifiers
         );
+
+        // Compute violation from the same post-modifier stats calculateTotalScore uses.
+        const totalStats = calculateTotalStats(
+            shipWithNewImplants.baseStats,
+            gearOnly,
+            getGearPiece,
+            shipWithNewImplants.refits,
+            shipWithNewImplants.implants,
+            getEngineeringStatsForShipType(shipWithNewImplants.type),
+            shipWithNewImplants.id
+        );
+        const statsForViolation =
+            arenaModifiers && Object.keys(arenaModifiers).length > 0
+                ? applyArenaModifiers(totalStats.final, arenaModifiers)
+                : totalStats.final;
+        const violation = calculateHardViolation(statsForViolation, priorities);
+
         performanceTracker.endTimer('CalculateFitness');
-        return result;
+        return { fitness, violation };
     }
 
     private selectParent(population: Individual[]): Individual {
@@ -330,7 +347,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             .fill(null)
             .map(() => population[Math.floor(Math.random() * population.length)]);
         return tournament.reduce((best, current) =>
-            current.fitness > best.fitness ? current : best
+            compareIndividuals(current, best) < 0 ? current : best
         );
     }
 
@@ -343,9 +360,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             ...Object.keys(parent2.equipment),
         ]);
 
-        // Use weighted crossover based on parent fitness
-        const totalFitness = parent1.fitness + parent2.fitness;
-        const parent1Weight = totalFitness > 0 ? parent1.fitness / totalFitness : 0.5;
+        // Use comparator-based weighting: favor the better parent
+        const parent1IsBetter = compareIndividuals(parent1, parent2) < 0;
+        const parent1Weight = parent1IsBetter ? 0.7 : 0.3;
 
         allSlots.forEach((slot) => {
             // Weighted choice favoring the fitter parent
@@ -353,7 +370,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             childEquipment[slot] = useParent1 ? parent1.equipment[slot] : parent2.equipment[slot];
         });
 
-        return { equipment: childEquipment, fitness: 0 };
+        return { equipment: childEquipment, fitness: 0, violation: 0 };
     }
 
     private mutate(
