@@ -161,6 +161,8 @@ export interface AutogearResult {
 
 The interface method signature becomes `findOptimalGear(...): Promise<AutogearResult>`. Call sites (`AutogearPage.tsx`) destructure `.suggestions` for existing downstream code.
 
+**Dead strategies (`BeamSearchStrategy`, `TwoPassStrategy`, `SetFirstStrategy`):** these were removed from the UI but are still registered in `getStrategy.ts` and still implement the old `findOptimalGear: Promise<GearSuggestion[]>` contract. Update them to match the new interface by wrapping their existing return in `{ suggestions, hardRequirementsMet: true, attempts: 1 }` — they don't implement hard-requirement logic, they just report "feasibility not evaluated; treat as met" so the shape compiles and the existing wrapping code keeps working. No user-visible change since they're not selectable. If a future cleanup deletes them outright, that is a separate task and out of scope here.
+
 **Rerun loop** lives inside `GeneticStrategy.findOptimalGear`:
 
 ```text
@@ -186,6 +188,7 @@ Key properties:
 - First-attempt success is the common case and has identical runtime to today.
 - Worst case (infeasible inventory): 5× current runtime. Acceptable given (a) only happens on user-misconfigured requirements, (b) provides actionable feedback.
 - Returns the best across *all* attempts, not just the last — guaranteed closest-to-feasible fallback.
+- `clearScoreCache()` stays at the top of `findOptimalGear` (once per call), *not* per attempt. Same ship, same inventory, same priorities — cached scores are valid across all 5 attempts and provide meaningful speedup on reruns (many combos will be re-generated).
 
 ### 4. UI
 
@@ -209,6 +212,14 @@ Crit (min: 70)                            ← soft, no suffix
 ```
 
 Hover on the `— Hard Requirement 2` text shows a `Tooltip` with "this time it's personal".
+
+> **Note to the implementer:** "Hard Requirement 2" is deliberate — a cheeky reference to the original feature being reintroduced. Keep the literal label, including the `2`, and the tooltip copy verbatim.
+
+**Interaction with existing soft-limit warning:** `AutogearPage.tsx` already renders an "Unmet Stat Priorities" block (around lines 885–921 pre-change) for soft-limit misses via `getUnmetPriorities`. To avoid double-warning the user about the same stat:
+
+- The existing soft-limit warning continues to render for soft limits only — filter `getUnmetPriorities` to exclude priorities where `hardRequirement === true`.
+- Hard-requirement misses are displayed solely via the new banner in `GearSuggestions.tsx`.
+- A single priority that has both a min and a max, with only one flagged hard, is a non-issue in practice — the hard side is either met (no warning) or missed (hard banner); the soft side continues to contribute to the existing warning.
 
 **`GearSuggestions.tsx`** — adds two new UI states driven by `AutogearResult`:
 
