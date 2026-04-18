@@ -1,19 +1,15 @@
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
+import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { EngineeringStat } from '../../types/stats';
-import { AutogearStrategy } from './AutogearStrategy';
+import { AutogearStrategy, AutogearResult, AutogearProgress } from './AutogearStrategy';
 
 export abstract class BaseStrategy implements AutogearStrategy {
     abstract name: string;
     abstract description: string;
 
-    protected progressCallback?: (progress: {
-        current: number;
-        total: number;
-        percentage: number;
-    }) => void;
+    protected progressCallback?: (progress: AutogearProgress) => void;
     protected totalOperations: number = 0;
     protected currentOperation: number = 0;
     protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
@@ -27,12 +23,11 @@ export abstract class BaseStrategy implements AutogearStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean
-    ): Promise<GearSuggestion[]> | GearSuggestion[];
+        tryToCompleteSets?: boolean,
+        arenaModifiers?: Record<string, number> | null
+    ): Promise<AutogearResult> | AutogearResult;
 
-    public setProgressCallback(
-        callback: (progress: { current: number; total: number; percentage: number }) => void
-    ) {
+    public setProgressCallback(callback: (progress: AutogearProgress) => void) {
         this.progressCallback = callback;
     }
 

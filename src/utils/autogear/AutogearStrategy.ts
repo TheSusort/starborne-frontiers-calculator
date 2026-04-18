@@ -1,8 +1,38 @@
 import type { Ship } from '../../types/ship';
 import type { GearPiece } from '../../types/gear';
-import type { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
+import type {
+    StatPriority,
+    GearSuggestion,
+    SetPriority,
+    StatBonus,
+} from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import type { EngineeringStat } from '../../types/stats';
+import type { EngineeringStat, StatName } from '../../types/stats';
+
+export interface HardRequirementViolation {
+    stat: StatName;
+    kind: 'min' | 'max';
+    limit: number;
+    actual: number;
+}
+
+export interface AutogearResult {
+    suggestions: GearSuggestion[];
+    hardRequirementsMet: boolean;
+    /** Only populated when hardRequirementsMet === false. */
+    violations?: HardRequirementViolation[];
+    /** 1..5 — how many GA passes were run. 1 for strategies without reruns. */
+    attempts: number;
+}
+
+export interface AutogearProgress {
+    current: number;
+    total: number;
+    percentage: number;
+    /** Set by strategies that run multiple attempts; otherwise omitted. */
+    attempt?: number;
+    maxAttempts?: number;
+}
 
 export interface AutogearStrategy {
     name: string;
@@ -18,10 +48,8 @@ export interface AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null
-    ): Promise<GearSuggestion[]> | GearSuggestion[];
-    setProgressCallback(
-        callback: (progress: { current: number; total: number; percentage: number }) => void
-    ): void;
+    ): Promise<AutogearResult> | AutogearResult;
+    setProgressCallback(callback: (progress: AutogearProgress) => void): void;
 }
 
 export enum AutogearAlgorithm {
@@ -29,5 +57,4 @@ export enum AutogearAlgorithm {
     SetFirst = 'setFirst',
     BeamSearch = 'beamSearch',
     Genetic = 'genetic',
-    // BruteForce = 'bruteForce',
 }
