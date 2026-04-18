@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Button, Input, Select } from '../ui';
+import React, { useRef, useState } from 'react';
+import { Button, Checkbox, Input, Select, Tooltip } from '../ui';
 import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
 import { STATS } from '../../constants/stats';
@@ -36,19 +36,27 @@ export const StatPriorityForm: React.FC<Props> = ({
     const [maxLimit, setMaxLimit] = useState<string>('');
     const [minLimit, setMinLimit] = useState<string>('');
     const [weight, setWeight] = useState<number>(1);
+    const [hardRequirement, setHardRequirement] = useState<boolean>(false);
+    const [showHardTooltip, setShowHardTooltip] = useState<boolean>(false);
+    const hardLabelRef = useRef<HTMLDivElement>(null);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        const hasLimit = (!hideMinLimit && !!minLimit) || (!hideMaxLimit && !!maxLimit);
+        const hardFlag = hasLimit && hardRequirement ? true : undefined;
 
         onAdd({
             stat: selectedStat,
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
             weight: hideWeight ? 1 : weight,
+            hardRequirement: hardFlag,
         });
 
         setMaxLimit('');
         setMinLimit('');
+        setHardRequirement(false);
         if (!hideWeight) {
             setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
         }
@@ -105,6 +113,33 @@ export const StatPriorityForm: React.FC<Props> = ({
                     />
                 )}
             </div>
+
+            {(!hideMinLimit || !hideMaxLimit) && (
+                <div className="mt-4">
+                    <div
+                        ref={hardLabelRef}
+                        onMouseEnter={() => setShowHardTooltip(true)}
+                        onMouseLeave={() => setShowHardTooltip(false)}
+                        className="inline-block"
+                    >
+                        <Checkbox
+                            id="hardRequirement"
+                            label="Hard Requirement 2"
+                            checked={hardRequirement}
+                            onChange={setHardRequirement}
+                            disabled={!minLimit && !maxLimit}
+                            helpLabel="Force the optimizer to meet this limit. Unlike soft limits, hard requirements are must-meet — the optimizer will retry up to 5 times and fall back to the closest result if no combo can satisfy them."
+                        />
+                    </div>
+                    <Tooltip
+                        isVisible={showHardTooltip && hardRequirement}
+                        targetElement={hardLabelRef.current}
+                        className="bg-dark border border-dark-lighter p-2"
+                    >
+                        <p className="text-xs">this time it&apos;s personal</p>
+                    </Tooltip>
+                </div>
+            )}
 
             <div className="grow mt-4">
                 <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
