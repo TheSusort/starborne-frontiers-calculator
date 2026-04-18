@@ -8,7 +8,11 @@ import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
+import {
+    AutogearAlgorithm,
+    AutogearResult,
+    HardRequirementViolation,
+} from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
@@ -133,6 +137,9 @@ export const AutogearPage: React.FC = () => {
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
                 arenaModifiers: Record<string, number> | null;
+                hardRequirementsMet: boolean;
+                hardViolations?: HardRequirementViolation[];
+                attempts: number;
             }
         >
     >({});
@@ -145,6 +152,8 @@ export const AutogearPage: React.FC = () => {
             name: string;
             index: number;
         };
+        attempt?: number;
+        maxAttempts?: number;
     } | null>(null);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [shipSettings, setShipSettings] = useState<Ship | null>(null);
@@ -350,12 +359,21 @@ export const AutogearPage: React.FC = () => {
                 currentStats: StatBreakdown;
                 suggestedStats: StatBreakdown;
                 arenaModifiers: Record<string, number> | null;
+                hardRequirementsMet: boolean;
+                hardViolations?: HardRequirementViolation[];
+                attempts: number;
             }
         > = {};
 
         // Custom progress callback for team autogear
         const teamProgressCallback = (
-            progress: { current: number; total: number; percentage: number },
+            progress: {
+                current: number;
+                total: number;
+                percentage: number;
+                attempt?: number;
+                maxAttempts?: number;
+            },
             shipName: string,
             index: number
         ) => {
@@ -516,7 +534,7 @@ export const AutogearPage: React.FC = () => {
                 : getGearPiece;
 
             performanceTracker.startTimer('FindOptimalGear');
-            const newSuggestions = await Promise.resolve(
+            const strategyResult: AutogearResult = await Promise.resolve(
                 strategy.findOptimalGear(
                     ship,
                     shipConfig.statPriorities,
@@ -530,6 +548,7 @@ export const AutogearPage: React.FC = () => {
                     arenaModifiers
                 )
             );
+            const newSuggestions = strategyResult.suggestions;
             performanceTracker.endTimer('FindOptimalGear');
 
             // Add used gear to the set
@@ -632,6 +651,9 @@ export const AutogearPage: React.FC = () => {
                     currentStats,
                     suggestedStats,
                     arenaModifiers,
+                    hardRequirementsMet: strategyResult.hardRequirementsMet,
+                    hardViolations: strategyResult.violations,
+                    attempts: strategyResult.attempts,
                 };
             }
             performanceTracker.endTimer('PostProcessing');
@@ -734,6 +756,9 @@ export const AutogearPage: React.FC = () => {
         const targetShipId = shipId || selectedShips[0]?.id || '';
 
         getShipConfig(targetShipId).statPriorities.forEach((priority) => {
+            // Hard-flagged priorities are surfaced in the GearSuggestions banner, not here.
+            if (priority.hardRequirement) return;
+
             const currentValue = stats[priority.stat] || 0;
 
             if (priority.minLimit && currentValue < priority.minLimit) {
@@ -844,7 +869,7 @@ export const AutogearPage: React.FC = () => {
                             current={optimizationProgress.current}
                             total={optimizationProgress.total}
                             percentage={optimizationProgress.percentage}
-                            label={`Optimizing: ${optimizationProgress.currentShip.name} (${optimizationProgress.currentShip.index + 1}/${selectedShips.length})`}
+                            label={`Optimizing: ${optimizationProgress.currentShip.name} (${optimizationProgress.currentShip.index + 1}/${selectedShips.length})${optimizationProgress.attempt && optimizationProgress.maxAttempts && optimizationProgress.attempt > 1 ? ` — Attempt ${optimizationProgress.attempt} of ${optimizationProgress.maxAttempts}` : ''}`}
                         />
                     )}
 
