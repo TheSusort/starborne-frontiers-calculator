@@ -23,6 +23,54 @@ import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
 
+const StatPriorityRow: React.FC<{
+    priority: StatPriority;
+    onRemove: () => void;
+}> = ({ priority, onRemove }) => {
+    const [showTooltip, setShowTooltip] = useState(false);
+    const hardRef = useRef<HTMLSpanElement>(null);
+
+    return (
+        <div className="flex items-center text-sm">
+            <span>
+                {STATS[priority.stat].label}
+                {priority.minLimit && ` (min: ${priority.minLimit})`}
+                {priority.maxLimit && ` (max: ${priority.maxLimit})`}
+                {priority.weight && priority.weight !== 1 && ` (weight: ${priority.weight})`}
+                {priority.hardRequirement && (
+                    <>
+                        {' '}
+                        <span
+                            ref={hardRef}
+                            onMouseEnter={() => setShowTooltip(true)}
+                            onMouseLeave={() => setShowTooltip(false)}
+                            className="text-amber-400 cursor-help"
+                        >
+                            — Hard Requirement 2
+                        </span>
+                        <Tooltip
+                            isVisible={showTooltip}
+                            targetElement={hardRef.current}
+                            className="bg-dark border border-dark-lighter p-2"
+                        >
+                            <p className="text-xs">this time it&apos;s personal</p>
+                        </Tooltip>
+                    </>
+                )}
+            </span>
+            <Button
+                aria-label="Remove priority"
+                variant="danger"
+                size="sm"
+                onClick={onRemove}
+                className="ml-auto"
+            >
+                <CloseIcon />
+            </Button>
+        </div>
+    );
+};
+
 function formatRuleSummary(rule: {
     factions: string[] | null;
     rarities: string[] | null;
@@ -403,25 +451,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <>
                             <h3 className="font-semibold">Stat Priority List</h3>
                             {priorities.map((priority, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                    <span>
-                                        {STATS[priority.stat].label}
-                                        {priority.minLimit && ` (min: ${priority.minLimit})`}
-                                        {priority.maxLimit && ` (max: ${priority.maxLimit})`}
-                                        {priority.weight &&
-                                            priority.weight !== 1 &&
-                                            ` (weight: ${priority.weight})`}
-                                    </span>
-                                    <Button
-                                        aria-label="Remove priority"
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => onRemovePriority(index)}
-                                        className="ml-auto"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
+                                <StatPriorityRow
+                                    key={index}
+                                    priority={priority}
+                                    onRemove={() => onRemovePriority(index)}
+                                />
                             ))}
                             <hr className="my-2 border-dark-lighter" />
                         </>
