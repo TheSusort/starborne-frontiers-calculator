@@ -15,6 +15,7 @@ import {
     calculateCritMultiplier,
     applyAdditiveBonuses,
     calculateMultiplierFactor,
+    calculateHardViolation,
 } from './priorityScore';
 
 // Re-export calculatePriorityScore so existing imports from this module continue to work
@@ -26,6 +27,7 @@ export {
     calculateCritMultiplier,
     applyAdditiveBonuses,
     calculateMultiplierFactor,
+    calculateHardViolation,
 };
 
 // Simple cache for gear combinations

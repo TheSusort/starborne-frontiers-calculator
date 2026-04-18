@@ -346,6 +346,26 @@ function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): nu
     return totalScore;
 }
 
+/**
+ * Sum of normalized violations for all hard-flagged priorities.
+ * Returns 0 when all hard requirements are met (combo is "feasible").
+ * Normalization divides by the limit so cross-stat comparisons are meaningful.
+ */
+export function calculateHardViolation(stats: BaseStats, priorities: StatPriority[]): number {
+    let violation = 0;
+    for (const p of priorities) {
+        if (!p.hardRequirement) continue;
+        const value = stats[p.stat] || 0;
+        if (p.minLimit && value < p.minLimit) {
+            violation += (p.minLimit - value) / p.minLimit;
+        }
+        if (p.maxLimit && value > p.maxLimit) {
+            violation += (value - p.maxLimit) / p.maxLimit;
+        }
+    }
+    return violation;
+}
+
 export function calculatePriorityScore(
     stats: BaseStats,
     priorities: StatPriority[],
