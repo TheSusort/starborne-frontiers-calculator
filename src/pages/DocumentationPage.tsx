@@ -1180,6 +1180,29 @@ const DocumentationPage: React.FC = () => {
                                 </div>
 
                                 <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold">Hard Requirements</h4>
+                                    <p className="text-theme-text mb-2">
+                                        Any min/max limit on a stat priority can be flagged as a{' '}
+                                        <strong>Hard Requirement</strong> via the checkbox in the
+                                        priority form. Soft limits work by penalizing the score when
+                                        they&apos;re missed; the optimizer can still choose to miss
+                                        them if the trade-off is worthwhile. Hard requirements are
+                                        different &mdash; the optimizer is instructed to{' '}
+                                        <em>never</em> pick a combo that violates them, if any
+                                        feasible combo exists in your inventory.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        When the algorithm can&apos;t find a combo that meets every
+                                        hard requirement on the first try, it retries up to five
+                                        times with fresh random starting points. If no attempt
+                                        produces a feasible combo, the closest-to-feasible result is
+                                        shown along with a list of which requirements were missed
+                                        and by how much &mdash; so you can adjust your limits to
+                                        something your inventory can actually hit.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Set Priorities</h4>
                                     <p className="text-theme-text">
                                         Specify which gear sets you want to complete and how many
