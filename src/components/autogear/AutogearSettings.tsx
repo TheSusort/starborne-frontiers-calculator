@@ -46,7 +46,7 @@ const StatPriorityRow: React.FC<{
                             onMouseLeave={() => setShowTooltip(false)}
                             className="text-amber-400 cursor-help"
                         >
-                            — Hard Requirement 2
+                            — Hard Requirement
                         </span>
                         <Tooltip
                             isVisible={showTooltip}

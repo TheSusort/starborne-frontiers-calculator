@@ -5,6 +5,7 @@ export interface AutogearSuggestion {
         minLimit?: number;
         maxLimit?: number;
         reasoning?: string;
+        hardRequirement?: boolean;
     }>;
     statBonuses: Array<{
         stat: string;

@@ -93,6 +93,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                   stat: p.stat,
                   minLimit: p.minLimit,
                   maxLimit: p.maxLimit,
+                  hardRequirement: p.hardRequirement,
               })),
               statBonuses: currentRecommendation.stat_bonuses.map((b) => ({
                   stat: b.stat,

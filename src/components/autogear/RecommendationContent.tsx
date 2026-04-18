@@ -57,6 +57,9 @@ export const RecommendationContent: React.FC<RecommendationContentProps> = ({ su
                                                             {priority.reasoning}
                                                         </span>
                                                     )}
+                                                    {priority.hardRequirement && (
+                                                        <span> (strict)</span>
+                                                    )}
                                                 </span>
                                             </div>
                                         </>

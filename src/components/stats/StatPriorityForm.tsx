@@ -124,7 +124,7 @@ export const StatPriorityForm: React.FC<Props> = ({
                     >
                         <Checkbox
                             id="hardRequirement"
-                            label="Hard Requirement 2"
+                            label="Hard Requirement"
                             checked={hardRequirement}
                             onChange={setHardRequirement}
                             disabled={!minLimit && !maxLimit}
