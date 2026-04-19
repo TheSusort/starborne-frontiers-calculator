@@ -19,7 +19,7 @@ interface Individual {
 
 type InventoryBySlot = Map<GearSlotName, GearPiece[]>;
 
-const EMPTY_PIECES: GearPiece[] = [];
+const EMPTY_PIECES: readonly GearPiece[] = [];
 
 /**
  * Genetic Strategy
