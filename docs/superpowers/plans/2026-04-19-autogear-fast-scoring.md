@@ -2254,8 +2254,6 @@ export const USE_FAST_SCORING = false;
 export const VERIFY_FAST_SCORING = false;
 ```
 
-The `&& false` keeps it disabled-by-default even in dev; developers flip it locally.
-
 - [ ] **Step 2: Commit**
 
 ```bash
