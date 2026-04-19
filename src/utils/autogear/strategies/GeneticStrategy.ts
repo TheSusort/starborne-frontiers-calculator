@@ -10,6 +10,10 @@ import { compareIndividuals } from '../individualComparator';
 import { BaseStrategy } from '../BaseStrategy';
 import { performanceTracker } from '../performanceTimer';
 import { applyArenaModifiers } from '../arenaModifiers';
+import { buildFastScoringContext, type FastScoringContext } from '../fastScoring/context';
+import { USE_FAST_SCORING, VERIFY_FAST_SCORING } from '../fastScoring/featureFlag';
+import { fastScore } from '../fastScoring/fastScore';
+import type { BaseStats } from '../../../types/stats';
 
 interface Individual {
     equipment: Partial<Record<GearSlotName, string>>;
@@ -114,6 +118,21 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             else inventoryBySlot.set(piece.slot, [piece]);
         }
 
+        const fastContext: FastScoringContext | null = USE_FAST_SCORING
+            ? buildFastScoringContext({
+                  ship,
+                  availableInventory,
+                  priorities,
+                  setPriorities,
+                  statBonuses,
+                  shipRole,
+                  tryToCompleteSets,
+                  arenaModifiers,
+                  engineeringStats: getEngineeringStatsForShipType(ship.type),
+                  resolveGearPiece: cachedGetGearPiece,
+              })
+            : null;
+
         const hasImplants = availableInventory.some((gear) => gear.slot.startsWith('implant_'));
         const populationSize = this.getPopulationSize(availableInventory.length, hasImplants);
         const generations = this.getGenerations(populationSize, hasImplants);
@@ -145,7 +164,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 arenaModifiers,
                 populationSize,
                 generations,
-                eliteSize
+                eliteSize,
+                fastContext
             );
 
             if (overallBest === null || compareIndividuals(bestOfThisRun, overallBest) < 0) {
@@ -197,7 +217,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers: Record<string, number> | null | undefined,
         populationSize: number,
         generations: number,
-        eliteSize: number
+        eliteSize: number,
+        fastContext: FastScoringContext | null
     ): Promise<Individual> {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
@@ -220,7 +241,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities,
             statBonuses,
             tryToCompleteSets,
-            arenaModifiers
+            arenaModifiers,
+            fastContext
         );
         performanceTracker.endTimer('InitialEvaluation');
 
@@ -261,7 +283,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 setPriorities,
                 statBonuses,
                 tryToCompleteSets,
-                arenaModifiers
+                arenaModifiers,
+                fastContext
             );
             performanceTracker.endTimer('Evaluation');
 
@@ -380,7 +403,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null
+        arenaModifiers?: Record<string, number> | null,
+        fastContext?: FastScoringContext | null
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
 
@@ -396,7 +420,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     setPriorities,
                     statBonuses,
                     tryToCompleteSets,
-                    arenaModifiers
+                    arenaModifiers,
+                    fastContext
                 );
                 return { ...individual, fitness, violation };
             })
@@ -416,9 +441,43 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null
+        arenaModifiers?: Record<string, number> | null,
+        fastContext?: FastScoringContext | null
     ): { fitness: number; violation: number } {
         performanceTracker.startTimer('CalculateFitness');
+
+        if (fastContext) {
+            const { gearIds, implantIds } = this.equipmentToIdArrays(equipment, fastContext);
+            const { fitness, finalStats } = fastScore(fastContext, gearIds, implantIds);
+
+            let violation = 0;
+            if (fastContext.hasHardRequirements) {
+                // finalStats is guaranteed defined when hasHardRequirements is true
+                violation = calculateHardViolation(finalStats as BaseStats, priorities);
+            }
+
+            if (VERIFY_FAST_SCORING) {
+                this.verifyAgainstSlowPath(
+                    equipment,
+                    ship,
+                    priorities,
+                    getGearPiece,
+                    getEngineeringStatsForShipType,
+                    shipRole,
+                    setPriorities,
+                    statBonuses,
+                    tryToCompleteSets,
+                    arenaModifiers,
+                    fitness,
+                    violation
+                );
+            }
+
+            performanceTracker.endTimer('CalculateFitness');
+            return { fitness, violation };
+        }
+
+        // Slow path (existing code) — unchanged below this line
 
         // Split equipment into gear and implants for proper scoring
         const gearOnly: Partial<Record<GearSlotName, string>> = {};
@@ -598,5 +657,75 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         // Fall back to random piece if no good set pieces found
         return availablePieces[Math.floor(Math.random() * availablePieces.length)].id;
+    }
+
+    private equipmentToIdArrays(
+        equipment: Partial<Record<GearSlotName, string>>,
+        fastContext: FastScoringContext
+    ): { gearIds: number[]; implantIds: number[] } {
+        const gearIds: number[] = [];
+        for (const slot of fastContext.gearSlotOrder) {
+            const id = equipment[slot];
+            gearIds.push(id ? (fastContext.gearRegistry.idOf.get(id) ?? -1) : -1);
+        }
+        const implantIds: number[] = [];
+        for (const slot of fastContext.implantSlotOrder) {
+            const id = equipment[slot];
+            implantIds.push(id ? (fastContext.implantRegistry.idOf.get(id) ?? -1) : -1);
+        }
+        return { gearIds, implantIds };
+    }
+
+    private verifyAgainstSlowPath(
+        equipment: Partial<Record<GearSlotName, string>>,
+        ship: Ship,
+        priorities: StatPriority[],
+        getGearPiece: (id: string) => GearPiece | undefined,
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        shipRole: ShipTypeName | undefined,
+        setPriorities: SetPriority[] | undefined,
+        statBonuses: StatBonus[] | undefined,
+        tryToCompleteSets: boolean | undefined,
+        arenaModifiers: Record<string, number> | null | undefined,
+        fastFitness: number,
+        _fastViolation: number
+    ): void {
+        // Split equipment same way the slow path does
+        const gearOnly: Partial<Record<GearSlotName, string>> = {};
+        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
+        Object.entries(equipment).forEach(([slot, gearId]) => {
+            if (slot.startsWith('implant_')) implantsOnly[slot] = gearId;
+            else gearOnly[slot] = gearId;
+        });
+        const hasImplantSlots = Object.keys(implantsOnly).length > 0;
+        const shipWithNewImplants: Ship = hasImplantSlots
+            ? { ...ship, implants: implantsOnly }
+            : ship;
+
+        const slowFitness = calculateTotalScore(
+            shipWithNewImplants,
+            gearOnly,
+            priorities,
+            getGearPiece,
+            getEngineeringStatsForShipType,
+            shipRole,
+            setPriorities,
+            statBonuses,
+            tryToCompleteSets,
+            arenaModifiers
+        );
+
+        const relTol = 1e-6;
+        const scale = Math.max(1, Math.abs(slowFitness), Math.abs(fastFitness));
+        if (Math.abs(slowFitness - fastFitness) > relTol * scale) {
+            // eslint-disable-next-line no-console
+            console.error('[VERIFY_FAST_SCORING] Fitness divergence', {
+                slowFitness,
+                fastFitness,
+                equipment,
+                shipRole,
+                arenaModifiers,
+            });
+        }
     }
 }
