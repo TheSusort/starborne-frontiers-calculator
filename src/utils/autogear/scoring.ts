@@ -30,6 +30,20 @@ export {
     calculateHardViolation,
 };
 
+// Exported for testing only.
+export function evictOldestIfFull<K, V>(
+    cache: Map<K, V>,
+    limit: number,
+    onEvict?: (key: K) => void
+): void {
+    if (cache.size < limit) return;
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+        cache.delete(oldestKey);
+        onEvict?.(oldestKey);
+    }
+}
+
 // Simple cache for gear combinations
 const scoreCache = new Map<string, number>();
 const CACHE_SIZE_LIMIT = 50000; // Increased cache size for better hit rates
@@ -247,12 +261,7 @@ export function calculateTotalScore(
 
     // Cache the result
     performanceTracker.startTimer('CacheResult');
-    if (scoreCache.size >= CACHE_SIZE_LIMIT) {
-        // Clear cache if it gets too large
-        scoreCache.clear();
-        equipmentKeyCache.clear();
-        // Note: We keep implantsKeyCache and arcaneSiegeCache as they're per-ship and small
-    }
+    evictOldestIfFull(scoreCache, CACHE_SIZE_LIMIT);
     scoreCache.set(cacheKey, score);
     performanceTracker.endTimer('CacheResult');
 

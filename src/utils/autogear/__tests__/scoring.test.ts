@@ -3,6 +3,7 @@ import {
     applyAdditiveBonuses,
     calculateMultiplierFactor,
     calculateHardViolation,
+    evictOldestIfFull,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
 import { StatBonus, StatPriority } from '../../../types/autogear';
@@ -175,5 +176,35 @@ describe('calculateHardViolation', () => {
             { stat: 'hacking', minLimit: 100, hardRequirement: true },
         ];
         expect(calculateHardViolation(stats, priorities)).toBeCloseTo(1.0, 10);
+    });
+});
+
+describe('evictOldestIfFull', () => {
+    it('does nothing when size < limit', () => {
+        const m = new Map<string, number>([['a', 1]]);
+        evictOldestIfFull(m, 2);
+        expect(m.size).toBe(1);
+    });
+
+    it('evicts the oldest entry when size === limit', () => {
+        const m = new Map<string, number>([
+            ['a', 1],
+            ['b', 2],
+            ['c', 3],
+        ]);
+        evictOldestIfFull(m, 3);
+        expect(m.has('a')).toBe(false);
+        expect(m.has('b')).toBe(true);
+        expect(m.has('c')).toBe(true);
+    });
+
+    it('calls onEvict with the evicted key', () => {
+        const m = new Map([
+            ['a', 1],
+            ['b', 2],
+        ]);
+        const evicted: string[] = [];
+        evictOldestIfFull(m, 2, (k) => evicted.push(k));
+        expect(evicted).toEqual(['a']);
     });
 });
