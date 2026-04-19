@@ -62,9 +62,53 @@ Helper `assertFloatsClose(a, b, { relative: true })` / `assertFloatsClose(a, b, 
 
 ---
 
+## ⚠ Correctness invariants — read before implementing Phase 2
+
+These three invariants are easy to get wrong and cause hard-to-debug divergence. Re-read `src/utils/ship/statsCalculator.ts` if anything below is unclear.
+
+### Invariant 1: percentage-stat references differ by pipeline stage
+
+`addStatModifier` in `statsCalculator.ts` takes a `baseStats` argument that it uses **only** when the stat is a flexible (non-percentage-only) stat applied with `type: 'percentage'`. The reference `baseStats` used in the slow path varies:
+
+| Pipeline stage | Percentage reference | Slow-path line |
+|---|---|---|
+| Refits | `baseStats` (the ship's base) | statsCalculator.ts:46 |
+| Engineering | `baseStats` | statsCalculator.ts:53 |
+| Gear main + sub | `breakdown.afterEngineering` | statsCalculator.ts:76, 80 |
+| Set bonuses | `breakdown.afterEngineering` | statsCalculator.ts:159 |
+| Implant subs | `breakdown.afterEngineering` | statsCalculator.ts:97 |
+
+Fast-path translation:
+
+- `shipPrefix` = base + refits + engineering → compute using `ship.baseStats` as the percentage reference (matches slow path for refits and engineering). This lives in Task 8.
+- Once `shipPrefix` is computed, it *is* the slow path's `afterEngineering`. Convert it once via `statVectorToBaseStats(shipPrefix)` → call the result `percentRef`.
+- Pass `percentRef` (NOT `baseStats`) as the percentage reference to: `buildGearRegistry` (both gear and implant registries), and the set-bonus application inside `fastCalculateStats`.
+
+Precomputed per-piece stat vectors in the registry are therefore only valid for the ship they were built for. That's fine — each GA run has exactly one ship and rebuilds its context.
+
+### Invariant 2: ship implants when the GA is not optimizing them
+
+The GA optimizes implants only when the filtered inventory contains implant pieces. When it doesn't, the slow path still applies `ship.implants` (the ship's currently-equipped implants) via `calculateTotalStats`'s `implants` argument.
+
+Fast-path rule: the context captures `ship.implants` at build time and, when `optimizingImplants === false`, uses those fixed ids on every `fastScore` call. When `optimizingImplants === true`, the individual's `implantIds` drive implant selection and ship.implants is ignored.
+
+### Invariant 3: damageReduction cap guard
+
+Slow path (statsCalculator.ts:126):
+
+```ts
+if (breakdown.base.damageReduction && breakdown.final.damageReduction) { ... }
+```
+
+Both values must be truthy (non-zero, non-undefined). The fast path must use the same guard — a `> 0` check is close but semantically differs for `undefined` (which is treated as 0 by `||` but not by `&&` on a possibly-absent field).
+
+---
+
 # Phase 1 — Surgical wins (independent of fast path)
 
 These land real gains (~100–150ms expected) with zero architectural change. Each task is its own commit. Phase 1 is independently shippable and should be merged before Phase 2 begins.
+
+**Note on the "duplicated arena-modifier application" from the spec:** That duplication only manifests when hard requirements are active (two `calculateTotalStats` + `applyArenaModifiers` calls per fitness eval). Fixing it in-place in today's `GeneticStrategy.calculateFitness` requires an API change to `calculateTotalScore`. Instead of touching the slow path, Phase 2's `fastScore` eliminates the duplication structurally: when `hasHardRequirements`, it returns `finalStats` alongside `fitness` so the caller reuses them for violation without a second stat calculation. Phase 1 does NOT ship this fix. Expect it to land with Phase 2.
 
 ## Task 1: Pre-index inventory by slot in `GeneticStrategy`
 
@@ -807,15 +851,19 @@ export interface GearRegistry {
 /**
  * Build a registry for the pre-filtered inventory of a single run. Piece stats
  * (main + sub, NOT counting set bonuses or calibration — those are applied later
- * in the pipeline) are precomputed into statBuffer as Float64 contributions to
- * the ship's "afterEngineering" stats.
+ * in the pipeline) are precomputed into statBuffer as Float64 contributions.
  *
- * NOTE: This function mirrors the "piece contributes to afterGear" portion of
+ * `percentRef` is the reference used for percentage-typed flexible stats. For
+ * gear/implant pieces this MUST be the "afterEngineering" stats (i.e. the
+ * ship's baseStats with refits+engineering applied), NOT the raw baseStats.
+ * See Invariant 1 in the plan preamble.
+ *
+ * This function mirrors the "piece contributes to afterGear" portion of
  * calculateTotalStats. Keep in sync when that pipeline changes.
  */
 export function buildGearRegistry(
     inventory: readonly GearPiece[],
-    baseStats: BaseStats
+    percentRef: BaseStats
 ): GearRegistry {
     const pieces = [...inventory];
     const idOf = new Map<string, number>();
@@ -857,14 +905,12 @@ export function buildGearRegistry(
         }
 
         // Compute stat contribution (main + subs) into tmp, then copy into buffer.
-        // This replicates addStatModifier from statsCalculator for a single piece
-        // against base stats (not afterEngineering — piece contribution is additive
-        // and independent of engineering at this level). The actual apply happens
-        // at scoring time against afterEngineering stats.
+        // This replicates addStatModifier from statsCalculator for a single piece,
+        // using percentRef (= afterEngineering) as the percentage reference.
         for (let k = 0; k < STAT_COUNT; k++) tmp[k] = 0;
-        applyPieceStat(piece.mainStat, tmp, baseStats);
+        applyPieceStat(piece.mainStat, tmp, percentRef);
         if (piece.subStats) {
-            for (const s of piece.subStats) applyPieceStat(s, tmp, baseStats);
+            for (const s of piece.subStats) applyPieceStat(s, tmp, percentRef);
         }
         const base = i * STAT_COUNT;
         for (let k = 0; k < STAT_COUNT; k++) statBuffer[base + k] = tmp[k];
@@ -886,7 +932,7 @@ export function buildGearRegistry(
 function applyPieceStat(
     stat: Stat | undefined | null,
     target: StatVector,
-    baseStats: BaseStats
+    percentRef: BaseStats
 ): void {
     if (!stat) return;
     const idx = STAT_INDEX[stat.name];
@@ -896,8 +942,8 @@ function applyPieceStat(
     if (isPercentOnly) {
         target[idx] += stat.value;
     } else if (stat.type === 'percentage') {
-        const baseValue = (baseStats as any)[stat.name] ?? 0;
-        target[idx] += baseValue * (stat.value / 100);
+        const refValue = (percentRef as any)[stat.name] ?? 0;
+        target[idx] += refValue * (stat.value / 100);
     } else {
         target[idx] += stat.value;
     }
@@ -927,6 +973,8 @@ import { buildGearRegistry, addPieceStatsInto } from '../gearRegistry';
 import { createStatVector, STAT_INDEX, STAT_COUNT } from '../statVector';
 import { generateTestInventory, TEST_BASE_STATS } from './fixtures/testInventory';
 
+// For these unit tests percentRef = TEST_BASE_STATS is fine (no engineering).
+// The real usage passes `statVectorToBaseStats(shipPrefix)` instead.
 describe('buildGearRegistry', () => {
     it('assigns unique integer ids for every piece', () => {
         const inventory = generateTestInventory(1, 12);
@@ -1386,10 +1434,17 @@ export function createWorkspace(setCount: number): FastCalcWorkspace {
 export interface FastCalcInputs {
     readonly registry: GearRegistry;
     readonly shipPrefix: StatVector;
-    readonly implantRegistry: GearRegistry; // separate registry for implants (can be same object if merged)
+    readonly implantRegistry: GearRegistry; // separate registry for implants
     readonly getImplantPiece: (id: number) => GearPiece;
     readonly getGearPiece: (id: number) => GearPiece;
+    /** Ship's raw base stats — only used for the damageReduction cap guard. */
     readonly baseStats: BaseStats;
+    /**
+     * Percentage reference for gear / set-bonus / implant percentage stats.
+     * MUST equal the slow path's `afterEngineering` — i.e. statVectorToBaseStats(shipPrefix).
+     * See Invariant 1.
+     */
+    readonly percentRef: BaseStats;
 }
 
 /**
@@ -1406,7 +1461,7 @@ export function fastCalculateStats(
     gearIds: readonly number[],
     implantIds: readonly number[]
 ): void {
-    const { registry, shipPrefix, implantRegistry, getGearPiece, getImplantPiece, baseStats } = inputs;
+    const { registry, shipPrefix, implantRegistry, getImplantPiece, baseStats, percentRef } = inputs;
     const { stats, setCount } = workspace;
 
     // Stage 1-3: copy prefix into stats
@@ -1423,23 +1478,26 @@ export function fastCalculateStats(
         if (setId !== 0) setCount[setId]++;
     }
 
-    // Stage 5: set bonuses
-    applySetBonuses(stats, setCount, registry, gearIds, getGearPiece, baseStats);
+    // Stage 5: set bonuses — percentage stats reference afterEngineering (= percentRef)
+    applySetBonuses(stats, setCount, registry, percentRef);
 
-    // Stage 6: implant sub stats
+    // Stage 6: implant sub stats (precomputed vectors already use percentRef)
     for (let i = 0; i < implantIds.length; i++) {
         const id = implantIds[i];
         if (id < 0) continue;
         addPieceStatsInto(implantRegistry, id, stats);
     }
 
-    // Stage 7: special implant multipliers (CODE_GUARD, CIPHER_LINK) based on final stats
+    // Stage 7: special implant multipliers (CODE_GUARD, CIPHER_LINK) — based on final stats
     applySpecialImplants(stats, implantIds, getImplantPiece);
 
-    // Stage 8: damageReduction cap (max of innate vs gear contribution)
-    const innateDR = baseStats.damageReduction ?? 0;
-    if (innateDR > 0 && stats[STAT_INDEX.damageReduction] > 0) {
-        const gearDR = stats[STAT_INDEX.damageReduction] - innateDR;
+    // Stage 8: damageReduction cap. Match the slow path guard EXACTLY:
+    //   slow path: if (breakdown.base.damageReduction && breakdown.final.damageReduction)
+    // Both must be truthy (non-zero, non-undefined). See Invariant 3.
+    const innateDR = baseStats.damageReduction;
+    const finalDR = stats[STAT_INDEX.damageReduction];
+    if (innateDR && finalDR) {
+        const gearDR = finalDR - innateDR;
         stats[STAT_INDEX.damageReduction] = Math.max(innateDR, gearDR);
     }
 }
@@ -1448,9 +1506,7 @@ function applySetBonuses(
     stats: StatVector,
     setCount: Uint8Array,
     registry: GearRegistry,
-    gearIds: readonly number[],
-    getGearPiece: (id: number) => GearPiece,
-    baseStats: BaseStats
+    percentRef: BaseStats
 ): void {
     for (let setId = 1; setId < setCount.length; setId++) {
         const count = setCount[setId];
@@ -1462,9 +1518,10 @@ function applySetBonuses(
         const bonusCount = Math.floor(count / minPieces);
         if (bonusCount === 0) continue;
 
-        // Apply setDef.stats bonusCount times
+        // Apply setDef.stats bonusCount times, using percentRef (afterEngineering)
+        // as the percentage reference — matches slow path statsCalculator.ts:159.
         for (let b = 0; b < bonusCount; b++) {
-            for (const stat of setDef.stats) applyStat(stat, stats, baseStats);
+            for (const stat of setDef.stats) applyStat(stat, stats, percentRef);
         }
     }
 }
@@ -1502,15 +1559,15 @@ function getSpecialImplantMultiplier(setBonus: string, rarity: string): number |
     return null;
 }
 
-function applyStat(stat: Stat, target: StatVector, baseStats: BaseStats): void {
+function applyStat(stat: Stat, target: StatVector, percentRef: BaseStats): void {
     const idx = STAT_INDEX[stat.name];
     if (idx === undefined) return;
     const isPercentOnly = (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat.name);
     if (isPercentOnly) {
         target[idx] += stat.value;
     } else if (stat.type === 'percentage') {
-        const baseValue = (baseStats as any)[stat.name] ?? 0;
-        target[idx] += baseValue * (stat.value / 100);
+        const refValue = (percentRef as any)[stat.name] ?? 0;
+        target[idx] += refValue * (stat.value / 100);
     } else {
         target[idx] += stat.value;
     }
@@ -1550,7 +1607,8 @@ import { buildGearRegistry, type GearRegistry } from './gearRegistry';
 import { computeShipPrefix } from './shipPrefix';
 import { createWorkspace, type FastCalcWorkspace } from './fastCalculateStats';
 import { FastCache } from './fastCache';
-import type { StatVector } from './statVector';
+import { statVectorToBaseStats, type StatVector } from './statVector';
+import type { BaseStats } from '../../../types/stats';
 
 export interface FastScoringContext {
     readonly ship: Ship;
@@ -1564,12 +1622,23 @@ export interface FastScoringContext {
     readonly gearRegistry: GearRegistry;
     readonly implantRegistry: GearRegistry;
     readonly shipPrefix: StatVector;
+    /** statVectorToBaseStats(shipPrefix). Percentage reference for gear/set/implant. */
+    readonly percentRef: BaseStats;
     readonly cache: FastCache<number>;
     readonly workspace: FastCalcWorkspace;
     /** Ordered list of gear-only slots (no implants). */
     readonly gearSlotOrder: readonly GearSlotName[];
     /** Ordered list of implant-only slots. */
     readonly implantSlotOrder: readonly GearSlotName[];
+
+    /** True iff the GA is optimizing implants (inventory contains implant pieces). */
+    readonly optimizingImplants: boolean;
+    /**
+     * When optimizingImplants === false, these are the ids of ship.implants pieces
+     * in implantRegistry. Used as a constant "implantIds" array for every fastScore
+     * call. Empty array when optimizingImplants === true. See Invariant 2.
+     */
+    readonly fixedImplantIds: readonly number[];
 
     readonly hasHardRequirements: boolean;
 }
@@ -1584,17 +1653,57 @@ export interface BuildContextInput {
     tryToCompleteSets?: boolean;
     arenaModifiers?: Record<string, number> | null;
     engineeringStats: EngineeringStat | undefined;
+    /**
+     * Used only when the GA is NOT optimizing implants — so the context can
+     * materialize ship.implants into the implant registry (Invariant 2).
+     * Typically this is GeneticStrategy's cachedGetGearPiece.
+     */
+    resolveGearPiece?: (id: string) => GearPiece | undefined;
 }
 
 const CACHE_LIMIT = 50000;
 
+/**
+ * IMPORTANT build order (see Invariant 1 in plan preamble):
+ *   1. Compute shipPrefix = base + refits + engineering (uses ship.baseStats as percent ref).
+ *   2. Convert shipPrefix to BaseStats → percentRef.
+ *   3. Build gearRegistry against percentRef (NOT baseStats).
+ *   4. Build implantRegistry:
+ *        - If optimizing implants: from the inventory's implant pieces, against percentRef.
+ *        - Else: from the ship's currently-equipped implants, against percentRef. Also
+ *          capture their ids in fixedImplantIds for use on every fastScore call.
+ */
 export function buildFastScoringContext(input: BuildContextInput): FastScoringContext {
     const gearOnly = input.availableInventory.filter((p) => !p.slot.startsWith('implant_'));
-    const implantOnly = input.availableInventory.filter((p) => p.slot.startsWith('implant_'));
+    const inventoryImplants = input.availableInventory.filter((p) => p.slot.startsWith('implant_'));
+    const optimizingImplants = inventoryImplants.length > 0;
 
-    const gearRegistry = buildGearRegistry(gearOnly, input.ship.baseStats);
-    const implantRegistry = buildGearRegistry(implantOnly, input.ship.baseStats);
+    // 1–2. Prefix + percentRef
     const shipPrefix = computeShipPrefix(input.ship, input.engineeringStats);
+    const percentRef = statVectorToBaseStats(shipPrefix);
+
+    // 3. Gear registry
+    const gearRegistry = buildGearRegistry(gearOnly, percentRef);
+
+    // 4. Implant registry — depends on whether GA is optimizing implants
+    let implantRegistry: GearRegistry;
+    let fixedImplantIds: number[];
+    if (optimizingImplants) {
+        implantRegistry = buildGearRegistry(inventoryImplants, percentRef);
+        fixedImplantIds = [];
+    } else {
+        // Collect ship.implants piece objects via the getter. Callers (GeneticStrategy)
+        // must ensure these are available in the gear cache — normally ship.implants
+        // ids are resolvable via getGearPiece at this point.
+        const shipImplantPieces: GearPiece[] = [];
+        for (const id of Object.values(input.ship.implants ?? {})) {
+            if (!id) continue;
+            const piece = input.resolveGearPiece?.(id);
+            if (piece) shipImplantPieces.push(piece);
+        }
+        implantRegistry = buildGearRegistry(shipImplantPieces, percentRef);
+        fixedImplantIds = shipImplantPieces.map((p) => implantRegistry.idOf.get(p.id)!);
+    }
 
     const totalSets = Math.max(
         gearRegistry.setIdToName.length,
@@ -1616,10 +1725,13 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         gearRegistry,
         implantRegistry,
         shipPrefix,
+        percentRef,
         cache: new FastCache<number>(CACHE_LIMIT),
         workspace,
         gearSlotOrder,
         implantSlotOrder,
+        optimizingImplants,
+        fixedImplantIds,
         hasHardRequirements: input.priorities.some((p) => p.hardRequirement),
     };
 }
@@ -1655,17 +1767,25 @@ export interface FastScoreResult {
  *
  * gearIds: array matching context.gearSlotOrder; -1 for empty slots.
  * implantIds: array matching context.implantSlotOrder; -1 for empty slots.
+ *   Pass an empty array [] when the GA is not optimizing implants — the
+ *   context's `fixedImplantIds` (built from ship.implants) will be used instead.
+ *   See Invariant 2.
  */
 export function fastScore(
     context: FastScoringContext,
     gearIds: readonly number[],
     implantIds: readonly number[]
 ): FastScoreResult {
-    const { workspace, cache, hasHardRequirements } = context;
+    const { workspace, cache, hasHardRequirements, optimizingImplants, fixedImplantIds } = context;
 
-    // Cache key: concat gear ids, separator, implant ids
-    const cacheKey =
-        buildFastCacheKey(gearIds) + '|' + buildFastCacheKey(implantIds);
+    // Resolve effective implant ids (fallback to fixedImplantIds when not optimizing implants)
+    const effectiveImplantIds = optimizingImplants ? implantIds : fixedImplantIds;
+
+    // Cache key: concat gear ids, separator, implant ids.
+    // Omit implants from the key when they're constant (fixedImplantIds) — saves work.
+    const cacheKey = optimizingImplants
+        ? buildFastCacheKey(gearIds) + '|' + buildFastCacheKey(effectiveImplantIds)
+        : buildFastCacheKey(gearIds);
 
     const cached = cache.get(cacheKey);
     if (cached !== undefined && !hasHardRequirements) {
@@ -1681,10 +1801,11 @@ export function fastScore(
             getImplantPiece: (id) => context.implantRegistry.pieces[id],
             getGearPiece: (id) => context.gearRegistry.pieces[id],
             baseStats: context.ship.baseStats,
+            percentRef: context.percentRef,
         },
         workspace,
         gearIds,
-        implantIds
+        effectiveImplantIds
     );
 
     // Convert to BaseStats for the priority scorer
@@ -1703,12 +1824,12 @@ export function fastScore(
         if (c > 0) setCount[context.gearRegistry.setIdToName[setId]] = c;
     }
 
-    // Arcane siege — check for implant in individual implantIds matching ARCANE_SIEGE
+    // Arcane siege — check effectiveImplantIds for ARCANE_SIEGE
     let arcaneSiegeMultiplier = 0;
     const shieldCount = setCount['SHIELD'] || 0;
     if (shieldCount >= 2) {
-        for (let i = 0; i < implantIds.length; i++) {
-            const id = implantIds[i];
+        for (let i = 0; i < effectiveImplantIds.length; i++) {
+            const id = effectiveImplantIds[i];
             if (id < 0) continue;
             const implant = context.implantRegistry.pieces[id];
             if (implant?.setBonus === 'ARCANE_SIEGE') {
@@ -1841,6 +1962,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
             shipRole: 'ATTACKER',
             engineeringStats: engineering,
             arenaModifiers: null,
+            resolveGearPiece: getGearPiece,
         });
 
         const slotOrder = context.gearSlotOrder;
@@ -1854,6 +1976,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
                 shipRole: sc.role,
                 engineeringStats: engineering,
                 arenaModifiers: sc.arenaModifiers ?? undefined,
+                resolveGearPiece: getGearPiece,
             });
 
             // Build the equipment from the mask, one bit per slot in ctx.gearSlotOrder
@@ -1903,11 +2026,146 @@ describe('fastScore equivalence with calculateTotalScore', () => {
         }
     });
 
-    it('covers explicit set bonus thresholds (2, 4, 6 piece)', () => {
-        // Build inventories that deliberately hit each threshold for each set in TEST_SET_BONUSES
-        // and assert equivalence. See test body below.
-        // (Expand this with a sub-loop per set bonus; omitted here for brevity — the
-        // implementation should iterate 2/4/6 pieces for SHIELD, DECIMATION, BOOST, HARDENED.)
+    it('covers explicit set bonus thresholds (2, 4 pieces) for each test set', () => {
+        // For each set bonus in TEST_SET_BONUSES, build inventory where exactly
+        // N pieces of that set exist across distinct slots, and assert fastScore
+        // matches calculateTotalScore at each threshold.
+        const setNames = ['SHIELD', 'DECIMATION', 'BOOST', 'HARDENED'] as const;
+        const gearSlots = Object.keys(GEAR_SLOTS) as GearSlotName[];
+
+        for (const setName of setNames) {
+            for (const pieceCount of [2, 4]) {
+                // Construct 'pieceCount' gear pieces of this set, each on a distinct slot,
+                // plus simple non-set filler pieces for remaining slots (to ensure the
+                // inventory is valid).
+                const specific: GearPiece[] = [];
+                for (let i = 0; i < pieceCount && i < gearSlots.length; i++) {
+                    specific.push({
+                        id: `set-${setName}-${i}`,
+                        slot: gearSlots[i],
+                        setBonus: setName,
+                        rarity: 'legendary',
+                        level: 16,
+                        stars: 6,
+                        mainStat: { name: 'attack', value: 500, type: 'flat' },
+                        subStats: [{ name: 'hp', value: 1000, type: 'flat' }],
+                    } as GearPiece);
+                }
+
+                const lookup = (id: string) =>
+                    specific.find((p) => p.id === id) as GearPiece | undefined;
+
+                const equipment: Partial<Record<GearSlotName, string>> = {};
+                for (const p of specific) equipment[p.slot] = p.id;
+
+                const ctx = buildFastScoringContext({
+                    ship,
+                    availableInventory: specific,
+                    priorities: [{ stat: 'attack', weight: 1 }],
+                    shipRole: 'ATTACKER',
+                    engineeringStats: engineering,
+                    arenaModifiers: undefined,
+                    resolveGearPiece: lookup,
+                });
+                const gearIds = ctx.gearSlotOrder.map((slot) => {
+                    const id = equipment[slot];
+                    return id ? ctx.gearRegistry.idOf.get(id)! : -1;
+                });
+
+                const slowScore = calculateTotalScore(
+                    ship,
+                    equipment,
+                    [{ stat: 'attack', weight: 1 }],
+                    lookup,
+                    getEng,
+                    'ATTACKER',
+                    undefined,
+                    undefined,
+                    false,
+                    null
+                );
+                const fast = fastScore(ctx, gearIds, []);
+
+                expect(
+                    scoresEqual(slowScore, fast.fitness),
+                    `set=${setName} pieces=${pieceCount} slow=${slowScore} fast=${fast.fitness}`
+                ).toBe(true);
+            }
+        }
+    });
+
+    it('cache returns same fitness on repeated call with identical ids', () => {
+        const ctx = buildFastScoringContext({
+            ship,
+            availableInventory: inventory,
+            priorities: [{ stat: 'attack', weight: 1 }],
+            shipRole: 'ATTACKER',
+            engineeringStats: engineering,
+            arenaModifiers: undefined,
+            resolveGearPiece: getGearPiece,
+        });
+        const gearIds = ctx.gearSlotOrder.map(() => -1);
+        gearIds[0] = ctx.gearRegistry.idOf.get(
+            inventory.filter((p) => p.slot === ctx.gearSlotOrder[0])[0].id
+        )!;
+        const first = fastScore(ctx, gearIds, []);
+        const second = fastScore(ctx, gearIds, []);
+        expect(second.fitness).toBe(first.fitness);
+        expect(ctx.cache.size).toBeGreaterThan(0);
+    });
+
+    it('equivalence when GA is not optimizing implants but ship has them equipped', () => {
+        // Construct a ship that already has implants equipped, and an inventory
+        // that contains ONLY gear (no implants). The slow path would apply
+        // ship.implants; fastScore should too via fixedImplantIds.
+        const implantPiece = {
+            id: 'ship-implant-1',
+            slot: 'implant_major',
+            setBonus: undefined,
+            rarity: 'legendary',
+            level: 16,
+            stars: 6,
+            mainStat: null,
+            subStats: [{ name: 'attack', value: 200, type: 'flat' }],
+        } as unknown as GearPiece;
+        const shipWithImplants = makeTestShip({
+            implants: { implant_major: implantPiece.id },
+        } as any);
+        const gearInventory = inventory; // no implants in our fixture
+
+        const lookup = (id: string) =>
+            id === implantPiece.id
+                ? implantPiece
+                : (gearInventory.find((p) => p.id === id) as GearPiece | undefined);
+
+        const ctx = buildFastScoringContext({
+            ship: shipWithImplants,
+            availableInventory: gearInventory,
+            priorities: [{ stat: 'attack', weight: 1 }],
+            shipRole: 'ATTACKER',
+            engineeringStats: engineering,
+            arenaModifiers: undefined,
+            resolveGearPiece: lookup,
+        });
+
+        expect(ctx.optimizingImplants).toBe(false);
+        expect(ctx.fixedImplantIds.length).toBe(1);
+
+        const gearIds = ctx.gearSlotOrder.map(() => -1); // no gear equipped
+        const slow = calculateTotalScore(
+            shipWithImplants,
+            {},
+            [{ stat: 'attack', weight: 1 }],
+            lookup,
+            getEng,
+            'ATTACKER',
+            undefined,
+            undefined,
+            false,
+            null
+        );
+        const fast = fastScore(ctx, gearIds, []);
+        expect(scoresEqual(slow, fast.fitness)).toBe(true);
     });
 
     it('equivalence holds with arena modifiers active', () => {
@@ -1919,6 +2177,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
             shipRole: 'ATTACKER',
             engineeringStats: engineering,
             arenaModifiers: { attack: 25, hp: -10 },
+            resolveGearPiece: getGearPiece,
         });
         const equipment = { weapon: inventory[0].id };
         const gearIds = ctx.gearSlotOrder.map((slot) =>
@@ -1982,16 +2241,17 @@ Create `src/utils/autogear/fastScoring/featureFlag.ts`:
  *
  * Defaults to false on first merge; flip to true in Task 16.
  */
-export const USE_FAST_SCORING = true;
+export const USE_FAST_SCORING = false;
 
 /**
  * VERIFY_FAST_SCORING — when true, the GA runs BOTH the fast path and the
- * slow path on every call and console.errors on divergence. Dev-only;
- * tree-shaken in prod builds by Vite's dead code elimination (import.meta.env.DEV).
+ * slow path on every fitness eval and console.errors on divergence.
  *
- * Set to true locally while developing. Ship as false.
+ * Set to a literal `true` locally to debug; revert to `false` before commit.
+ * Kept as a module-level constant (not an env-var read) so Vite can dead-code
+ * eliminate the verify branch in production builds.
  */
-export const VERIFY_FAST_SCORING = (import.meta as any).env?.DEV === true && false;
+export const VERIFY_FAST_SCORING = false;
 ```
 
 The `&& false` keeps it disabled-by-default even in dev; developers flip it locally.
@@ -2038,6 +2298,7 @@ const fastContext: FastScoringContext | null = USE_FAST_SCORING
           tryToCompleteSets,
           arenaModifiers,
           engineeringStats: getEngineeringStatsForShipType(ship.type),
+          resolveGearPiece: cachedGetGearPiece,
       })
     : null;
 ```
@@ -2231,7 +2492,7 @@ Follow Task 4 steps with the flag off. Record the current `performanceTimer` sum
 export const USE_FAST_SCORING = true;
 ```
 
-Wait — the flag was already defaulted to `true` in Task 13 to let Phase 3 exercise the path during development. If `USE_FAST_SCORING` was left as `false` for initial Phase 3 merge, flip now. If already `true`, this step is a no-op.
+Note: during Phase 3 development, the flag was flipped to `true` locally (uncommitted) to exercise the fast path. Task 16 is the commit that lands the flip.
 
 - [ ] **Step 4: Run benchmark after flip**
 
@@ -2255,6 +2516,8 @@ git commit -m "feat(autogear-fast): default USE_FAST_SCORING to on"
 ## Task 17: Build `scripts/benchmark-autogear.ts`
 
 **Why:** Repeatable measurement so future changes can be checked against a known-good baseline.
+
+**Caveat:** The fixture generator from Task 6 is synthetic — it does not vary rarity, level, or set complexity the way a real 773-piece Salvation inventory does. Use this benchmark for **relative** before/after comparisons across commits. The **absolute** numbers will not match the spec's 670ms Salvation baseline; always re-verify gains with a browser run on a real imported inventory (Task 4 / Task 16 Step 4) before declaring a win.
 
 **Files:**
 - Create: `scripts/benchmark-autogear.ts`
