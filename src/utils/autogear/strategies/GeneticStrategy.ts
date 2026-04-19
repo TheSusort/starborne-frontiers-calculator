@@ -718,7 +718,6 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const relTol = 1e-6;
         const scale = Math.max(1, Math.abs(slowFitness), Math.abs(fastFitness));
         if (Math.abs(slowFitness - fastFitness) > relTol * scale) {
-            // eslint-disable-next-line no-console
             console.error('[VERIFY_FAST_SCORING] Fitness divergence', {
                 slowFitness,
                 fastFitness,
