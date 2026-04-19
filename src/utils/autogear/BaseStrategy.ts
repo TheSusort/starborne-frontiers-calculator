@@ -13,6 +13,8 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected totalOperations: number = 0;
     protected currentOperation: number = 0;
     protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
+    protected lastProgressEmitTime: number = 0;
+    protected readonly PROGRESS_THROTTLE_MS = 16; // ~60fps cap
     protected currentAttempt?: number;
     protected maxAttempts?: number;
 
@@ -33,24 +35,28 @@ export abstract class BaseStrategy implements AutogearStrategy {
         this.progressCallback = callback;
     }
 
-    protected updateProgress() {
-        if (this.progressCallback && this.totalOperations > 0) {
-            const current = Math.min(this.currentOperation, this.totalOperations);
-            const percentage = Math.round((current / this.totalOperations) * 100);
-            this.progressCallback({
-                current,
-                total: this.totalOperations,
-                percentage,
-                attempt: this.currentAttempt,
-                maxAttempts: this.maxAttempts,
-            });
-        }
+    protected updateProgress(force: boolean = false) {
+        if (!this.progressCallback || this.totalOperations <= 0) return;
+        const now = performance.now();
+        if (!force && now - this.lastProgressEmitTime < this.PROGRESS_THROTTLE_MS) return;
+        this.lastProgressEmitTime = now;
+
+        const current = Math.min(this.currentOperation, this.totalOperations);
+        const percentage = Math.round((current / this.totalOperations) * 100);
+        this.progressCallback({
+            current,
+            total: this.totalOperations,
+            percentage,
+            attempt: this.currentAttempt,
+            maxAttempts: this.maxAttempts,
+        });
     }
 
     protected initializeProgress(total: number) {
         this.totalOperations = total;
         this.currentOperation = 0;
-        this.updateProgress();
+        this.lastProgressEmitTime = 0;
+        this.updateProgress(true); // force
     }
 
     protected incrementProgress() {
@@ -61,6 +67,7 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected completeProgress() {
         if (this.progressCallback) {
             this.currentOperation = this.totalOperations;
+            this.lastProgressEmitTime = 0;
             this.progressCallback({
                 current: this.totalOperations,
                 total: this.totalOperations,
