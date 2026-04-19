@@ -10,6 +10,7 @@ import {
     statVectorToBaseStats,
 } from '../statVector';
 import type { BaseStats } from '../../../../types/stats';
+import { generateTestInventory, makeTestShip, seededRandom } from './fixtures/testInventory';
 
 describe('statVector layout', () => {
     it('exposes one index per stat name without collisions', () => {
@@ -126,5 +127,25 @@ describe('BaseStats <-> StatVector round-trip', () => {
         expect(back.healModifier).toBe(0);
         expect(back.hpRegen).toBe(0);
         expect(back.shield).toBe(0);
+    });
+});
+
+describe('test fixture sanity', () => {
+    it('generates deterministic inventory given the same seed', () => {
+        const a = generateTestInventory(42, 10);
+        const b = generateTestInventory(42, 10);
+        expect(a.map((p) => p.id)).toEqual(b.map((p) => p.id));
+    });
+
+    it('seededRandom(1) is deterministic', () => {
+        const r1 = seededRandom(1);
+        const r2 = seededRandom(1);
+        for (let i = 0; i < 5; i++) expect(r1()).toBe(r2());
+    });
+
+    it('makeTestShip returns a valid Ship', () => {
+        const ship = makeTestShip();
+        expect(ship.id).toBeTruthy();
+        expect(ship.baseStats.hp).toBeGreaterThan(0);
     });
 });
