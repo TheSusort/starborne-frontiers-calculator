@@ -17,6 +17,10 @@ interface Individual {
     violation: number;
 }
 
+type InventoryBySlot = Map<GearSlotName, GearPiece[]>;
+
+const EMPTY_PIECES: GearPiece[] = [];
+
 /**
  * Genetic Strategy
  *
@@ -103,6 +107,13 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             return gearCache.get(id);
         };
 
+        const inventoryBySlot: InventoryBySlot = new Map();
+        for (const piece of availableInventory) {
+            const existing = inventoryBySlot.get(piece.slot);
+            if (existing) existing.push(piece);
+            else inventoryBySlot.set(piece.slot, [piece]);
+        }
+
         const hasImplants = availableInventory.some((gear) => gear.slot.startsWith('implant_'));
         const populationSize = this.getPopulationSize(availableInventory.length, hasImplants);
         const generations = this.getGenerations(populationSize, hasImplants);
@@ -124,6 +135,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 ship,
                 priorities,
                 availableInventory,
+                inventoryBySlot,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
                 shipRole,
@@ -175,6 +187,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         ship: Ship,
         priorities: StatPriority[],
         availableInventory: GearPiece[],
+        inventoryBySlot: InventoryBySlot,
         cachedGetGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole: ShipTypeName | undefined,
@@ -189,6 +202,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
             availableInventory,
+            inventoryBySlot,
             cachedGetGearPiece,
             setPriorities,
             populationSize
@@ -224,7 +238,13 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 const parent1 = this.selectParent(population);
                 const parent2 = this.selectParent(population);
                 const child = this.crossover(parent1, parent2);
-                this.mutate(child, availableInventory, cachedGetGearPiece, setPriorities);
+                this.mutate(
+                    child,
+                    availableInventory,
+                    inventoryBySlot,
+                    cachedGetGearPiece,
+                    setPriorities
+                );
                 newPopulation.push(child);
                 this.incrementProgress();
             }
@@ -323,6 +343,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
     private initializePopulation(
         inventory: GearPiece[],
+        inventoryBySlot: InventoryBySlot,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities: SetPriority[] | undefined,
         populationSize: number
@@ -336,7 +357,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             slotsToOptimize.forEach((slot) => {
                 equipment[slot] = this.getPreferredGearForSlot(
                     slot,
-                    inventory,
+                    inventoryBySlot,
                     equipment,
                     getGearPiece,
                     setPriorities
@@ -492,6 +513,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     private mutate(
         individual: Individual,
         inventory: GearPiece[],
+        inventoryBySlot: InventoryBySlot,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): void {
@@ -501,7 +523,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             if (Math.random() < this.MUTATION_RATE) {
                 individual.equipment[slot] = this.getPreferredGearForSlot(
                     slot,
-                    inventory,
+                    inventoryBySlot,
                     individual.equipment,
                     getGearPiece,
                     setPriorities
@@ -512,12 +534,12 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
     private getPreferredGearForSlot(
         slot: GearSlotName,
-        inventory: GearPiece[],
+        inventoryBySlot: InventoryBySlot,
         currentEquipment: Partial<Record<GearSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): string | undefined {
-        const availablePieces = inventory.filter((gear) => gear.slot === slot);
+        const availablePieces = inventoryBySlot.get(slot) ?? EMPTY_PIECES;
         if (availablePieces.length === 0) return undefined;
 
         // OPTIMIZATION: Implants don't have set bonuses - just pick randomly for diversity
