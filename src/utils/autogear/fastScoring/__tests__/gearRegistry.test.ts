@@ -8,7 +8,7 @@ import { generateTestInventory, TEST_BASE_STATS } from './fixtures/testInventory
 describe('buildGearRegistry', () => {
     it('assigns unique integer ids for every piece', () => {
         const inventory = generateTestInventory(1, 12);
-        const reg = buildGearRegistry(inventory, TEST_BASE_STATS);
+        const reg = buildGearRegistry(inventory, TEST_BASE_STATS, 'test-ship-id');
         const ids = new Set<number>();
         for (const p of inventory) ids.add(reg.idOf.get(p.id)!);
         expect(ids.size).toBe(inventory.length);
@@ -16,13 +16,13 @@ describe('buildGearRegistry', () => {
 
     it('allocates statBuffer of size N * STAT_COUNT', () => {
         const inventory = generateTestInventory(2, 7);
-        const reg = buildGearRegistry(inventory, TEST_BASE_STATS);
+        const reg = buildGearRegistry(inventory, TEST_BASE_STATS, 'test-ship-id');
         expect(reg.statBuffer.length).toBe(7 * STAT_COUNT);
     });
 
     it('maps set bonuses to consecutive positive ids (0 reserved)', () => {
         const inventory = generateTestInventory(3, 8);
-        const reg = buildGearRegistry(inventory, TEST_BASE_STATS);
+        const reg = buildGearRegistry(inventory, TEST_BASE_STATS, 'test-ship-id');
         for (const [name, id] of reg.setNameToId) {
             expect(id).toBeGreaterThan(0);
             expect(reg.setIdToName[id]).toBe(name);
@@ -31,7 +31,7 @@ describe('buildGearRegistry', () => {
 
     it('precomputes stat contribution: flat + percentage + substats', () => {
         const inventory = generateTestInventory(4, 3);
-        const reg = buildGearRegistry(inventory, TEST_BASE_STATS);
+        const reg = buildGearRegistry(inventory, TEST_BASE_STATS, 'test-ship-id');
         for (let i = 0; i < inventory.length; i++) {
             const piece = inventory[i];
             const base = i * STAT_COUNT;
@@ -54,7 +54,7 @@ describe('buildGearRegistry', () => {
 describe('addPieceStatsInto', () => {
     it('adds a piece vector into target component-wise', () => {
         const inventory = generateTestInventory(5, 2);
-        const reg = buildGearRegistry(inventory, TEST_BASE_STATS);
+        const reg = buildGearRegistry(inventory, TEST_BASE_STATS, 'test-ship-id');
         const target = createStatVector();
         addPieceStatsInto(reg, 0, target);
         // Adding twice should be double the single contribution.

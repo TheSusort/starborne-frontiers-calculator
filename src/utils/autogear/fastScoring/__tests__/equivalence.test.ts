@@ -269,4 +269,117 @@ describe('fastScore equivalence with calculateTotalScore', () => {
         const fastResult = fastScore(ctx, gearIds, []);
         expect(scoresEqual(slowScore, fastResult.fitness)).toBe(true);
     });
+
+    it('equivalence when inventory contains gear calibrated to the target ship', () => {
+        // Level 16, 6-star, attack flat — calibration doubles the main stat value
+        const calibratedPiece = {
+            id: 'cal-1',
+            slot: 'weapon',
+            setBonus: null,
+            rarity: 'legendary',
+            level: 16,
+            stars: 6,
+            mainStat: { name: 'attack', value: 500, type: 'flat' },
+            subStats: [{ name: 'hp', value: 1000, type: 'flat' }],
+            calibration: { shipId: ship.id }, // calibrated to THIS ship
+        } as unknown as GearPiece;
+
+        // Also include a non-calibrated piece of the same shape to prove the fix
+        // doesn't over-apply calibration.
+        const plainPiece = {
+            id: 'plain-1',
+            slot: 'hull',
+            setBonus: null,
+            rarity: 'legendary',
+            level: 16,
+            stars: 6,
+            mainStat: { name: 'attack', value: 500, type: 'flat' },
+            subStats: [{ name: 'hp', value: 1000, type: 'flat' }],
+        } as unknown as GearPiece;
+
+        const inv = [calibratedPiece, plainPiece];
+        const lookup = (id: string) => inv.find((p) => p.id === id);
+
+        const ctx = buildFastScoringContext({
+            ship,
+            availableInventory: inv,
+            priorities: [{ stat: 'attack', weight: 1 }],
+            shipRole: 'ATTACKER',
+            engineeringStats: engineering,
+            arenaModifiers: undefined,
+            resolveGearPiece: lookup,
+        });
+
+        const equipment: Partial<Record<GearSlotName, string>> = {
+            weapon: calibratedPiece.id,
+            hull: plainPiece.id,
+        };
+        const gearIds = ctx.gearSlotOrder.map((slot) => {
+            const id = equipment[slot];
+            return id ? ctx.gearRegistry.idOf.get(id)! : -1;
+        });
+
+        const slow = calculateTotalScore(
+            ship,
+            equipment,
+            [{ stat: 'attack', weight: 1 }],
+            lookup,
+            getEng,
+            'ATTACKER',
+            undefined,
+            undefined,
+            false,
+            null
+        );
+        const fast = fastScore(ctx, gearIds, []);
+        expect(scoresEqual(slow, fast.fitness)).toBe(true);
+    });
+
+    it('equivalence when calibrated piece is NOT for the target ship', () => {
+        // Calibrated to a DIFFERENT ship — slow path ignores calibration
+        const calibratedToOther = {
+            id: 'cal-other',
+            slot: 'weapon',
+            setBonus: null,
+            rarity: 'legendary',
+            level: 16,
+            stars: 6,
+            mainStat: { name: 'attack', value: 500, type: 'flat' },
+            subStats: [{ name: 'hp', value: 1000, type: 'flat' }],
+            calibration: { shipId: 'some-other-ship' },
+        } as unknown as GearPiece;
+
+        const inv = [calibratedToOther];
+        const lookup = (id: string) => inv.find((p) => p.id === id);
+
+        const ctx = buildFastScoringContext({
+            ship,
+            availableInventory: inv,
+            priorities: [{ stat: 'attack', weight: 1 }],
+            shipRole: 'ATTACKER',
+            engineeringStats: engineering,
+            arenaModifiers: undefined,
+            resolveGearPiece: lookup,
+        });
+
+        const equipment: Partial<Record<GearSlotName, string>> = { weapon: calibratedToOther.id };
+        const gearIds = ctx.gearSlotOrder.map((slot) =>
+            slot === 'weapon' ? ctx.gearRegistry.idOf.get(calibratedToOther.id)! : -1
+        );
+
+        const slow = calculateTotalScore(
+            ship,
+            equipment,
+            [{ stat: 'attack', weight: 1 }],
+            lookup,
+            getEng,
+            'ATTACKER',
+            undefined,
+            undefined,
+            false,
+            null
+        );
+        const fast = fastScore(ctx, gearIds, []);
+        expect(scoresEqual(slow, fast.fitness)).toBe(true);
+    });
 });

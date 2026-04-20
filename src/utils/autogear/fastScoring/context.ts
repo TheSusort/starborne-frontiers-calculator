@@ -81,14 +81,16 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
     const shipPrefix = computeShipPrefix(input.ship, input.engineeringStats);
     const percentRef = statVectorToBaseStats(shipPrefix);
 
-    // 3. Gear registry
-    const gearRegistry = buildGearRegistry(gearOnly, percentRef);
+    // 3. Gear registry — pass shipId so calibration bonuses are applied
+    const gearRegistry = buildGearRegistry(gearOnly, percentRef, input.ship.id);
 
-    // 4. Implant registry — depends on whether GA is optimizing implants
+    // 4. Implant registry — depends on whether GA is optimizing implants.
+    // Implants are never calibration-eligible (isCalibrationEligible returns false
+    // for implant slots), so shipId has no effect here — passing it is harmless.
     let implantRegistry: GearRegistry;
     let fixedImplantIds: number[];
     if (optimizingImplants) {
-        implantRegistry = buildGearRegistry(inventoryImplants, percentRef);
+        implantRegistry = buildGearRegistry(inventoryImplants, percentRef, input.ship.id);
         fixedImplantIds = [];
     } else {
         // Collect ship.implants piece objects via the getter. Callers (GeneticStrategy)
@@ -100,7 +102,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
             const piece = input.resolveGearPiece?.(id);
             if (piece) shipImplantPieces.push(piece);
         }
-        implantRegistry = buildGearRegistry(shipImplantPieces, percentRef);
+        implantRegistry = buildGearRegistry(shipImplantPieces, percentRef, input.ship.id);
         fixedImplantIds = shipImplantPieces.map((p) => implantRegistry.idOf.get(p.id)!);
     }
 

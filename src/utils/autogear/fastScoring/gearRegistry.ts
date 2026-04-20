@@ -2,6 +2,7 @@ import type { GearPiece } from '../../../types/gear';
 import type { GearSlotName } from '../../../constants';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
+import { getCalibratedMainStat, isCalibrationEligible } from '../../gear/calibrationUtils';
 import { STAT_INDEX, STAT_COUNT, createStatVector, type StatVector } from './statVector';
 
 export interface GearRegistry {
@@ -27,8 +28,10 @@ export interface GearRegistry {
 
 /**
  * Build a registry for the pre-filtered inventory of a single run. Piece stats
- * (main + sub, NOT counting set bonuses or calibration — those are applied later
- * in the pipeline) are precomputed into statBuffer as Float64 contributions.
+ * (main + sub, NOT counting set bonuses — those are applied later in the pipeline)
+ * are precomputed into statBuffer as Float64 contributions. When `shipId` is
+ * provided, calibration bonuses are applied to the main stat of any piece that is
+ * calibrated to that ship (mirrors the slow-path behaviour in statsCalculator).
  *
  * `percentRef` is the reference used for percentage-typed flexible stats. For
  * gear/implant pieces this MUST be the "afterEngineering" stats (i.e. the
@@ -40,7 +43,8 @@ export interface GearRegistry {
  */
 export function buildGearRegistry(
     inventory: readonly GearPiece[],
-    percentRef: BaseStats
+    percentRef: BaseStats,
+    shipId = ''
 ): GearRegistry {
     const pieces = [...inventory];
     const idOf = new Map<string, number>();
@@ -85,7 +89,13 @@ export function buildGearRegistry(
         // This replicates addStatModifier from statsCalculator for a single piece,
         // using percentRef (= afterEngineering) as the percentage reference.
         for (let k = 0; k < STAT_COUNT; k++) tmp[k] = 0;
-        applyPieceStat(piece.mainStat, tmp, percentRef);
+        const shouldApplyCalibration =
+            !!shipId && piece.calibration?.shipId === shipId && isCalibrationEligible(piece);
+        const mainStat =
+            shouldApplyCalibration && piece.mainStat
+                ? getCalibratedMainStat(piece)
+                : piece.mainStat;
+        applyPieceStat(mainStat, tmp, percentRef);
         if (piece.subStats) {
             for (const s of piece.subStats) applyPieceStat(s, tmp, percentRef);
         }
