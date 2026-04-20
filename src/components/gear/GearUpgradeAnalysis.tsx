@@ -269,6 +269,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
 
     const handleAnalyze = async () => {
         setIsLoading(true);
+        const analyzeStart = performance.now();
 
         // Clear baseline caches at the start of a new analysis session
         // This ensures we start fresh, but the caches persist across calls within the session
@@ -299,8 +300,19 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
         let completedSteps = 0;
         for (let i = 0; i < rolesToProcess.length; i++) {
             const role = rolesToProcess[i];
+            const roleStart = performance.now();
             completedSteps = await processRole(role, i, newResults, totalSteps, completedSteps);
+            // eslint-disable-next-line no-console
+            console.log(
+                `[AnalyzeGear] role=${role} took ${(performance.now() - roleStart).toFixed(1)}ms`
+            );
         }
+
+        const analyzeTotal = performance.now() - analyzeStart;
+        // eslint-disable-next-line no-console
+        console.log(
+            `[AnalyzeGear] TOTAL ${analyzeTotal.toFixed(1)}ms (${rolesToProcess.length} role(s), ship=${selectedShipId === 'none' ? 'none' : (selectedShip?.name ?? selectedShipId)}, rarity=${selectedRarity}, inventory=${inventory.length})`
+        );
 
         // Small delay to show 100% completion before hiding progress bar
         await new Promise((resolve) => setTimeout(resolve, 500));
