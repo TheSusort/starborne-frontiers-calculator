@@ -5,7 +5,7 @@
  *
  * Defaults to false on first merge; flip to true in Task 16.
  */
-export const USE_FAST_SCORING = false;
+export const USE_FAST_SCORING = true;
 
 /**
  * VERIFY_FAST_SCORING — when true, the GA runs BOTH the fast path and the
