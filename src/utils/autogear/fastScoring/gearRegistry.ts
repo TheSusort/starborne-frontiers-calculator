@@ -3,7 +3,12 @@ import type { GearSlotName } from '../../../constants';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import { getCalibratedMainStat, isCalibrationEligible } from '../../gear/calibrationUtils';
-import { STAT_INDEX, STAT_COUNT, createStatVector, type StatVector } from './statVector';
+import {
+    STAT_INDEX,
+    STAT_COUNT,
+    createStatVector,
+    type StatVector,
+} from '../../fastScoring/statVector';
 
 export interface GearRegistry {
     /** piece.id (string) -> integer id in [0, N) */

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Ship } from '../../../../types/ship';
 import { computeShipPrefix } from '../shipPrefix';
-import { statVectorToBaseStats, STAT_INDEX } from '../statVector';
+import { statVectorToBaseStats, STAT_INDEX } from '../../../fastScoring/statVector';
 import { calculateTotalStats } from '../../../ship/statsCalculator';
 import { makeTestShip, makeTestEngineering, TEST_BASE_STATS } from './fixtures/testInventory';
 

@@ -3,11 +3,11 @@ import type { GearPiece } from '../../../types/gear';
 import type { EngineeringStat, BaseStats } from '../../../types/stats';
 import type { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
+import { FastCache } from '../../fastScoring/fastCache';
+import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
 import { buildGearRegistry, type GearRegistry } from './gearRegistry';
 import { computeShipPrefix } from './shipPrefix';
 import { createWorkspace, type FastCalcWorkspace } from './fastCalculateStats';
-import { FastCache } from './fastCache';
-import { statVectorToBaseStats, type StatVector } from './statVector';
 
 export interface FastScoringContext {
     readonly ship: Ship;

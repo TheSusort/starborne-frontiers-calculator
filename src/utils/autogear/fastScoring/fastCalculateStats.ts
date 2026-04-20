@@ -2,7 +2,12 @@ import { GEAR_SETS } from '../../../constants/gearSets';
 import type { GearPiece } from '../../../types/gear';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
-import { STAT_INDEX, type StatVector, copyStatVector, createStatVector } from './statVector';
+import {
+    STAT_INDEX,
+    type StatVector,
+    copyStatVector,
+    createStatVector,
+} from '../../fastScoring/statVector';
 import type { GearRegistry } from './gearRegistry';
 import { addPieceStatsInto } from './gearRegistry';
 

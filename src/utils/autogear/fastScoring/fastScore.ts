@@ -2,9 +2,9 @@ import type { BaseStats } from '../../../types/stats';
 import type { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
 import { applyArenaModifiers } from '../arenaModifiers';
 import { calculatePriorityScore } from '../priorityScore';
+import { buildFastCacheKey } from '../../fastScoring/fastCache';
+import { statVectorToBaseStats } from '../../fastScoring/statVector';
 import { fastCalculateStats } from './fastCalculateStats';
-import { buildFastCacheKey } from './fastCache';
-import { statVectorToBaseStats } from './statVector';
 import type { FastScoringContext } from './context';
 
 // Arcane Siege multipliers by rarity — mirrors scoring.ts

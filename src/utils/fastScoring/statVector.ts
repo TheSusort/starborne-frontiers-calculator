@@ -1,4 +1,4 @@
-import type { BaseStats, StatName } from '../../../types/stats';
+import type { BaseStats, StatName } from '../../types/stats';
 
 /**
  * Fixed-index Float64Array stat layout used by the autogear fast-scoring hot loop.

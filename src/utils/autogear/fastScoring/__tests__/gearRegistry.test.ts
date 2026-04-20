@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildGearRegistry, addPieceStatsInto } from '../gearRegistry';
-import { createStatVector, STAT_INDEX, STAT_COUNT } from '../statVector';
+import { createStatVector, STAT_INDEX, STAT_COUNT } from '../../../fastScoring/statVector';
 import { generateTestInventory, TEST_BASE_STATS } from './fixtures/testInventory';
 
 // For these unit tests percentRef = TEST_BASE_STATS is fine (no engineering).

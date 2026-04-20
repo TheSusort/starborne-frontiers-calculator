@@ -9,7 +9,7 @@ import {
     baseStatsToStatVector,
     statVectorToBaseStats,
 } from '../statVector';
-import type { BaseStats } from '../../../../types/stats';
+import type { BaseStats } from '../../../types/stats';
 import { generateTestInventory, makeTestShip, seededRandom } from './fixtures/testInventory';
 
 describe('statVector layout', () => {

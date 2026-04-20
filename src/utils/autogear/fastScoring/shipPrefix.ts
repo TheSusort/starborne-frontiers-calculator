@@ -1,7 +1,7 @@
 import type { Ship } from '../../../types/ship';
 import type { BaseStats, EngineeringStat, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
-import { STAT_INDEX, baseStatsToStatVector, type StatVector } from './statVector';
+import { STAT_INDEX, baseStatsToStatVector, type StatVector } from '../../fastScoring/statVector';
 
 /**
  * Compute the per-ship "constant prefix" (base + refits + engineering) as a
