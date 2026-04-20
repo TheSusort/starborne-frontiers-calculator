@@ -35,6 +35,7 @@ import {
     getSystemStats,
     getGrowthStats,
     getTableSizes,
+    refreshSystemSnapshot,
     SystemStats,
     GrowthMetric,
     TableInfo,
@@ -68,6 +69,7 @@ export const AdminPanel: React.FC = () => {
 
     // System health states
     const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+    const [refreshingSystemStats, setRefreshingSystemStats] = useState(false);
     const [growthMetrics, setGrowthMetrics] = useState<GrowthMetric[]>([]);
     const [tableSizes, setTableSizes] = useState<TableInfo[]>([]);
 
@@ -193,6 +195,29 @@ export const AdminPanel: React.FC = () => {
         } finally {
             setUpdatingTemplate(false);
         }
+    };
+
+    const handleRefreshSystemStats = async () => {
+        setRefreshingSystemStats(true);
+        const fresh = await refreshSystemSnapshot();
+        if (fresh) {
+            setSystemStats(fresh);
+            addNotification('success', 'System stats refreshed');
+        } else {
+            addNotification('error', 'Failed to refresh system stats');
+        }
+        setRefreshingSystemStats(false);
+    };
+
+    const formatRelativeTime = (iso: string): string => {
+        const diffMs = Date.now() - new Date(iso).getTime();
+        const minutes = Math.floor(diffMs / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes} min ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
     };
 
     useEffect(() => {
@@ -412,6 +437,25 @@ export const AdminPanel: React.FC = () => {
                 {/* System Health Tab */}
                 {activeTab === 'system-health' && (
                     <div className="space-y-6">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-semibold">System Stats</h3>
+                                {systemStats?.updated_at && (
+                                    <p className="text-sm text-gray-400">
+                                        Last updated {formatRelativeTime(systemStats.updated_at)}
+                                    </p>
+                                )}
+                            </div>
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => void handleRefreshSystemStats()}
+                                disabled={refreshingSystemStats}
+                            >
+                                {refreshingSystemStats ? 'Refreshing…' : 'Refresh now'}
+                            </Button>
+                        </div>
+
                         {/* System Stats */}
                         {systemStats && (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
