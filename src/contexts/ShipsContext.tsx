@@ -343,7 +343,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setLocalShips([]);
+                // Clear through useStorage so localStorage is wiped too —
+                // otherwise a refresh re-hydrates the signed-out user's ships.
+                void setStorageShips([]);
             }
         };
 
@@ -351,7 +353,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setLocalShips, isMigrating]);
+    }, [setStorageShips, isMigrating]);
 
     // Listen for migration start/end events
     useEffect(() => {

@@ -306,7 +306,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                setLocalInventory([]);
+                // Clear through useStorage so IndexedDB is wiped too —
+                // otherwise a refresh re-hydrates the signed-out user's inventory.
+                void setStorageInventory([]);
             }
         };
 
@@ -314,7 +316,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setLocalInventory, isMigrating]);
+    }, [setStorageInventory, isMigrating]);
 
     // Listen for migration start/end events
     useEffect(() => {

@@ -90,6 +90,18 @@ export const useEncounterNotes = () => {
         void loadEncounters();
     }, [loadEncounters]);
 
+    // Clear encounter notes (in-memory + localStorage) on signout so
+    // they don't leak across accounts.
+    useEffect(() => {
+        const handleSignOut = () => {
+            void setEncounters([]);
+        };
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setEncounters]);
+
     // Ensure encounter formations are properly initialized
     useEffect(() => {
         if (encounters.length > 0) {

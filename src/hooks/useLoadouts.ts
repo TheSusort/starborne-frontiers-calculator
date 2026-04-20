@@ -145,6 +145,19 @@ export const useLoadouts = () => {
         void loadLoadouts();
     }, [loadLoadouts]);
 
+    // Clear loadouts + team loadouts (in-memory + localStorage) on signout
+    // so they don't leak across accounts.
+    useEffect(() => {
+        const handleSignOut = () => {
+            void setLoadouts([]);
+            void setTeamLoadouts([]);
+        };
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
+    }, [setLoadouts, setTeamLoadouts]);
+
     const addLoadout = useCallback(
         async (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
             const timestamp = Date.now();

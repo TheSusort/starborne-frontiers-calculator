@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { GearPiece } from '../types/gear';
 import { StorageKey } from '../constants/storage';
 import { simulateUpgrade } from '../utils/gear/potentialCalculator';
@@ -97,6 +97,18 @@ export const useGearUpgrades = () => {
 
     const clearUpgrades = useCallback(async () => {
         await setStorageUpgrades({});
+    }, [setStorageUpgrades]);
+
+    // Clear gear upgrades (in-memory + IndexedDB) on signout so they
+    // don't leak across accounts.
+    useEffect(() => {
+        const handleSignOut = () => {
+            void setStorageUpgrades({});
+        };
+        window.addEventListener('app:signout', handleSignOut);
+        return () => {
+            window.removeEventListener('app:signout', handleSignOut);
+        };
     }, [setStorageUpgrades]);
 
     const getUpgrade = useCallback(
