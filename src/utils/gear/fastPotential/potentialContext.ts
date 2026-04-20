@@ -2,12 +2,9 @@ import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
 import type { BaseStats, EngineeringStat, StatName } from '../../../types/stats';
 import type { ShipTypeName, GearSlotName } from '../../../constants';
-import {
-    createStatVector,
-    baseStatsToStatVector,
-    type StatVector,
-} from '../../fastScoring/statVector';
+import { createStatVector, baseStatsToStatVector } from '../../fastScoring/statVector';
 import { calculateTotalStats, type StatBreakdown } from '../../ship/statsCalculator';
+// eslint-disable-next-line import/no-cycle
 import { baselineBreakdownCache } from '../potentialCalculator';
 
 /**

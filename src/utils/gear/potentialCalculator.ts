@@ -18,6 +18,9 @@ import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 import { Ship } from '../../types/ship';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { isCalibrationEligible, getCalibratedMainStat } from './calibrationCalculator';
+import { USE_FAST_POTENTIAL, VERIFY_FAST_POTENTIAL } from './fastPotential/featureFlag';
+// eslint-disable-next-line import/no-cycle
+import { fastAnalyzePotentialUpgrades } from './fastPotential/fastAnalyze';
 
 // Role-specific base stats representing typical ship base stats (before gear).
 // Using midpoints of known ranges so percentage gear stats are weighted correctly.
@@ -542,7 +545,7 @@ export const baselineBreakdownCache = new Map<string, StatBreakdown>();
 // Key: `${pieceId}_${includePiece}_${slot || 'all'}`
 const gearStatsCache = new Map<string, BaseStats>();
 
-export function analyzePotentialUpgrades(
+function slowAnalyzePotentialUpgrades(
     inventory: GearPiece[],
     shipRole: ShipTypeName,
     count: number = 6,
@@ -763,4 +766,87 @@ export function analyzePotentialUpgrades(
         .slice(0, count);
 
     return sortedResults;
+}
+
+export function analyzePotentialUpgrades(
+    inventory: GearPiece[],
+    shipRole: ShipTypeName,
+    count: number = 6,
+    slot?: GearSlotName,
+    minRarity: 'rare' | 'epic' | 'legendary' = 'rare',
+    simulationCount: number = 20,
+    selectedStats: StatName[] = [],
+    statFilterMode: 'AND' | 'OR' = 'AND',
+    selectedGearSets: string[] = [],
+    ship?: Ship,
+    getGearPiece?: (id: string) => GearPiece | undefined,
+    getEngineeringStatsForShipType?: (shipType: ShipTypeName) => EngineeringStat | undefined
+): PotentialResult[] {
+    const args = [
+        inventory,
+        shipRole,
+        count,
+        slot,
+        minRarity,
+        simulationCount,
+        selectedStats,
+        statFilterMode,
+        selectedGearSets,
+        ship,
+        getGearPiece,
+        getEngineeringStatsForShipType,
+    ] as const;
+
+    if (VERIFY_FAST_POTENTIAL) {
+        const slowResult = slowAnalyzePotentialUpgrades(...args);
+        const fastResult = fastAnalyzePotentialUpgrades(...args);
+        verifyEquivalence(slowResult, fastResult, { shipRole, slot, withShip: !!ship });
+        return slowResult; // production answer stays on the slow path while verifying
+    }
+
+    if (USE_FAST_POTENTIAL) {
+        return fastAnalyzePotentialUpgrades(...args);
+    }
+
+    return slowAnalyzePotentialUpgrades(...args);
+}
+
+function verifyEquivalence(
+    slow: PotentialResult[],
+    fast: PotentialResult[],
+    ctx: { shipRole: ShipTypeName; slot: GearSlotName | undefined; withShip: boolean }
+): void {
+    if (fast.length !== slow.length) {
+        console.error('[VERIFY_FAST_POTENTIAL] length mismatch', {
+            slow: slow.length,
+            fast: fast.length,
+            ctx,
+        });
+        return;
+    }
+    for (let i = 0; i < slow.length; i++) {
+        if (fast[i].piece.id !== slow[i].piece.id) {
+            console.error('[VERIFY_FAST_POTENTIAL] ordering divergence', {
+                i,
+                slow: slow[i].piece.id,
+                fast: fast[i].piece.id,
+                ctx,
+            });
+            return;
+        }
+        const scale = Math.max(
+            1,
+            Math.abs(slow[i].potentialScore),
+            Math.abs(fast[i].potentialScore)
+        );
+        if (Math.abs(slow[i].potentialScore - fast[i].potentialScore) > 1e-6 * scale) {
+            console.error('[VERIFY_FAST_POTENTIAL] score divergence', {
+                i,
+                pieceId: slow[i].piece.id,
+                slowScore: slow[i].potentialScore,
+                fastScore: fast[i].potentialScore,
+                ctx,
+            });
+        }
+    }
 }

@@ -2,6 +2,7 @@ import type { GearPiece } from '../../../types/gear';
 import type { Ship } from '../../../types/ship';
 import type { StatName, EngineeringStat } from '../../../types/stats';
 import type { ShipTypeName, GearSlotName } from '../../../constants';
+// eslint-disable-next-line import/no-cycle
 import { simulateUpgrade } from '../potentialCalculator';
 import { buildPotentialContext } from './potentialContext';
 import { scoreCurrentWithShip, scorePieceApplied } from './scorePieceUpgrade';

@@ -27,7 +27,6 @@ export function scoreCurrentWithShip(
         if (process.env.NODE_ENV !== 'production') {
             throw new Error(`scoreCurrentWithShip: missing finalVector for slot ${slot}`);
         }
-        // eslint-disable-next-line no-console
         console.error(`[fast-potential] missing finalVector for slot ${slot}`);
         return 0;
     }
@@ -69,7 +68,6 @@ export function scorePieceApplied(
         if (process.env.NODE_ENV !== 'production') {
             throw new Error(`scorePieceApplied: missing baseline for slot ${slot}`);
         }
-        // eslint-disable-next-line no-console
         console.error(`[fast-potential] missing baseline for slot ${slot}`);
         return 0;
     }
