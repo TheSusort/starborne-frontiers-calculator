@@ -7,6 +7,7 @@ import {
 import { fastAnalyzePotentialUpgrades } from '../fastAnalyze';
 import type { ShipTypeName, GearSlotName } from '../../../../constants';
 import type { StatName } from '../../../../types/stats';
+import type { GearPiece } from '../../../../types/gear';
 import {
     generateEligibleInventory,
     seededRandom,
@@ -155,4 +156,205 @@ describe('equivalence: fast vs slow analyzePotentialUpgrades', () => {
             }
         }
     );
+});
+
+describe('equivalence: explicit edge cases', () => {
+    // Helper that runs both paths under the same PRNG and returns results
+    // for assertion. Keeps individual tests short.
+    function runBothPaths(args: Parameters<typeof analyzePotentialUpgrades>, seed = 0) {
+        let rng = seededRandom(seed);
+        vi.spyOn(Math, 'random').mockImplementation(() => rng());
+        const slow = analyzePotentialUpgrades(...args);
+        rng = seededRandom(seed);
+        vi.spyOn(Math, 'random').mockImplementation(() => rng());
+        baselineBreakdownCache.clear();
+        baselineStatsCache.clear();
+        const fast = fastAnalyzePotentialUpgrades(...args);
+        return { slow, fast };
+    }
+
+    it('empty eligible pieces returns empty arrays from both paths', () => {
+        const { slow, fast } = runBothPaths([
+            [],
+            'ATTACKER',
+            6,
+            undefined,
+            'rare',
+            10,
+            [],
+            'AND',
+            [],
+            undefined,
+            undefined,
+            undefined,
+        ]);
+        expect(slow).toEqual([]);
+        expect(fast).toEqual([]);
+    });
+
+    it('single eligible piece produces matching single result (dummy)', () => {
+        const inv = generateEligibleInventory(100, 1);
+        const { slow, fast } = runBothPaths([
+            inv,
+            'ATTACKER',
+            6,
+            undefined,
+            'rare',
+            5,
+            [],
+            'AND',
+            [],
+            undefined,
+            undefined,
+            undefined,
+        ]);
+        expect(fast).toHaveLength(1);
+        assertFloatsClose(fast[0].potentialScore, slow[0].potentialScore, { relative: true });
+    });
+
+    it('simulated-upgrade of calibrated piece applies calibration in both paths', () => {
+        // analyzePotentialUpgrades filters for piece.level < 16, but
+        // isCalibrationEligible requires piece.level === 16. So the
+        // CURRENT-path calibration branch is unreachable — the only place
+        // calibration actually runs is inside the simulation loop, where
+        // simulateUpgrade() returns a piece at level 16. That upgraded
+        // piece inherits the original's calibration metadata (via spread)
+        // and therefore hits getCalibratedMainStat.
+        //
+        // This test exercises exactly that path: an analyze-eligible
+        // piece (level 15, stars >= 5) with calibration metadata pointing
+        // at the target ship. Fast and slow must produce identical
+        // potentialScore (calibration applied to simulated upgrade).
+        const ship = makeTestShip();
+        const inv = generateEligibleInventory(55, 8);
+        inv[0] = {
+            ...inv[0],
+            level: 15,
+            stars: 5, // analyze-eligible; upgrade → 16 → calibration-eligible
+            calibration: { shipId: ship.id },
+        };
+        const gearById = new Map(inv.map((p) => [p.id, p]));
+        const { slow, fast } = runBothPaths(
+            [
+                inv,
+                'ATTACKER',
+                6,
+                undefined,
+                'rare',
+                10,
+                [],
+                'AND',
+                [],
+                ship,
+                (id) => gearById.get(id),
+                () => undefined,
+            ],
+            77
+        );
+        expect(fast.map((r) => r.piece.id)).toEqual(slow.map((r) => r.piece.id));
+        for (let i = 0; i < slow.length; i++) {
+            assertFloatsClose(fast[i].potentialScore, slow[i].potentialScore, { relative: true });
+        }
+        // Sanity: the calibrated piece's potentialScore must differ from what
+        // it would be without calibration metadata — proves calibration
+        // actually ran on the upgraded piece. (Drop this assertion if flaky;
+        // the equivalence assertions above are the primary gate.)
+        const invNoCal = inv.map((p, i) => (i === 0 ? { ...p, calibration: undefined } : p));
+        const gearByIdNoCal = new Map(invNoCal.map((p) => [p.id, p]));
+        const { fast: fastNoCal } = runBothPaths(
+            [
+                invNoCal,
+                'ATTACKER',
+                6,
+                undefined,
+                'rare',
+                10,
+                [],
+                'AND',
+                [],
+                ship,
+                (id) => gearByIdNoCal.get(id),
+                () => undefined,
+            ],
+            77
+        );
+        const calIdx = fast.findIndex((r) => r.piece.id === inv[0].id);
+        const noCalIdx = fastNoCal.findIndex((r) => r.piece.id === inv[0].id);
+        if (calIdx >= 0 && noCalIdx >= 0) {
+            expect(fast[calIdx].potentialScore).not.toBe(fastNoCal[noCalIdx].potentialScore);
+        }
+    });
+
+    it('2-piece set threshold: with-ship equipping to cross 2-piece boundary', () => {
+        // The ship already has 1 DECIMATION piece; the candidate piece is
+        // DECIMATION → adding it flips setCount from 1 to 2, crossing the
+        // 2-piece boundary. Slow path applies bonus; fast must too.
+        const ship = makeTestShip({ equipment: { hull: 'eq-hull' } });
+        const equippedHull = {
+            id: 'eq-hull',
+            slot: 'hull' as const,
+            setBonus: 'DECIMATION' as GearPiece['setBonus'],
+            rarity: 'legendary' as const,
+            level: 16,
+            stars: 6,
+            mainStat: { name: 'hp' as const, value: 100, type: 'flat' as const },
+            subStats: [],
+        };
+        const inv = generateEligibleInventory(99, 4).map((p, i) =>
+            i === 0
+                ? { ...p, slot: 'weapon' as const, setBonus: 'DECIMATION' as GearPiece['setBonus'] }
+                : p
+        );
+        const gearById = new Map<string, GearPiece>([
+            ['eq-hull', equippedHull as GearPiece],
+            ...inv.map((p) => [p.id, p] as [string, GearPiece]),
+        ]);
+        const { slow, fast } = runBothPaths(
+            [
+                inv,
+                'ATTACKER',
+                6,
+                'weapon',
+                'rare',
+                10,
+                [],
+                'AND',
+                [],
+                ship,
+                (id) => gearById.get(id),
+                () => undefined,
+            ],
+            11
+        );
+        expect(fast.map((r) => r.piece.id)).toEqual(slow.map((r) => r.piece.id));
+        for (let i = 0; i < slow.length; i++) {
+            assertFloatsClose(fast[i].potentialScore, slow[i].potentialScore, { relative: true });
+        }
+    });
+
+    it('DEBUFFER_CORROSION with DECIMATION set piece (role-specific bonus)', () => {
+        const ship = makeTestShip({ type: 'DEBUFFER_CORROSION' });
+        const inv = generateEligibleInventory(21, 6).map((p, i) =>
+            i === 0 ? { ...p, setBonus: 'DECIMATION' as GearPiece['setBonus'] } : p
+        );
+        const gearById = new Map(inv.map((p) => [p.id, p]));
+        const { slow, fast } = runBothPaths(
+            [
+                inv,
+                'DEBUFFER_CORROSION',
+                6,
+                undefined,
+                'rare',
+                10,
+                [],
+                'AND',
+                [],
+                ship,
+                (id) => gearById.get(id),
+                () => undefined,
+            ],
+            33
+        );
+        expect(fast.map((r) => r.piece.id)).toEqual(slow.map((r) => r.piece.id));
+    });
 });
