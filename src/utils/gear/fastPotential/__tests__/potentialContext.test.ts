@@ -3,47 +3,7 @@ import { buildPotentialContext } from '../potentialContext';
 import { STAT_INDEX } from '../../../fastScoring/statVector';
 import { baselineBreakdownCache, baselineStatsCache } from '../../potentialCalculator';
 import type { GearPiece } from '../../../../types/gear';
-import type { Ship } from '../../../../types/ship';
-
-function makeMinimalPiece(id: string, slot: string, setBonus?: string): GearPiece {
-    return {
-        id,
-        slot: slot,
-        setBonus,
-        rarity: 'legendary',
-        level: 0,
-        stars: 6,
-        mainStat: { name: 'attack', value: 100, type: 'flat' },
-        subStats: [],
-    } as GearPiece;
-}
-
-function makeShip(overrides: Partial<Ship> = {}): Ship {
-    return {
-        id: 'ship-1',
-        type: 'ATTACKER',
-        name: 'TestShip',
-        baseStats: {
-            hp: 20000,
-            attack: 5000,
-            defence: 4000,
-            speed: 120,
-            hacking: 0,
-            security: 0,
-            crit: 20,
-            critDamage: 80,
-            healModifier: 0,
-            hpRegen: 0,
-            shield: 0,
-            damageReduction: 0,
-            defensePenetration: 0,
-        },
-        refits: [],
-        equipment: {},
-        implants: {},
-        ...overrides,
-    } as Ship;
-}
+import { makeMinimalPiece, makeShip } from './fixtures';
 
 beforeEach(() => {
     baselineBreakdownCache.clear();

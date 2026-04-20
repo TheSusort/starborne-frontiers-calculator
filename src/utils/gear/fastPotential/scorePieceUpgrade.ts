@@ -139,7 +139,7 @@ export function scorePieceApplied(
                     const scale = minPieces >= 4 ? 0.5 : 1;
                     for (let k = 0; k < delta; k++) {
                         for (const s of setDef.stats) {
-                            applyScaledStat(s, scale, w, ctx.percentRef);
+                            applyStat(s, w, ctx.percentRef, scale);
                         }
                     }
                 }
@@ -150,7 +150,7 @@ export function scorePieceApplied(
                 const minPieces = setDef.minPieces ?? 2;
                 const scale = minPieces >= 4 ? 0.5 : 1;
                 for (const s of setDef.stats) {
-                    applyScaledStat(s, scale, w, ctx.percentRef);
+                    applyStat(s, w, ctx.percentRef, scale);
                 }
             }
         }
@@ -162,27 +162,17 @@ export function scorePieceApplied(
     return baseScore + getMainStatBonus(piece, ctx.selectedStats, baseScore);
 }
 
-function applyStat(stat: Stat, target: Float64Array, percentRef: BaseStats): void {
+function applyStat(stat: Stat, target: Float64Array, percentRef: BaseStats, scale = 1): void {
     const idx = STAT_INDEX[stat.name];
     if (idx === undefined) return;
+    const value = stat.value * scale;
     const isPercentOnly = (PERCENTAGE_ONLY_STATS as readonly string[]).includes(stat.name);
     if (isPercentOnly) {
-        target[idx] += stat.value;
+        target[idx] += value;
     } else if (stat.type === 'percentage') {
-        const ref = (percentRef as unknown as Record<string, number>)[stat.name] ?? 0;
-        target[idx] += ref * (stat.value / 100);
+        const ref = percentRef[stat.name as keyof BaseStats] ?? 0;
+        target[idx] += ref * (value / 100);
     } else {
-        target[idx] += stat.value;
+        target[idx] += value;
     }
-}
-
-function applyScaledStat(
-    stat: Stat,
-    scale: number,
-    target: Float64Array,
-    percentRef: BaseStats
-): void {
-    // Scale only the VALUE, not the reference, to match the slow path
-    // (potentialCalculator.ts:373-379 and :451-469 both multiply stat.value).
-    applyStat({ ...stat, value: stat.value * scale }, target, percentRef);
 }
