@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { PageLayout, Tabs } from '../../components/ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -46,15 +45,9 @@ export const StatisticsPage: React.FC = () => {
         return (
             <PageLayout title="Statistics" description="View statistics about your fleet and gear">
                 <div className="flex flex-col items-center justify-center py-20 text-center">
-                    <div className="text-theme-text-secondary text-lg mb-4">
+                    <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed w-full">
                         No data available. Import your game data to see statistics.
                     </div>
-                    <Link
-                        to="/"
-                        className="px-6 py-3 bg-primary text-white hover:bg-primary-dark transition-colors"
-                    >
-                        Upload Game File
-                    </Link>
                 </div>
             </PageLayout>
         );
