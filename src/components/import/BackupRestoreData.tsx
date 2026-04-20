@@ -6,6 +6,7 @@ import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { StorageKey, StorageKeyType } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
+import { clearIndexedDBStorage } from '../../hooks/useStorage';
 
 const BACKUP_KEYS = Object.values(StorageKey);
 
@@ -368,10 +369,12 @@ export const BackupRestoreData: React.FC = () => {
         fileInputRef.current?.click();
     };
 
-    const handleDeleteLocalStorage = () => {
+    const handleDeleteLocalStorage = async () => {
         try {
             // Clear all backup keys from local storage
             BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
+            // Inventory and gear_upgrades live in IndexedDB, not localStorage.
+            await clearIndexedDBStorage();
 
             addNotification('success', 'Local storage cleared successfully');
             addNotification('info', 'Please refresh the page to see the changes');
@@ -388,6 +391,8 @@ export const BackupRestoreData: React.FC = () => {
         try {
             // Clear local storage
             BACKUP_KEYS.forEach((key) => localStorage.removeItem(key));
+            // Inventory and gear_upgrades live in IndexedDB, not localStorage.
+            await clearIndexedDBStorage();
 
             // Delete user account
             await supabase.rpc('delete_user');
@@ -441,7 +446,7 @@ export const BackupRestoreData: React.FC = () => {
             <ConfirmModal
                 isOpen={showDeleteLocalStorageConfirm}
                 onClose={() => setShowDeleteLocalStorageConfirm(false)}
-                onConfirm={handleDeleteLocalStorage}
+                onConfirm={() => void handleDeleteLocalStorage()}
                 title="Delete Local Storage"
                 message="Are you sure you want to delete all local storage data? This will clear all your ships, gear, loadouts, and other local data. This action cannot be undone. If you're logged in, your cloud data will remain safe."
                 confirmLabel="Delete Local Storage"
