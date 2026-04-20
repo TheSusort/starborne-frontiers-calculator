@@ -199,14 +199,17 @@ export const AdminPanel: React.FC = () => {
 
     const handleRefreshSystemStats = async () => {
         setRefreshingSystemStats(true);
-        const fresh = await refreshSystemSnapshot();
-        if (fresh) {
-            setSystemStats(fresh);
-            addNotification('success', 'System stats refreshed');
-        } else {
-            addNotification('error', 'Failed to refresh system stats');
+        try {
+            const fresh = await refreshSystemSnapshot();
+            if (fresh) {
+                setSystemStats(fresh);
+                addNotification('success', 'System stats refreshed');
+            } else {
+                addNotification('error', 'Failed to refresh system stats');
+            }
+        } finally {
+            setRefreshingSystemStats(false);
         }
-        setRefreshingSystemStats(false);
     };
 
     const formatRelativeTime = (iso: string): string => {
@@ -439,7 +442,9 @@ export const AdminPanel: React.FC = () => {
                     <div className="space-y-6">
                         <div className="flex items-center justify-between gap-4">
                             <div>
-                                <h3 className="text-lg font-semibold">System Stats</h3>
+                                <h3 className="text-lg font-semibold text-theme-text">
+                                    System Stats
+                                </h3>
                                 {systemStats?.updated_at && (
                                     <p className="text-sm text-gray-400">
                                         Last updated {formatRelativeTime(systemStats.updated_at)}
