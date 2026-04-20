@@ -529,7 +529,13 @@ export const baselineStatsCache = new Map<string, BaseStats>();
 
 // Cache for baseline breakdown (full StatBreakdown) - much more efficient for incremental calculations
 // Key: `${shipId}_${slot}_breakdown`
-// Persists across calls within an analysis session so "all" can reuse breakdowns from individual slots
+// Persists across calls within an analysis session so "all" can reuse breakdowns from individual slots.
+//
+// SHARED OWNERSHIP: both the slow path (this module) and the fast path
+// (gear/fastPotential/potentialContext.ts) write to this Map under the same
+// key format. The sharing is intentional — it lets VERIFY_FAST_POTENTIAL runs
+// stay coherent. Tests that exercise either path must clear this cache
+// (alongside baselineStatsCache) in beforeEach to avoid cross-test leakage.
 export const baselineBreakdownCache = new Map<string, StatBreakdown>();
 
 // Cache for gear stats calculations

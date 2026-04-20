@@ -165,7 +165,7 @@ export function buildPotentialContext(input: BuildPotentialContextInput): Potent
     };
     for (const p of inventory) registerSet(p.setBonus);
     if (withShip && ship && input.getGearPiece) {
-        for (const gearId of Object.values(ship.equipment ?? {})) {
+        for (const gearId of Object.values(ship.equipment)) {
             if (!gearId) continue;
             const g = input.getGearPiece(gearId);
             if (g?.setBonus) registerSet(g.setBonus);
@@ -185,7 +185,7 @@ export function buildPotentialContext(input: BuildPotentialContextInput): Potent
         // afterEngineering is slot-independent — compute (or reuse cached)
         // baselineBreakdown for any slot we need, and read afterEngineering
         // off it. Pick an arbitrary slot deterministically.
-        const firstSlot = [...slotsNeeded][0];
+        const firstSlot = slotsNeeded.values().next().value as GearSlotName;
         const breakdown = getOrCreateBreakdown(
             ship,
             firstSlot,
@@ -212,7 +212,7 @@ export function buildPotentialContext(input: BuildPotentialContextInput): Potent
 
             // setCount of equipment-minus-this-slot
             const setCount = new Uint8Array(setIdToName.length);
-            for (const [eqSlot, gearId] of Object.entries(ship.equipment ?? {})) {
+            for (const [eqSlot, gearId] of Object.entries(ship.equipment)) {
                 if (!gearId) continue;
                 if (eqSlot === slotName) continue;
                 const g = input.getGearPiece(gearId);
