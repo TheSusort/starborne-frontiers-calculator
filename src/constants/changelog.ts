@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.53.0';
+export const CURRENT_VERSION = '1.53.1';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.53.1',
+        date: '2026-04-20',
+        changes: [
+            'Fixed new email signups failing with "Database error saving new user"',
+            'Fixed "Delete Local Storage" not actually clearing gear and implants',
+            "Fixed signing out leaving the previous account's ships, gear, and stats visible",
+        ],
+    },
     {
         version: '1.53.0',
         date: '2026-04-18',
