@@ -3,7 +3,7 @@
  * fastAnalyzePotentialUpgrades. Defaults to false on first merge; flipped in
  * Phase 5 once equivalence tests and user-side benchmarks look good.
  */
-export const USE_FAST_POTENTIAL = false;
+export const USE_FAST_POTENTIAL = true;
 
 /**
  * VERIFY_FAST_POTENTIAL — when true, runs BOTH paths per call and
