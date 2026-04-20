@@ -161,6 +161,18 @@ Import-path updates: any autogear file that imported `'./statVector'` or `'./fas
 
 ### 2. `src/utils/gear/fastPotential/potentialContext.ts`
 
+**Critical: two baseline vectors per slot.** Reading `potentialCalculator.ts:269-388` carefully, the slow path uses THREE distinct `StatBreakdown` fields:
+
+| Field | Used for | Notes |
+|---|---|---|
+| `baseline.final` | with-ship **currentScore** input (no piece applied; includes implants + pre-existing set bonuses) | `potentialCalculator.ts:667` |
+| `baseline.afterGear` | with-ship **potentialScore** starting vector (piece + new-tier set deltas added on top) | `potentialCalculator.ts:293, 326` |
+| `baseline.afterEngineering` | percentage reference when adding the piece's stats and set deltas | `potentialCalculator.ts:327, 335, 377` |
+
+These are three different vectors (or one baseline + two fields). The spec's `SlotBaseline` must carry both the `afterGear` vector (for the upgrade path) and the `final` vector (for the current path). `afterEngineering` can live on the context once because it's slot-independent (base + refits + engineering — no gear).
+
+Additionally: with-ship `currentScore` uses `baseline.final` directly (piece NOT applied — it's the ship state without this slot's gear). Dummy `currentScore` uses role-base-stats + the piece applied (dummy mode has no "ship without this slot" concept). Two genuinely different semantics across modes — handled by branching in the scoring layer (§3).
+
 ```ts
 export interface PotentialContext {
     readonly withShip: boolean;
@@ -169,8 +181,8 @@ export interface PotentialContext {
     readonly shipRole: ShipTypeName;
     readonly selectedStats: StatName[];                    // for main-stat bonus
 
-    /** Baseline per slot (slot-to-baseline). All slots relevant to the current
-     * analyze call are populated lazily before the piece loop. */
+    /** Baseline per slot. All slots that have eligible pieces in the current
+     * analyze call are populated before the piece loop. */
     readonly baselinesBySlot: Map<GearSlotName, SlotBaseline>;
 
     /** Slot-specific baseline when analyzePotentialUpgrades is called with a
@@ -179,7 +191,7 @@ export interface PotentialContext {
 
     readonly workspace: {
         stats: Float64Array;                               // len = STAT_COUNT
-        setCount: Uint8Array;                              // len = setRegistry.size + 1
+        setCount: Uint8Array;                              // len = setNameToId.size + 1
     };
 
     readonly setNameToId: Map<string, number>;
@@ -187,12 +199,29 @@ export interface PotentialContext {
 }
 
 interface SlotBaseline {
-    /** final stats with this slot's equipment removed. */
-    readonly statsVector: Float64Array;
-    /** set counts of the rest of the equipment (excluding this slot). */
+    /**
+     * afterGear vector — base + refits + engineering + all gear EXCEPT this slot's.
+     * Starting vector for the upgrade-scoring path (§3).
+     * With-ship: Float64Array of baselineBreakdown.afterGear.
+     * Dummy: Float64Array of ROLE_BASE_STATS[baseRole].
+     */
+    readonly afterGearVector: Float64Array;
+
+    /**
+     * final vector — baseline.final from the cached StatBreakdown (with-ship only).
+     * Used ONLY for with-ship currentScore — the piece is NOT applied on top.
+     * Dummy mode: null. Dummy `currentScore` applies the piece to afterGearVector
+     * (same code path as dummy potentialScore), because dummy has no "ship without
+     * this slot" concept.
+     */
+    readonly finalVector: Float64Array | null;
+
+    /**
+     * Set counts of equipment-minus-slot, keyed by ctx.setNameToId integer ids.
+     * With-ship: from the ship's current equipment minus this slot.
+     * Dummy: all zeros (no other equipment).
+     */
     readonly setCount: Uint8Array;
-    /** per-piece crit baseline for the dummy path (matches the slow path's per-piece computation). */
-    readonly dummyCritBaseline: number | undefined;
 }
 
 export function buildPotentialContext(input: BuildContextInput): PotentialContext;
@@ -201,47 +230,87 @@ export function buildPotentialContext(input: BuildContextInput): PotentialContex
 Build order:
 
 1. Determine `withShip = input.ship !== undefined && getGearPiece && getEngineeringStats`.
-2. Register all set names that appear anywhere in the inventory and ship equipment into `setNameToId` (0 reserved for "no set"). Allocate `workspace.setCount` with `length = setNameToId.size + 1`.
-3. Populate `baselinesBySlot`:
-   - **With-ship:** for each slot with eligible pieces in this analyze call, either read from the existing `baselineStatsCache` (if already populated) or call `calculateTotalStats` with that slot's equipment removed — same logic the slow path uses today. Convert the `final` `BaseStats` to a `Float64Array` via `baseStatsToStatVector`. Compute `setCount` from the equipment minus the slot. Store.
-   - **Dummy:** baseline is `ROLE_BASE_STATS[baseRole]` as a vector; `setCount` is all zeros; the dummy `crit` adjustment happens per-piece in the hot loop (not in the baseline) because it depends on the piece's own crit.
-4. If `slot` (the argument) is defined, set `fixedSlotBaseline = baselinesBySlot.get(slot) ?? null`.
-5. `percentRef` = `statVectorToBaseStats(slotBaseline.statsVector)` for with-ship (the "afterEngineering" equivalent for this slot's baseline), or the role base stats for dummy. Stored on the context for reuse.
+2. Register all set names from inventory + ship equipment into `setNameToId` (0 reserved for "no set"). Allocate `workspace.setCount` with `length = setNameToId.size + 1`.
+3. Compute `percentRef`:
+   - **With-ship:** pull `afterEngineering` from the cached baselineBreakdown for any slot (it's slot-independent since afterEngineering excludes gear). If no baseline is cached yet, compute one and populate the cache first.
+   - **Dummy:** `percentRef = ROLE_BASE_STATS[baseRole]`. The per-piece `crit` adjustment (see §3) does NOT go into `percentRef` — `crit` is a percentage-only stat that adds directly and never uses `percentRef` to resolve.
+4. Populate `baselinesBySlot`. For each slot that has eligible pieces in this analyze call:
+   - **With-ship:**
+     - Read or compute `baselineBreakdown` via the existing `baselineBreakdownCache` / `baselineStatsCache` — same logic the slow path uses.
+     - `afterGearVector = baseStatsToStatVector(baselineBreakdown.afterGear)`
+     - `finalVector = baseStatsToStatVector(baselineBreakdown.final)`
+     - `setCount`: iterate `equipmentWithoutSlot`, increment `setCount[setNameToId.get(setBonus)]` per piece.
+   - **Dummy:**
+     - `afterGearVector = baseStatsToStatVector(ROLE_BASE_STATS[baseRole])`
+     - `finalVector = null`
+     - `setCount`: zeroed.
+5. If the `slot` argument is defined, `fixedSlotBaseline = baselinesBySlot.get(slot) ?? null`. Otherwise null (caller looks up by piece's slot per-iteration).
 
-Rationale: building once per `analyzePotentialUpgrades` call (not once per session) is cheap (<1 ms) and correct — different calls have different `shipRole`/`slot`/`selectedStats`/`selectedGearSets`, which affect scoring inputs.
+Rationale: building once per `analyzePotentialUpgrades` call (not once per session) is cheap (<1 ms) and correct — different calls have different `shipRole`/`slot`/`selectedStats`/`selectedGearSets`, which affect scoring inputs. Calls within a session share the module-level `baselineBreakdownCache` for the expensive `calculateTotalStats` work.
 
 ### 3. `src/utils/gear/fastPotential/scorePieceUpgrade.ts`
 
+Two scoring functions. Both read context, write to workspace.
+
 ```ts
 /**
- * Score a piece as if it were equipped in `slot`, given the context.
- * Returns the role score including main-stat bonus.
+ * Score the current state (no piece applied). Used by with-ship mode only —
+ * scores baseline.final (ship state without this slot's gear).
  *
- * Reads context (read-only); writes to workspace (scratch).
+ * Dummy mode uses scorePieceApplied for BOTH current and potential because
+ * dummy has no "ship without this slot" concept; current = role base + this
+ * piece, potential = role base + this piece upgraded.
  */
-export function scorePieceUpgrade(
+export function scoreCurrentWithShip(
+    ctx: PotentialContext,
+    piece: GearPiece,        // for getMainStatBonus only; stats NOT applied
+    slot: GearSlotName
+): number;
+
+/**
+ * Score with the piece applied to afterGear baseline + set bonus handling.
+ * Used by:
+ * - with-ship potentialScore (piece = original or simulated upgrade)
+ * - dummy currentScore (piece = original)
+ * - dummy potentialScore (piece = simulated upgrade)
+ */
+export function scorePieceApplied(
     ctx: PotentialContext,
     piece: GearPiece,
     slot: GearSlotName
 ): number;
 ```
 
-Internal flow per call:
+**`scoreCurrentWithShip` flow:**
 
-1. Resolve `baseline = ctx.fixedSlotBaseline ?? ctx.baselinesBySlot.get(slot)`. Missing baseline = fatal (bug in context build); throw in dev, `console.error` + return `0` in prod.
-2. `copyStatVector(baseline.statsVector, workspace.stats)` — single loop over 14 floats.
-3. Copy `baseline.setCount` into `workspace.setCount` — single loop.
-4. **Resolve the piece's main stat** (applying calibration if `withShip && piece.calibration?.shipId === ctx.ship.id && isCalibrationEligible(piece)`).
-5. **With-ship mode:** apply piece main stat + sub stats to `workspace.stats` using `ctx.percentRef`. Increment `workspace.setCount[pieceSetId]` if piece has a set. For each set where `floor(new / minPieces) > floor(old / minPieces)`, apply set bonus stats (scaled 0.5 for 4-piece) to `workspace.stats` using `ctx.percentRef`.
-6. **Dummy mode:** apply piece main stat + sub stats — but the dummy path handles `crit` specially. The slow path computes `baseCrit = max(0, 100 - sum(gearCrit))` per piece and passes a ship baseline with that `crit` — so we do the same here: replace `workspace.stats[STAT_INDEX.crit]` with the per-piece dummy baseline crit before applying piece stats. Apply set bonus *optimistically* if piece has one — scale 0.5 for 4-piece sets — as `workspace.stats[idx] += setStat.value * scale` (using `ctx.percentRef`).
-7. `statVectorToBaseStats(workspace.stats)` — stack-allocated BaseStats for the scorer.
-8. `baseScore = calculatePriorityScore(stats, [], ctx.shipRole)`.
-9. `mainStatBonus = getMainStatBonus(piece, ctx.selectedStats, baseScore)` (existing function, unchanged).
-10. Return `baseScore + mainStatBonus`.
+1. Resolve `baseline = ctx.fixedSlotBaseline ?? ctx.baselinesBySlot.get(slot)`. Missing or `baseline.finalVector == null` = bug (dummy mode shouldn't call this); throw in dev, `console.error` + return 0 in prod.
+2. Convert `baseline.finalVector` to BaseStats via `statVectorToBaseStats`.
+3. `baseScore = calculatePriorityScore(stats, [], ctx.shipRole)`.
+4. Return `baseScore + getMainStatBonus(piece, ctx.selectedStats, baseScore)`.
 
-**No allocations in the hot loop** except:
-- The `BaseStats` object returned by `statVectorToBaseStats` (14 properties; unavoidable because `calculatePriorityScore` takes `BaseStats`). This is a single per-call allocation vs the slow path's 6 × 14 = 84 property copies per call.
-- `getMainStatBonus` is pure arithmetic on `piece`.
+No workspace mutation; no piece application to stats.
+
+**`scorePieceApplied` flow:**
+
+1. Resolve `baseline = ctx.fixedSlotBaseline ?? ctx.baselinesBySlot.get(slot)`. Missing = bug; throw.
+2. `copyStatVector(baseline.afterGearVector, ctx.workspace.stats)` — single loop over 14 floats.
+3. Copy `baseline.setCount` into `ctx.workspace.setCount` — single loop.
+4. **Dummy-mode crit adjustment** (skip for with-ship). Compute `pieceCritBaseline = max(0, 100 - sum(gearCritFromPiece))` — iterate main stat + subs, sum every `crit` contribution, subtract from 100. Set `ctx.workspace.stats[STAT_INDEX.crit] = pieceCritBaseline`. This matches the slow path's per-piece crit baseline (`potentialCalculator.ts:646-656, 687, 724`).
+5. **Resolve piece's main stat for application:** if `ctx.withShip && piece.calibration?.shipId === ctx.ship.id && isCalibrationEligible(piece)`, replace `piece.mainStat` with `getCalibratedMainStat(piece)` for this call only. Dummy mode: calibration never applies.
+6. Apply the (possibly calibrated) main stat and each sub stat to `ctx.workspace.stats` using `ctx.percentRef` as the percentage reference. Use the same `addStatModifier`-equivalent logic as in autogear's `applyPieceStat` (percent-only stats add directly; `type: 'percentage'` flexible stats resolve as `percentRef[name] * (value / 100)`; `type: 'flat'` flexible stats add directly).
+7. **Set bonus handling** (diverges by mode):
+   - **With-ship:** if `piece.setBonus`, compute `setId = ctx.setNameToId.get(piece.setBonus)` and increment `ctx.workspace.setCount[setId]`. For each set id `1..setCount.length`, compute `before = floor(baseline.setCount[id] / minPieces)` and `after = floor(workspace.setCount[id] / minPieces)`. If `after > before`, apply `(after - before)` copies of that set's stats to `ctx.workspace.stats` using `ctx.percentRef`, scaling each stat's value by `0.5` if `minPieces >= 4`.
+   - **Dummy:** if `piece.setBonus && GEAR_SETS[piece.setBonus]?.stats`, apply the set bonus stats *optimistically* (once, pretending the set is complete), scaling by `0.5` if `minPieces >= 4`. Same `addStatModifier` logic as above using `ctx.percentRef`.
+8. `stats = statVectorToBaseStats(ctx.workspace.stats)` — stack-allocated BaseStats for the scorer.
+9. `baseScore = calculatePriorityScore(stats, [], ctx.shipRole)`.
+10. `mainStatBonus = getMainStatBonus(piece, ctx.selectedStats, baseScore)`.
+11. Return `baseScore + mainStatBonus`.
+
+**Per-call allocations:**
+- Workspace mutation — no allocation.
+- `statVectorToBaseStats` — one BaseStats object (14 properties). Unavoidable because `calculatePriorityScore` takes `BaseStats`. Still dramatically less than the slow path's 6 × 14 = 84 property copies per call.
+- `getCalibratedMainStat` (if calibration applies) — one Stat object. Rare (only calibrated pieces).
+- `getMainStatBonus` — pure arithmetic.
 
 ### 4. `src/utils/gear/fastPotential/fastAnalyze.ts`
 
@@ -267,13 +336,16 @@ export function fastAnalyzePotentialUpgrades(
 Signature mirrors `analyzePotentialUpgrades` exactly. Body:
 
 1. Filter eligible pieces — same logic as the slow path (rarity, level, slot, stat filter, gear-set filter, no implants).
-2. Build `PotentialContext` (once) for the slot(s) that have eligible pieces.
+2. Build `PotentialContext` (once) for the slot(s) that have eligible pieces. Population should use each piece's actual slot (`piece.slot`) — not just the `slot` argument — because when `slot === undefined` ('all' mode) a piece can land in any slot the user has pieces for, including slots the ship has never had gear in.
 3. For each eligible piece:
-   - Compute `currentScore = scorePieceUpgrade(ctx, piece, slot ?? piece.slot)`.
-   - For `i` in `0..simulationCount`: compute `simulated = simulateUpgrade(piece).piece`, then `potentialScore += scorePieceUpgrade(ctx, simulated, slot ?? piece.slot)`.
-   - `avgPotentialScore = potentialScore / simulationCount`.
+   - Resolve `targetSlot = slot ?? piece.slot`.
+   - `currentScore = ctx.withShip ? scoreCurrentWithShip(ctx, piece, targetSlot) : scorePieceApplied(ctx, piece, targetSlot)`.
+   - For `i` in `0..simulationCount`: `simulated = simulateUpgrade(piece).piece`; `sumPotential += scorePieceApplied(ctx, simulated, targetSlot)`.
+   - `avgPotentialScore = sumPotential / simulationCount`.
    - Record `{ piece, currentScore, potentialScore: avgPotentialScore, improvement: avgPotentialScore - currentScore }`.
 4. Sort by `potentialScore` descending, slice to `count`, return.
+
+Notice: with-ship mode uses `scoreCurrentWithShip` for the current path (baseline only, no piece applied). Dummy mode uses `scorePieceApplied` for both current and potential because dummy's "current" means "this piece's current state," not "ship minus piece."
 
 ### 5. Dispatch in `analyzePotentialUpgrades`
 
@@ -460,5 +532,5 @@ No CI check. User runs analyze-gear in-browser before/after the flag flip (Task 
 ## Open questions (for planning phase)
 
 - **Return value from `statVectorToBaseStats` in the hot loop:** the 14-property object allocation is unavoidable given `calculatePriorityScore`'s signature. If Phase 4 benchmarks show this is a meaningful cost, a follow-up could offer a `calculatePriorityScoreFromVector(vector: Float64Array, ...)` variant. Out of scope here; revisit only if numbers require it.
-- **`fastCache` usage:** the existing LRU cache primitive is extracted but not yet used by `fastPotential` (analyze-gear doesn't have the repeated-key access pattern that benefits from caching). Keep it shared for the future; Phase 1 doesn't wire it into fastPotential.
+- **`fastCache` extraction but non-use:** the LRU cache primitive is moved to `src/utils/fastScoring/` but `fastPotential` does not import it. Analyze-gear's access pattern doesn't have repeated identical-key lookups — each piece × simulation is unique, so caching by gear id wouldn't hit. The extraction is still valuable because (a) it already lives next to `statVector`, (b) future fast-path consumers (potentially DPS simulation or charging/CR calculators) may have caching needs, (c) moving now avoids a harder move later. No wiring into fastPotential.
 - **Temporary timer removal:** replace with `performanceTracker`-style instrumentation long-term, or fully remove? Design removes. Can be re-added later if a different feature needs it.
