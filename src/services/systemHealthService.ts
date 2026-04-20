@@ -9,6 +9,8 @@ export interface SystemStats {
     total_active_users: number;
     avg_ships_per_user: number;
     avg_gear_per_user: number;
+    snapshot_date: string;
+    updated_at: string;
 }
 
 export interface GrowthMetric {
@@ -54,6 +56,26 @@ export async function getSystemStats(): Promise<SystemStats | null> {
         return data;
     } catch (error) {
         console.error('Error fetching system stats:', error);
+        return null;
+    }
+}
+
+/**
+ * Recompute and upsert today's system-health snapshot, returning the new row.
+ * Admin-only; non-admin callers receive a 42501 error from the RPC.
+ */
+export async function refreshSystemSnapshot(): Promise<SystemStats | null> {
+    try {
+        const { data, error } = await supabase.rpc('refresh_system_snapshot');
+
+        if (error) {
+            console.error('Error refreshing system snapshot:', error);
+            return null;
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Error refreshing system snapshot:', error);
         return null;
     }
 }
