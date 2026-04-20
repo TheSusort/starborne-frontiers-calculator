@@ -581,7 +581,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
                                         .sort((a, b) => a.name.localeCompare(b.name))
                                         .map((ship) => ({
                                             value: ship.id,
-                                            label: `${ship.name} (${SHIP_TYPES[ship.type].name})`,
+                                            label: `${ship.name} R${ship.refits?.length ?? 0} (${SHIP_TYPES[ship.type].name})`,
                                         })),
                                 ]}
                                 helpLabel="Select a ship to analyze upgrades using its actual stats, gear, implants, and engineering. Leave as 'None' to use generic dummy values."
