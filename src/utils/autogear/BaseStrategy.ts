@@ -12,7 +12,6 @@ export abstract class BaseStrategy implements AutogearStrategy {
     protected progressCallback?: (progress: AutogearProgress) => void;
     protected totalOperations: number = 0;
     protected currentOperation: number = 0;
-    protected readonly PROGRESS_UPDATE_INTERVAL = 50000;
     protected lastProgressEmitTime: number = 0;
     protected readonly PROGRESS_THROTTLE_MS = 16; // ~60fps cap
     protected currentAttempt?: number;
