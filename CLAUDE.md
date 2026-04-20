@@ -230,7 +230,7 @@ Defined in `src/constants/storage.ts`:
 
 - `users` - User profiles, includes `is_admin` flag
   - Auto-synced from `auth.users` via trigger on user creation/update
-  - Trigger: `on_auth_user_created` → `handle_new_user()`
+  - Trigger on `auth.users` INSERT → `public.insert_user()` (SECURITY DEFINER, copies `id` + `email` into `public.users`)
 - `ships` - User ship instances (JSONB for stats, equipment, refits)
 - `inventory` - Gear pieces (JSONB for stats)
 - `engineering_stats` - Per-user ship type bonuses
