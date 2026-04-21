@@ -271,6 +271,7 @@ export const ImportButton: React.FC<{
                     onChange={(e) => void handleFileUpload(e)}
                     style={{ display: 'none' }}
                     id="import-file-input"
+                    data-testid="import-game-data-input"
                 />
                 <Button
                     variant="primary"
