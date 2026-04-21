@@ -21,8 +21,13 @@ test.describe('anonymous user imports game data', () => {
         await page.goto('/gear');
         await expect(page.getByTestId('gear-count')).toHaveText('13', { timeout: 10_000 });
 
-        // 5. Smoke-test autogear — navigate, start a run, wait for suggestions.
-        await page.goto('/autogear');
+        // 5. Smoke-test autogear — navigate with ?shipId so AutogearPage's
+        //    URL-param effect auto-populates selectedShips. Without a ship,
+        //    handleAutogear early-returns (validShips.length === 0) and the
+        //    autogear-suggestions container never mounts. The fixture's first
+        //    ship has Id `e2e-ship-1`; ships keep that Id through the import
+        //    pipeline (importPlayerData uses unit.Id verbatim).
+        await page.goto('/autogear?shipId=e2e-ship-1');
         await page.getByTestId('autogear-start').click();
         await expect(page.getByTestId('autogear-suggestions')).toBeVisible({
             timeout: 30_000,
