@@ -14,11 +14,11 @@ function getAdminClient(): SupabaseClient {
     return _client;
 }
 
-export function assertIsTestEmail(email: string, domain: string): void {
+export function assertIsTestEmail(email: string, prefix: string, domain: string): void {
     // Safety rail: this helper must never touch non-test users.
-    // Pattern: e2e-<uuid>@<exact test domain>
+    // Pattern: <prefix><uuid>@<exact test domain>
     const pattern = new RegExp(
-        `^e2e-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@${escapeRegex(domain)}$`
+        `^${escapeRegex(prefix)}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@${escapeRegex(domain)}$`
     );
     if (!pattern.test(email)) {
         throw new Error(
@@ -48,8 +48,12 @@ export async function confirmUserEmail(userId: string): Promise<void> {
     if (error) throw error;
 }
 
-export async function deleteTestUser(email: string, domain: string): Promise<void> {
-    assertIsTestEmail(email, domain);
+export async function deleteTestUser(
+    email: string,
+    prefix: string,
+    domain: string
+): Promise<void> {
+    assertIsTestEmail(email, prefix, domain);
     const client = getAdminClient();
     const userId = await findUserIdByEmail(email);
     if (!userId) return; // already gone
@@ -58,6 +62,7 @@ export async function deleteTestUser(email: string, domain: string): Promise<voi
 }
 
 export async function listOrphanTestUsers(
+    prefix: string,
     domain: string,
     olderThan: Date
 ): Promise<Array<{ id: string; email: string; created_at: string }>> {
@@ -68,7 +73,7 @@ export async function listOrphanTestUsers(
         .filter((u) => {
             if (!u.email) return false;
             try {
-                assertIsTestEmail(u.email, domain);
+                assertIsTestEmail(u.email, prefix, domain);
             } catch {
                 return false;
             }
