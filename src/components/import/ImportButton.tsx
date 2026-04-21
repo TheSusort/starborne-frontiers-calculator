@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useId, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -27,7 +27,13 @@ export const ImportButton: React.FC<{
     className?: string;
     shareData?: boolean;
     setShareData?: (value: boolean) => void;
-}> = ({ className = '', shareData: externalShareData, setShareData: externalSetShareData }) => {
+    testId?: string;
+}> = ({
+    className = '',
+    shareData: externalShareData,
+    setShareData: externalSetShareData,
+    testId,
+}) => {
     const { setData: setShips } = useShips();
     const { setData: setInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
@@ -38,6 +44,11 @@ export const ImportButton: React.FC<{
     const [showHangarModal, setShowHangarModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
+    // Unique id per ImportButton instance so multiple mounts (e.g. HomePage CTA
+    // + Sidebar) don't collide on a single DOM id. The id is used for the
+    // hidden-input click delegation below.
+    const reactId = useId();
+    const inputDomId = `import-file-input-${reactId}`;
 
     // Use external state if provided, otherwise use internal state
     const shareData = externalShareData !== undefined ? externalShareData : internalShareData;
@@ -194,13 +205,13 @@ export const ImportButton: React.FC<{
             } finally {
                 setLoading(false);
                 // Reset the file input
-                const fileInput = document.getElementById('import-file-input') as HTMLInputElement;
+                const fileInput = document.getElementById(inputDomId) as HTMLInputElement;
                 if (fileInput) fileInput.value = '';
             }
         },
         // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [setShips, setInventory, setEngineeringStats, addNotification, user]
+        [setShips, setInventory, setEngineeringStats, addNotification, user, inputDomId]
     );
 
     const handleHangarNameSubmit = useCallback(
@@ -270,12 +281,12 @@ export const ImportButton: React.FC<{
                     accept=".json"
                     onChange={(e) => void handleFileUpload(e)}
                     style={{ display: 'none' }}
-                    id="import-file-input"
-                    data-testid="import-game-data-input"
+                    id={inputDomId}
+                    data-testid={testId}
                 />
                 <Button
                     variant="primary"
-                    onClick={() => document.getElementById('import-file-input')?.click()}
+                    onClick={() => document.getElementById(inputDomId)?.click()}
                     className={className}
                     data-import-button
                 >
@@ -293,9 +304,7 @@ export const ImportButton: React.FC<{
                     setShowHangarModal(false);
                     setSelectedFile(null);
                     // Reset the file input
-                    const fileInput = document.getElementById(
-                        'import-file-input'
-                    ) as HTMLInputElement;
+                    const fileInput = document.getElementById(inputDomId) as HTMLInputElement;
                     if (fileInput) fileInput.value = '';
                 }}
                 onSubmit={(name: string) => void handleHangarNameSubmit(name)}
