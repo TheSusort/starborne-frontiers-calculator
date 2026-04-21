@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { importGameData } from '../helpers/page-actions';
+import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
 
 test.describe('anonymous user imports game data', () => {
+    test.beforeEach(async ({ page }) => {
+        await silenceFirstVisitOverlays(page);
+    });
+
     test('imports, navigates, runs autogear, persists on reload', async ({ page }) => {
         // 1. Fresh context — Playwright gives us one per test by default.
         await page.goto('/');

@@ -7,6 +7,7 @@ import {
 } from '../helpers/page-actions';
 import { generateTestCredentials } from '../helpers/disposableEmail';
 import { armMigrationListener } from '../helpers/wait-for-migration';
+import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
 import {
     confirmUserEmail,
     deleteTestUser,
@@ -20,6 +21,10 @@ if (!DOMAIN) throw new Error('E2E_TEST_EMAIL_DOMAIN is required');
 
 test.describe('new account: signup → confirm → signin → migrate', () => {
     const created: string[] = [];
+
+    test.beforeEach(async ({ page }) => {
+        await silenceFirstVisitOverlays(page);
+    });
 
     test.afterEach(async () => {
         for (const email of created) {

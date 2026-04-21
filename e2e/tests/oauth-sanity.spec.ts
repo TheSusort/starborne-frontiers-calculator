@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
 
 test.describe('google oauth redirect sanity', () => {
+    test.beforeEach(async ({ page }) => {
+        await silenceFirstVisitOverlays(page);
+    });
+
     test('clicking google button redirects to accounts.google.com with a client_id', async ({
         page,
     }) => {
