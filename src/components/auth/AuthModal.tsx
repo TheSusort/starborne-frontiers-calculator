@@ -100,6 +100,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             variant="secondary"
                             fullWidth
                             type="button"
+                            data-testid="auth-continue-with-email"
                         >
                             Continue with Email
                         </Button>
