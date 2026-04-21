@@ -43,7 +43,11 @@
         "prepare": "husky install",
         "lint-staged": "lint-staged",
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
-        "admin:import": "tsx scripts/admin-import.ts"
+        "admin:import": "tsx scripts/admin-import.ts",
+        "e2e": "cd e2e && npm test",
+        "e2e:headed": "cd e2e && npm run test:headed",
+        "e2e:ui": "cd e2e && npm run test:ui",
+        "e2e:install": "cd e2e && npm ci && npx playwright install --with-deps chromium"
     },
     "browserslist": {
         "production": [
