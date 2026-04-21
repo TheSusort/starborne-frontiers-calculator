@@ -13,9 +13,26 @@ const FIXTURE_PATH = resolve(__dirname, '..', 'fixtures', 'gameData.json');
 export async function importGameData(page: Page): Promise<void> {
     const input = page.getByTestId('import-game-data-input');
     await input.setInputFiles(FIXTURE_PATH);
-    // Import is async — wait for the button to re-enable after the import
-    // pipeline resolves. The input itself is disabled during import.
-    await expect(input).toBeEnabled({ timeout: 30_000 });
+    // Wait for the import pipeline to finish writing to localStorage.
+    // The ImportButton handler calls setShips after parsing, which persists
+    // the collection under the 'ships' key (see src/constants/storage.ts,
+    // StorageKey.SHIPS). A non-empty array is a reliable completion signal —
+    // the hidden input is never disabled during import, so checking
+    // toBeEnabled on it resolves immediately and is not a real wait.
+    await page.waitForFunction(
+        () => {
+            const raw = window.localStorage.getItem('ships');
+            if (!raw) return false;
+            try {
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) && parsed.length > 0;
+            } catch {
+                return false;
+            }
+        },
+        null,
+        { timeout: 30_000 }
+    );
 }
 
 /**
