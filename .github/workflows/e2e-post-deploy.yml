@@ -1,0 +1,93 @@
+# E2E Post-Deploy Smoke Tests
+# ----------------------------
+# Runs Playwright specs against the production deploy after every successful
+# Netlify build. Fails loudly if the anonymous import, signup+migration, or
+# Google OAuth redirect breaks.
+#
+# What this tests:
+#   - Anonymous user imports game data and uses the app (anon-import.spec.ts)
+#   - New account signup -> email confirm -> signin -> localStorage-to-Supabase
+#     migration -> data persists on reload (new-account-signup-migrate.spec.ts)
+#   - Google OAuth button redirects to accounts.google.com with a client_id
+#     (oauth-sanity.spec.ts)
+#
+# What this does NOT test:
+#   - Full OAuth completion (no real Google account automation)
+#   - Preview / branch deploys (production only)
+#   - Non-chromium browsers
+#
+# Required GitHub Secrets (Settings -> Secrets and variables -> Actions):
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - E2E_TEST_EMAIL_PREFIX  (e.g. "starborneplanner+e2e-")
+#   - E2E_TEST_EMAIL_DOMAIN  (e.g. "gmail.com")
+#
+# Local run:
+#   npm run e2e:install   # one-time
+#   E2E_BASE_URL=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+#   E2E_TEST_EMAIL_PREFIX=... E2E_TEST_EMAIL_DOMAIN=... npm run e2e
+#
+# Related:
+#   - Weekly orphan cleanup: .github/workflows/e2e-cleanup-orphans.yml
+#   - Spec: docs/plans/2026-04-21-e2e-post-deploy-testing-design.md
+#   - Known adjacent issue: signup UI has no "check your email" confirmation
+#     state (tracked separately; this suite bypasses via admin API).
+
+name: E2E — post-deploy smoke
+
+on:
+    deployment_status:
+    workflow_dispatch:
+        inputs:
+            base_url:
+                description: 'Target URL (defaults to production)'
+                required: false
+
+concurrency:
+    group: e2e-post-deploy
+    cancel-in-progress: false
+
+jobs:
+    smoke:
+        # deployment_status: only prod successes
+        # workflow_dispatch: always run
+        if: >-
+            github.event_name == 'workflow_dispatch' ||
+            (github.event.deployment_status.state == 'success' &&
+             github.event.deployment.environment == 'production')
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+                  cache-dependency-path: e2e/package-lock.json
+
+            - name: Install e2e deps
+              working-directory: e2e
+              run: npm ci
+
+            - name: Install playwright browsers
+              working-directory: e2e
+              run: npx playwright install --with-deps chromium
+
+            - name: Run playwright
+              working-directory: e2e
+              env:
+                  E2E_BASE_URL: ${{ github.event.deployment_status.environment_url || github.event.inputs.base_url || 'https://starborneplanner.com' }}
+                  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+                  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+                  E2E_TEST_EMAIL_PREFIX: ${{ secrets.E2E_TEST_EMAIL_PREFIX }}
+                  E2E_TEST_EMAIL_DOMAIN: ${{ secrets.E2E_TEST_EMAIL_DOMAIN }}
+              run: npm test
+
+            - name: Upload playwright report
+              if: failure()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: playwright-report-${{ github.run_id }}
+                  path: e2e/playwright-report/
+                  retention-days: 14
