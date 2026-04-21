@@ -6,7 +6,7 @@ import {
     submitSignin,
 } from '../helpers/page-actions';
 import { generateTestCredentials } from '../helpers/disposableEmail';
-import { armMigrationListener } from '../helpers/wait-for-migration';
+import { installMigrationSentinel, waitForMigration } from '../helpers/wait-for-migration';
 import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
 import {
     confirmUserEmail,
@@ -23,7 +23,14 @@ test.describe('new account: signup → confirm → signin → migrate', () => {
     const created: string[] = [];
 
     test.beforeEach(async ({ page }) => {
+        // Both init-script helpers must run BEFORE the first page.goto so
+        // the scripts are registered on the browser context for every
+        // document load. The migration sentinel in particular must be in
+        // place before any auth state change can dispatch
+        // `app:migration:end` — otherwise a race with fast sign-in paths
+        // (e.g. email confirmation OFF) could miss the event.
         await silenceFirstVisitOverlays(page);
+        await installMigrationSentinel(page);
     });
 
     test.afterEach(async () => {
@@ -65,13 +72,11 @@ test.describe('new account: signup → confirm → signin → migrate', () => {
         // 4. Confirm via admin API (skips real email click)
         await confirmUserEmail(userId!);
 
-        // 5. Arm migration listener BEFORE signin — if armed after, the
-        //    'app:migration:end' event could fire before Playwright's
-        //    listener attaches, and we'd wait forever.
-        const awaitMigration = await armMigrationListener(page);
-
-        // 6. Signin. If the modal was auto-closed after signup, reopen it.
-        //    Otherwise submitSignin's ensureSigninMode toggles mode as needed.
+        // 5. Signin. The migration sentinel was installed in beforeEach via
+        //    addInitScript, so the listener is already in place on every
+        //    document load — we don't need to arm it here. If the modal was
+        //    auto-closed after signup, reopen it; otherwise submitSignin's
+        //    ensureSigninMode toggles mode as needed.
         const emailInputVisible = await page
             .getByTestId('auth-email-input')
             .isVisible()
@@ -81,10 +86,10 @@ test.describe('new account: signup → confirm → signin → migrate', () => {
         }
         await submitSignin(page, email, password);
 
-        // 7. Wait for migration to complete
-        await awaitMigration(30_000);
+        // 6. Wait for migration to complete
+        await waitForMigration(page, 30_000);
 
-        // 8. Persistence check — reload, assert ship count still shows.
+        // 7. Persistence check — reload, assert ship count still shows.
         //    This exercises the Supabase READ path through RLS.
         await page.reload();
         await page.goto('/ships');
