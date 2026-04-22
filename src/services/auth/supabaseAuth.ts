@@ -40,11 +40,17 @@ export class SupabaseAuthService implements AuthService {
     }
 
     async signUpWithEmail(email: string, password: string): Promise<void> {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
             email,
             password,
         });
         if (error) throw error;
+        // Supabase returns success with an empty identities array when the email
+        // is already registered (to prevent email enumeration). Translate that
+        // into a real error so the UI can tell the user what's going on.
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+            throw new Error('An account with this email already exists. Try signing in instead.');
+        }
     }
 
     async signOut(): Promise<void> {

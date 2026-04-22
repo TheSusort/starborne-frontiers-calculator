@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout, CollapsibleForm, ConfirmModal } from '../../components/ui';
 import { GearPieceForm } from '../../components/gear/GearPieceForm';
@@ -19,15 +19,7 @@ import { GEAR_TABS_TUTORIAL } from '../../constants/tutorialSteps';
 
 export const GearPage: React.FC = () => {
     const [searchParams] = useSearchParams();
-    const {
-        inventory,
-        loading,
-        loadingProgress,
-        syncing,
-        addGear,
-        updateGearPiece,
-        deleteGearPiece,
-    } = useInventory();
+    const { inventory, loading, addGear, updateGearPiece, deleteGearPiece } = useInventory();
     const [editingPiece, setEditingPiece] = useState<GearPiece | undefined>();
     const [isFormVisible, setIsFormVisible] = useState(false);
     const { addNotification } = useNotification();
@@ -72,26 +64,6 @@ export const GearPage: React.FC = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    // Show notification for loading/syncing gear
-    const wasLoadingRef = useRef(false);
-    const wasSyncingRef = useRef(false);
-    useEffect(() => {
-        if (loading && !wasLoadingRef.current) {
-            addNotification('info', `Loading gear... ${loadingProgress}%`);
-        }
-        if (!loading && wasLoadingRef.current) {
-            addNotification('success', `Loaded ${inventory.length} gear pieces`);
-        }
-        wasLoadingRef.current = loading;
-    }, [loading, loadingProgress, addNotification, inventory.length]);
-
-    useEffect(() => {
-        if (syncing && !wasSyncingRef.current) {
-            addNotification('info', 'Syncing gear...');
-        }
-        wasSyncingRef.current = syncing;
-    }, [syncing, addNotification]);
 
     // Auto-start tutorial on first visit (only when gear exists)
     useEffect(() => {

@@ -92,6 +92,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user?.id, addNotification]);
 
+    const errorMessage = (error: unknown) =>
+        error instanceof Error ? error.message : 'Unknown error';
+
     const signInWithGoogle = async () => {
         try {
             await authService.signInWithGoogle();
@@ -99,7 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addNotification('success', 'Logging in with Google');
         } catch (error) {
             console.error('Google sign in error:', error);
-            addNotification('error', 'Google sign in failed');
+            addNotification('error', `Google sign in failed: ${errorMessage(error)}`);
             throw error;
         }
     };
@@ -110,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addNotification('success', 'Logged in successfully');
         } catch (error) {
             console.error('Sign in error:', error);
-            addNotification('error', 'Sign in failed');
+            addNotification('error', `Sign in failed: ${errorMessage(error)}`);
             throw error;
         }
     };
@@ -121,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addNotification('success', 'Account created successfully');
         } catch (error) {
             console.error('Sign up error:', error);
-            addNotification('error', 'Sign up failed');
+            addNotification('error', `Sign up failed: ${errorMessage(error)}`);
             throw error;
         }
     };
@@ -134,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             addNotification('success', 'Logged out successfully');
         } catch (error) {
             console.error('Sign out error:', error);
-            addNotification('error', 'Sign out failed');
+            addNotification('error', `Sign out failed: ${errorMessage(error)}`);
             throw error;
         }
     };

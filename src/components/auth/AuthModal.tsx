@@ -14,15 +14,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [error, setError] = useState<string | null>(null);
     const [showEmailForm, setShowEmailForm] = useState(false);
     const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
     const { addNotification } = useNotification();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
+        e.stopPropagation();
 
+        let succeeded = false;
         try {
             if (isSignUp) {
                 await signUpWithEmail(email, password);
@@ -31,22 +31,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 await signInWithEmail(email, password);
                 addNotification('success', 'You are now signed in');
             }
-            onClose();
-        } catch (error) {
-            setError(error instanceof Error ? error.message : 'An error occurred');
-            addNotification('error', 'An error occurred');
+            succeeded = true;
+        } catch {
+            // Error toast is fired by AuthProvider; keep modal open so the user
+            // can correct bad credentials in place.
         }
+        if (succeeded) onClose();
     };
 
     const handleGoogleSignIn = async () => {
+        let succeeded = false;
         try {
             await signInWithGoogle();
             addNotification('success', 'You are now signed in');
-            onClose();
-        } catch (error) {
-            setError(error instanceof Error ? error.message : 'An error occurred');
-            addNotification('error', 'An error occurred');
+            succeeded = true;
+        } catch {
+            // Error toast fired by AuthProvider.
         }
+        if (succeeded) onClose();
     };
 
     return (
@@ -57,8 +59,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             highZIndex
         >
             <div className="space-y-6">
-                {error && <div className="text-red-500 text-sm">{error}</div>}
-
                 <span className="text-sm text-theme-text-secondary">
                     Login is optional, to easily access your data across devices. The app works
                     without it. If you login, your data will be synced to the cloud.
@@ -110,6 +110,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 label="Email"
                                 type="email"
                                 id="email"
+                                name="email"
+                                autoComplete="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -120,6 +122,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 label="Password"
                                 type="password"
                                 id="password"
+                                name="password"
+                                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required

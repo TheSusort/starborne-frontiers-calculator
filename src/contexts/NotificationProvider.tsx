@@ -10,16 +10,17 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }, []);
 
     const addNotification = useCallback(
-        (type: NotificationType, message: string, duration = 5000) => {
+        (type: NotificationType, message: string, duration?: number) => {
+            const resolvedDuration = duration ?? (type === 'error' ? 15000 : 5000);
             const id = Date.now().toString() + Math.random().toString(36).substring(2, 15);
-            const notification: Notification = { id, type, message, duration };
+            const notification: Notification = { id, type, message, duration: resolvedDuration };
 
             setNotifications((prev) => [...prev, notification]);
 
-            if (duration > 0) {
+            if (resolvedDuration > 0) {
                 setTimeout(() => {
                     removeNotification(id);
-                }, duration);
+                }, resolvedDuration);
             }
         },
         [removeNotification]

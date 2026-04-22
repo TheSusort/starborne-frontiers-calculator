@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
@@ -301,6 +301,37 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     useEffect(() => {
         void loadInventory();
     }, [user?.id, loadInventory]);
+
+    // Global load/sync notifications — fired from the provider so they reach the
+    // user regardless of which page is mounted when a sign-in triggers a load.
+    // Gated on user?.id so the initial mount (before auth resolves) doesn't
+    // produce a spurious "Loading... 0%" / "Loaded 0" pair.
+    const wasLoadingRef = useRef(false);
+    const wasSyncingRef = useRef(false);
+    useEffect(() => {
+        if (!user?.id) {
+            wasLoadingRef.current = loading;
+            return;
+        }
+        if (loading && !wasLoadingRef.current) {
+            addNotification('info', `Loading gear...`);
+        }
+        if (!loading && wasLoadingRef.current) {
+            addNotification('success', `Loaded ${localInventory.length} gear pieces`);
+        }
+        wasLoadingRef.current = loading;
+    }, [loading, loadingProgress, addNotification, localInventory.length, user?.id]);
+
+    useEffect(() => {
+        if (!user?.id) {
+            wasSyncingRef.current = syncing;
+            return;
+        }
+        if (syncing && !wasSyncingRef.current) {
+            addNotification('info', 'Syncing gear...');
+        }
+        wasSyncingRef.current = syncing;
+    }, [syncing, addNotification, user?.id]);
 
     useEffect(() => {
         const handleSignOut = () => {

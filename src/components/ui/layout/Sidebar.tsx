@@ -343,81 +343,77 @@ export const Sidebar: React.FC = () => {
         return [...publicNavigationLinks];
     }, [publicNavigationLinks]);
 
-    const SidebarContent = memo(
-        ({
-            shareData,
-            setShareData,
-        }: {
-            shareData: boolean;
-            setShareData: (value: boolean) => void;
-        }) => (
-            <div className="space-y-2 flex flex-col h-full">
-                <div className="hidden lg:flex items-center justify-between">
-                    <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
-                    <div className="flex items-center gap-2">
-                        {isSynthwave && (
-                            <button
-                                onClick={() => {
-                                    if (audioRef.current) {
-                                        if (isPlaying) {
-                                            audioRef.current.pause();
-                                        } else {
-                                            void audioRef.current.play();
-                                        }
-                                        setIsPlaying(!isPlaying);
-                                    }
-                                }}
-                                className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
-                                title={isPlaying ? 'Pause music' : 'Play music'}
-                            >
-                                {isPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                            </button>
-                        )}
+    // NOTE: renderSidebarContent is a plain JSX helper, not a React component.
+    // Making it a component (`const X = memo(...)` inside this function) would
+    // give it a new identity every render, which caused React to unmount and
+    // remount every descendant — wiping local state like LoginButton's modal
+    // open flag on any Sidebar re-render.
+    const renderSidebarContent = () => (
+        <div className="space-y-2 flex flex-col h-full">
+            <div className="hidden lg:flex items-center justify-between">
+                <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
+                <div className="flex items-center gap-2">
+                    {isSynthwave && (
                         <button
-                            onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                            onClick={() => {
+                                if (audioRef.current) {
+                                    if (isPlaying) {
+                                        audioRef.current.pause();
+                                    } else {
+                                        void audioRef.current.play();
+                                    }
+                                    setIsPlaying(!isPlaying);
+                                }
+                            }}
                             className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
-                            title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
+                            title={isPlaying ? 'Pause music' : 'Play music'}
                         >
-                            {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
+                            {isPlaying ? <Volume2 size={14} /> : <VolumeX size={14} />}
                         </button>
-                    </div>
-                </div>
-                <Link to="/" data-sidebar-title>
-                    <h1
-                        className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 hidden lg:flex gap-2 items-center`}
+                    )}
+                    <button
+                        onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                        className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                        title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
                     >
-                        <img src={logo} alt="logo" className="w-8 h-8" />
-                        {APP_NAME}
-                    </h1>
-                </Link>
-
-                <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
-                    {navigationLinks.map((item) => (
-                        <NavigationItem
-                            key={item.path}
-                            item={item}
-                            isActive={isActive}
-                            initialExpanded={item.children && isActiveOrHasActiveChild(item)}
-                            setIsMobileMenuOpen={setIsMobileMenuOpen}
-                            isAuthenticated={!!user}
-                        />
-                    ))}
-                </nav>
-
-                <div className="!mt-auto flex flex-col gap-2 pt-2">
-                    <div data-tutorial="sidebar-import-button">
-                        <ImportButton
-                            className="w-full text-right"
-                            shareData={shareData}
-                            setShareData={setShareData}
-                        />
-                    </div>
-                    <LoginButton />
+                        {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
+                    </button>
                 </div>
             </div>
-        )
+            <Link to="/" data-sidebar-title>
+                <h1
+                    className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 hidden lg:flex gap-2 items-center`}
+                >
+                    <img src={logo} alt="logo" className="w-8 h-8" />
+                    {APP_NAME}
+                </h1>
+            </Link>
+
+            <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
+                {navigationLinks.map((item) => (
+                    <NavigationItem
+                        key={item.path}
+                        item={item}
+                        isActive={isActive}
+                        initialExpanded={item.children && isActiveOrHasActiveChild(item)}
+                        setIsMobileMenuOpen={setIsMobileMenuOpen}
+                        isAuthenticated={!!user}
+                    />
+                ))}
+            </nav>
+
+            <div className="!mt-auto flex flex-col gap-2 pt-2">
+                <div data-tutorial="sidebar-import-button">
+                    <ImportButton
+                        className="w-full text-right"
+                        shareData={shareData}
+                        setShareData={setShareData}
+                    />
+                </div>
+                <LoginButton />
+            </div>
+        </div>
     );
-    SidebarContent.displayName = 'SidebarContent';
 
     return (
         <>
@@ -475,9 +471,7 @@ export const Sidebar: React.FC = () => {
                 data-testid="desktop-sidebar"
                 className={`hidden lg:block fixed top-0 left-0 h-full w-64 z-20 ${isSynthwave ? 'bg-black/70 lg:backdrop-blur-sm' : "bg-dark bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"}`}
             >
-                <div className="p-4 h-full">
-                    <SidebarContent shareData={shareData} setShareData={setShareData} />
-                </div>
+                <div className="p-4 h-full">{renderSidebarContent()}</div>
             </div>
 
             {/* Mobile Offcanvas */}
@@ -489,7 +483,7 @@ export const Sidebar: React.FC = () => {
                 hideCloseButton
                 scrollable={false}
             >
-                <SidebarContent shareData={shareData} setShareData={setShareData} />
+                {renderSidebarContent()}
             </Offcanvas>
         </>
     );
