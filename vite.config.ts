@@ -381,6 +381,9 @@ export default defineConfig({
         setupFiles: './src/setupTests.ts',
         css: true,
         reporters: ['verbose'],
+        // Exclude the Playwright e2e workspace — those tests use @playwright/test,
+        // not Vitest, and will fail if Vitest tries to execute them.
+        exclude: [...configDefaults.exclude, 'e2e/**'],
         coverage: {
             reporter: ['text', 'json', 'html'],
             include: ['src/**/*'],

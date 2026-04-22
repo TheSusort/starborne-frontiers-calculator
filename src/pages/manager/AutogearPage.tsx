@@ -876,7 +876,7 @@ export const AutogearPage: React.FC = () => {
                     <div className="flex-1">
                         {/* Show gear suggestions for all ships */}
                         {Object.keys(shipResults).length > 0 && (
-                            <div className="space-y-4">
+                            <div className="space-y-4" data-testid="autogear-suggestions">
                                 {Object.entries(shipResults).map(([shipId, results]) => {
                                     const ship = selectedShips.find((s) => s?.id === shipId);
                                     if (!ship || !results.suggestions.length) return null;

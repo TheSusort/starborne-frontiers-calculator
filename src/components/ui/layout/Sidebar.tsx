@@ -410,6 +410,7 @@ export const Sidebar: React.FC = () => {
                             className="w-full text-right"
                             shareData={shareData}
                             setShareData={setShareData}
+                            testId="import-game-data-input"
                         />
                     </div>
                     <LoginButton />

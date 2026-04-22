@@ -383,7 +383,8 @@ export const GearInventory: React.FC<Props> = ({
             <div className="flex flex-col">
                 {sortedInventory.length > 0 && (
                     <span className="text-sm text-theme-text-secondary">
-                        Showing {visibleItems.length} of {sortedInventory.length} items
+                        Showing {visibleItems.length} of{' '}
+                        <span data-testid="gear-count">{sortedInventory.length}</span> items
                         {maxItems !== undefined && ` (${maxItems} total)`}
                     </span>
                 )}
