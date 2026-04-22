@@ -13,12 +13,9 @@ const FIXTURE_PATH = resolve(__dirname, '..', 'fixtures', 'gameData.json');
 export async function importGameData(page: Page): Promise<void> {
     const input = page.getByTestId('import-game-data-input');
     await input.setInputFiles(FIXTURE_PATH);
-    // Wait for the import pipeline to finish writing to localStorage.
-    // The ImportButton handler calls setShips after parsing, which persists
-    // the collection under the 'ships' key (see src/constants/storage.ts,
-    // StorageKey.SHIPS). A non-empty array is a reliable completion signal —
-    // the hidden input is never disabled during import, so checking
-    // toBeEnabled on it resolves immediately and is not a real wait.
+
+    // Wait for localStorage `ships` (set via useStorage, non-IDB) to populate.
+    // This confirms the import pipeline ran and `setShips` was called.
     await page.waitForFunction(
         () => {
             const raw = window.localStorage.getItem('ships');
@@ -30,6 +27,42 @@ export async function importGameData(page: Page): Promise<void> {
                 return false;
             }
         },
+        null,
+        { timeout: 30_000 }
+    );
+
+    // Inventory is written to IndexedDB (InventoryProvider passes
+    // `useIndexedDB: true` to useStorage), not localStorage, and completes
+    // asynchronously *after* setShips. Without waiting on IDB, the test can
+    // navigate to /gear before the write lands and see an empty inventory.
+    // DB_NAME='starborneFrontiers', STORE_NAME='data', key='inventory_items'
+    // (see src/hooks/useStorage.ts and src/constants/storage.ts).
+    await page.waitForFunction(
+        () =>
+            new Promise<boolean>((resolve) => {
+                const open = window.indexedDB.open('starborneFrontiers', 1);
+                open.onerror = () => resolve(false);
+                open.onsuccess = () => {
+                    const db = open.result;
+                    if (!db.objectStoreNames.contains('data')) {
+                        db.close();
+                        resolve(false);
+                        return;
+                    }
+                    const tx = db.transaction('data', 'readonly');
+                    const store = tx.objectStore('data');
+                    const get = store.get('inventory_items');
+                    get.onerror = () => {
+                        db.close();
+                        resolve(false);
+                    };
+                    get.onsuccess = () => {
+                        db.close();
+                        const value = get.result;
+                        resolve(Array.isArray(value) && value.length > 0);
+                    };
+                };
+            }),
         null,
         { timeout: 30_000 }
     );

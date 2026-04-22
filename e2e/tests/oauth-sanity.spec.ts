@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
+import { capturePageErrors } from '../helpers/capture-page-errors';
 
 test.describe('google oauth redirect sanity', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
+        capturePageErrors(page, testInfo);
         await silenceFirstVisitOverlays(page);
     });
 
