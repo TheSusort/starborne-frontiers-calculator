@@ -1,0 +1,47 @@
+# E2E Weekly Orphan Cleanup
+# -------------------------
+# Sweeps e2e-* test users older than 24h from auth.users. Defense in depth —
+# the post-deploy workflow's afterEach should already handle cleanup, but
+# crashed or timed-out runs may leak users. This cron bounds the orphan
+# count at <7 per week.
+#
+# Required GitHub Secrets (same as e2e-post-deploy.yml):
+#   - SUPABASE_URL
+#   - SUPABASE_SERVICE_ROLE_KEY
+#   - E2E_TEST_EMAIL_PREFIX
+#   - E2E_TEST_EMAIL_DOMAIN
+#
+# Manual run: Actions tab → "E2E — weekly orphan cleanup" → Run workflow
+
+name: E2E — weekly orphan cleanup
+
+on:
+    schedule:
+        - cron: '0 4 * * 0' # Sunday 04:00 UTC
+    workflow_dispatch:
+
+jobs:
+    cleanup:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+                  cache-dependency-path: e2e/package-lock.json
+
+            - name: Install e2e deps
+              working-directory: e2e
+              run: npm ci
+
+            - name: Run cleanup
+              working-directory: e2e
+              env:
+                  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+                  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+                  E2E_TEST_EMAIL_PREFIX: ${{ secrets.E2E_TEST_EMAIL_PREFIX }}
+                  E2E_TEST_EMAIL_DOMAIN: ${{ secrets.E2E_TEST_EMAIL_DOMAIN }}
+              run: npm run cleanup-orphans

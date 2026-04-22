@@ -21,7 +21,15 @@ export const StatDisplay: React.FC<Props> = ({
         return null;
     }
 
-    const statsToDisplay = upgradedStats ? upgradedStats : stats;
+    // Guard against null/undefined entries. If a caller ever passes an array
+    // containing nulls (e.g. an implant whose mainStat is null being spread
+    // into a stats list), skip them rather than crash the React tree on
+    // `stat.value` access.
+    const statsToDisplay = (upgradedStats ?? stats).filter((stat): stat is Stat => stat != null);
+
+    if (statsToDisplay.length === 0) {
+        return null;
+    }
 
     return (
         <div className={`space-y-2 ${className}`}>

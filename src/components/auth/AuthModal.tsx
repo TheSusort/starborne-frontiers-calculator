@@ -76,6 +76,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             fullWidth
                             className="flex items-center gap-2 justify-center"
                             type="button"
+                            data-testid="auth-google-button"
                         >
                             <img
                                 src="https://www.google.com/favicon.ico"
@@ -99,6 +100,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             variant="secondary"
                             fullWidth
                             type="button"
+                            data-testid="auth-continue-with-email"
                         >
                             Continue with Email
                         </Button>
@@ -115,6 +117,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
+                                data-testid="auth-email-input"
                             />
                         </div>
                         <div>
@@ -127,10 +130,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
+                                data-testid="auth-password-input"
                             />
                         </div>
                         <div className="flex flex-col gap-2">
-                            <Button variant="primary" fullWidth type="submit">
+                            <Button
+                                variant="primary"
+                                fullWidth
+                                type="submit"
+                                data-testid={isSignUp ? 'auth-signup-submit' : 'auth-signin-submit'}
+                            >
                                 {isSignUp ? 'Sign Up' : 'Sign In'}
                             </Button>
                             <Button
@@ -138,6 +147,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                 fullWidth
                                 onClick={() => setIsSignUp(!isSignUp)}
                                 type="button"
+                                data-testid="auth-toggle-mode"
                             >
                                 {isSignUp
                                     ? 'Already have an account? Sign in'

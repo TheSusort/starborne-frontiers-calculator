@@ -1,0 +1,8 @@
+{
+    "name": "netlify-plugin-github-dispatch",
+    "version": "1.0.0",
+    "description": "Netlify build plugin that fires a repository_dispatch on GitHub after a successful production deploy.",
+    "type": "module",
+    "main": "index.js",
+    "private": true
+}

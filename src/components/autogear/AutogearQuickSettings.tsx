@@ -169,6 +169,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                     variant="primary"
                     className="w-full"
                     data-tutorial="autogear-optimize-button"
+                    data-testid="autogear-start"
                 >
                     Find Optimal Gear
                 </Button>

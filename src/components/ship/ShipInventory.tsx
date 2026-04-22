@@ -398,7 +398,8 @@ export const ShipInventory: React.FC<Props> = ({
             <div className="flex flex-col" data-tutorial="ships-filter-panel">
                 {sortedInventory.length > 0 && (
                     <span className="text-sm text-theme-text-secondary">
-                        Showing {visibleItems.length} of {sortedInventory.length} ships
+                        Showing {visibleItems.length} of{' '}
+                        <span data-testid="ship-count">{sortedInventory.length}</span> ships
                         {ships.length !== sortedInventory.length && ` (${ships.length} total)`}
                     </span>
                 )}

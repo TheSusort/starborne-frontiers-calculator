@@ -51,6 +51,7 @@ export const LoginButton: React.FC = () => {
                 variant="secondary"
                 type="button"
                 className="text-right"
+                data-testid="open-auth-modal"
             >
                 Sign In
             </Button>

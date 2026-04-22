@@ -2,6 +2,13 @@
   command = "npx puppeteer browsers install chrome && npm run build"
   publish = "dist"
 
+# Fires a repository_dispatch on GitHub after a successful production deploy
+# so the e2e-post-deploy smoke workflow can run against the new build.
+# Requires env vars GH_DISPATCH_TOKEN and GH_DISPATCH_REPO to be set in
+# Netlify site settings.
+[[plugins]]
+  package = "./plugins/github-dispatch"
+
 # Security headers
 [[headers]]
   for = "/*"
