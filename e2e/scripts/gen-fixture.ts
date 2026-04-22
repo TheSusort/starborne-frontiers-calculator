@@ -92,24 +92,29 @@ const gearPieces = gearSlots.map((slot, index) =>
     })
 );
 
-// 3 implants with unique Ids.
+// 3 implants with unique Ids. Slot values match what the app expects —
+// `implant_<type>` prefix, per src/constants/gearTypes.ts IMPLANT_SLOTS
+// and GearPieceDisplay's `isImplant = gear.slot.startsWith('implant_')`
+// check. The factory default slots (minor_alpha/minor_gamma/major) are
+// conservatively preserved for backward compatibility with the existing
+// Vitest tests; this generator overrides them with the canonical values.
 const implants = [
     makeImplantItem({
         Id: 'e2e-implant-1',
         Name: 'E2E Minor Alpha Implant',
-        Slot: 'minor_alpha',
+        Slot: 'implant_minor_alpha',
         Set: 'Implant_Minor_Alpha_Power_Perc',
     }),
     makeImplantItem({
         Id: 'e2e-implant-2',
         Name: 'E2E Minor Gamma Implant',
-        Slot: 'minor_gamma',
+        Slot: 'implant_minor_gamma',
         Set: 'Implant_Minor_Gamma_HullPoints_Perc',
     }),
     makeImplantItem({
         Id: 'e2e-implant-3',
         Name: 'E2E Major Implant',
-        Slot: 'major',
+        Slot: 'implant_major',
         Set: 'Implant_Major_Power_Perc',
     }),
 ];
