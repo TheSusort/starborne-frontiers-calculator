@@ -8,6 +8,7 @@ import {
 import { generateTestCredentials } from '../helpers/disposableEmail';
 import { installMigrationSentinel, waitForMigration } from '../helpers/wait-for-migration';
 import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
+import { capturePageErrors } from '../helpers/capture-page-errors';
 import {
     confirmUserEmail,
     deleteTestUser,
@@ -22,13 +23,14 @@ if (!DOMAIN) throw new Error('E2E_TEST_EMAIL_DOMAIN is required');
 test.describe('new account: signup → confirm → signin → migrate', () => {
     const created: string[] = [];
 
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
         // Both init-script helpers must run BEFORE the first page.goto so
         // the scripts are registered on the browser context for every
         // document load. The migration sentinel in particular must be in
         // place before any auth state change can dispatch
         // `app:migration:end` — otherwise a race with fast sign-in paths
         // (e.g. email confirmation OFF) could miss the event.
+        capturePageErrors(page, testInfo);
         await silenceFirstVisitOverlays(page);
         await installMigrationSentinel(page);
     });

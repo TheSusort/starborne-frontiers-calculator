@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { importGameData } from '../helpers/page-actions';
 import { silenceFirstVisitOverlays } from '../helpers/silence-overlays';
+import { capturePageErrors } from '../helpers/capture-page-errors';
 
 test.describe('anonymous user imports game data', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
+        capturePageErrors(page, testInfo);
         await silenceFirstVisitOverlays(page);
     });
 
