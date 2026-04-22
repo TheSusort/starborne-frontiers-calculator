@@ -19,7 +19,11 @@ export const onSuccess = async function ({ utils }) {
 
     const token = process.env.GH_DISPATCH_TOKEN;
     const repo = process.env.GH_DISPATCH_REPO;
-    const deployUrl = process.env.DEPLOY_PRIME_URL || process.env.URL || process.env.DEPLOY_URL;
+    // Prefer the canonical production URL (URL) over the branch permalink
+    // (DEPLOY_PRIME_URL). The preview domain (`main--<site>.netlify.app`)
+    // isn't in Supabase's allowed origins, so CORS-gated fetches from the
+    // browser would fail there even though the same bundle works on prod.
+    const deployUrl = process.env.URL || process.env.DEPLOY_PRIME_URL || process.env.DEPLOY_URL;
 
     if (!token) {
         return utils.build.failPlugin('GH_DISPATCH_TOKEN is not set — add it in Netlify env vars');
