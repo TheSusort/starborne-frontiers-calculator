@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo, useMemo, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import logo from '/favicon.ico?url';
-import { Sun, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import { Sun, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
 import { LoginButton } from '../../auth/LoginButton';
 import { MenuIcon } from '../icons/MenuIcon';
 import { ChevronDownIcon } from '../icons';
@@ -10,6 +10,8 @@ import { useAuth } from '../../../contexts/AuthProvider';
 import { ImportButton } from '../../import/ImportButton';
 import { isAdmin } from '../../../services/adminService';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { isDemoDataLoaded, clearDemoData } from '../../../utils/demoData';
+import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
 
@@ -216,6 +218,8 @@ export const Sidebar: React.FC = () => {
     const tracksRef = useRef<string[]>([]);
     const trackIndexRef = useRef(0);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
+    const [showClearDemoConfirm, setShowClearDemoConfirm] = useState(false);
+    const [demoDataActive, _setDemoDataActive] = useState(() => isDemoDataLoaded());
 
     // Initialize audio with shuffled playlist
     useEffect(() => {
@@ -402,6 +406,19 @@ export const Sidebar: React.FC = () => {
                 ))}
             </nav>
 
+            {demoDataActive && (
+                <div className="flex items-center justify-center gap-1 px-2 py-1 bg-amber-900/30 border border-amber-700/50 rounded text-amber-400 text-xs">
+                    <span>Demo Data</span>
+                    <button
+                        onClick={() => setShowClearDemoConfirm(true)}
+                        className="hover:text-amber-200 transition-colors ml-1"
+                        aria-label="Clear demo data"
+                    >
+                        <X size={12} />
+                    </button>
+                </div>
+            )}
+
             <div className="!mt-auto flex flex-col gap-2 pt-2">
                 <div data-tutorial="sidebar-import-button">
                     <ImportButton
@@ -486,6 +503,26 @@ export const Sidebar: React.FC = () => {
             >
                 {renderSidebarContent()}
             </Offcanvas>
+
+            <ConfirmModal
+                isOpen={showClearDemoConfirm}
+                onClose={() => setShowClearDemoConfirm(false)}
+                onConfirm={() => {
+                    setShowClearDemoConfirm(false);
+                    void (async () => {
+                        try {
+                            await clearDemoData();
+                            window.location.reload();
+                        } catch (error) {
+                            console.error('Failed to clear demo data:', error);
+                        }
+                    })();
+                }}
+                title="Clear Demo Data"
+                message="Remove demo data and start fresh? This will clear all ships, gear, and engineering stats."
+                confirmLabel="Clear Demo Data"
+                cancelLabel="Cancel"
+            />
         </>
     );
 };
