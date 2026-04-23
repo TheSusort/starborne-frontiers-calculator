@@ -18,19 +18,21 @@ export async function trackAutogearRun(userId?: string | null): Promise<number |
             return null;
         }
 
-        // Fetch the updated count
+        // Fetch the updated count. For anonymous runs the sentinel user row
+        // may not exist or may be hidden by RLS, so maybeSingle() returns
+        // null instead of erroring on 0 rows.
         const { data, error: fetchError } = await supabase
             .from('users')
             .select('autogear_run_count')
             .eq('id', trackingUserId)
-            .single();
+            .maybeSingle();
 
         if (fetchError) {
             console.error('Error fetching autogear count:', fetchError);
             return null;
         }
 
-        return data?.autogear_run_count || null;
+        return data?.autogear_run_count ?? null;
     } catch (error) {
         console.error('Error tracking autogear run:', error);
         return null;
