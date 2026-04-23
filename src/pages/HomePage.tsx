@@ -16,6 +16,7 @@ import {
     Database,
 } from 'lucide-react';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
+import { DemoDataSection } from '../components/home/DemoDataSection';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { ImportButton } from '../components/import/ImportButton';
@@ -285,6 +286,7 @@ const HomePage: React.FC = () => {
                         <div className="flex justify-center">
                             <BackupRestoreData />
                         </div>
+                        <DemoDataSection />
                     </div>
                 </section>
             </div>
