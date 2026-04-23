@@ -69,14 +69,22 @@ export async function importGameData(page: Page): Promise<void> {
 }
 
 /**
- * Opens the auth modal and clicks "Continue with Email" so the email/password
- * form is visible. Leaves the modal in whichever mode it defaults to (signup
- * or signin) — call ensureSignupMode / ensureSigninMode after this if needed.
+ * Opens the auth modal and ensures the email/password form is visible. Leaves
+ * the modal in whichever mode it defaults to (signup or signin) — call
+ * ensureSignupMode / ensureSigninMode after this if needed.
+ *
+ * AuthModal preserves its internal `showEmailForm` state across open/close
+ * (it lives in LoginButton which stays mounted), so on a reopen the email
+ * form may already be showing — in that case the "Continue with Email"
+ * button is not rendered and we skip straight to the form.
  */
 export async function openAuthModal(page: Page): Promise<void> {
     await page.getByTestId('open-auth-modal').click();
-    await page.getByTestId('auth-continue-with-email').click();
-    await expect(page.getByTestId('auth-email-input')).toBeVisible();
+    const emailInput = page.getByTestId('auth-email-input');
+    if (!(await emailInput.isVisible().catch(() => false))) {
+        await page.getByTestId('auth-continue-with-email').click();
+    }
+    await expect(emailInput).toBeVisible();
 }
 
 /**
