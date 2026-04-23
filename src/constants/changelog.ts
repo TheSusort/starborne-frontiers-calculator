@@ -1,8 +1,20 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.53.1';
+export const CURRENT_VERSION = '1.54.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.54.0',
+        date: '2026-04-23',
+        changes: [
+            '"Use upgraded stats" auto-runs the upgrade simulation and considers unleveled gear at its simulated level-16 stats',
+            'Autogear search space widened on large inventories for better results',
+            'Many more implants in the autogear pool — especially majors, which were nearly excluded before',
+            'Complete Sets option no longer zeroes out good layouts — now penalizes orphan pieces instead of incomplete sets',
+            'Tutorial covers starring ships and Hard Requirements',
+            'Fixed anonymous-user autogear console error',
+        ],
+    },
     {
         version: '1.53.1',
         date: '2026-04-20',
