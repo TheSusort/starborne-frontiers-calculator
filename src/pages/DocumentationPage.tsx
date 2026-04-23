@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { PageLayout } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { CHANGELOG, CURRENT_VERSION } from '../constants/changelog';
 
 const DocumentationPage: React.FC = () => {
     const location = useLocation();
@@ -209,6 +210,16 @@ const DocumentationPage: React.FC = () => {
                                 <a href="#themes" className="text-primary hover:text-primary-light">
                                     <span className="before:content-[counter(index)'.'] before:mr-2">
                                         Themes & Appearance
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
+                                    href="#changelog"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Changelog
                                     </span>
                                 </a>
                             </li>
@@ -2248,6 +2259,39 @@ const DocumentationPage: React.FC = () => {
                                 Your theme preference is saved locally in your browser, so your
                                 choice will persist whenever you return to the calculator.
                             </p>
+                        </div>
+                    </section>
+
+                    {/* Changelog Section */}
+                    <section id="changelog" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Changelog
+                        </h2>
+                        <div className="card space-y-4">
+                            <p className="text-theme-text">
+                                A full history of updates and fixes. The latest version is{' '}
+                                <span className="text-primary font-semibold">
+                                    {CURRENT_VERSION}
+                                </span>
+                                .
+                            </p>
+                            <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-4">
+                                {CHANGELOG.map((entry) => (
+                                    <div
+                                        key={entry.version}
+                                        className="p-4 bg-dark-lighter border border-dark-border"
+                                    >
+                                        <h3 className="font-semibold text-primary mb-2">
+                                            Version {entry.version} — {entry.date}
+                                        </h3>
+                                        <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                            {entry.changes.map((change, index) => (
+                                                <li key={index}>{change}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </section>
                 </div>
