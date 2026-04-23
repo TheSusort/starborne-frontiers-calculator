@@ -54,7 +54,7 @@ export const DemoDataSection: React.FC = () => {
     };
 
     return (
-        <section className="card p-8">
+        <section className="card p-8 flex flex-col items-center gap-2">
             <p className="text-theme-text-secondary text-sm mb-3">
                 No game data? Try the app with sample data.
             </p>

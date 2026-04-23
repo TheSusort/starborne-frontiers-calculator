@@ -264,6 +264,8 @@ const HomePage: React.FC = () => {
                     </div>
                 </section>
 
+                <DemoDataSection />
+
                 {/* Backup & Restore */}
                 <section className="card p-8">
                     <div className="max-w-3xl mx-auto text-center">
@@ -286,7 +288,6 @@ const HomePage: React.FC = () => {
                         <div className="flex justify-center">
                             <BackupRestoreData />
                         </div>
-                        <DemoDataSection />
                     </div>
                 </section>
             </div>

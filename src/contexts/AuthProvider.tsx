@@ -60,17 +60,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 if (user) {
                     // Any sign-in supersedes demo mode — real data will come from
-                    // Supabase and we don't want the demo badge lingering. Reload
-                    // so InventoryProvider and other contexts re-initialize from
-                    // clean storage (their React state caches the demo data from
-                    // mount and wouldn't clear otherwise).
+                    // Supabase and we don't want the demo badge lingering.
                     if (localStorage.getItem(StorageKey.DEMO_DATA_LOADED) === 'true') {
                         localStorage.removeItem(StorageKey.SHIPS);
                         await removeFromIndexedDB(StorageKey.INVENTORY);
                         localStorage.removeItem(StorageKey.ENGINEERING_STATS);
                         localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
-                        window.location.reload();
-                        return;
                     }
 
                     // Check if this is a new user
