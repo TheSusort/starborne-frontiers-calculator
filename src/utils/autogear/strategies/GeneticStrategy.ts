@@ -47,7 +47,14 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
     private getPopulationSize(inventorySize: number, hasImplants: boolean): number {
         const multiplier = hasImplants ? 18 : 4.5;
-        return Math.min(2400, Math.max(900, Math.floor(inventorySize * multiplier)));
+        const base = Math.floor(inventorySize * multiplier);
+        // Cap grows with √inventorySize past ~1000 items. Small inventories
+        // keep the tight 2400 cap (good for ~750 leveled-only runs); large
+        // inventories land in the 5000–6000 range so the GA can sample more
+        // of the much larger search space.
+        const sqrtBonus = Math.floor(Math.sqrt(Math.max(0, inventorySize - 1000)) * 30);
+        const maxPop = Math.min(9000, 2400 + sqrtBonus);
+        return Math.min(maxPop, Math.max(900, base));
     }
 
     private getGenerations(populationSize: number, hasImplants: boolean): number {
