@@ -21,6 +21,7 @@ import { Ship, AffinityName } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName } from '../../constants/shipTypes';
+import { StorageKey } from '../../constants/storage';
 import { HangarNameModal } from './HangarNameModal';
 
 export const ImportButton: React.FC<{
@@ -136,6 +137,9 @@ export const ImportButton: React.FC<{
                     await setShips(result.data.ships);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
+
+                    // Clear demo data flag if it was set — the user has imported real data
+                    localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
 
                     // Check for template updates BEFORE syncing (so it completes before refresh)
                     if (user) {
