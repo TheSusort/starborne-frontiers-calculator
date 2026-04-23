@@ -220,7 +220,7 @@ export const Sidebar: React.FC = () => {
     const trackIndexRef = useRef(0);
     const [isUserAdmin, setIsUserAdmin] = useState(false);
     const [showClearDemoConfirm, setShowClearDemoConfirm] = useState(false);
-    const [demoDataActive, _setDemoDataActive] = useState(() => isDemoDataLoaded());
+    const demoDataActive = !user && isDemoDataLoaded();
 
     // Initialize audio with shuffled playlist
     useEffect(() => {

@@ -30,17 +30,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const migrateDataForNewUser = async () => {
             try {
-                // If demo data is loaded, clear it instead of syncing to Supabase.
-                // Demo users start fresh after sign-up.
-                if (localStorage.getItem(StorageKey.DEMO_DATA_LOADED) === 'true') {
-                    localStorage.removeItem(StorageKey.SHIPS);
-                    await removeFromIndexedDB(StorageKey.INVENTORY);
-                    localStorage.removeItem(StorageKey.ENGINEERING_STATS);
-                    localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
-                    window.dispatchEvent(new Event('app:migration:end'));
-                    return;
-                }
-
                 // Dispatch migration start event
                 window.dispatchEvent(new Event('app:migration:start'));
 
@@ -70,6 +59,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setLoading(false);
 
                 if (user) {
+                    // Any sign-in supersedes demo mode — real data will come from
+                    // Supabase and we don't want the demo badge lingering.
+                    if (localStorage.getItem(StorageKey.DEMO_DATA_LOADED) === 'true') {
+                        localStorage.removeItem(StorageKey.SHIPS);
+                        await removeFromIndexedDB(StorageKey.INVENTORY);
+                        localStorage.removeItem(StorageKey.ENGINEERING_STATS);
+                        localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
+                    }
+
                     // Check if this is a new user
                     const { data: userData, error: userError } = await supabase
                         .from('users')
