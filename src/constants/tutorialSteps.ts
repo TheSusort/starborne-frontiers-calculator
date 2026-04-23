@@ -29,7 +29,7 @@ export const SHIPS_INITIAL_TUTORIAL: TutorialGroup = {
             targetId: 'ships-first-card',
             title: 'Ship Card',
             description:
-                'Each ship card shows stats and equipped gear. Use the lock button to protect gear from being reassigned by autogear. Click the menu for more actions like edit, delete, and unequip. Stats include hacking/security from Code Guard and Cipher Link.',
+                'Each ship card shows stats and equipped gear. Star a ship to mark it as a priority — a floating panel then alerts you whenever a starred ship has empty gear slots. Use the lock button to protect gear from being reassigned by autogear. Click the menu for more actions like edit, delete, and unequip. Stats include hacking/security from Code Guard and Cipher Link.',
         },
     ],
 };
@@ -107,7 +107,7 @@ const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
             targetId: 'autogear-stat-priorities',
             title: 'Stat Priorities',
             description:
-                "Set minimum and maximum targets for specific stats. The optimizer penalizes results that don't meet these thresholds.",
+                "Set minimum and maximum targets for specific stats. The optimizer penalizes results that don't meet these thresholds. Toggle Hard Requirement to force a limit to be met — the optimizer will retry up to 5 times and fall back to the closest result if nothing satisfies it.",
         },
         {
             targetId: 'autogear-set-priorities',
