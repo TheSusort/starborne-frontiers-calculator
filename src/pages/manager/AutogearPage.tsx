@@ -79,7 +79,7 @@ export const AutogearPage: React.FC = () => {
 
     // All hooks
     const { getGearPiece, inventory } = useInventory();
-    const { getUpgradedGearPiece } = useGearUpgrades();
+    const { getUpgradedGearPiece, upgrades, simulateUpgrades } = useGearUpgrades();
     const {
         getShipById,
         equipMultipleGear,
@@ -343,6 +343,26 @@ export const AutogearPage: React.FC = () => {
         setActiveTab(null);
         setDonorContext(null);
 
+        // If any selected ship is configured to use upgraded stats but no
+        // upgrade simulation has been run yet, run it now so the optimizer has
+        // data to work with. The returned upgrades feed a local getter because
+        // React state from setStorageUpgrades won't propagate into this async
+        // closure until the next render.
+        let upgradedGearGetter = getUpgradedGearPiece;
+        const anyUsesUpgradedStats = validShips.some(
+            (ship) => getShipConfig(ship.id).useUpgradedStats
+        );
+        if (anyUsesUpgradedStats && Object.keys(upgrades).length === 0) {
+            addNotification('info', 'Simulating gear upgrades first — this may take a moment...');
+            const freshUpgrades = await simulateUpgrades(inventory);
+            upgradedGearGetter = (id: string): GearPiece | undefined => {
+                const piece = getGearPiece(id);
+                if (!piece) return undefined;
+                const upgrade = freshUpgrades[id];
+                return upgrade ? ({ ...piece, mainStat: upgrade.mainStat } as GearPiece) : piece;
+            };
+        }
+
         const startTime = performance.now();
         // eslint-disable-next-line no-console
         console.log('Starting team optimization...');
@@ -501,6 +521,10 @@ export const AutogearPage: React.FC = () => {
                     const isImplant = gear.slot.startsWith('implant_');
                     // Don't apply ignoreUnleveled to implants (they don't have levels)
                     if (isImplant) return true;
+                    // When useUpgradedStats is on, unleveled gear is evaluated via
+                    // its simulated level-16 stats, so the level filter would defeat
+                    // the purpose of the setting.
+                    if (shipConfig.useUpgradedStats) return true;
                     // For gear, apply the ignoreUnleveled filter
                     return !shipConfig.ignoreUnleveled || gear.level > 0;
                 });
@@ -529,9 +553,7 @@ export const AutogearPage: React.FC = () => {
             // calculateTotalStats applies the calibration bonus only when
             // gear.calibration.shipId === the target ship's id, so no reversal
             // is needed here.
-            const getGearForShip = shipConfig.useUpgradedStats
-                ? getUpgradedGearPiece
-                : getGearPiece;
+            const getGearForShip = shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece;
 
             performanceTracker.startTimer('FindOptimalGear');
             const strategyResult: AutogearResult = await Promise.resolve(
@@ -589,7 +611,7 @@ export const AutogearPage: React.FC = () => {
             const currentStats = calculateTotalStats(
                 ship.baseStats,
                 ship.equipment,
-                shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
                 ship.refits,
                 ship.implants,
                 getEngineeringStatsForShipType(ship.type),
@@ -599,7 +621,7 @@ export const AutogearPage: React.FC = () => {
             const suggestedStats = calculateTotalStats(
                 ship.baseStats,
                 suggestedEquipment,
-                shipConfig.useUpgradedStats ? getUpgradedGearPiece : getGearPiece,
+                shipConfig.useUpgradedStats ? upgradedGearGetter : getGearPiece,
                 ship.refits,
                 suggestedImplants,
                 getEngineeringStatsForShipType(ship.type),

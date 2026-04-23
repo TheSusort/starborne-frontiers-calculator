@@ -20,7 +20,7 @@ interface Upgrade {
     cost: number;
 }
 
-interface Upgrades {
+export interface Upgrades {
     [key: string]: Upgrade;
 }
 
@@ -45,29 +45,21 @@ export const useGearUpgrades = () => {
 
                 // Skip if piece is already at max level
                 if (piece.level >= 16) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Skipping piece ${piece.id} - already at max level`);
                     continue;
                 }
 
                 // Skip if piece is below rare rarity
                 if (!['rare', 'epic', 'legendary'].includes(piece.rarity)) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Skipping piece ${piece.id} - below rare rarity`);
                     continue;
                 }
 
                 // Skip if piece is an implant
                 if (piece.slot.includes('implant')) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Skipping piece ${piece.id} - is an implant`);
                     continue;
                 }
 
                 // Skip if piece has no main stat
                 if (!piece.mainStat) {
-                    // eslint-disable-next-line no-console
-                    console.log(`Skipping piece ${piece.id} - no main stat`);
                     continue;
                 }
 
@@ -91,6 +83,7 @@ export const useGearUpgrades = () => {
             // eslint-disable-next-line no-console
             console.log(`Total upgrades saved: ${Object.keys(newUpgrades).length}`);
             await setStorageUpgrades(newUpgrades);
+            return newUpgrades;
         },
         [setStorageUpgrades]
     );

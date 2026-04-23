@@ -339,7 +339,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             label="Ignore unleveled gear"
                             checked={ignoreUnleveled}
                             onChange={onIgnoreUnleveledChange}
-                            helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable if you want to include unleveled gear in the search, this also applies to simulated upgraded gear."
+                            helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable to include unleveled gear at its current (level 0) stats. This filter is bypassed when Use Upgraded Stats is on, since unleveled gear is then evaluated at its simulated level-16 stats."
                         />
                     </div>
                     <div data-tutorial="autogear-upgrade-options">
