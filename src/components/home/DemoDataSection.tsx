@@ -11,7 +11,13 @@ export const DemoDataSection: React.FC = () => {
     const { addNotification } = useNotification();
 
     const hasExistingData = () => {
-        return !!localStorage.getItem(StorageKey.SHIPS);
+        return (
+            !!localStorage.getItem(StorageKey.SHIPS) ||
+            !!localStorage.getItem(StorageKey.ENGINEERING_STATS) ||
+            !!localStorage.getItem(StorageKey.LOADOUTS) ||
+            !!localStorage.getItem(StorageKey.TEAM_LOADOUTS) ||
+            !!localStorage.getItem(StorageKey.AUTOGEAR_CONFIGS)
+        );
     };
 
     const runLoad = async () => {
