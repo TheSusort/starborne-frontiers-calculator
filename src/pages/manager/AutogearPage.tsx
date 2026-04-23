@@ -539,7 +539,8 @@ export const AutogearPage: React.FC = () => {
                 ? filterTopImplantsPerSlot(
                       availableInventory,
                       shipConfig.statPriorities,
-                      equippedImplantIds
+                      equippedImplantIds,
+                      shipConfig.statBonuses
                   )
                 : availableInventory;
             performanceTracker.endTimer('FilterInventory');
