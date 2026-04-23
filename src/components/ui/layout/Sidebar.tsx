@@ -11,6 +11,7 @@ import { ImportButton } from '../../import/ImportButton';
 import { isAdmin } from '../../../services/adminService';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { isDemoDataLoaded, clearDemoData } from '../../../utils/demoData';
+import { Button } from '../Button';
 import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
@@ -407,16 +408,15 @@ export const Sidebar: React.FC = () => {
             </nav>
 
             {demoDataActive && (
-                <div className="flex items-center justify-center gap-1 px-2 py-1 bg-amber-900/30 border border-amber-700/50 rounded text-amber-400 text-xs">
-                    <span>Demo Data</span>
-                    <button
-                        onClick={() => setShowClearDemoConfirm(true)}
-                        className="hover:text-amber-200 transition-colors ml-1"
-                        aria-label="Clear demo data"
-                    >
-                        <X size={12} />
-                    </button>
-                </div>
+                <Button
+                    variant="secondary"
+                    onClick={() => setShowClearDemoConfirm(true)}
+                    className="flex items-center gap-2"
+                    aria-label="Clear demo data"
+                >
+                    <X size={12} className="mr-auto text-primary" />
+                    <span className="text-primary">Clear Demo Data</span>
+                </Button>
             )}
 
             <div className="!mt-auto flex flex-col gap-2 pt-2">
