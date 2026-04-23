@@ -1,18 +1,36 @@
 import React, { useState } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { Button } from '../ui';
-import { StorageKey } from '../../constants/storage';
+import { StorageKey, StorageKeyType } from '../../constants/storage';
 import { loadDemoData, isDemoDataLoaded } from '../../utils/demoData';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 
+const storageKeyHasContent = (key: StorageKeyType): boolean => {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.length > 0;
+        if (parsed && typeof parsed === 'object') {
+            // EngineeringStats wraps its list in { stats: [...] }
+            const stats = (parsed as { stats?: unknown }).stats;
+            if (Array.isArray(stats)) return stats.length > 0;
+            return Object.keys(parsed).length > 0;
+        }
+        return !!parsed;
+    } catch {
+        return false;
+    }
+};
+
 const hasExistingData = (): boolean => {
     return (
-        !!localStorage.getItem(StorageKey.SHIPS) ||
-        !!localStorage.getItem(StorageKey.ENGINEERING_STATS) ||
-        !!localStorage.getItem(StorageKey.LOADOUTS) ||
-        !!localStorage.getItem(StorageKey.TEAM_LOADOUTS) ||
-        !!localStorage.getItem(StorageKey.AUTOGEAR_CONFIGS)
+        storageKeyHasContent(StorageKey.SHIPS) ||
+        storageKeyHasContent(StorageKey.ENGINEERING_STATS) ||
+        storageKeyHasContent(StorageKey.LOADOUTS) ||
+        storageKeyHasContent(StorageKey.TEAM_LOADOUTS) ||
+        storageKeyHasContent(StorageKey.AUTOGEAR_CONFIGS)
     );
 };
 
@@ -36,7 +54,7 @@ export const DemoDataSection: React.FC = () => {
     };
 
     return (
-        <div className="border-t border-dark-border pt-4 mt-4 text-center flex flex-col items-center gap-2">
+        <section className="card p-8">
             <p className="text-theme-text-secondary text-sm mb-3">
                 No game data? Try the app with sample data.
             </p>
@@ -49,6 +67,6 @@ export const DemoDataSection: React.FC = () => {
                 <FlaskConical size={16} />
                 {loading ? 'Loading...' : 'Load Demo Data'}
             </Button>
-        </div>
+        </section>
     );
 };
