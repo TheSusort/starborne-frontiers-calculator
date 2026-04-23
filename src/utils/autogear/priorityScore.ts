@@ -412,18 +412,20 @@ export function calculatePriorityScore(
         }
     }
 
-    // Penalize incomplete sets when tryToCompleteSets is enabled
+    // Penalize orphan pieces when tryToCompleteSets is enabled.
+    // An orphan is a piece whose set doesn't have enough companions in the
+    // loadout to activate (e.g. 1-of-2, 3-of-4). For each set we count
+    // `count mod minPieces` — the leftover pieces that don't contribute to a
+    // bonus. This keeps the penalty monotonic in orphan count and bounded
+    // (max 6 orphans in a 6-slot loadout → 60% at weight 10), so the GA
+    // always has a non-zero fitness gradient to work with.
     if (tryToCompleteSets && setCount) {
+        let orphans = 0;
         for (const [setName, count] of Object.entries(setCount)) {
-            if (count > 0) {
-                const minPieces = GEAR_SETS[setName]?.minPieces || 2;
-                if (count < minPieces) {
-                    // Calculate penalty as percentage below minimum pieces needed for set bonus
-                    const diff = (minPieces - count) / minPieces;
-                    penalties += diff * 150; // Moderate penalty for incomplete sets
-                }
-            }
+            const minPieces = GEAR_SETS[setName]?.minPieces || 2;
+            orphans += count % minPieces;
         }
+        penalties += orphans * 10;
     }
 
     // Get base score from role-specific calculation
