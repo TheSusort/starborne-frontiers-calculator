@@ -5,6 +5,8 @@ import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { migratePlayerData, syncMigratedDataToSupabase } from '../utils/migratePlayerData';
 import { updateHeartbeatUser } from '../services/heartbeatService';
+import { StorageKey } from '../constants/storage';
+import { removeFromIndexedDB } from '../hooks/useStorage';
 
 interface AuthContextType {
     user: AuthUser | null;
@@ -28,6 +30,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const migrateDataForNewUser = async () => {
             try {
+                // If demo data is loaded, clear it instead of syncing to Supabase.
+                // Demo users start fresh after sign-up.
+                if (localStorage.getItem(StorageKey.DEMO_DATA_LOADED) === 'true') {
+                    localStorage.removeItem(StorageKey.SHIPS);
+                    await removeFromIndexedDB(StorageKey.INVENTORY);
+                    localStorage.removeItem(StorageKey.ENGINEERING_STATS);
+                    localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
+                    window.dispatchEvent(new Event('app:migration:end'));
+                    return;
+                }
+
                 // Dispatch migration start event
                 window.dispatchEvent(new Event('app:migration:start'));
 
