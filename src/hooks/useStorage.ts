@@ -53,7 +53,7 @@ const getFromIndexedDB = async (key: string): Promise<any> => {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const setInIndexedDB = async (key: string, value: any): Promise<void> => {
+export const setInIndexedDB = async (key: string, value: any): Promise<void> => {
     const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -76,6 +76,17 @@ export const clearIndexedDBStorage = async (): Promise<void> => {
         const transaction = db.transaction(STORE_NAME, 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.clear();
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve();
+    });
+};
+
+export const removeFromIndexedDB = async (key: string): Promise<void> => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.delete(key);
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
     });

@@ -1,4 +1,5 @@
 import { StorageKey } from '../constants/storage';
+import { setInIndexedDB, removeFromIndexedDB } from '../hooks/useStorage';
 import type { GearPiece } from '../types/gear';
 import type { Ship } from '../types/ship';
 import type { EngineeringStats } from '../types/stats';
@@ -77,14 +78,14 @@ export const DEMO_SHIPS: Ship[] = [
         implants: {},
         refits: [
             {
-                id: 'refit-1111-4111-a111-111111111111',
+                id: 'aaaa1111-1111-4111-a111-111111111111',
                 stats: [
                     { name: 'attack', value: 8, type: 'percentage' },
                     { name: 'crit', value: 4, type: 'percentage' },
                 ],
             },
             {
-                id: 'refit-1111-4111-a111-222222222222',
+                id: 'aaaa1112-1111-4111-a111-222222222222',
                 stats: [{ name: 'critDamage', value: 10, type: 'percentage' }],
             },
         ],
@@ -120,7 +121,7 @@ export const DEMO_SHIPS: Ship[] = [
         implants: {},
         refits: [
             {
-                id: 'refit-2222-4222-a222-111111111111',
+                id: 'bbbb2222-2222-4222-a222-111111111111',
                 stats: [
                     { name: 'hp', value: 10, type: 'percentage' },
                     { name: 'defence', value: 8, type: 'percentage' },
@@ -160,11 +161,11 @@ export const DEMO_SHIPS: Ship[] = [
         implants: {},
         refits: [
             {
-                id: 'refit-3333-4333-a333-111111111111',
+                id: 'cccc3333-3333-4333-a333-111111111111',
                 stats: [{ name: 'speed', value: 6, type: 'percentage' }],
             },
             {
-                id: 'refit-3333-4333-a333-222222222222',
+                id: 'cccc3334-3333-4333-a333-222222222222',
                 stats: [
                     { name: 'healModifier', value: 10, type: 'percentage' },
                     { name: 'hp', value: 6, type: 'percentage' },
@@ -520,6 +521,7 @@ export const DEMO_ENGINEERING_STATS: EngineeringStats = {
                 { name: 'hp', value: 8000, type: 'flat' },
                 { name: 'defence', value: 350, type: 'flat' },
                 { name: 'attack', value: 200, type: 'flat' },
+                { name: 'crit', value: 5, type: 'percentage' },
             ],
         },
     ],
@@ -533,18 +535,16 @@ export function isDemoDataLoaded(): boolean {
     return localStorage.getItem(StorageKey.DEMO_DATA_LOADED) === 'true';
 }
 
-export function loadDemoData(): void {
+export async function loadDemoData(): Promise<void> {
     localStorage.setItem(StorageKey.SHIPS, JSON.stringify(DEMO_SHIPS));
-    localStorage.setItem(StorageKey.INVENTORY, JSON.stringify(DEMO_INVENTORY));
+    await setInIndexedDB(StorageKey.INVENTORY, DEMO_INVENTORY);
     localStorage.setItem(StorageKey.ENGINEERING_STATS, JSON.stringify(DEMO_ENGINEERING_STATS));
     localStorage.setItem(StorageKey.DEMO_DATA_LOADED, 'true');
-    window.location.reload();
 }
 
-export function clearDemoData(): void {
+export async function clearDemoData(): Promise<void> {
     localStorage.removeItem(StorageKey.SHIPS);
-    localStorage.removeItem(StorageKey.INVENTORY);
+    await removeFromIndexedDB(StorageKey.INVENTORY);
     localStorage.removeItem(StorageKey.ENGINEERING_STATS);
     localStorage.removeItem(StorageKey.DEMO_DATA_LOADED);
-    window.location.reload();
 }
