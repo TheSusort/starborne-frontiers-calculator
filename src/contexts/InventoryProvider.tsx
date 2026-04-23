@@ -274,8 +274,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 if (items.length < BATCH_SIZE) break;
             }
 
-            // Once all items are loaded, update the main inventory
+            // Once all items are loaded, update the main inventory and
+            // cache to IndexedDB so the next visit can hydrate instantly
+            // via the `cacheLoaded` fast path instead of blocking on Supabase.
             setLocalInventory(allItems);
+            void setStorageInventory(allItems);
             setLoadingProgress(100);
         } catch (error) {
             console.error('Error loading inventory:', error);
@@ -292,6 +295,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setTempInventory,
         isMigrating,
         localInventory.length,
+        setStorageInventory,
     ]);
 
     // Use tempInventory for display while doing a fresh load (no cache), otherwise use localInventory
