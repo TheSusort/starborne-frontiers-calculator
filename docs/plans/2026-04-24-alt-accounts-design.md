@@ -103,6 +103,7 @@ Across the following tables currently using `auth.uid() = user_id`:
 - `statistics_snapshots`
 - `user_activity_log`
 - `encounter_notes` (keeps its `is_public` branch unchanged for the public-view path)
+- `community_recommendations` — uses `created_by` (not `user_id`) but follows the same per-profile rule. Swap `auth.uid() = created_by` to `public.has_profile_access(created_by)`.
 
 Apply:
 
@@ -118,11 +119,18 @@ WITH CHECK (public.has_profile_access(user_id))
 
 Public-visibility branches (`is_public = true`) and admin branches (`public.is_admin()`) are unchanged.
 
-The implementation plan should re-grep `auth.uid() = user_id` against the migrations as a final audit in case any policies were added after this spec was written.
+The implementation plan must do a final audit re-grep against `supabase/migrations/` covering every variant of the auth-uid pattern: `auth.uid() = user_id`, `user_id = auth.uid()`, `auth.uid() = created_by`, `created_by = auth.uid()`, and any subquery form `WHERE x.user_id = auth.uid()` / `WHERE x.created_by = auth.uid()`. The grep-only approach catches direct policies but misses child-table subquery patterns — the plan must explicitly walk `20260221000003_rls_child_tables.sql` end-to-end.
 
 ### Tables intentionally excluded from the swap
 
-- **`encounter_votes`** — kept on `auth.uid() = user_id`. Encounter votes represent one-vote-per-human community sentiment; allowing each profile to cast its own vote would inflate vote counts up to 6× per user. Client-side voting always passes `user.id` (auth uid), not `activeProfileId`. This is the only "game-data-ish" surface that intentionally remains auth-user-scoped.
+Both kept on `auth.uid() = user_id` for one-vote-per-human community sentiment. Allowing each profile to vote would inflate vote counts up to 6× per user. Client-side voting always passes `user.id` (auth uid), not `activeProfileId`.
+
+- **`encounter_votes`**
+- **`community_recommendation_votes`**
+
+### Child tables (subquery-based policies)
+
+Several tables (`ship_base_stats`, `ship_equipment`, `ship_implants`, `ship_implant_stats`, `ship_refits`, `ship_refit_stats`, `loadout_equipment`, `team_loadout_ships`, `team_loadout_equipment`, `encounter_formations`, etc.) currently use the variant pattern `parent.user_id = auth.uid()` via subquery to inherit access from their parent. These must also be swapped to `public.has_profile_access(parent.user_id)`. See `supabase/migrations/20260221000003_rls_child_tables.sql` for the full set — the implementation plan must enumerate every policy in that file and apply the corresponding swap.
 
 ### Columns (not tables) that get profile scoping client-side
 
@@ -232,7 +240,7 @@ Mechanical `user.id` → `activeProfileId` swap:
 1. Auth state change → `user` hydrates in `AuthProvider`.
 2. `ActiveProfileProvider` runs `SELECT * FROM users WHERE id = auth.uid() OR owner_auth_user_id = auth.uid()` (allowed by the extended SELECT policy).
 3. If localStorage `active_profile_id` is present **and** appears in the fetched profiles list, that becomes the active profile. Otherwise fall back to main (`auth.uid()`).
-4. Data contexts mount with `activeProfileId` set and fire their initial loads.
+4. Data contexts must await profile hydration (i.e., a non-loading `activeProfileId` from `ActiveProfileProvider`) before firing their initial loads. Otherwise a refresh-while-on-alt would race the fetch and load main's data first, then re-load alt's data on hydration. Each data context guards its initial fetch on `activeProfileId !== null && !isProfileLoading`.
 
 ### Stale active profile handling
 
