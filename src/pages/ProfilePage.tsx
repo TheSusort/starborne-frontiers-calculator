@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthProvider';
+import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 import { useNotification } from '../hooks/useNotification';
 import { PageLayout } from '../components/ui';
 import { Button } from '../components/ui/Button';
@@ -25,6 +26,7 @@ import { TrophyIcon } from '../components/ui/icons';
 
 export const ProfilePage: React.FC = () => {
     const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const { addNotification } = useNotification();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ export const ProfilePage: React.FC = () => {
     const [checkingUsername, setCheckingUsername] = useState(false);
 
     useEffect(() => {
-        if (!user?.id) {
+        if (!user?.id || !activeProfileId) {
             setLoading(false);
             return;
         }
@@ -50,11 +52,14 @@ export const ProfilePage: React.FC = () => {
         const loadProfileData = async () => {
             try {
                 setLoading(true);
-                // Load profile, stats, and usage stats first (fast)
+                // Load profile, stats, and usage stats first (fast).
+                // getUserProfile / getUserUsageStats operate on the auth identity (users table).
+                // getUserStats queries game-data tables (ships, inventory, engineering) and is
+                // scoped to the active profile so alt accounts show their own fleet stats.
                 const [profileData, statsData, usageData] = await Promise.all([
-                    getUserProfile(user.id),
-                    getUserStats(user.id),
-                    getUserUsageStats(user.id),
+                    getUserProfile(user.id), // auth-identity profile (username, public flag)
+                    getUserStats(activeProfileId), // game data — scoped to active profile
+                    getUserUsageStats(user.id), // usage stats are auth-identity level
                 ]);
 
                 setProfile(profileData);
@@ -76,11 +81,11 @@ export const ProfilePage: React.FC = () => {
         };
 
         void loadProfileData();
-    }, [user?.id, addNotification]);
+    }, [user?.id, activeProfileId, addNotification]);
 
     // Load ship rankings asynchronously (separate from main page load)
     useEffect(() => {
-        if (!user?.id) {
+        if (!activeProfileId) {
             setTopShips([]);
             return;
         }
@@ -88,7 +93,7 @@ export const ProfilePage: React.FC = () => {
         const loadShipRankings = async () => {
             try {
                 setShipsLoading(true);
-                const shipsData = await getTopShipRankings(user.id);
+                const shipsData = await getTopShipRankings(activeProfileId); // game data — scoped to active profile
                 setTopShips(shipsData);
             } catch (error) {
                 console.error('Error loading ship rankings:', error);
@@ -104,7 +109,7 @@ export const ProfilePage: React.FC = () => {
         }, 100);
 
         return () => clearTimeout(timer);
-    }, [user?.id, addNotification]);
+    }, [activeProfileId, addNotification]);
 
     const validateUsername = (value: string): boolean => {
         const usernameRegex = /^[a-zA-Z0-9 _-]{3,20}$/;
@@ -152,7 +157,7 @@ export const ProfilePage: React.FC = () => {
     };
 
     const handleSave = async () => {
-        if (!user?.id || !profile) return;
+        if (!user?.id || !activeProfileId || !profile) return;
 
         // Validate username
         if (username && !validateUsername(username)) {

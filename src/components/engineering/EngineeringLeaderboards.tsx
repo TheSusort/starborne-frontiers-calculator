@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from 'recharts';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { BaseChart, ChartTooltip } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
@@ -94,15 +95,18 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
     className = '',
 }) => {
     const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const themeColors = useThemeColors();
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [leaderboardLoading, setLeaderboardLoading] = useState(false);
     const [tokensLeaderboard, setTokensLeaderboard] = useState<TokensLeaderboardEntry[]>([]);
     const [tokensLeaderboardLoading, setTokensLeaderboardLoading] = useState(false);
 
-    // Fetch leaderboard data when user is logged in
+    // Fetch leaderboard data when user is logged in.
+    // activeProfileId is used so the "(You)" marker highlights the currently active
+    // profile's entry rather than always the main account's entry.
     useEffect(() => {
-        if (!user?.id) {
+        if (!activeProfileId) {
             setLeaderboard([]);
             setTokensLeaderboard([]);
             return;
@@ -113,8 +117,8 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
             setTokensLeaderboardLoading(true);
             try {
                 const [pointsData, tokensData] = await Promise.all([
-                    getEngineeringLeaderboard(user.id),
-                    getEngineeringTokensLeaderboard(user.id),
+                    getEngineeringLeaderboard(activeProfileId),
+                    getEngineeringTokensLeaderboard(activeProfileId),
                 ]);
                 setLeaderboard(pointsData);
                 setTokensLeaderboard(tokensData);
@@ -129,7 +133,7 @@ export const EngineeringLeaderboards: React.FC<EngineeringLeaderboardsProps> = (
         };
 
         void fetchLeaderboards();
-    }, [user?.id]);
+    }, [activeProfileId]);
 
     // Prepare leaderboard chart data
     const leaderboardChartData = useMemo(() => {

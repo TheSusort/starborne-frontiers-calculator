@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { PageLayout } from '../../components/ui';
 import { Button } from '../../components/ui/Button';
 import { Loader } from '../../components/ui/Loader';
@@ -26,7 +26,7 @@ interface LeaderboardEntry {
 export const LeaderboardPage: React.FC = () => {
     const { shipName } = useParams<{ shipName: string }>();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
 
     const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -239,7 +239,9 @@ export const LeaderboardPage: React.FC = () => {
                         ship,
                         score,
                         rank: 0, // Will be set after sorting
-                        isCurrentUser: user?.id === shipsData[index].user_id, // Use the user_id from the original data
+                        // activeProfileId highlights the currently active profile's entry
+                        // (so switching to an alt correctly marks that alt's ship as "yours")
+                        isCurrentUser: activeProfileId === shipsData[index].user_id,
                         userId: shipsData[index].user_id, // Store the user_id from the original data
                     };
                 });
@@ -261,7 +263,7 @@ export const LeaderboardPage: React.FC = () => {
 
         void fetchLeaderboardData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [shipName, user?.id]);
+    }, [shipName, activeProfileId]);
 
     // Recalculate scores when selected role changes
     useEffect(() => {
