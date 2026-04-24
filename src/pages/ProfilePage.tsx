@@ -60,7 +60,7 @@ export const ProfilePage: React.FC = () => {
                 const [profileData, statsData, usageData] = await Promise.all([
                     getUserProfile(activeProfileId), // active profile (username, public flag, in_game_id)
                     getUserStats(activeProfileId), // game data — scoped to active profile
-                    getUserUsageStats(user.id), // usage stats are auth-identity level (main account only)
+                    getUserUsageStats(activeProfileId), // usage stats scoped to active profile (alt shows alt's stats)
                 ]);
 
                 setProfile(profileData);
