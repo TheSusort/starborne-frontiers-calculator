@@ -1,8 +1,8 @@
 {
   "Units": [
     {
-      "Id": "e2e-ship-1",
-      "DefinitionId": "def-e2e-1",
+      "Id": "aa000001-0000-4000-8000-000000000001",
+      "DefinitionId": "bb000001-0000-4000-8000-000000000001",
       "Name": "E2E Vanguard",
       "Faction": "Terran",
       "Rarity": "Epic",
@@ -60,8 +60,8 @@
       "Skills": []
     },
     {
-      "Id": "e2e-ship-2",
-      "DefinitionId": "def-e2e-2",
+      "Id": "aa000001-0000-4000-8000-000000000002",
+      "DefinitionId": "bb000001-0000-4000-8000-000000000002",
       "Name": "E2E Sentinel",
       "Faction": "Terran",
       "Rarity": "Rare",
@@ -119,8 +119,8 @@
       "Skills": []
     },
     {
-      "Id": "e2e-ship-3",
-      "DefinitionId": "def-e2e-3",
+      "Id": "aa000001-0000-4000-8000-000000000003",
+      "DefinitionId": "bb000001-0000-4000-8000-000000000003",
       "Name": "E2E Mender",
       "Faction": "Octavian",
       "Rarity": "Epic",
@@ -178,8 +178,8 @@
       "Skills": []
     },
     {
-      "Id": "e2e-ship-4",
-      "DefinitionId": "def-e2e-4",
+      "Id": "aa000001-0000-4000-8000-000000000004",
+      "DefinitionId": "bb000001-0000-4000-8000-000000000004",
       "Name": "E2E Saboteur",
       "Faction": "Lunarii",
       "Rarity": "Epic",
@@ -237,8 +237,8 @@
       "Skills": []
     },
     {
-      "Id": "e2e-ship-5",
-      "DefinitionId": "def-e2e-5",
+      "Id": "aa000001-0000-4000-8000-000000000005",
+      "DefinitionId": "bb000001-0000-4000-8000-000000000005",
       "Name": "E2E Skirmisher",
       "Faction": "Terran",
       "Rarity": "Rare",
@@ -298,7 +298,7 @@
   ],
   "Equipment": [
     {
-      "Id": "e2e-gear-1",
+      "Id": "cc000001-0000-4000-8000-000000000001",
       "EquippedOnUnit": null,
       "Name": "E2E Weapon 1",
       "Level": 0,
@@ -337,7 +337,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-2",
+      "Id": "cc000001-0000-4000-8000-000000000002",
       "EquippedOnUnit": null,
       "Name": "E2E Hull 2",
       "Level": 4,
@@ -376,7 +376,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-3",
+      "Id": "cc000001-0000-4000-8000-000000000003",
       "EquippedOnUnit": null,
       "Name": "E2E Generator 3",
       "Level": 8,
@@ -415,7 +415,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-4",
+      "Id": "cc000001-0000-4000-8000-000000000004",
       "EquippedOnUnit": null,
       "Name": "E2E Sensor 4",
       "Level": 12,
@@ -454,7 +454,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-5",
+      "Id": "cc000001-0000-4000-8000-000000000005",
       "EquippedOnUnit": null,
       "Name": "E2E Software 5",
       "Level": 0,
@@ -493,7 +493,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-6",
+      "Id": "cc000001-0000-4000-8000-000000000006",
       "EquippedOnUnit": null,
       "Name": "E2E Thrusters 6",
       "Level": 4,
@@ -532,7 +532,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-7",
+      "Id": "cc000001-0000-4000-8000-000000000007",
       "EquippedOnUnit": null,
       "Name": "E2E Weapon 7",
       "Level": 8,
@@ -571,7 +571,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-8",
+      "Id": "cc000001-0000-4000-8000-000000000008",
       "EquippedOnUnit": null,
       "Name": "E2E Hull 8",
       "Level": 12,
@@ -610,7 +610,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-9",
+      "Id": "cc000001-0000-4000-8000-000000000009",
       "EquippedOnUnit": null,
       "Name": "E2E Generator 9",
       "Level": 0,
@@ -649,7 +649,7 @@
       ]
     },
     {
-      "Id": "e2e-gear-10",
+      "Id": "cc000001-0000-4000-8000-000000000010",
       "EquippedOnUnit": null,
       "Name": "E2E Sensor 10",
       "Level": 4,
@@ -688,7 +688,7 @@
       ]
     },
     {
-      "Id": "e2e-implant-1",
+      "Id": "dd000001-0000-4000-8000-000000000001",
       "EquippedOnUnit": null,
       "Name": "E2E Minor Alpha Implant",
       "Level": 1,
@@ -710,7 +710,7 @@
       "SubStats": []
     },
     {
-      "Id": "e2e-implant-2",
+      "Id": "dd000001-0000-4000-8000-000000000002",
       "EquippedOnUnit": null,
       "Name": "E2E Minor Gamma Implant",
       "Level": 1,
@@ -732,7 +732,7 @@
       "SubStats": []
     },
     {
-      "Id": "e2e-implant-3",
+      "Id": "dd000001-0000-4000-8000-000000000003",
       "EquippedOnUnit": null,
       "Name": "E2E Major Implant",
       "Level": 1,

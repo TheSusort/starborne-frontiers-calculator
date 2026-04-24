@@ -231,7 +231,15 @@ export const ImportButton: React.FC<{
         },
         // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [setShips, setInventory, setEngineeringStats, addNotification, user, inputDomId]
+        [
+            setShips,
+            setInventory,
+            setEngineeringStats,
+            addNotification,
+            user,
+            activeProfileId,
+            inputDomId,
+        ]
     );
 
     const handleHangarNameSubmit = useCallback(
