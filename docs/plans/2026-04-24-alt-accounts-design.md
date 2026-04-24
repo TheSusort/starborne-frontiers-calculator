@@ -38,6 +38,7 @@ RLS is rewritten via a single helper function `has_profile_access(target_user_id
 |---|---|
 | Add column | `owner_auth_user_id uuid NULL REFERENCES auth.users(id) ON DELETE CASCADE`. NULL = main account. Non-NULL = alt owned by that auth user. |
 | Drop FK | `public.users.id → auth.users(id)` is dropped. `id` remains a PK uuid but no longer needs an auth.users row. |
+| Default `id` | `ALTER TABLE public.users ALTER COLUMN id SET DEFAULT gen_random_uuid();`. The existing `insert_user()` trigger explicitly supplies `id` for real users (= `auth.users.id`), so it is unaffected. Alt creation omits `id` on INSERT and the DB generates it, which also satisfies the new INSERT RLS check `id != auth.uid()`. |
 | Relax email | `email` becomes nullable. The unique constraint on `email` is replaced with a partial unique index `WHERE email IS NOT NULL` so real users still can't share an email. |
 | Username | Unchanged. Stays `UNIQUE NOT NULL`. Alts share the same global username namespace as main accounts (driven by the public profile route). |
 | `is_admin` | Default false for alts. Never elevated for alts in the normal flow. RLS admin checks read `auth.uid()`'s row only, so alt `is_admin` values are inert. |
@@ -89,9 +90,21 @@ Existing `public.users` rows have `owner_auth_user_id = NULL` by default, which 
 
 ## RLS rewrite
 
-### Mechanical swap on every user-owned table
+### Mechanical swap on user-owned tables
 
-Across `ships`, `inventory_items`, `engineering_stats`, `autogear_configs`, `loadouts`, `team_loadouts`, `ship_starred`, `tutorial_completed_groups`, `statistics_snapshots`, and any other table currently using `auth.uid() = user_id`:
+Across the following tables currently using `auth.uid() = user_id`:
+
+- `ships`
+- `inventory_items`
+- `engineering_stats`
+- `autogear_configs`
+- `loadouts`
+- `team_loadouts`
+- `statistics_snapshots`
+- `user_activity_log`
+- `encounter_notes` (keeps its `is_public` branch unchanged for the public-view path)
+
+Apply:
 
 ```sql
 -- before
@@ -104,6 +117,17 @@ WITH CHECK (public.has_profile_access(user_id))
 ```
 
 Public-visibility branches (`is_public = true`) and admin branches (`public.is_admin()`) are unchanged.
+
+The implementation plan should re-grep `auth.uid() = user_id` against the migrations as a final audit in case any policies were added after this spec was written.
+
+### Tables intentionally excluded from the swap
+
+- **`encounter_votes`** — kept on `auth.uid() = user_id`. Encounter votes represent one-vote-per-human community sentiment; allowing each profile to cast its own vote would inflate vote counts up to 6× per user. Client-side voting always passes `user.id` (auth uid), not `activeProfileId`. This is the only "game-data-ish" surface that intentionally remains auth-user-scoped.
+
+### Columns (not tables) that get profile scoping client-side
+
+- `ships.starred` — scoped by the existing `ships` RLS policy, which is already being rewritten above. No separate change needed.
+- `users.tutorial_completed_groups` — scoped by the `users` RLS policy update below. Each profile's row carries its own tutorial state column.
 
 ### `public.users` policy changes
 
@@ -197,6 +221,7 @@ Mechanical `user.id` → `activeProfileId` swap:
 - `src/services/adminService.ts` (admin RPCs use `auth.uid()` via SECURITY DEFINER)
 - Demo-mode guards
 - Anything reading `user.email` or `is_admin` directly
+- Encounter vote casting (always uses `user.id`, never `activeProfileId`, per the RLS exclusion above)
 
 ### Switching mechanism
 
@@ -328,6 +353,7 @@ Fires per-import — keep it that way, so an alt's import shares that alt's hang
 
 1. **`supabase/migrations/20260424000001_alt_accounts_users_schema.sql`**
    - Drop FK `public.users.id → auth.users(id)`
+   - Set `DEFAULT gen_random_uuid()` on `public.users.id` so alt INSERTs can omit it
    - Make `public.users.email` nullable
    - Replace email unique constraint with partial unique index `WHERE email IS NOT NULL`
    - Add column `public.users.owner_auth_user_id uuid NULL REFERENCES auth.users(id) ON DELETE CASCADE`
@@ -371,3 +397,9 @@ Roll forward, do not plan to roll back the schema. If the UI needs to be pulled 
 - Full audit of every file currently reading `useAuth().user.id` for game-data scoping (the list in this doc is representative; the plan should enumerate all sites).
 - Confirm the public profile route's exact resolver path so we can verify alts route correctly with no changes.
 - Confirm names of any existing localStorage keys that cache game data; each must be re-keyed by profile id with a one-time wipe of legacy entries.
+- Re-grep `auth.uid() = user_id` against `supabase/migrations/` as a final audit before writing the RLS migration, in case any new user-owned tables were added after this spec was written.
+- Verify that the existing `delete_user()` SECURITY DEFINER flow does not need to be alt-aware. The new `handle_auth_user_delete` trigger already cascades owned alts when the auth user is deleted, so `delete_user()` likely doesn't need changes — but confirm during plan writing.
+
+## Acknowledged trade-offs
+
+- **Admin "top users" analytics inflation:** because usage tracking is per-profile, the admin "top active users" view will count one human as up to 6 rows (main + 5 alts) when their alts are active. This is intentional — it gives the admin true visibility into per-account activity. If aggregation by owner becomes desirable later, the link can be reconstructed via `public.users.owner_auth_user_id`.
