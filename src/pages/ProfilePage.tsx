@@ -20,13 +20,14 @@ import {
     UserUsageStats,
     TopShipRanking,
 } from '../services/userProfileService';
+import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
 import { TrophyIcon } from '../components/ui/icons';
 
 export const ProfilePage: React.FC = () => {
     const { user } = useAuth();
-    const { activeProfileId } = useActiveProfile();
+    const { activeProfileId, isOnAlt, refreshProfiles } = useActiveProfile();
     const { addNotification } = useNotification();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -57,9 +58,9 @@ export const ProfilePage: React.FC = () => {
                 // getUserStats queries game-data tables (ships, inventory, engineering) and is
                 // scoped to the active profile so alt accounts show their own fleet stats.
                 const [profileData, statsData, usageData] = await Promise.all([
-                    getUserProfile(user.id), // auth-identity profile (username, public flag)
+                    getUserProfile(activeProfileId), // active profile (username, public flag, in_game_id)
                     getUserStats(activeProfileId), // game data — scoped to active profile
-                    getUserUsageStats(user.id), // usage stats are auth-identity level
+                    getUserUsageStats(user.id), // usage stats are auth-identity level (main account only)
                 ]);
 
                 setProfile(profileData);
@@ -186,13 +187,15 @@ export const ProfilePage: React.FC = () => {
 
         try {
             setSaving(true);
-            const updatedProfile = await updateUserProfile(user.id, {
+            const updatedProfile = await updateUserProfile(activeProfileId, {
                 username: username || null,
                 in_game_id: inGameId || null,
                 is_public: isPublic,
             });
 
             setProfile(updatedProfile);
+            // Refresh profiles so the sidebar switcher reflects the new username / is_public.
+            await refreshProfiles();
             addNotification('success', 'Profile updated successfully');
         } catch (error) {
             console.error('Error updating profile:', error);
@@ -271,6 +274,9 @@ export const ProfilePage: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Alt Accounts — only visible on the main profile */}
+                    {!isOnAlt && <AltAccountsSection />}
 
                     {/* Statistics */}
                     {stats && (
