@@ -53,16 +53,11 @@ export class CommunityRecommendationService {
     }
 
     static async createRecommendation(
-        input: CreateCommunityRecommendationInput
+        input: CreateCommunityRecommendationInput,
+        // Authorship uses the active profile so alt accounts can share recommendations
+        // independently. RLS allows any profile the auth user owns (has_profile_access).
+        createdBy: string
     ): Promise<CommunityRecommendation | null> {
-        const {
-            data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-            return null;
-        }
-
         const { data, error } = await supabase
             .from('community_recommendations')
             .insert({
@@ -76,7 +71,8 @@ export class CommunityRecommendationService {
                 stat_priorities: JSON.parse(JSON.stringify(input.statPriorities)),
                 stat_bonuses: JSON.parse(JSON.stringify(input.statBonuses)),
                 set_priorities: JSON.parse(JSON.stringify(input.setPriorities)),
-                created_by: user.id,
+                // activeProfileId passed from call site — one recommendation per alt profile
+                created_by: createdBy,
             })
             .select()
             .single();
@@ -104,6 +100,8 @@ export class CommunityRecommendationService {
         const { error } = await supabase.from('community_recommendation_votes').upsert(
             {
                 recommendation_id: recommendationId,
+                // Intentionally auth user (not activeProfileId): one vote per human —
+                // alt profiles must not be able to inflate vote counts.
                 user_id: user.id,
                 vote_type: voteType,
             },
@@ -133,6 +131,7 @@ export class CommunityRecommendationService {
             .from('community_recommendation_votes')
             .select('vote_type')
             .eq('recommendation_id', recommendationId)
+            // Intentionally auth user (not activeProfileId): votes are per-human.
             .eq('user_id', user.id)
             .single();
 
@@ -156,6 +155,7 @@ export class CommunityRecommendationService {
             .from('community_recommendation_votes')
             .delete()
             .eq('recommendation_id', recommendationId)
+            // Intentionally auth user (not activeProfileId): votes are per-human.
             .eq('user_id', user.id);
 
         if (error) {

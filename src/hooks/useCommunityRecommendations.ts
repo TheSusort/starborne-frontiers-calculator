@@ -5,6 +5,7 @@ import { CommunityRecommendationService } from '../services/communityRecommendat
 import { SavedAutogearConfig } from '../types/autogear';
 import { IMPLANTS } from '../constants/implants';
 import { useInventory } from '../contexts/InventoryProvider';
+import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 
 interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
@@ -40,6 +41,7 @@ export const useCommunityRecommendations = ({
     currentConfig,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
+    const { activeProfileId } = useActiveProfile();
 
     // Check if there's a shareable config (has a ship and role configured)
     const canShare = !!selectedShip && !!currentConfig && !!currentConfig.shipRole;
@@ -176,19 +178,29 @@ export const useCommunityRecommendations = ({
             }
 
             try {
-                const result = await CommunityRecommendationService.createRecommendation({
-                    shipName: selectedShip.name,
-                    title,
-                    description,
-                    isImplantSpecific,
-                    ultimateImplant: isImplantSpecific
-                        ? (ultimateImplantName ?? undefined)
-                        : undefined,
-                    shipRole: currentConfig.shipRole || selectedShip.type,
-                    statPriorities: currentConfig.statPriorities,
-                    statBonuses: currentConfig.statBonuses,
-                    setPriorities: currentConfig.setPriorities,
-                });
+                if (!activeProfileId) {
+                    setError('No active profile. Please sign in to share a recommendation.');
+                    return false;
+                }
+
+                const result = await CommunityRecommendationService.createRecommendation(
+                    {
+                        shipName: selectedShip.name,
+                        title,
+                        description,
+                        isImplantSpecific,
+                        ultimateImplant: isImplantSpecific
+                            ? (ultimateImplantName ?? undefined)
+                            : undefined,
+                        shipRole: currentConfig.shipRole || selectedShip.type,
+                        statPriorities: currentConfig.statPriorities,
+                        statBonuses: currentConfig.statBonuses,
+                        setPriorities: currentConfig.setPriorities,
+                    },
+                    // Pass active profile so the recommendation is authored by the
+                    // correct alt profile, not just the root auth user.
+                    activeProfileId
+                );
 
                 if (result) {
                     setShowShareForm(false);
@@ -206,7 +218,7 @@ export const useCommunityRecommendations = ({
             }
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [selectedShip, currentConfig, ultimateImplantName] // refreshRecommendation excluded intentionally
+        [selectedShip, currentConfig, ultimateImplantName, activeProfileId] // refreshRecommendation excluded intentionally
     );
 
     const handleSelectAlternative = useCallback((alt: CommunityRecommendation) => {

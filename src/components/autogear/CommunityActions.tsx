@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { CommunityRecommendation } from '../../types/communityRecommendation';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 
 interface CommunityActionsProps {
     recommendation: CommunityRecommendation | null;
@@ -20,11 +21,15 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
     onVote,
     onToggleShareForm,
 }) => {
+    // Votes are one-per-human: gate on auth user, not active profile.
     const { user } = useAuth();
+    // Authorship (sharing a recommendation) is per active profile.
+    const { activeProfileId } = useActiveProfile();
 
     return (
         <div className="pt-2 border-t border-dark-border space-y-2">
-            {/* Voting for community recommendations */}
+            {/* Voting for community recommendations — intentionally gated on auth user
+                (not activeProfileId) so alt profiles cannot cast duplicate votes. */}
             {recommendation?.id && (
                 <div className="flex items-center justify-center space-x-4">
                     {user ? (
@@ -55,10 +60,11 @@ export const CommunityActions: React.FC<CommunityActionsProps> = ({
                 </div>
             )}
 
-            {/* Share button section */}
+            {/* Share button section — gated on activeProfileId so each alt profile
+                can author its own recommendations independently. */}
             {!showShareForm && (
                 <div className="flex items-center justify-center">
-                    {user ? (
+                    {activeProfileId ? (
                         canShare ? (
                             <Button
                                 size="sm"

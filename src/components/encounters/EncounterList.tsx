@@ -105,6 +105,8 @@ export const EncounterList = ({
 
     const getUserVote = (encounter: SharedEncounterNote) => {
         if (!user) return 0;
+        // Intentionally auth user (not activeProfileId): encounter votes are one-per-human.
+        // The userVotes map is keyed by auth user_id as stored/fetched in useSharedEncounters.
         const vote = encounter.userVotes?.[user.id] || 0;
         return vote;
     };
