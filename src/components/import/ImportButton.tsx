@@ -8,6 +8,7 @@ import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { Checkbox } from '../ui/Checkbox';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { trackDataImport } from '../../services/usageTracking';
@@ -40,6 +41,7 @@ export const ImportButton: React.FC<{
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const [loading, setLoading] = useState(false);
     const [internalShareData, setInternalShareData] = useState(false);
     const [showHangarModal, setShowHangarModal] = useState(false);
@@ -170,7 +172,7 @@ export const ImportButton: React.FC<{
                     }
 
                     // Track data import (for both logged-in and anonymous users)
-                    await trackDataImport(user?.id);
+                    await trackDataImport(activeProfileId);
 
                     // sync to supabase if user is logged in
                     if (user) {
