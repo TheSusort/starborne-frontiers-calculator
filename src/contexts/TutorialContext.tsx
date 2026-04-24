@@ -9,7 +9,7 @@ import React, {
 } from 'react';
 import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/tutorialSteps';
 import { supabase } from '../config/supabase';
-import { useAuth } from './AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 const STORAGE_KEY = 'tutorial_completed_groups';
 
@@ -72,7 +72,7 @@ function findGroup(groupId: string): TutorialGroup | undefined {
 }
 
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { user } = useAuth();
+    const { activeProfileId, profilesLoading } = useActiveProfile();
     const [completedGroups, setCompletedGroups] = useState<Set<string>>(loadCompletedGroups);
     const [activeGroup, setActiveGroup] = useState<TutorialGroup | null>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(0);
@@ -94,9 +94,25 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
     }, []);
 
-    // Load from Supabase on sign-in and merge with localStorage
+    // Cancel any in-progress tutorial overlay and reset completed groups on profile switch.
+    // Tutorial state is per-profile: each alt is a fresh game account, so re-running the
+    // tutorial when switching to a fresh alt is correct. The load effect will refetch the
+    // new profile's completed groups automatically.
     useEffect(() => {
-        if (!user?.id || isMigrating) {
+        const onSwitch = () => {
+            setActiveGroup(null);
+            setActiveStepIndex(0);
+            pendingGroupsRef.current = [];
+            setCompletedGroups(new Set());
+            supabaseLoadedRef.current = false;
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, []);
+
+    // Load from Supabase on sign-in/profile-switch and merge with localStorage
+    useEffect(() => {
+        if (activeProfileId === null || profilesLoading || isMigrating) {
             supabaseLoadedRef.current = false;
             return;
         }
@@ -104,14 +120,14 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         let cancelled = false;
 
         const loadAndMerge = async () => {
-            const remoteGroups = await loadCompletedGroupsFromSupabase(user.id);
+            const remoteGroups = await loadCompletedGroupsFromSupabase(activeProfileId);
             if (cancelled) return;
 
             setCompletedGroups((prev) => {
                 const merged = new Set([...prev, ...remoteGroups]);
                 // If Supabase had fewer, push the merged set back
                 if (merged.size > remoteGroups.length) {
-                    void saveCompletedGroupsToSupabase(user.id, merged);
+                    void saveCompletedGroupsToSupabase(activeProfileId, merged);
                 }
                 saveCompletedGroups(merged);
                 return merged;
@@ -124,16 +140,16 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return () => {
             cancelled = true;
         };
-    }, [user?.id, isMigrating]);
+    }, [activeProfileId, profilesLoading, isMigrating]);
 
     // Persist completed groups to localStorage + Supabase
     useEffect(() => {
         saveCompletedGroups(completedGroups);
 
-        if (user?.id && supabaseLoadedRef.current && completedGroups.size > 0) {
-            void saveCompletedGroupsToSupabase(user.id, completedGroups);
+        if (activeProfileId && supabaseLoadedRef.current && completedGroups.size > 0) {
+            void saveCompletedGroupsToSupabase(activeProfileId, completedGroups);
         }
-    }, [completedGroups, user?.id]);
+    }, [completedGroups, activeProfileId]);
 
     const completeCurrentGroup = useCallback(() => {
         if (activeGroup) {
@@ -257,10 +273,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveStepIndex(0);
         pendingGroupsRef.current = [];
         localStorage.removeItem(STORAGE_KEY);
-        if (user?.id) {
-            void saveCompletedGroupsToSupabase(user.id, new Set());
+        if (activeProfileId) {
+            void saveCompletedGroupsToSupabase(activeProfileId, new Set());
         }
-    }, [user?.id]);
+    }, [activeProfileId]);
 
     const activeStep = activeGroup ? (activeGroup.steps[activeStepIndex] ?? null) : null;
 
