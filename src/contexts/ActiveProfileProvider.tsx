@@ -76,9 +76,17 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         [user?.id, storedId, profiles]
     );
 
+    // Tracks the auth user id we have actually completed a profiles fetch for.
+    // Without this, the stale-detection effect can fire after sign-in but BEFORE
+    // refreshProfiles has had a chance to populate profiles — `profilesLoading`
+    // is still false (from the unauth state) at that point because state updates
+    // from the fetch start haven't applied yet.
+    const fetchedForUserRef = useRef<string | null>(null);
+
     // Notify once when a stored alt id is no longer in the profiles list (deleted elsewhere).
     useEffect(() => {
         if (!user?.id || profilesLoading) return;
+        if (fetchedForUserRef.current !== user.id) return; // wait for the first fetch to complete
         if (
             storedId &&
             storedId !== user.id &&
@@ -99,6 +107,7 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const refreshProfiles = useCallback(async () => {
         if (!user?.id) {
+            fetchedForUserRef.current = null;
             setProfiles([]);
             setProfilesLoading(false);
             return;
@@ -107,6 +116,7 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         try {
             const rows = await listProfiles(user.id);
             setProfiles(rows);
+            fetchedForUserRef.current = user.id;
         } catch (err) {
             console.error('Failed to load profiles', err);
             addNotification('error', 'Failed to load profiles');
@@ -124,6 +134,7 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
     useEffect(() => {
         const onSignout = () => {
             lastNotifiedStaleRef.current = null; // reset so the next user gets the notification if they have a stale id
+            fetchedForUserRef.current = null;
             localStorage.removeItem(StorageKey.ACTIVE_PROFILE_ID);
             setStoredId(null);
             setProfiles([]);

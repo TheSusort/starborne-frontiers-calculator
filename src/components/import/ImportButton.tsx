@@ -105,32 +105,6 @@ export const ImportButton: React.FC<{
         }
     };
 
-    const handleFile = useCallback(
-        async (file: File) => {
-            if (loading) return;
-
-            // If sharing is enabled, show the hangar name modal
-            if (shareData) {
-                setSelectedFile(file);
-                setShowHangarModal(true);
-                return;
-            }
-
-            // Otherwise, proceed with normal import
-            await processFileImport(file);
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [loading, shareData]
-    );
-
-    const handleFileUpload = useCallback(
-        async (event: React.ChangeEvent<HTMLInputElement>) => {
-            const file = event.target.files?.[0];
-            if (file) await handleFile(file);
-        },
-        [handleFile]
-    );
-
     const processFileImport = useCallback(
         async (file: File) => {
             try {
@@ -240,6 +214,31 @@ export const ImportButton: React.FC<{
             activeProfileId,
             inputDomId,
         ]
+    );
+
+    const handleFile = useCallback(
+        async (file: File) => {
+            if (loading) return;
+
+            // If sharing is enabled, show the hangar name modal
+            if (shareData) {
+                setSelectedFile(file);
+                setShowHangarModal(true);
+                return;
+            }
+
+            // Otherwise, proceed with normal import
+            await processFileImport(file);
+        },
+        [loading, shareData, processFileImport]
+    );
+
+    const handleFileUpload = useCallback(
+        async (event: React.ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            if (file) await handleFile(file);
+        },
+        [handleFile]
     );
 
     const handleHangarNameSubmit = useCallback(
