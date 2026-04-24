@@ -259,26 +259,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const [isMigrating, setIsMigrating] = useState(false);
     const [localShips, setLocalShips] = useState<Ship[]>([]);
 
-    // One-time wipe of the legacy unkeyed ships localStorage entry.
-    // Before profile-keying, all profiles shared a single "ships" key and
-    // stale data from one profile would be served to another after refresh.
-    useEffect(() => {
-        const MIGRATION_FLAG = 'ships_cache_v2_migrated';
-        if (!localStorage.getItem(MIGRATION_FLAG)) {
-            localStorage.removeItem(StorageKey.SHIPS);
-            localStorage.setItem(MIGRATION_FLAG, 'true');
-        }
-    }, []);
-
-    // Build the profile-scoped localStorage key. Fall back to the legacy bare
-    // key when unauthenticated/demo so those flows still persist.
-    const shipsCacheKey = activeProfileId
-        ? `${StorageKey.SHIPS}:${activeProfileId}`
-        : StorageKey.SHIPS;
-
     // Use useStorage for ships
     const { data: storageShips, setData: setStorageShips } = useStorage<Ship[]>({
-        key: shipsCacheKey,
+        key: StorageKey.SHIPS,
         defaultValue: [],
     });
 

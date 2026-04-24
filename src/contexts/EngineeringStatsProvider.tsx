@@ -65,24 +65,9 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
     const [loading, setLoading] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
 
-    // One-time wipe of the legacy unkeyed engineering_stats localStorage entry,
-    // so switching profiles doesn't show another profile's cached engineering.
-    useEffect(() => {
-        const MIGRATION_FLAG = 'engineering_stats_cache_v2_migrated';
-        if (!localStorage.getItem(MIGRATION_FLAG)) {
-            localStorage.removeItem(StorageKey.ENGINEERING_STATS);
-            localStorage.setItem(MIGRATION_FLAG, 'true');
-        }
-    }, []);
-
-    // Profile-scoped key; fall back to legacy bare key for unauth/demo.
-    const engineeringCacheKey = activeProfileId
-        ? `${StorageKey.ENGINEERING_STATS}:${activeProfileId}`
-        : StorageKey.ENGINEERING_STATS;
-
     // Use useStorage for engineering stats
     const { data: engineeringStats, setData: setEngineeringStats } = useStorage<EngineeringStats>({
-        key: engineeringCacheKey,
+        key: StorageKey.ENGINEERING_STATS,
         defaultValue: { stats: [] },
     });
 

@@ -17,7 +17,7 @@ export const LoginButton: React.FC = () => {
             <img
                 src={user.photoURL}
                 alt={user.displayName || user.email || 'User'}
-                className="w-10 h-10 cursor-pointer hover:opacity-80 transition-opacity"
+                className="w-10 h-10 cursor-pointer hover:opacity-80 transition-opacity object-cover"
                 title="Account menu"
             />
         ) : (
