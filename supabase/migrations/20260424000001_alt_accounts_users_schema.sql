@@ -18,7 +18,7 @@ BEGIN
       AND rel.relname = 'users'
       AND con.contype = 'f'
       AND con.confrelid = 'auth.users'::regclass
-      AND (SELECT array_agg(attname) FROM pg_attribute
+      AND (SELECT array_agg(attname ORDER BY attnum) FROM pg_attribute
            WHERE attrelid = con.conrelid
              AND attnum = ANY(con.conkey)) = ARRAY['id'::name];
 
@@ -46,12 +46,33 @@ BEGIN
     WHERE ns.nspname = 'public'
       AND rel.relname = 'users'
       AND con.contype = 'u'
-      AND (SELECT array_agg(attname) FROM pg_attribute
+      AND (SELECT array_agg(attname ORDER BY attnum) FROM pg_attribute
            WHERE attrelid = con.conrelid
              AND attnum = ANY(con.conkey)) = ARRAY['email'::name];
 
     IF uq_name IS NOT NULL THEN
         EXECUTE format('ALTER TABLE public.users DROP CONSTRAINT %I', uq_name);
+    END IF;
+END $$;
+
+-- Also drop any pre-existing UNIQUE INDEX on (email) that wasn't a constraint
+-- (Supabase schemas vary: some define email uniqueness as a bare index).
+-- Excludes partial indexes (WHERE clause) so our own users_email_unique_when_present
+-- is not removed on re-runs.
+DO $$
+DECLARE
+    idx_name text;
+BEGIN
+    SELECT indexname INTO idx_name
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'users'
+      AND indexdef LIKE '%UNIQUE%'
+      AND indexdef LIKE '%(email)%'
+      AND indexdef NOT LIKE '%WHERE%';
+
+    IF idx_name IS NOT NULL THEN
+        EXECUTE format('DROP INDEX IF EXISTS public.%I', idx_name);
     END IF;
 END $$;
 
