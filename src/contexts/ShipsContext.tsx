@@ -251,7 +251,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
     const { addNotification } = useNotification();
@@ -362,10 +362,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         const onSwitch = () => {
             setLocalShips([]);
+            // Also clear storage so the storageShips→localShips sync effect doesn't
+            // repopulate localShips with the previous profile's data before loadShips
+            // fires for the new profile.
+            void setStorageShips([]);
         };
         window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
         return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
-    }, []);
+    }, [setStorageShips]);
 
     // Listen for migration start/end events
     useEffect(() => {
