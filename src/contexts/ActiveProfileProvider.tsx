@@ -107,9 +107,19 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
 
     const refreshProfiles = useCallback(async () => {
         if (!user?.id) {
+            // Unauth early-return. Deliberately do NOT setProfilesLoading(false)
+            // here: data contexts gate on activeProfileId !== null AND
+            // !profilesLoading. For unauth users activeProfileId is already
+            // null so the gate is false regardless. If we flipped
+            // profilesLoading to false and then the auth session resolved,
+            // there would be a render where user is truthy but profiles is
+            // still empty and profilesLoading is stale-false — data contexts
+            // would see activeProfileId = user.id (main, from fallback) and
+            // load main's data before the alt-containing profiles list
+            // arrives. Keeping profilesLoading=true here (or at its previous
+            // value) avoids that race.
             fetchedForUserRef.current = null;
             setProfiles([]);
-            setProfilesLoading(false);
             return;
         }
         setProfilesLoading(true);
