@@ -4,7 +4,7 @@ import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { useAuth } from './AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface AutogearConfigContextType {
     savedConfigs: Record<string, SavedAutogearConfig>;
@@ -34,8 +34,8 @@ const transformConfigs = (data: RawAutogearConfig[]): Record<string, SavedAutoge
 
 export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
-    const [loading, setLoading] = useState(true);
+    const { activeProfileId, profilesLoading } = useActiveProfile();
+    const [loading, setLoading] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
 
     const { data: savedConfigs, setData: setSavedConfigs } = useStorage<
@@ -51,11 +51,11 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
 
         try {
             setLoading(true);
-            if (user?.id) {
+            if (activeProfileId) {
                 const { data, error } = await supabase
                     .from('autogear_configs')
                     .select('*')
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) {
                     throw error;
@@ -71,12 +71,14 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setSavedConfigs, isMigrating]);
+    }, [activeProfileId, addNotification, setSavedConfigs, isMigrating]);
 
-    // Initial load and reload on auth changes
+    // Initial load and reload on auth/profile changes
     useEffect(() => {
-        void loadConfigs();
-    }, [user?.id, loadConfigs]);
+        if (activeProfileId !== null && !profilesLoading) {
+            void loadConfigs();
+        }
+    }, [activeProfileId, profilesLoading, loadConfigs]);
 
     // Clear data on sign out
     useEffect(() => {
@@ -92,6 +94,16 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
             window.removeEventListener('app:signout', handleSignOut);
         };
     }, [setSavedConfigs, isMigrating]);
+
+    // Reset state when the active profile changes so stale data from the
+    // previous profile is cleared before the new profile's data loads.
+    useEffect(() => {
+        const onSwitch = () => {
+            void setSavedConfigs({});
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, [setSavedConfigs]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -120,12 +132,12 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
                 [config.shipId]: config,
             })); // Optimistic update
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const { error } = await supabase.from('autogear_configs').upsert(
                     {
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         ship_id: config.shipId,
                         config: config,
                     },
@@ -144,7 +156,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
                 throw error;
             }
         },
-        [user?.id, addNotification, savedConfigs, setSavedConfigs]
+        [activeProfileId, addNotification, savedConfigs, setSavedConfigs]
     );
 
     const getConfig = useCallback(
@@ -163,13 +175,13 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
                 return newConfigs;
             }); // Optimistic update
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const { error } = await supabase
                     .from('autogear_configs')
                     .delete()
-                    .eq('user_id', user.id)
+                    .eq('user_id', activeProfileId)
                     .eq('ship_id', shipId);
 
                 if (error) throw error;
@@ -182,7 +194,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
                 throw error;
             }
         },
-        [user?.id, addNotification, savedConfigs, setSavedConfigs]
+        [activeProfileId, addNotification, savedConfigs, setSavedConfigs]
     );
 
     const contextValue = {
