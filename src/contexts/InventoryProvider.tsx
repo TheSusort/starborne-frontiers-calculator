@@ -7,9 +7,9 @@ import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
-import { useStorage } from '../hooks/useStorage';
+import { useStorage, removeFromIndexedDB } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
-import { useAuth } from './AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface InventoryContextType {
     inventory: GearPiece[];
@@ -138,8 +138,10 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
-    const [loading, setLoading] = useState(true);
+    const { activeProfileId, profilesLoading } = useActiveProfile();
+    // Initialize loading to false so unauthenticated / demo users are never stranded.
+    // loadInventory sets it to true before async work, so the authenticated path is correct.
+    const [loading, setLoading] = useState(false);
     const [loadingProgress, setLoadingProgress] = useState(0);
     const [syncing, setSyncing] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
@@ -147,9 +149,29 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const [localInventory, setLocalInventory] = useState<GearPiece[]>([]);
     const [cacheLoaded, setCacheLoaded] = useState(false);
 
+    // One-time wipe of the legacy unkeyed inventory cache entry.
+    // Before this task, all profiles shared a single "inventory_items" IndexedDB key.
+    // Now each profile gets its own key ("inventory_items:<profileId>").
+    // On first load after deploy, delete the old entry so stale data isn't served.
+    useEffect(() => {
+        const MIGRATION_FLAG = 'inventory_cache_v2_migrated';
+        if (!localStorage.getItem(MIGRATION_FLAG)) {
+            // Wipe the legacy unkeyed inventory cache once. Future reads use profile-keyed entries.
+            void removeFromIndexedDB(StorageKey.INVENTORY);
+            localStorage.setItem(MIGRATION_FLAG, 'true');
+        }
+    }, []);
+
+    // Build the profile-scoped IndexedDB cache key.
+    // When activeProfileId is null (unauthenticated / demo), fall back to the legacy
+    // base key so offline/demo users still get a persistent cache.
+    const inventoryCacheKey = activeProfileId
+        ? `${StorageKey.INVENTORY}:${activeProfileId}`
+        : StorageKey.INVENTORY;
+
     // Use useStorage for inventory
     const { data: storageInventory, setData: setStorageInventory } = useStorage<GearPiece[]>({
-        key: StorageKey.INVENTORY,
+        key: inventoryCacheKey,
         defaultValue: [],
         useIndexedDB: true,
     });
@@ -181,13 +203,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             lastId: string | null,
             retryCount = 0
         ): Promise<{ items: GearPiece[]; lastId: string | null }> => {
-            if (!user?.id) return { items: [], lastId: null };
+            if (!activeProfileId) return { items: [], lastId: null };
 
             try {
                 let query = supabase
                     .from('inventory_items')
                     .select('*')
-                    .eq('user_id', user.id)
+                    .eq('user_id', activeProfileId)
                     .order('id')
                     .limit(BATCH_SIZE);
 
@@ -220,7 +242,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id]
+        [activeProfileId]
     );
 
     const loadInventory = useCallback(async () => {
@@ -228,7 +250,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (isMigrating) return;
 
         try {
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             // If we have cached data, use syncing mode instead of full loading
             const hasCachedData = localInventory.length > 0;
@@ -247,7 +269,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const { count, error: countError } = await supabase
                 .from('inventory_items')
                 .select('*', { count: 'exact', head: true })
-                .eq('user_id', user?.id);
+                .eq('user_id', activeProfileId);
 
             if (countError) throw countError;
             const totalItems = count || 0;
@@ -289,7 +311,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             setSyncing(false);
         }
     }, [
-        user?.id,
+        activeProfileId,
         addNotification,
         loadBatch,
         setTempInventory,
@@ -301,19 +323,23 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Use tempInventory for display while doing a fresh load (no cache), otherwise use localInventory
     const displayInventory = loading && !cacheLoaded ? tempInventory : localInventory;
 
-    // Initial load and reload on auth changes
+    // Initial load and reload on auth/profile changes.
+    // Gated on activeProfileId !== null && !profilesLoading so we don't fire
+    // before the profile system has resolved — avoids premature empty loads.
     useEffect(() => {
-        void loadInventory();
-    }, [user?.id, loadInventory]);
+        if (activeProfileId !== null && !profilesLoading) {
+            void loadInventory();
+        }
+    }, [activeProfileId, profilesLoading, loadInventory]);
 
     // Global load/sync notifications — fired from the provider so they reach the
     // user regardless of which page is mounted when a sign-in triggers a load.
-    // Gated on user?.id so the initial mount (before auth resolves) doesn't
+    // Gated on activeProfileId so the initial mount (before auth resolves) doesn't
     // produce a spurious "Loading... 0%" / "Loaded 0" pair.
     const wasLoadingRef = useRef(false);
     const wasSyncingRef = useRef(false);
     useEffect(() => {
-        if (!user?.id) {
+        if (!activeProfileId) {
             wasLoadingRef.current = loading;
             return;
         }
@@ -324,10 +350,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             addNotification('success', `Loaded ${localInventory.length} gear pieces`);
         }
         wasLoadingRef.current = loading;
-    }, [loading, loadingProgress, addNotification, localInventory.length, user?.id]);
+    }, [loading, loadingProgress, addNotification, localInventory.length, activeProfileId]);
 
     useEffect(() => {
-        if (!user?.id) {
+        if (!activeProfileId) {
             wasSyncingRef.current = syncing;
             return;
         }
@@ -335,7 +361,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             addNotification('info', 'Syncing gear...');
         }
         wasSyncingRef.current = syncing;
-    }, [syncing, addNotification, user?.id]);
+    }, [syncing, addNotification, activeProfileId]);
 
     useEffect(() => {
         const handleSignOut = () => {
@@ -352,6 +378,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             window.removeEventListener('app:signout', handleSignOut);
         };
     }, [setStorageInventory, isMigrating]);
+
+    // Reset in-memory inventory state when the active profile changes.
+    // The activeProfileId-keyed loadInventory effect will refetch automatically.
+    useEffect(() => {
+        const onSwitch = () => {
+            setLocalInventory([]);
+            // Also clear storage so the storageInventory→localInventory sync effect doesn't
+            // repopulate localInventory with the previous profile's data before loadInventory
+            // fires for the new profile.
+            void setStorageInventory([]);
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, [setStorageInventory]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -392,7 +432,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setLocalInventory((prev) => [...prev, optimisticGear]);
                 void syncToStorage([...localInventory, optimisticGear]);
 
-                if (!user?.id) return optimisticGear;
+                if (!activeProfileId) return optimisticGear;
 
                 // Create gear record with stats JSONB
                 const statsJsonb = {
@@ -413,7 +453,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 const { data: gearData, error: gearError } = await supabase
                     .from('inventory_items')
                     .insert({
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         slot: newGear.slot,
                         level: newGear.level,
                         stars: newGear.stars,
@@ -439,7 +479,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, addNotification, localInventory, syncToStorage]
+        [activeProfileId, addNotification, localInventory, syncToStorage]
     );
 
     const updateGearPiece = useCallback(
@@ -466,7 +506,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setLocalInventory(updatedInventory);
                 void syncToStorage(updatedInventory);
 
-                if (!user?.id) return;
+                if (!activeProfileId) return;
 
                 // Build update object
                 const updateData: Record<string, unknown> = {
@@ -501,12 +541,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .from('inventory_items')
                     .update(updateData)
                     .eq('id', id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (gearError) throw gearError;
 
                 // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
-                if (user?.id) {
+                if (activeProfileId) {
                     //await loadInventory();
                 }
             } catch (error) {
@@ -517,7 +557,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification, localInventory, syncToStorage]
+        [activeProfileId, loadInventory, addNotification, localInventory, syncToStorage]
     );
 
     const deleteGearPiece = useCallback(
@@ -528,13 +568,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setLocalInventory(updatedInventory);
                 void syncToStorage(updatedInventory);
 
-                if (user?.id) {
+                if (activeProfileId) {
                     // Delete gear record (this will cascade delete related records)
                     const { error } = await supabase
                         .from('inventory_items')
                         .delete()
                         .eq('id', id)
-                        .eq('user_id', user.id);
+                        .eq('user_id', activeProfileId);
 
                     if (error) throw error;
                 }
@@ -546,7 +586,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 throw error;
             }
         },
-        [user?.id, loadInventory, addNotification, localInventory, syncToStorage]
+        [activeProfileId, loadInventory, addNotification, localInventory, syncToStorage]
     );
 
     return (
