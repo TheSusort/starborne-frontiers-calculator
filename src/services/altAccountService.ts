@@ -15,7 +15,9 @@ export interface ProfileRow {
 export const listProfiles = async (authUserId: string): Promise<ProfileRow[]> => {
     const { data, error } = await supabase
         .from('users')
-        .select('*')
+        .select(
+            'id, username, is_public, owner_auth_user_id, in_game_id, email, is_admin, created_at, updated_at'
+        )
         .or(`id.eq.${authUserId},owner_auth_user_id.eq.${authUserId}`);
     if (error) throw error;
     return (data ?? []) as ProfileRow[];

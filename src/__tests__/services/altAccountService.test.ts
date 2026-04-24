@@ -78,6 +78,8 @@ describe('altAccountService', () => {
         await setAltPublic('alt-1', 'auth-id', true);
 
         expect(update).toHaveBeenCalledWith({ is_public: true });
+        expect(eq1).toHaveBeenCalledWith('id', 'alt-1');
+        expect(eq2).toHaveBeenCalledWith('owner_auth_user_id', 'auth-id');
     });
 
     it('deleteAlt removes only an owned alt row', async () => {
