@@ -1,42 +1,31 @@
 import React, { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useActiveProfile } from '../../../contexts/ActiveProfileProvider';
 import { useNotification } from '../../../hooks/useNotification';
 import { Dropdown } from '../Dropdown';
 import { AltAccountIcon } from '../icons/AltAccountIcon';
 import { type ProfileRow } from '../../../services/altAccountService';
 
-/**
- * Resolve the best display name for a profile row.
- * Falls back to email prefix if username is absent, then to a truncated id.
- */
 const displayName = (profile: ProfileRow, authUserId: string | null): string => {
     if (profile.username) return profile.username;
     if (profile.id === authUserId && profile.email) {
-        // Use the part before the @ for the main profile
         return profile.email.split('@')[0];
     }
     return `Profile ${profile.id.slice(0, 6)}`;
 };
 
 /**
- * ProfileSwitcher — shows the active profile name in the sidebar with a
- * dropdown that lets the user switch between main + alt accounts, or navigate
- * to the profile management page.
+ * Renders the profile switcher entries (main + alts) as Dropdown items.
+ * Caller is responsible for wrapping in a <Dropdown>.
  *
- * Returns null while profiles are loading or when there is no authenticated user.
+ * Returns null when profiles are loading or there is no active profile,
+ * which lets the caller skip the surrounding chrome too.
  */
-export const ProfileSwitcher: React.FC = () => {
-    const { profiles, activeProfile, isOnAlt, switchProfile, profilesLoading } = useActiveProfile();
+export const ProfileSwitcherMenu: React.FC = () => {
+    const { profiles, activeProfile, switchProfile, profilesLoading } = useActiveProfile();
     const { addNotification } = useNotification();
-    const navigate = useNavigate();
 
-    // Sorted list: main profile first, then alts alphabetically by display name.
     const sortedProfiles = useMemo(() => {
         if (!profiles.length) return [];
-
-        // Identify the main profile — the one whose id matches owner_auth_user_id or whose
-        // owner_auth_user_id is null (it IS the auth user row).
         const main = profiles.find((p) => p.owner_auth_user_id === null);
         const alts = profiles
             .filter((p) => p.owner_auth_user_id !== null)
@@ -45,38 +34,21 @@ export const ProfileSwitcher: React.FC = () => {
                 const bName = displayName(b, main?.id ?? null);
                 return aName.localeCompare(bName);
             });
-
         return main ? [main, ...alts] : alts;
     }, [profiles]);
 
     if (profilesLoading || !activeProfile) return null;
 
     const mainProfile = sortedProfiles.find((p) => p.owner_auth_user_id === null) ?? null;
-    const activeName = displayName(activeProfile, mainProfile?.id ?? null);
 
     const handleSwitch = (profile: ProfileRow) => {
         if (profile.id === activeProfile.id) return;
         switchProfile(profile.id);
-        const name = displayName(profile, mainProfile?.id ?? null);
-        addNotification('success', `Switched to ${name}`);
+        addNotification('success', `Switched to ${displayName(profile, mainProfile?.id ?? null)}`);
     };
 
-    const trigger = (
-        <button
-            className={`flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-80 ${
-                isOnAlt ? 'text-amber-400' : 'text-gray-300'
-            }`}
-            aria-label={`Active profile: ${activeName}. Click to switch profile.`}
-        >
-            <AltAccountIcon
-                className={`flex-shrink-0 ${isOnAlt ? 'text-amber-400' : 'text-gray-400'}`}
-            />
-            <span className="truncate max-w-[120px]">{activeName}</span>
-        </button>
-    );
-
     return (
-        <Dropdown trigger={trigger} align="left">
+        <>
             {sortedProfiles.map((profile) => {
                 const name = displayName(profile, mainProfile?.id ?? null);
                 const isActive = profile.id === activeProfile.id;
@@ -98,14 +70,6 @@ export const ProfileSwitcher: React.FC = () => {
                     </Dropdown.Item>
                 );
             })}
-            <div className="border-t border-dark-border mt-1 pt-1">
-                <Dropdown.Item
-                    onClick={() => void navigate('/profile')}
-                    className="text-gray-400 text-sm"
-                >
-                    Manage profiles
-                </Dropdown.Item>
-            </div>
-        </Dropdown>
+        </>
     );
 };

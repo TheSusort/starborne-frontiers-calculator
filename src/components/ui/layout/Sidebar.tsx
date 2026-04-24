@@ -15,7 +15,6 @@ import { Button } from '../Button';
 import { ConfirmModal } from './ConfirmModal';
 import { Offcanvas } from './Offcanvas';
 import { Tooltip } from './Tooltip';
-import { ProfileSwitcher } from './ProfileSwitcher';
 
 // Define the type for navigation items
 type NavigationItem = {
@@ -429,7 +428,6 @@ export const Sidebar: React.FC = () => {
                         testId="import-game-data-input"
                     />
                 </div>
-                {user && <ProfileSwitcher />}
                 <LoginButton />
             </div>
         </div>

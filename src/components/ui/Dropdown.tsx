@@ -4,6 +4,7 @@ interface DropdownProps {
     trigger: React.ReactNode;
     children: React.ReactNode;
     align?: 'left' | 'right';
+    direction?: 'down' | 'up';
 }
 
 interface DropdownItemProps {
@@ -88,7 +89,7 @@ const DropdownSubmenu: React.FC<DropdownSubmenuProps> = ({ label, children, clas
 export const Dropdown: React.FC<DropdownProps> & {
     Item: typeof DropdownItem;
     Submenu: typeof DropdownSubmenu;
-} = ({ trigger, children, align = 'right' }) => {
+} = ({ trigger, children, align = 'right', direction = 'down' }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -115,7 +116,9 @@ export const Dropdown: React.FC<DropdownProps> & {
             </div>
             {isOpen && (
                 <div
-                    className={`absolute z-50 mt-2 ${
+                    className={`absolute z-50 ${
+                        direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
+                    } ${
                         align === 'right' ? 'right-0' : 'left-0'
                     } min-w-[200px] bg-dark border border-dark-border shadow-lg`}
                     onClick={(e) => e.stopPropagation()}
