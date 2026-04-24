@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { useActiveProfile } from '../../../contexts/ActiveProfileProvider';
 import { useNotification } from '../../../hooks/useNotification';
 import { Dropdown } from '../Dropdown';
-import { AltAccountIcon } from '../icons/AltAccountIcon';
 import { type ProfileRow } from '../../../services/altAccountService';
 
 const displayName = (profile: ProfileRow, authUserId: string | null): string => {
@@ -56,16 +55,16 @@ export const ProfileSwitcherMenu: React.FC = () => {
                     <Dropdown.Item
                         key={profile.id}
                         onClick={() => handleSwitch(profile)}
-                        className={isActive ? 'font-semibold text-teal-400' : ''}
+                        className={isActive ? 'font-semibold text-primary' : ''}
                     >
                         <span className="flex items-center gap-2">
-                            {profile.owner_auth_user_id !== null && (
-                                <AltAccountIcon className="flex-shrink-0 text-amber-400" />
-                            )}
                             <span className="truncate">{name}</span>
+                            {profile.owner_auth_user_id == null && mainProfile && (
+                                <span className="flex-shrink-0 text-xs text-primary">main</span>
+                            )}
                             {isActive && (
                                 <span className="ml-auto text-xs text-gray-500">active</span>
-                            )}
+                            )}{' '}
                         </span>
                     </Dropdown.Item>
                 );
