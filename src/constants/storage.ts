@@ -1,4 +1,5 @@
 export const StorageKey = {
+    ACTIVE_PROFILE_ID: 'active_profile_id',
     SHIPS: 'ships',
     INVENTORY: 'inventory_items',
     ENCOUNTERS: 'encounter_notes',

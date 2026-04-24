@@ -7,7 +7,7 @@ import {
     SharedShipPosition,
 } from '../types/encounters';
 import { supabase } from '../config/supabase';
-import { useAuth } from '../contexts/AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { useShips } from '../contexts/ShipsContext';
 import { StorageKey } from '../constants/storage';
 import { useStorage } from './useStorage';
@@ -48,7 +48,7 @@ const transformEncounterNote = (data: RawEncounterNote): LocalEncounterNote => {
 
 export const useEncounterNotes = () => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const { ships } = useShips();
     const [loading, setLoading] = useState(true);
 
@@ -61,7 +61,7 @@ export const useEncounterNotes = () => {
     const loadEncounters = useCallback(async () => {
         try {
             setLoading(true);
-            if (user?.id) {
+            if (activeProfileId) {
                 const { data, error } = await supabase
                     .from('encounter_notes')
                     .select(
@@ -70,7 +70,7 @@ export const useEncounterNotes = () => {
                     encounter_formations (*)
                 `
                     )
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
 
@@ -83,7 +83,7 @@ export const useEncounterNotes = () => {
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setEncounters]);
+    }, [activeProfileId, addNotification, setEncounters]);
 
     // Initial load and reload on auth changes
     useEffect(() => {
@@ -101,6 +101,18 @@ export const useEncounterNotes = () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
     }, [setEncounters]);
+
+    // Reload encounter notes when the active profile switches.
+    useEffect(() => {
+        const handleProfileSwitch = () => {
+            void setEncounters([]);
+            void loadEncounters();
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, handleProfileSwitch);
+        return () => {
+            window.removeEventListener(PROFILE_SWITCH_EVENT, handleProfileSwitch);
+        };
+    }, [loadEncounters, setEncounters]);
 
     // Ensure encounter formations are properly initialized
     useEffect(() => {
@@ -132,14 +144,14 @@ export const useEncounterNotes = () => {
             // Optimistic update
             void setEncounters((prev) => [...prev, optimisticEncounter]);
 
-            if (!user?.id) return optimisticEncounter;
+            if (!activeProfileId) return optimisticEncounter;
 
             try {
                 // Create encounter note
                 const { data: noteData, error: noteError } = await supabase
                     .from('encounter_notes')
                     .insert({
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         name: encounter.name,
                         description: encounter.description,
                         is_public: encounter.isPublic,
@@ -194,7 +206,7 @@ export const useEncounterNotes = () => {
                 throw error;
             }
         },
-        [user?.id, loadEncounters, addNotification, ships, setEncounters]
+        [activeProfileId, loadEncounters, addNotification, ships, setEncounters]
     );
 
     const updateEncounter = useCallback(
@@ -210,7 +222,7 @@ export const useEncounterNotes = () => {
                 prev.map((e) => (e.id === encounter.id ? updatedEncounter : e))
             );
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Update encounter note
@@ -222,7 +234,7 @@ export const useEncounterNotes = () => {
                         is_public: encounter.isPublic,
                     })
                     .eq('id', encounter.id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (noteError) throw noteError;
 
@@ -260,7 +272,7 @@ export const useEncounterNotes = () => {
                 throw error;
             }
         },
-        [user?.id, loadEncounters, addNotification, setEncounters]
+        [activeProfileId, loadEncounters, addNotification, setEncounters]
     );
 
     const deleteEncounter = useCallback(
@@ -268,14 +280,14 @@ export const useEncounterNotes = () => {
             // Optimistic update
             void setEncounters((prev) => prev.filter((e) => e.id !== encounterId));
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const { error } = await supabase
                     .from('encounter_notes')
                     .delete()
                     .eq('id', encounterId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
 
@@ -289,7 +301,7 @@ export const useEncounterNotes = () => {
                 throw error;
             }
         },
-        [user?.id, loadEncounters, addNotification, setEncounters]
+        [activeProfileId, loadEncounters, addNotification, setEncounters]
     );
 
     return {

@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.54.0';
+export const CURRENT_VERSION = '1.55.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.55.0',
+        date: '2026-04-24',
+        changes: [
+            'Alt accounts — manage up to 5 additional game-account profiles under your login, each with its own ships, gear, engineering, loadouts, and optional public profile',
+            'Switch profiles from the sidebar: click your profile picture to open the switcher dropdown',
+            'Create, rename, and delete alts from the Profile page',
+            'Drag and drop a game export JSON onto the Import button to import it — no file picker needed',
+        ],
+    },
     {
         version: '1.54.0',
         date: '2026-04-23',

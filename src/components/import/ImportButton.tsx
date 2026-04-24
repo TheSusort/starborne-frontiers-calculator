@@ -1,4 +1,4 @@
-import React, { useCallback, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
 import { Button } from '../ui/Button';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -8,6 +8,7 @@ import { useNotification } from '../../hooks/useNotification';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { Checkbox } from '../ui/Checkbox';
 import { uploadToCubedweb } from '../../utils/uploadToCubedweb';
 import { trackDataImport } from '../../services/usageTracking';
@@ -40,11 +41,13 @@ export const ImportButton: React.FC<{
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const [loading, setLoading] = useState(false);
     const [internalShareData, setInternalShareData] = useState(false);
     const [showHangarModal, setShowHangarModal] = useState(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     // Unique id per ImportButton instance so multiple mounts (e.g. HomePage CTA
     // + Sidebar) don't collide on a single DOM id. The id is used for the
     // hidden-input click delegation below.
@@ -102,25 +105,6 @@ export const ImportButton: React.FC<{
         }
     };
 
-    const handleFileUpload = useCallback(
-        async (event: React.ChangeEvent<HTMLInputElement>) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-
-            // If sharing is enabled, show the hangar name modal
-            if (shareData) {
-                setSelectedFile(file);
-                setShowHangarModal(true);
-                return;
-            }
-
-            // Otherwise, proceed with normal import
-            await processFileImport(file);
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [setShips, setInventory, setEngineeringStats, addNotification, user, shareData]
-    );
-
     const processFileImport = useCallback(
         async (file: File) => {
             try {
@@ -158,7 +142,10 @@ export const ImportButton: React.FC<{
                                     // Run submissions in parallel for speed
                                     await Promise.all(
                                         proposals.map((proposal) =>
-                                            submitTemplateProposal(proposal, user.id)
+                                            submitTemplateProposal(
+                                                proposal,
+                                                activeProfileId ?? user.id
+                                            )
                                         )
                                     );
                                 }
@@ -170,19 +157,22 @@ export const ImportButton: React.FC<{
                     }
 
                     // Track data import (for both logged-in and anonymous users)
-                    await trackDataImport(user?.id);
+                    await trackDataImport(activeProfileId);
 
                     // sync to supabase if user is logged in
                     if (user) {
                         addNotification('info', 'Syncing to cloud...', 30000);
-                        const syncResult = await syncMigratedDataToSupabase(user.id, {
-                            ships: result.data.ships,
-                            inventory: result.data.inventory,
-                            encounters: [],
-                            loadouts: [],
-                            teamLoadouts: [],
-                            engineeringStats: result.data.engineeringStats,
-                        });
+                        const syncResult = await syncMigratedDataToSupabase(
+                            activeProfileId ?? user.id,
+                            {
+                                ships: result.data.ships,
+                                inventory: result.data.inventory,
+                                encounters: [],
+                                loadouts: [],
+                                teamLoadouts: [],
+                                engineeringStats: result.data.engineeringStats,
+                            }
+                        );
 
                         if (syncResult.success) {
                             refreshPage('Data synced successfully, refreshing in 3 seconds...');
@@ -215,7 +205,40 @@ export const ImportButton: React.FC<{
         },
         // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [setShips, setInventory, setEngineeringStats, addNotification, user, inputDomId]
+        [
+            setShips,
+            setInventory,
+            setEngineeringStats,
+            addNotification,
+            user,
+            activeProfileId,
+            inputDomId,
+        ]
+    );
+
+    const handleFile = useCallback(
+        async (file: File) => {
+            if (loading) return;
+
+            // If sharing is enabled, show the hangar name modal
+            if (shareData) {
+                setSelectedFile(file);
+                setShowHangarModal(true);
+                return;
+            }
+
+            // Otherwise, proceed with normal import
+            await processFileImport(file);
+        },
+        [loading, shareData, processFileImport]
+    );
+
+    const handleFileUpload = useCallback(
+        async (event: React.ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            if (file) await handleFile(file);
+        },
+        [handleFile]
     );
 
     const handleHangarNameSubmit = useCallback(
@@ -257,6 +280,45 @@ export const ImportButton: React.FC<{
         [selectedFile, addNotification, processFileImport]
     );
 
+    // Prevent the browser from navigating to a file if the user drops it outside
+    // the drop zone. Without this, a stray drop anywhere else on the page opens
+    // the file and loses the user's session.
+    useEffect(() => {
+        const preventDefault = (e: DragEvent) => e.preventDefault();
+        window.addEventListener('dragover', preventDefault);
+        window.addEventListener('drop', preventDefault);
+        return () => {
+            window.removeEventListener('dragover', preventDefault);
+            window.removeEventListener('drop', preventDefault);
+        };
+    }, []);
+
+    const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        if (!loading && e.dataTransfer.types.includes('Files')) {
+            setIsDragging(true);
+        }
+    };
+    const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+    };
+    const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        // Only clear highlight when the drag leaves the wrapper, not a child.
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDragging(false);
+    };
+    const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDragging(false);
+        const file = e.dataTransfer.files?.[0];
+        if (!file) return;
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            addNotification('error', 'Please drop a .json export file');
+            return;
+        }
+        void handleFile(file);
+    };
+
     const refreshPage = useCallback(
         (message: string) => {
             addNotification('success', message);
@@ -279,7 +341,15 @@ export const ImportButton: React.FC<{
                 checked={shareData}
                 onChange={() => setShareData(!shareData)}
             />
-            <div className={`flex align-items-center gap-2`}>
+            <div
+                className={`flex align-items-center gap-2 rounded transition-shadow ${
+                    isDragging ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-dark' : ''
+                }`}
+                onDragEnter={onDragEnter}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+            >
                 <input
                     type="file"
                     accept=".json"
@@ -293,9 +363,12 @@ export const ImportButton: React.FC<{
                     onClick={() => document.getElementById(inputDomId)?.click()}
                     className={className}
                     data-import-button
+                    title="Click to select a file or drop a .json export here"
                 >
                     {loading ? (
                         <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-dark absolute top-2 left-1/2"></div>
+                    ) : isDragging ? (
+                        'Drop to import'
                     ) : (
                         'Import Game Data'
                     )}

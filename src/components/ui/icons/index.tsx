@@ -1,3 +1,4 @@
+export * from './AltAccountIcon';
 export * from './CalibrationIcon';
 export * from './ChartIcon';
 export * from './CompareIcon';

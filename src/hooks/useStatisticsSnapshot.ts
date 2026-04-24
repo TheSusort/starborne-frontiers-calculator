@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../contexts/AuthProvider';
+import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 import {
     getSnapshotList,
     getSnapshot,
@@ -49,7 +49,7 @@ export function useStatisticsSnapshot({
     engineeringStats,
     allContextsLoaded,
 }: UseStatisticsSnapshotParams): UseStatisticsSnapshotReturn {
-    const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const [snapshots, setSnapshots] = useState<SnapshotListItem[]>([]);
     const [selectedSnapshot, setSelectedSnapshot] = useState<StatisticsSnapshot | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
@@ -61,13 +61,13 @@ export function useStatisticsSnapshot({
 
     // Load snapshot list and auto-create current month snapshot
     useEffect(() => {
-        if (!user?.id || !allContextsLoaded) return;
+        if (!activeProfileId || !allContextsLoaded) return;
 
         const init = async () => {
             setLoading(true);
 
             // Fetch existing snapshots
-            const list = await getSnapshotList(user.id);
+            const list = await getSnapshotList(activeProfileId);
             setSnapshots(list);
 
             // Auto-create current month snapshot if missing and user has data
@@ -83,7 +83,7 @@ export function useStatisticsSnapshot({
                 const implantsStats = calculateImplantStatistics(implants, ships);
                 const engStats = calculateEngineeringStatistics(engineeringStats);
 
-                await createSnapshot(user.id, currentMonth, {
+                await createSnapshot(activeProfileId, currentMonth, {
                     shipsStats,
                     gearStats,
                     implantsStats,
@@ -91,12 +91,14 @@ export function useStatisticsSnapshot({
                 });
 
                 // Refresh list after creating
-                const updatedList = await getSnapshotList(user.id);
+                const updatedList = await getSnapshotList(activeProfileId);
                 setSnapshots(updatedList);
             }
 
             // Auto-select previous month if available
-            const finalList = snapshotCreatedRef.current ? await getSnapshotList(user.id) : list;
+            const finalList = snapshotCreatedRef.current
+                ? await getSnapshotList(activeProfileId)
+                : list;
             setSnapshots(finalList);
             const hasPreviousMonth = finalList.some((s) => s.snapshotMonth === previousMonth);
             if (hasPreviousMonth) {
@@ -107,24 +109,24 @@ export function useStatisticsSnapshot({
         };
 
         void init();
-    }, [user?.id, allContextsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [activeProfileId, allContextsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load selected snapshot data
     useEffect(() => {
-        if (!user?.id || !selectedMonth) {
+        if (!activeProfileId || !selectedMonth) {
             setSelectedSnapshot(null);
             return;
         }
 
         const loadSnapshot = async () => {
             setLoading(true);
-            const snapshot = await getSnapshot(user.id, selectedMonth);
+            const snapshot = await getSnapshot(activeProfileId, selectedMonth);
             setSelectedSnapshot(snapshot);
             setLoading(false);
         };
 
         void loadSnapshot();
-    }, [user?.id, selectedMonth]);
+    }, [activeProfileId, selectedMonth]);
 
     return {
         snapshots,

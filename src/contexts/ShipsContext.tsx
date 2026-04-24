@@ -10,7 +10,7 @@ import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
-import { useAuth } from './AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface ShipsContextType {
     ships: Ship[];
@@ -251,11 +251,11 @@ const transformShipData = (data: RawShipData): Ship | null => {
 const ShipsContext = createContext<ShipsContextType | undefined>(undefined);
 
 export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [editingShip, setEditingShip] = useState<Ship | undefined>();
     const { addNotification } = useNotification();
-    const { user } = useAuth();
+    const { activeProfileId, profilesLoading } = useActiveProfile();
     const [isMigrating, setIsMigrating] = useState(false);
     const [localShips, setLocalShips] = useState<Ship[]>([]);
 
@@ -291,7 +291,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         try {
             setLoading(true);
-            if (user?.id) {
+            if (activeProfileId) {
                 const { data, error } = await supabase
                     .from('ships')
                     .select(
@@ -309,7 +309,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     )
                 `
                     )
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
 
@@ -332,12 +332,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setStorageShips, isMigrating]);
+    }, [activeProfileId, addNotification, setStorageShips, isMigrating]);
 
-    // Initial load and reload on auth changes
+    // Initial load and reload on auth/profile changes
     useEffect(() => {
-        void loadShips();
-    }, [user?.id, loadShips]);
+        if (activeProfileId !== null && !profilesLoading) {
+            void loadShips();
+        }
+    }, [activeProfileId, profilesLoading, loadShips]);
 
     useEffect(() => {
         const handleSignOut = () => {
@@ -354,6 +356,20 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             window.removeEventListener('app:signout', handleSignOut);
         };
     }, [setStorageShips, isMigrating]);
+
+    // Reset in-memory ship state when the active profile changes.
+    // The activeProfileId-keyed loadShips effect will refetch automatically.
+    useEffect(() => {
+        const onSwitch = () => {
+            setLocalShips([]);
+            // Also clear storage so the storageShips→localShips sync effect doesn't
+            // repopulate localShips with the previous profile's data before loadShips
+            // fires for the new profile.
+            void setStorageShips([]);
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, [setStorageShips]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -409,12 +425,12 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips((prev) => [...prev, optimisticShip]);
             void setStorageShips([...localShips, optimisticShip]);
 
-            if (!user?.id) return getShipById(tempId) as Ship;
+            if (!activeProfileId) return getShipById(tempId) as Ship;
 
             try {
                 // Create ship record
                 const shipData = {
-                    user_id: user.id,
+                    user_id: activeProfileId,
                     name: newShip.name,
                     type: newShip.type,
                     faction: newShip.faction,
@@ -504,7 +520,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, getShipById, addNotification, localShips, setStorageShips]
+        [activeProfileId, getShipById, addNotification, localShips, setStorageShips]
     );
 
     const updateShip = useCallback(
@@ -516,7 +532,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Update ship record
@@ -532,7 +548,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         starred: updates.starred,
                     })
                     .eq('id', id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (shipError) throw shipError;
 
@@ -635,7 +651,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const deleteShip = useCallback(
@@ -645,7 +661,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Delete ship record (this will cascade delete related records)
@@ -653,7 +669,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .from('ships')
                     .delete()
                     .eq('id', id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
             } catch (error) {
@@ -664,7 +680,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const equipGear = useCallback(
@@ -695,7 +711,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Delete existing equipment
@@ -726,7 +742,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const equipMultipleGear = useCallback(
@@ -760,7 +776,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Delete existing equipment for all gear being equipped
@@ -793,7 +809,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const removeGear = useCallback(
@@ -813,7 +829,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Remove equipment from database
@@ -832,7 +848,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const equipImplant = useCallback(
@@ -852,7 +868,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Delete existing implant in this slot for this ship
@@ -880,7 +896,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const removeImplant = useCallback(
@@ -900,7 +916,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Remove implant from database
@@ -919,7 +935,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const lockEquipment = useCallback(
@@ -936,7 +952,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Update lock state
@@ -944,7 +960,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     .from('ships')
                     .update({ equipment_locked: locked })
                     .eq('id', shipId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
             } catch (error) {
@@ -955,7 +971,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const validateGearAssignments = useCallback(() => {
@@ -1004,7 +1020,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 // Remove all equipment from database
@@ -1022,7 +1038,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const toggleEquipmentLock = useCallback(
@@ -1048,14 +1064,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             setLocalShips(updatedShips);
             void setStorageShips(updatedShips);
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const { error } = await supabase
                     .from('ships')
                     .update({ starred: newStarred })
                     .eq('id', shipId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
             } catch (error) {
@@ -1065,7 +1081,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [user?.id, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
     );
 
     const getShipFromGearId = useCallback(

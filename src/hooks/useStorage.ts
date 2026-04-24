@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { StorageKeyType } from '../constants/storage';
 import { useNotification } from './useNotification';
 
 interface StorageConfig<T> {
-    key: StorageKeyType;
+    // Accepts any string so profile-keyed variants (e.g. "inventory_items:<profileId>") work.
+    // All existing callers pass StorageKey.* values which satisfy string.
+    key: string;
     defaultValue: T;
     data?: T;
     onUpdate?: (data: T) => Promise<void>;

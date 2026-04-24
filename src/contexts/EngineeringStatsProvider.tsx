@@ -4,9 +4,9 @@ import { STATS } from '../constants/stats';
 import { ShipTypeName } from '../constants/shipTypes';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { useAuth } from '../contexts/AuthProvider';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 // -- Start of merged context definition --
 export interface EngineeringStatsContextType {
@@ -61,8 +61,8 @@ const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats
 
 export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
-    const [loading, setLoading] = useState(true);
+    const { activeProfileId, profilesLoading } = useActiveProfile();
+    const [loading, setLoading] = useState(false);
     const [isMigrating, setIsMigrating] = useState(false);
 
     // Use useStorage for engineering stats
@@ -77,11 +77,11 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
 
         try {
             setLoading(true);
-            if (user?.id) {
+            if (activeProfileId) {
                 const { data, error } = await supabase
                     .from('engineering_stats')
                     .select('*')
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) {
                     throw error;
@@ -99,12 +99,14 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setEngineeringStats, isMigrating]);
+    }, [activeProfileId, addNotification, setEngineeringStats, isMigrating]);
 
-    // Initial load and reload on auth changes
+    // Initial load and reload on auth/profile changes
     useEffect(() => {
-        void loadEngineeringStats();
-    }, [user?.id, loadEngineeringStats]);
+        if (activeProfileId !== null && !profilesLoading) {
+            void loadEngineeringStats();
+        }
+    }, [activeProfileId, profilesLoading, loadEngineeringStats]);
 
     useEffect(() => {
         const handleSignOut = () => {
@@ -121,6 +123,16 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
             window.removeEventListener('app:signout', handleSignOut);
         };
     }, [setEngineeringStats, isMigrating]);
+
+    // Reset state when the active profile changes so stale data from the
+    // previous profile is cleared before the new profile's data loads.
+    useEffect(() => {
+        const onSwitch = () => {
+            void setEngineeringStats({ stats: [] });
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, [setEngineeringStats]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -146,7 +158,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
             const oldStats = { ...engineeringStats }; // Preserve old stats for potential rollback
             void setEngineeringStats(statsToSave); // Optimistic update
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const shipTypes = statsToSave.stats.map((stat) => stat.shipType);
@@ -154,14 +166,14 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                     const { error: deleteError } = await supabase
                         .from('engineering_stats')
                         .delete()
-                        .eq('user_id', user.id)
+                        .eq('user_id', activeProfileId)
                         .in('ship_type', shipTypes);
                     if (deleteError) throw deleteError;
                 }
 
                 const records = statsToSave.stats.flatMap((stat) =>
                     stat.stats.map((s) => ({
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         ship_type: stat.shipType,
                         stat_name: s.name,
                         value: s.value,
@@ -184,7 +196,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 throw error;
             }
         },
-        [user?.id, addNotification, engineeringStats, setEngineeringStats] // Simplified deps, loadEngineeringStats removed as it would cause re-fetch
+        [activeProfileId, addNotification, engineeringStats, setEngineeringStats] // Simplified deps, loadEngineeringStats removed as it would cause re-fetch
     );
 
     const deleteEngineeringStats = useCallback(
@@ -194,13 +206,13 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 stats: prev.stats.filter((stat) => stat.shipType !== shipTypeToDelete),
             })); // Optimistic update
 
-            if (!user?.id) return;
+            if (!activeProfileId) return;
 
             try {
                 const { error } = await supabase
                     .from('engineering_stats')
                     .delete()
-                    .eq('user_id', user.id)
+                    .eq('user_id', activeProfileId)
                     .eq('ship_type', shipTypeToDelete);
 
                 if (error) throw error;
@@ -213,7 +225,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 throw error;
             }
         },
-        [user?.id, addNotification, engineeringStats, setEngineeringStats] // Simplified deps
+        [activeProfileId, addNotification, engineeringStats, setEngineeringStats] // Simplified deps
     );
 
     const getAllAllowedStats = useCallback(() => {

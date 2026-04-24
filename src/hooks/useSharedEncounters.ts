@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../config/supabase';
 import { LocalEncounterNote, SharedEncounterNote, Position } from '../types/encounters';
 import { useAuth } from '../contexts/AuthProvider';
+import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 import { useShips } from '../contexts/ShipsContext';
 import { useNotification } from './useNotification';
 
@@ -36,6 +37,7 @@ export const useSharedEncounters = () => {
     const [userVotes, setUserVotes] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const { addNotification } = useNotification();
     const { ships } = useShips();
 
@@ -106,7 +108,7 @@ export const useSharedEncounters = () => {
     }, [fetchSharedEncounters]);
 
     const shareEncounter = async (encounter: LocalEncounterNote) => {
-        if (!user) {
+        if (!user || !activeProfileId) {
             throw new Error('User must be logged in to share encounters');
         }
 
@@ -133,7 +135,7 @@ export const useSharedEncounters = () => {
                     user_name: user.displayName || 'Anonymous',
                 })
                 .eq('id', encounter.id)
-                .eq('user_id', user.id);
+                .eq('user_id', activeProfileId);
 
             if (noteError) throw noteError;
 
@@ -154,7 +156,7 @@ export const useSharedEncounters = () => {
                 description: encounter.description,
                 isPublic: true,
                 formation: sharedFormation,
-                userId: user.id,
+                userId: activeProfileId,
                 userName: user.displayName || 'Anonymous',
                 createdAt: encounter.createdAt,
                 votes: 0,
@@ -172,7 +174,7 @@ export const useSharedEncounters = () => {
     };
 
     const unshareEncounter = async (encounterId: string) => {
-        if (!user) {
+        if (!user || !activeProfileId) {
             throw new Error('User must be logged in to unshare encounters');
         }
 
@@ -182,7 +184,7 @@ export const useSharedEncounters = () => {
                 .from('encounter_notes')
                 .update({ is_public: false })
                 .eq('id', encounterId)
-                .eq('user_id', user.id);
+                .eq('user_id', activeProfileId);
 
             if (noteError) throw noteError;
 

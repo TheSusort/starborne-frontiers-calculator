@@ -34,7 +34,7 @@ import {
 import { BaseStats } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
-import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
 import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
 import { ArenaSeason } from '../../types/arena';
@@ -93,7 +93,7 @@ export const AutogearPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
-    const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const { startGroup, hasCompletedGroup } = useTutorial();
 
     // Auto-start tutorial on first visit (only when ships exist)
@@ -697,7 +697,7 @@ export const AutogearPage: React.FC = () => {
         performanceTracker.printSummary();
 
         // Track autogear run (for both logged-in and anonymous users)
-        const newCount = await trackAutogearRun(user?.id);
+        const newCount = await trackAutogearRun(activeProfileId);
 
         // Show milestone modal every 100 runs
         if (newCount && newCount % 100 === 0) {

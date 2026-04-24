@@ -9,9 +9,10 @@ import React, {
 } from 'react';
 import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/tutorialSteps';
 import { supabase } from '../config/supabase';
-import { useAuth } from './AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
-const STORAGE_KEY = 'tutorial_completed_groups';
+const getStorageKey = (profileId: string | null) =>
+    profileId ? `tutorial_completed_groups:${profileId}` : 'tutorial_completed_groups';
 
 interface TutorialContextValue {
     activeGroup: TutorialGroup | null;
@@ -29,9 +30,9 @@ interface TutorialContextValue {
 
 const TutorialContext = createContext<TutorialContextValue | null>(null);
 
-function loadCompletedGroups(): Set<string> {
+function loadCompletedGroups(profileId: string | null): Set<string> {
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(getStorageKey(profileId));
         if (stored) {
             return new Set(JSON.parse(stored) as string[]);
         }
@@ -41,8 +42,8 @@ function loadCompletedGroups(): Set<string> {
     return new Set();
 }
 
-function saveCompletedGroups(groups: Set<string>) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...groups]));
+function saveCompletedGroups(profileId: string | null, groups: Set<string>) {
+    localStorage.setItem(getStorageKey(profileId), JSON.stringify([...groups]));
 }
 
 async function loadCompletedGroupsFromSupabase(userId: string): Promise<string[]> {
@@ -72,8 +73,10 @@ function findGroup(groupId: string): TutorialGroup | undefined {
 }
 
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { user } = useAuth();
-    const [completedGroups, setCompletedGroups] = useState<Set<string>>(loadCompletedGroups);
+    const { activeProfileId, profilesLoading } = useActiveProfile();
+    const [completedGroups, setCompletedGroups] = useState<Set<string>>(() =>
+        loadCompletedGroups(activeProfileId)
+    );
     const [activeGroup, setActiveGroup] = useState<TutorialGroup | null>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(0);
     const pendingGroupsRef = useRef<string[]>([]);
@@ -94,9 +97,25 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         };
     }, []);
 
-    // Load from Supabase on sign-in and merge with localStorage
+    // Cancel any in-progress tutorial overlay and reset completed groups on profile switch.
+    // Tutorial state is per-profile: each alt is a fresh game account, so re-running the
+    // tutorial when switching to a fresh alt is correct. The load effect will refetch the
+    // new profile's completed groups automatically.
     useEffect(() => {
-        if (!user?.id || isMigrating) {
+        const onSwitch = () => {
+            setActiveGroup(null);
+            setActiveStepIndex(0);
+            pendingGroupsRef.current = [];
+            setCompletedGroups(new Set());
+            supabaseLoadedRef.current = false;
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+        return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
+    }, []);
+
+    // Load from Supabase on sign-in/profile-switch and merge with localStorage
+    useEffect(() => {
+        if (activeProfileId === null || profilesLoading || isMigrating) {
             supabaseLoadedRef.current = false;
             return;
         }
@@ -104,16 +123,16 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         let cancelled = false;
 
         const loadAndMerge = async () => {
-            const remoteGroups = await loadCompletedGroupsFromSupabase(user.id);
+            const remoteGroups = await loadCompletedGroupsFromSupabase(activeProfileId);
             if (cancelled) return;
 
             setCompletedGroups((prev) => {
                 const merged = new Set([...prev, ...remoteGroups]);
                 // If Supabase had fewer, push the merged set back
                 if (merged.size > remoteGroups.length) {
-                    void saveCompletedGroupsToSupabase(user.id, merged);
+                    void saveCompletedGroupsToSupabase(activeProfileId, merged);
                 }
-                saveCompletedGroups(merged);
+                saveCompletedGroups(activeProfileId, merged);
                 return merged;
             });
             supabaseLoadedRef.current = true;
@@ -124,16 +143,16 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return () => {
             cancelled = true;
         };
-    }, [user?.id, isMigrating]);
+    }, [activeProfileId, profilesLoading, isMigrating]);
 
     // Persist completed groups to localStorage + Supabase
     useEffect(() => {
-        saveCompletedGroups(completedGroups);
+        saveCompletedGroups(activeProfileId, completedGroups);
 
-        if (user?.id && supabaseLoadedRef.current && completedGroups.size > 0) {
-            void saveCompletedGroupsToSupabase(user.id, completedGroups);
+        if (activeProfileId && supabaseLoadedRef.current && completedGroups.size > 0) {
+            void saveCompletedGroupsToSupabase(activeProfileId, completedGroups);
         }
-    }, [completedGroups, user?.id]);
+    }, [completedGroups, activeProfileId]);
 
     const completeCurrentGroup = useCallback(() => {
         if (activeGroup) {
@@ -256,11 +275,11 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveGroup(null);
         setActiveStepIndex(0);
         pendingGroupsRef.current = [];
-        localStorage.removeItem(STORAGE_KEY);
-        if (user?.id) {
-            void saveCompletedGroupsToSupabase(user.id, new Set());
+        localStorage.removeItem(getStorageKey(activeProfileId));
+        if (activeProfileId) {
+            void saveCompletedGroupsToSupabase(activeProfileId, new Set());
         }
-    }, [user?.id]);
+    }, [activeProfileId]);
 
     const activeStep = activeGroup ? (activeGroup.steps[activeStepIndex] ?? null) : null;
 

@@ -1,758 +1,758 @@
 {
-  "Units": [
-    {
-      "Id": "e2e-ship-1",
-      "DefinitionId": "def-e2e-1",
-      "Name": "E2E Vanguard",
-      "Faction": "Terran",
-      "Rarity": "Epic",
-      "ShipType": "Attacker",
-      "Affinity": "Red",
-      "Rank": 6,
-      "Level": 60,
-      "Refit": 2,
-      "Attributes": {
-        "BaseWithLevelAndRank": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "WithRefitAndEngineering": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Total": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Refit": [],
-        "Engineering": []
-      },
-      "Skills": []
-    },
-    {
-      "Id": "e2e-ship-2",
-      "DefinitionId": "def-e2e-2",
-      "Name": "E2E Sentinel",
-      "Faction": "Terran",
-      "Rarity": "Rare",
-      "ShipType": "Defender",
-      "Affinity": "Red",
-      "Rank": 4,
-      "Level": 45,
-      "Refit": 1,
-      "Attributes": {
-        "BaseWithLevelAndRank": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "WithRefitAndEngineering": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Total": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Refit": [],
-        "Engineering": []
-      },
-      "Skills": []
-    },
-    {
-      "Id": "e2e-ship-3",
-      "DefinitionId": "def-e2e-3",
-      "Name": "E2E Mender",
-      "Faction": "Octavian",
-      "Rarity": "Epic",
-      "ShipType": "Supporter",
-      "Affinity": "Red",
-      "Rank": 5,
-      "Level": 50,
-      "Refit": 0,
-      "Attributes": {
-        "BaseWithLevelAndRank": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "WithRefitAndEngineering": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Total": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Refit": [],
-        "Engineering": []
-      },
-      "Skills": []
-    },
-    {
-      "Id": "e2e-ship-4",
-      "DefinitionId": "def-e2e-4",
-      "Name": "E2E Saboteur",
-      "Faction": "Lunarii",
-      "Rarity": "Epic",
-      "ShipType": "Debuffer",
-      "Affinity": "Red",
-      "Rank": 5,
-      "Level": 55,
-      "Refit": 0,
-      "Attributes": {
-        "BaseWithLevelAndRank": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "WithRefitAndEngineering": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Total": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Refit": [],
-        "Engineering": []
-      },
-      "Skills": []
-    },
-    {
-      "Id": "e2e-ship-5",
-      "DefinitionId": "def-e2e-5",
-      "Name": "E2E Skirmisher",
-      "Faction": "Terran",
-      "Rarity": "Rare",
-      "ShipType": "Attacker",
-      "Affinity": "Red",
-      "Rank": 3,
-      "Level": 30,
-      "Refit": 0,
-      "Attributes": {
-        "BaseWithLevelAndRank": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "WithRefitAndEngineering": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Total": {
-          "Initiative": 300,
-          "HullPoints": 50000,
-          "ShieldPoints": 0,
-          "Security": 3000,
-          "Manipulation": 5000,
-          "Power": 10000,
-          "CritChance": 0.5,
-          "CritBoost": 1.5,
-          "Defense": 8000,
-          "CritResistance": 0,
-          "DefensePenetration": 0,
-          "ShieldPenetration": 0
-        },
-        "Refit": [],
-        "Engineering": []
-      },
-      "Skills": []
-    }
-  ],
-  "Equipment": [
-    {
-      "Id": "e2e-gear-1",
-      "EquippedOnUnit": null,
-      "Name": "E2E Weapon 1",
-      "Level": 0,
-      "Rank": 1,
-      "Slot": "Weapon",
-      "Set": "Attack",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
+    "Units": [
         {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
+            "Id": "aa000001-0000-4000-8000-000000000001",
+            "DefinitionId": "bb000001-0000-4000-8000-000000000001",
+            "Name": "Stalwart",
+            "Faction": "Legion",
+            "Rarity": "Epic",
+            "ShipType": "Attacker",
+            "Affinity": "Blue",
+            "Rank": 6,
+            "Level": 60,
+            "Refit": 2,
+            "Attributes": {
+                "BaseWithLevelAndRank": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "WithRefitAndEngineering": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Total": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Refit": [],
+                "Engineering": []
+            },
+            "Skills": []
+        },
+        {
+            "Id": "aa000001-0000-4000-8000-000000000002",
+            "DefinitionId": "bb000001-0000-4000-8000-000000000002",
+            "Name": "Isha",
+            "Faction": "Terran",
+            "Rarity": "Legendary",
+            "ShipType": "Defender",
+            "Affinity": "None",
+            "Rank": 4,
+            "Level": 45,
+            "Refit": 1,
+            "Attributes": {
+                "BaseWithLevelAndRank": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "WithRefitAndEngineering": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Total": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Refit": [],
+                "Engineering": []
+            },
+            "Skills": []
+        },
+        {
+            "Id": "aa000001-0000-4000-8000-000000000003",
+            "DefinitionId": "bb000001-0000-4000-8000-000000000003",
+            "Name": "Oleander",
+            "Faction": "Gelecek",
+            "Rarity": "Legendary",
+            "ShipType": "Supporter",
+            "Affinity": "Green",
+            "Rank": 5,
+            "Level": 50,
+            "Refit": 0,
+            "Attributes": {
+                "BaseWithLevelAndRank": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "WithRefitAndEngineering": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Total": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Refit": [],
+                "Engineering": []
+            },
+            "Skills": []
+        },
+        {
+            "Id": "aa000001-0000-4000-8000-000000000004",
+            "DefinitionId": "bb000001-0000-4000-8000-000000000004",
+            "Name": "Opal",
+            "Faction": "MPL",
+            "Rarity": "Epic",
+            "ShipType": "Debuffer",
+            "Affinity": "Electric",
+            "Rank": 5,
+            "Level": 55,
+            "Refit": 0,
+            "Attributes": {
+                "BaseWithLevelAndRank": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "WithRefitAndEngineering": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Total": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Refit": [],
+                "Engineering": []
+            },
+            "Skills": []
+        },
+        {
+            "Id": "aa000001-0000-4000-8000-000000000005",
+            "DefinitionId": "bb000001-0000-4000-8000-000000000005",
+            "Name": "Yuyan",
+            "Faction": "Tianchao",
+            "Rarity": "Epic",
+            "ShipType": "Debuffer",
+            "Affinity": "Electric",
+            "Rank": 3,
+            "Level": 30,
+            "Refit": 0,
+            "Attributes": {
+                "BaseWithLevelAndRank": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "WithRefitAndEngineering": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Total": {
+                    "Initiative": 300,
+                    "HullPoints": 50000,
+                    "ShieldPoints": 0,
+                    "Security": 3000,
+                    "Manipulation": 5000,
+                    "Power": 10000,
+                    "CritChance": 0.5,
+                    "CritBoost": 1.5,
+                    "Defense": 8000,
+                    "CritResistance": 0,
+                    "DefensePenetration": 0,
+                    "ShieldPenetration": 0
+                },
+                "Refit": [],
+                "Engineering": []
+            },
+            "Skills": []
         }
-      ],
-      "SubStats": [
+    ],
+    "Equipment": [
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000001",
+            "EquippedOnUnit": null,
+            "Name": "E2E Weapon 1",
+            "Level": 0,
+            "Rank": 1,
+            "Slot": "Weapon",
+            "Set": "Attack",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-2",
-      "EquippedOnUnit": null,
-      "Name": "E2E Hull 2",
-      "Level": 4,
-      "Rank": 2,
-      "Slot": "Hull",
-      "Set": "Defense",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000002",
+            "EquippedOnUnit": null,
+            "Name": "E2E Hull 2",
+            "Level": 4,
+            "Rank": 2,
+            "Slot": "Hull",
+            "Set": "Defense",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-3",
-      "EquippedOnUnit": null,
-      "Name": "E2E Generator 3",
-      "Level": 8,
-      "Rank": 3,
-      "Slot": "Generator",
-      "Set": "Attack",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000003",
+            "EquippedOnUnit": null,
+            "Name": "E2E Generator 3",
+            "Level": 8,
+            "Rank": 3,
+            "Slot": "Generator",
+            "Set": "Attack",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-4",
-      "EquippedOnUnit": null,
-      "Name": "E2E Sensor 4",
-      "Level": 12,
-      "Rank": 4,
-      "Slot": "Sensor",
-      "Set": "Defense",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000004",
+            "EquippedOnUnit": null,
+            "Name": "E2E Sensor 4",
+            "Level": 12,
+            "Rank": 4,
+            "Slot": "Sensor",
+            "Set": "Defense",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-5",
-      "EquippedOnUnit": null,
-      "Name": "E2E Software 5",
-      "Level": 0,
-      "Rank": 5,
-      "Slot": "Software",
-      "Set": "Attack",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000005",
+            "EquippedOnUnit": null,
+            "Name": "E2E Software 5",
+            "Level": 0,
+            "Rank": 5,
+            "Slot": "Software",
+            "Set": "Attack",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-6",
-      "EquippedOnUnit": null,
-      "Name": "E2E Thrusters 6",
-      "Level": 4,
-      "Rank": 6,
-      "Slot": "Thrusters",
-      "Set": "Defense",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000006",
+            "EquippedOnUnit": null,
+            "Name": "E2E Thrusters 6",
+            "Level": 4,
+            "Rank": 6,
+            "Slot": "Thrusters",
+            "Set": "Defense",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-7",
-      "EquippedOnUnit": null,
-      "Name": "E2E Weapon 7",
-      "Level": 8,
-      "Rank": 1,
-      "Slot": "Weapon",
-      "Set": "Attack",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000007",
+            "EquippedOnUnit": null,
+            "Name": "E2E Weapon 7",
+            "Level": 8,
+            "Rank": 1,
+            "Slot": "Weapon",
+            "Set": "Attack",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-8",
-      "EquippedOnUnit": null,
-      "Name": "E2E Hull 8",
-      "Level": 12,
-      "Rank": 2,
-      "Slot": "Hull",
-      "Set": "Defense",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000008",
+            "EquippedOnUnit": null,
+            "Name": "E2E Hull 8",
+            "Level": 12,
+            "Rank": 2,
+            "Slot": "Hull",
+            "Set": "Defense",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-9",
-      "EquippedOnUnit": null,
-      "Name": "E2E Generator 9",
-      "Level": 0,
-      "Rank": 3,
-      "Slot": "Generator",
-      "Set": "Attack",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000009",
+            "EquippedOnUnit": null,
+            "Name": "E2E Generator 9",
+            "Level": 0,
+            "Rank": 3,
+            "Slot": "Generator",
+            "Set": "Attack",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-gear-10",
-      "EquippedOnUnit": null,
-      "Name": "E2E Sensor 10",
-      "Level": 4,
-      "Rank": 4,
-      "Slot": "Sensor",
-      "Set": "Defense",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 16,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Flat",
-            "Value": 1000
-          }
-        }
-      ],
-      "SubStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "HullPoints",
-            "Type": "Flat",
-            "Value": 500
-          }
+            "Id": "cc000001-0000-4000-8000-000000000010",
+            "EquippedOnUnit": null,
+            "Name": "E2E Sensor 10",
+            "Level": 4,
+            "Rank": 4,
+            "Slot": "Sensor",
+            "Set": "Defense",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 16,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Flat",
+                        "Value": 1000
+                    }
+                }
+            ],
+            "SubStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "HullPoints",
+                        "Type": "Flat",
+                        "Value": 500
+                    }
+                },
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Defense",
+                        "Type": "Flat",
+                        "Value": 200
+                    }
+                }
+            ]
         },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Defense",
-            "Type": "Flat",
-            "Value": 200
-          }
-        }
-      ]
-    },
-    {
-      "Id": "e2e-implant-1",
-      "EquippedOnUnit": null,
-      "Name": "E2E Minor Alpha Implant",
-      "Level": 1,
-      "Rank": 1,
-      "Slot": "implant_minor_alpha",
-      "Set": "Implant_Minor_Alpha_Power_Perc",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
+            "Id": "dd000001-0000-4000-8000-000000000001",
+            "EquippedOnUnit": null,
+            "Name": "E2E Minor Alpha Implant",
+            "Level": 1,
+            "Rank": 1,
+            "Slot": "implant_minor_alpha",
+            "Set": "Implant_Minor_Alpha_Power_Perc",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Percentage",
+                        "Value": 0.1
+                    }
+                }
+            ],
+            "SubStats": []
+        },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Percentage",
-            "Value": 0.1
-          }
-        }
-      ],
-      "SubStats": []
-    },
-    {
-      "Id": "e2e-implant-2",
-      "EquippedOnUnit": null,
-      "Name": "E2E Minor Gamma Implant",
-      "Level": 1,
-      "Rank": 1,
-      "Slot": "implant_minor_gamma",
-      "Set": "Implant_Minor_Gamma_HullPoints_Perc",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
+            "Id": "dd000001-0000-4000-8000-000000000002",
+            "EquippedOnUnit": null,
+            "Name": "E2E Minor Gamma Implant",
+            "Level": 1,
+            "Rank": 1,
+            "Slot": "implant_minor_gamma",
+            "Set": "Implant_Minor_Gamma_HullPoints_Perc",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Percentage",
+                        "Value": 0.1
+                    }
+                }
+            ],
+            "SubStats": []
+        },
         {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Percentage",
-            "Value": 0.1
-          }
+            "Id": "dd000001-0000-4000-8000-000000000003",
+            "EquippedOnUnit": null,
+            "Name": "E2E Major Implant",
+            "Level": 1,
+            "Rank": 1,
+            "Slot": "implant_major",
+            "Set": "Implant_Major_Power_Perc",
+            "Rarity": "Epic",
+            "Locked": false,
+            "MainStats": [
+                {
+                    "Level": 1,
+                    "Attribute": {
+                        "Attribute": "Power",
+                        "Type": "Percentage",
+                        "Value": 0.1
+                    }
+                }
+            ],
+            "SubStats": []
         }
-      ],
-      "SubStats": []
-    },
-    {
-      "Id": "e2e-implant-3",
-      "EquippedOnUnit": null,
-      "Name": "E2E Major Implant",
-      "Level": 1,
-      "Rank": 1,
-      "Slot": "implant_major",
-      "Set": "Implant_Major_Power_Perc",
-      "Rarity": "Epic",
-      "Locked": false,
-      "MainStats": [
-        {
-          "Level": 1,
-          "Attribute": {
-            "Attribute": "Power",
-            "Type": "Percentage",
-            "Value": 0.1
-          }
-        }
-      ],
-      "SubStats": []
-    }
-  ],
-  "Engineering": []
+    ],
+    "Engineering": []
 }
