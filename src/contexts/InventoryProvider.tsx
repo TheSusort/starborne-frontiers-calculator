@@ -384,6 +384,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     useEffect(() => {
         const onSwitch = () => {
             setLocalInventory([]);
+            setCacheLoaded(false);
             // Also clear storage so the storageInventory→localInventory sync effect doesn't
             // repopulate localInventory with the previous profile's data before loadInventory
             // fires for the new profile.
@@ -544,11 +545,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .eq('user_id', activeProfileId);
 
                 if (gearError) throw gearError;
-
-                // Only reload if we're authenticated - for unauthenticated users we rely on the optimistic update
-                if (activeProfileId) {
-                    //await loadInventory();
-                }
             } catch (error) {
                 // Revert optimistic update on error
                 await loadInventory();
