@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { GearSlotName } from '../constants';
 import { supabase } from '../config/supabase';
-import { useAuth } from '../contexts/AuthProvider';
+import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { StorageKey } from '../constants/storage';
 import { useStorage } from './useStorage';
 import { useNotification } from './useNotification';
@@ -84,7 +84,7 @@ const transformTeamLoadout = (data: RawTeamLoadout): TeamLoadout => {
 
 export const useLoadouts = () => {
     const { addNotification } = useNotification();
-    const { user } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const [loading, setLoading] = useState(true);
 
     // Use useStorage for loadouts
@@ -103,7 +103,7 @@ export const useLoadouts = () => {
         try {
             setLoading(true);
 
-            if (user?.id) {
+            if (activeProfileId) {
                 const { data: loadoutData, error: loadoutError } = await supabase
                     .from('loadouts')
                     .select(
@@ -112,7 +112,7 @@ export const useLoadouts = () => {
                     loadout_equipment (*)
                 `
                     )
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (loadoutError) throw loadoutError;
 
@@ -125,7 +125,7 @@ export const useLoadouts = () => {
                     team_loadout_equipment (*)
                 `
                     )
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (teamLoadoutError) throw teamLoadoutError;
 
@@ -139,7 +139,7 @@ export const useLoadouts = () => {
         } finally {
             setLoading(false);
         }
-    }, [user?.id, addNotification, setLoadouts, setTeamLoadouts]);
+    }, [activeProfileId, addNotification, setLoadouts, setTeamLoadouts]);
 
     useEffect(() => {
         void loadLoadouts();
@@ -158,6 +158,19 @@ export const useLoadouts = () => {
         };
     }, [setLoadouts, setTeamLoadouts]);
 
+    // Reload loadouts when the active profile switches.
+    useEffect(() => {
+        const handleProfileSwitch = () => {
+            void setLoadouts([]);
+            void setTeamLoadouts([]);
+            void loadLoadouts();
+        };
+        window.addEventListener(PROFILE_SWITCH_EVENT, handleProfileSwitch);
+        return () => {
+            window.removeEventListener(PROFILE_SWITCH_EVENT, handleProfileSwitch);
+        };
+    }, [loadLoadouts, setLoadouts, setTeamLoadouts]);
+
     const addLoadout = useCallback(
         async (loadout: Omit<Loadout, 'id' | 'createdAt'>) => {
             const timestamp = Date.now();
@@ -175,7 +188,7 @@ export const useLoadouts = () => {
             void setLoadouts((prev) => [...prev, newLoadout]);
 
             // If user is not authenticated, we're done (data is already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Loadout added');
                 return newLoadout.id;
             }
@@ -186,7 +199,7 @@ export const useLoadouts = () => {
                 const { data: loadoutData, error: loadoutError } = await supabase
                     .from('loadouts')
                     .insert({
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         name: loadout.name,
                         ship_id: loadout.shipId,
                     })
@@ -233,7 +246,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, addNotification, setLoadouts]
+        [activeProfileId, addNotification, setLoadouts]
     );
 
     const updateLoadout = useCallback(
@@ -260,7 +273,7 @@ export const useLoadouts = () => {
             );
 
             // If user is not authenticated, we're done (data already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Loadout updated');
                 return;
             }
@@ -311,7 +324,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, loadouts, addNotification, setLoadouts]
+        [activeProfileId, loadouts, addNotification, setLoadouts]
     );
 
     const deleteLoadout = useCallback(
@@ -323,7 +336,7 @@ export const useLoadouts = () => {
             void setLoadouts((prev) => prev.filter((loadout) => loadout.id !== id));
 
             // If user is not authenticated, we're done (data already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Loadout deleted');
                 return;
             }
@@ -334,7 +347,7 @@ export const useLoadouts = () => {
                     .from('loadouts')
                     .delete()
                     .eq('id', id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
 
@@ -347,7 +360,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, loadouts, addNotification, setLoadouts]
+        [activeProfileId, loadouts, addNotification, setLoadouts]
     );
 
     const validateTeamLoadout = useCallback((shipLoadouts: TeamLoadout['shipLoadouts']) => {
@@ -385,7 +398,7 @@ export const useLoadouts = () => {
             void setTeamLoadouts((prev) => [...prev, newTeamLoadout]);
 
             // If user is not authenticated, we're done (data already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Team loadout added');
                 return newTeamLoadout.id;
             }
@@ -396,7 +409,7 @@ export const useLoadouts = () => {
                 const { data: teamLoadoutData, error: teamLoadoutError } = await supabase
                     .from('team_loadouts')
                     .insert({
-                        user_id: user.id,
+                        user_id: activeProfileId,
                         name: teamLoadout.name,
                     })
                     .select()
@@ -469,7 +482,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, addNotification, setTeamLoadouts, validateTeamLoadout]
+        [activeProfileId, addNotification, setTeamLoadouts, validateTeamLoadout]
     );
 
     const updateTeamLoadout = useCallback(
@@ -499,7 +512,7 @@ export const useLoadouts = () => {
             );
 
             // If user is not authenticated, we're done (data already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Team loadout updated');
                 return;
             }
@@ -593,7 +606,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, teamLoadouts, addNotification, setTeamLoadouts, validateTeamLoadout]
+        [activeProfileId, teamLoadouts, addNotification, setTeamLoadouts, validateTeamLoadout]
     );
 
     const deleteTeamLoadout = useCallback(
@@ -605,7 +618,7 @@ export const useLoadouts = () => {
             void setTeamLoadouts((prev) => prev.filter((teamLoadout) => teamLoadout.id !== id));
 
             // If user is not authenticated, we're done (data already saved to localStorage)
-            if (!user?.id) {
+            if (!activeProfileId) {
                 addNotification('success', 'Team loadout deleted');
                 return;
             }
@@ -616,7 +629,7 @@ export const useLoadouts = () => {
                     .from('team_loadouts')
                     .delete()
                     .eq('id', id)
-                    .eq('user_id', user.id);
+                    .eq('user_id', activeProfileId);
 
                 if (error) throw error;
 
@@ -629,7 +642,7 @@ export const useLoadouts = () => {
                 throw error;
             }
         },
-        [user?.id, teamLoadouts, addNotification, setTeamLoadouts]
+        [activeProfileId, teamLoadouts, addNotification, setTeamLoadouts]
     );
 
     return {
