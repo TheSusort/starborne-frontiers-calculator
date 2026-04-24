@@ -6,10 +6,10 @@
 -- (or auth.uid() = created_by) to call this helper instead.
 --
 -- Tables intentionally NOT touched here:
---   • encounter_votes               — one-vote-per-human; stays on auth.uid() = user_id
---   • community_recommendation_votes — same reason
---   • ship_template_proposals       — proposed_by_user_id is an audit field (text cast),
---                                     not a profile-scoped ownership column
+--   • encounter_votes               — SELECT/INSERT/UPDATE and the voter-self DELETE branch
+--                                     stay on auth.uid() = user_id (one-vote-per-human).
+--                                     The note-owner DELETE branch is widened in section 7.
+--   • community_recommendation_votes — one-vote-per-human; stays on auth.uid() = user_id
 --   • admin / is_admin() branches   — unchanged
 --   • is_public = true branches     — unchanged; preserved verbatim below
 --   • anon policies                 — unchanged (managed in separate migrations)
@@ -754,3 +754,23 @@ CREATE POLICY "Users can update own proposals" ON public.ship_template_proposals
   FOR UPDATE TO authenticated
   USING (public.has_profile_access(proposed_by_user_id::uuid))
   WITH CHECK (public.has_profile_access(proposed_by_user_id::uuid));
+
+
+-- ============================================================
+-- 7. encounter_votes DELETE (note-owner branch only)
+-- ============================================================
+-- The voter-self branch (auth.uid() = user_id) intentionally remains
+-- one-vote-per-human and is NOT widened. The note-owner branch checks
+-- encounter_notes.user_id, which can now be an alt's profile id, so it
+-- must use has_profile_access.
+DROP POLICY IF EXISTS "Users can delete encounter votes" ON public.encounter_votes;
+CREATE POLICY "Users can delete encounter votes" ON public.encounter_votes
+    FOR DELETE TO authenticated
+    USING (
+        auth.uid() = user_id
+        OR EXISTS (
+            SELECT 1 FROM public.encounter_notes
+            WHERE encounter_notes.id = encounter_votes.encounter_id
+              AND public.has_profile_access(encounter_notes.user_id)
+        )
+    );
