@@ -11,7 +11,7 @@ Players often run multiple game accounts in Starborne Frontiers (different facti
 
 - One auth user (one human) owns one **main** profile and up to **5 alt** profiles.
 - Each profile has its own ships, gear, engineering stats, autogear configs, loadouts, starred ships, tutorial state, and statistics snapshots.
-- Each profile has its own username, display name, and `is_public` toggle. Alts are first-class identities for public-facing features (public profile pages, community recommendations).
+- Each profile has its own username (which also serves as its display name) and `is_public` toggle. Alts are first-class identities for public-facing features (public profile pages, community recommendations).
 - A persistent UI badge makes the active profile unmistakable; switching is one click from the sidebar.
 - Admin status, heartbeat tracking, and authentication remain tied to the auth user — they do not switch with the profile.
 
@@ -193,8 +193,8 @@ interface ActiveProfileContextType {
   profiles: UserProfile[];            // main + all owned alts
   isOnAlt: boolean;
   switchProfile: (id: string) => void;
-  createAlt: (username: string, displayName: string) => Promise<UserProfile>;
-  renameAlt: (id: string, username: string, displayName: string) => Promise<void>;
+  createAlt: (username: string) => Promise<UserProfile>;   // alt display name = alt username; no separate field
+  renameAlt: (id: string, username: string) => Promise<void>;
   togglePublicAlt: (id: string, isPublic: boolean) => Promise<void>;
   deleteAlt: (id: string) => Promise<void>;
 }
@@ -283,10 +283,10 @@ Card on the existing profile page.
 - Header: "Alt accounts" + counter "<n> / 5".
 - Empty state: short blurb explaining alts + "Create alt" button.
 - Populated state: each alt rendered as a row inside the card with:
-  - Display name + username
+  - Username (which is also its display name)
   - `is_public` toggle (existing `Checkbox` primitive)
   - "Switch to" button (or disabled "Active" label when current)
-  - "Rename" button → `Modal` with two `Input`s (username + display name)
+  - "Rename" button → `Modal` with one `Input` (username — also serves as display name)
   - "Delete" button → `ConfirmModal`
 - "Create alt" button at the bottom, disabled with tooltip when count == 5.
 - Username uniqueness enforced by DB; on collision, surface the Supabase error inline as "Username taken." No real-time debounced check needed.
@@ -294,7 +294,7 @@ Card on the existing profile page.
 ### Create alt flow
 
 1. User submits create form.
-2. `createAlt(username, displayName)` inserts the `public.users` row (allowed by new INSERT RLS policy).
+2. `createAlt(username)` inserts the `public.users` row (allowed by new INSERT RLS policy). The username also serves as the alt's display name — no separate field.
 3. On success, refresh `profiles` list. Toast: "Alt created. Switch to it to import game data."
 4. Stay on profile page. User clicks "Switch to" when ready.
 5. After switching, the regular `ImportButton` flow on the home page imports against the alt's `user_id` — no new entry point needed.

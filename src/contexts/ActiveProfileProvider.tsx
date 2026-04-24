@@ -122,6 +122,7 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
     // Sign-out: clear the stored profile id so a different account on the same device starts fresh.
     useEffect(() => {
         const onSignout = () => {
+            lastNotifiedStaleRef.current = null; // reset so the next user gets the notification if they have a stale id
             localStorage.removeItem(StorageKey.ACTIVE_PROFILE_ID);
             setStoredId(null);
             setProfiles([]);
@@ -189,19 +190,34 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         [user?.id, activeProfileId, switchProfile, refreshProfiles]
     );
 
-    const value: ActiveProfileContextType = {
-        activeProfileId,
-        activeProfile,
-        profiles,
-        isOnAlt: activeProfileId !== null && activeProfileId !== user?.id,
-        profilesLoading,
-        switchProfile,
-        createAlt,
-        renameAlt,
-        togglePublicAlt,
-        deleteAlt,
-        refreshProfiles,
-    };
+    const value = useMemo<ActiveProfileContextType>(
+        () => ({
+            activeProfileId,
+            activeProfile,
+            profiles,
+            isOnAlt: activeProfileId !== null && activeProfileId !== user?.id,
+            profilesLoading,
+            switchProfile,
+            createAlt,
+            renameAlt,
+            togglePublicAlt,
+            deleteAlt,
+            refreshProfiles,
+        }),
+        [
+            activeProfileId,
+            activeProfile,
+            profiles,
+            profilesLoading,
+            user?.id,
+            switchProfile,
+            createAlt,
+            renameAlt,
+            togglePublicAlt,
+            deleteAlt,
+            refreshProfiles,
+        ]
+    );
 
     return <ActiveProfileContext.Provider value={value}>{children}</ActiveProfileContext.Provider>;
 };
