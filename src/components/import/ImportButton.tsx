@@ -160,7 +160,10 @@ export const ImportButton: React.FC<{
                                     // Run submissions in parallel for speed
                                     await Promise.all(
                                         proposals.map((proposal) =>
-                                            submitTemplateProposal(proposal, user.id)
+                                            submitTemplateProposal(
+                                                proposal,
+                                                activeProfileId ?? user.id
+                                            )
                                         )
                                     );
                                 }
