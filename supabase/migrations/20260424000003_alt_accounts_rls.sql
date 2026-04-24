@@ -723,3 +723,34 @@ CREATE POLICY "Users can delete own encounter formations" ON public.encounter_fo
     WHERE encounter_notes.id = encounter_formations.note_id
       AND public.has_profile_access(encounter_notes.user_id)
   ));
+
+
+-- ============================================================
+-- 6. ship_template_proposals
+-- ============================================================
+-- The proposed_by_user_id column is text-typed; cast to uuid for the
+-- has_profile_access check. Alts submit proposals attributed to themselves;
+-- reviewing admins still see all proposals via the is_admin() branch in the
+-- SELECT policy. No DELETE policy exists on this table (admin-managed).
+
+-- SELECT: widen the proposed_by_user_id branch so alts can see their own proposals.
+-- The status = 'approved' and public.is_admin() branches are preserved verbatim.
+DROP POLICY IF EXISTS "Anyone can view approved proposals" ON public.ship_template_proposals;
+CREATE POLICY "Anyone can view approved proposals" ON public.ship_template_proposals
+  FOR SELECT TO authenticated
+  USING (
+    status = 'approved'
+    OR public.has_profile_access(proposed_by_user_id::uuid)
+    OR public.is_admin()
+  );
+
+DROP POLICY IF EXISTS "Authenticated users can create own proposals" ON public.ship_template_proposals;
+CREATE POLICY "Authenticated users can create own proposals" ON public.ship_template_proposals
+  FOR INSERT TO authenticated
+  WITH CHECK (public.has_profile_access(proposed_by_user_id::uuid));
+
+DROP POLICY IF EXISTS "Users can update own proposals" ON public.ship_template_proposals;
+CREATE POLICY "Users can update own proposals" ON public.ship_template_proposals
+  FOR UPDATE TO authenticated
+  USING (public.has_profile_access(proposed_by_user_id::uuid))
+  WITH CHECK (public.has_profile_access(proposed_by_user_id::uuid));
