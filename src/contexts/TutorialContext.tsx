@@ -11,7 +11,8 @@ import { ALL_TUTORIAL_GROUPS, TutorialGroup, TutorialStep } from '../constants/t
 import { supabase } from '../config/supabase';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
-const STORAGE_KEY = 'tutorial_completed_groups';
+const getStorageKey = (profileId: string | null) =>
+    profileId ? `tutorial_completed_groups:${profileId}` : 'tutorial_completed_groups';
 
 interface TutorialContextValue {
     activeGroup: TutorialGroup | null;
@@ -29,9 +30,9 @@ interface TutorialContextValue {
 
 const TutorialContext = createContext<TutorialContextValue | null>(null);
 
-function loadCompletedGroups(): Set<string> {
+function loadCompletedGroups(profileId: string | null): Set<string> {
     try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = localStorage.getItem(getStorageKey(profileId));
         if (stored) {
             return new Set(JSON.parse(stored) as string[]);
         }
@@ -41,8 +42,8 @@ function loadCompletedGroups(): Set<string> {
     return new Set();
 }
 
-function saveCompletedGroups(groups: Set<string>) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...groups]));
+function saveCompletedGroups(profileId: string | null, groups: Set<string>) {
+    localStorage.setItem(getStorageKey(profileId), JSON.stringify([...groups]));
 }
 
 async function loadCompletedGroupsFromSupabase(userId: string): Promise<string[]> {
@@ -73,7 +74,9 @@ function findGroup(groupId: string): TutorialGroup | undefined {
 
 export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { activeProfileId, profilesLoading } = useActiveProfile();
-    const [completedGroups, setCompletedGroups] = useState<Set<string>>(loadCompletedGroups);
+    const [completedGroups, setCompletedGroups] = useState<Set<string>>(() =>
+        loadCompletedGroups(activeProfileId)
+    );
     const [activeGroup, setActiveGroup] = useState<TutorialGroup | null>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(0);
     const pendingGroupsRef = useRef<string[]>([]);
@@ -129,7 +132,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 if (merged.size > remoteGroups.length) {
                     void saveCompletedGroupsToSupabase(activeProfileId, merged);
                 }
-                saveCompletedGroups(merged);
+                saveCompletedGroups(activeProfileId, merged);
                 return merged;
             });
             supabaseLoadedRef.current = true;
@@ -144,7 +147,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     // Persist completed groups to localStorage + Supabase
     useEffect(() => {
-        saveCompletedGroups(completedGroups);
+        saveCompletedGroups(activeProfileId, completedGroups);
 
         if (activeProfileId && supabaseLoadedRef.current && completedGroups.size > 0) {
             void saveCompletedGroupsToSupabase(activeProfileId, completedGroups);
@@ -272,7 +275,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setActiveGroup(null);
         setActiveStepIndex(0);
         pendingGroupsRef.current = [];
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(getStorageKey(activeProfileId));
         if (activeProfileId) {
             void saveCompletedGroupsToSupabase(activeProfileId, new Set());
         }
