@@ -23,6 +23,12 @@ CREATE TRIGGER on_auth_user_deleted
     FOR EACH ROW EXECUTE FUNCTION public.handle_auth_user_delete();
 
 -- Soft cap: max 5 alts per owner. Enforced at the DB so nothing can bypass.
+-- Known limitation: the count + insert is not serialized, so two concurrent
+-- INSERTs for the same owner that each see 4 existing alts will both succeed,
+-- briefly exceeding the cap by 1. Acceptable here — the UI gates the create
+-- button at 5 and concurrent alt creation by a single human is unrealistic.
+-- If strict enforcement is ever needed, take a per-owner advisory lock first:
+--   PERFORM pg_advisory_xact_lock(hashtextextended(NEW.owner_auth_user_id::text, 0));
 CREATE OR REPLACE FUNCTION public.enforce_alt_account_cap()
 RETURNS trigger
 LANGUAGE plpgsql
