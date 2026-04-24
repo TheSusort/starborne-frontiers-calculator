@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Button, ConfirmModal } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { StorageKey, StorageKeyType } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
 import { clearIndexedDBStorage } from '../../hooks/useStorage';
@@ -120,6 +121,7 @@ interface TeamLoadoutData {
 export const BackupRestoreData: React.FC = () => {
     const { addNotification } = useNotification();
     const { user, signOut } = useAuth();
+    const { activeProfileId } = useActiveProfile();
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDeleteLocalStorageConfirm, setShowDeleteLocalStorageConfirm] = useState(false);
@@ -193,7 +195,7 @@ export const BackupRestoreData: React.FC = () => {
                 });
 
                 // If user is logged in, sync to Supabase
-                if (user?.id) {
+                if (activeProfileId) {
                     try {
                         const tableNameMap: Record<string, string> = {
                             [StorageKey.SHIPS]: 'ships',
@@ -214,14 +216,17 @@ export const BackupRestoreData: React.FC = () => {
                             // Handle different data types
                             if (key === StorageKey.LOADOUTS) {
                                 // Handle loadouts specially
-                                await supabase.from('loadouts').delete().eq('user_id', user.id);
+                                await supabase
+                                    .from('loadouts')
+                                    .delete()
+                                    .eq('user_id', activeProfileId);
 
                                 if (Array.isArray(parsedData) && parsedData.length > 0) {
                                     // Insert loadout records
                                     const loadoutRecords = parsedData.map(
                                         (loadout: LoadoutData) => ({
                                             id: loadout.id,
-                                            user_id: user.id,
+                                            user_id: activeProfileId,
                                             name: loadout.name,
                                             ship_id: loadout.shipId,
                                             created_at: new Date(loadout.createdAt).toISOString(),
@@ -253,13 +258,13 @@ export const BackupRestoreData: React.FC = () => {
                                 await supabase
                                     .from('team_loadouts')
                                     .delete()
-                                    .eq('user_id', user.id);
+                                    .eq('user_id', activeProfileId);
 
                                 if (Array.isArray(parsedData) && parsedData.length > 0) {
                                     // Insert team loadout records
                                     const teamLoadoutRecords = parsedData.map((teamLoadout) => ({
                                         id: teamLoadout.id,
-                                        user_id: user.id,
+                                        user_id: activeProfileId,
                                         name: teamLoadout.name,
                                         created_at: new Date(
                                             teamLoadout.createdAt as string | number | Date
@@ -310,12 +315,15 @@ export const BackupRestoreData: React.FC = () => {
                                 }
                             } else if (key === StorageKey.ENGINEERING_STATS) {
                                 // Handle engineering stats specially
-                                await supabase.from(tableName).delete().eq('user_id', user.id);
+                                await supabase
+                                    .from(tableName)
+                                    .delete()
+                                    .eq('user_id', activeProfileId);
 
                                 if (parsedData.stats && parsedData.stats.length > 0) {
                                     const records = parsedData.stats.flatMap((stat: any) =>
                                         stat.stats.map((s: any) => ({
-                                            user_id: user.id,
+                                            user_id: activeProfileId,
                                             ship_type: stat.shipType,
                                             stat_name: s.name,
                                             value: s.value,
@@ -329,13 +337,16 @@ export const BackupRestoreData: React.FC = () => {
                                 }
                             } else if (Array.isArray(parsedData)) {
                                 // Handle other array data
-                                await supabase.from(tableName).delete().eq('user_id', user.id);
+                                await supabase
+                                    .from(tableName)
+                                    .delete()
+                                    .eq('user_id', activeProfileId);
 
                                 if (parsedData.length > 0) {
                                     await supabase.from(tableName).insert(
                                         parsedData.map((item: any) => ({
                                             ...item,
-                                            user_id: user.id,
+                                            user_id: activeProfileId,
                                         }))
                                     );
                                 }

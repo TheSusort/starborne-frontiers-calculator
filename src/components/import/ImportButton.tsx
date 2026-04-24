@@ -180,14 +180,17 @@ export const ImportButton: React.FC<{
                     // sync to supabase if user is logged in
                     if (user) {
                         addNotification('info', 'Syncing to cloud...', 30000);
-                        const syncResult = await syncMigratedDataToSupabase(user.id, {
-                            ships: result.data.ships,
-                            inventory: result.data.inventory,
-                            encounters: [],
-                            loadouts: [],
-                            teamLoadouts: [],
-                            engineeringStats: result.data.engineeringStats,
-                        });
+                        const syncResult = await syncMigratedDataToSupabase(
+                            activeProfileId ?? user.id,
+                            {
+                                ships: result.data.ships,
+                                inventory: result.data.inventory,
+                                encounters: [],
+                                loadouts: [],
+                                teamLoadouts: [],
+                                engineeringStats: result.data.engineeringStats,
+                            }
+                        );
 
                         if (syncResult.success) {
                             refreshPage('Data synced successfully, refreshing in 3 seconds...');
