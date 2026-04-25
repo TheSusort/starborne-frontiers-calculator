@@ -105,4 +105,15 @@ describe('InlineNumberEdit', () => {
         fireEvent.click(screen.getByText('100'));
         expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
     });
+
+    it('calls onSave exactly once on Enter (no double-commit on blur cascade)', () => {
+        const { onSave } = renderWith();
+        fireEvent.click(screen.getByText('100'));
+        const input = screen.getByRole('spinbutton');
+        fireEvent.change(input, { target: { value: '250' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.blur(input);
+        expect(onSave).toHaveBeenCalledTimes(1);
+        expect(onSave).toHaveBeenCalledWith(250);
+    });
 });

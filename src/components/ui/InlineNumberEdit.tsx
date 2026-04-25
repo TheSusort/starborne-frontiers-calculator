@@ -24,6 +24,7 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<string>('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const committedRef = useRef(false);
 
     useEffect(() => {
         if (editing && inputRef.current) {
@@ -34,11 +35,14 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
 
     const startEdit = () => {
         if (disabled) return;
+        committedRef.current = false;
         setDraft(value === undefined ? '' : String(value));
         setEditing(true);
     };
 
     const commit = () => {
+        if (committedRef.current) return;
+        committedRef.current = true;
         const trimmed = draft.trim();
         if (trimmed === '') {
             if (allowEmpty) onSave(undefined);
