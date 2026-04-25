@@ -97,21 +97,6 @@ export const StatPriorityRow: React.FC<StatPriorityRowProps> = ({
                         {')'}
                     </>
                 )}
-                {priority.weight !== undefined && priority.weight !== 1 && (
-                    <>
-                        {' ('}
-                        weight:{' '}
-                        <InlineNumberEdit
-                            value={priority.weight}
-                            onSave={(v) => update({ weight: v ?? 1 })}
-                            min={0}
-                            disabled={isEditing}
-                        >
-                            {priority.weight}
-                        </InlineNumberEdit>
-                        {')'}
-                    </>
-                )}
                 {priority.hardRequirement && (
                     <>
                         {' '}

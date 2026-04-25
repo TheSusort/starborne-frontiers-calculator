@@ -404,10 +404,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
                                     onClick={() => openForm('priority')}
                                 >
-                                    <div className="font-semibold">📊 Stat priority</div>
+                                    <div className="font-semibold">Stat priority</div>
                                     <div className="text-xs text-theme-text-secondary">
-                                        Prioritize a stat (e.g. crit damage). Optionally set min,
-                                        max, or weight.
+                                        Prioritize a stat (e.g. crit damage). Optionally set min or
+                                        max.
                                     </div>
                                 </button>
                                 <button
@@ -415,7 +415,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
                                     onClick={() => openForm('setPriority')}
                                 >
-                                    <div className="font-semibold">🛡 Set requirement</div>
+                                    <div className="font-semibold">Set requirement</div>
                                     <div className="text-xs text-theme-text-secondary">
                                         Require a number of pieces from a gear set (e.g. 2×
                                         Stealth).
@@ -427,7 +427,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onClick={() => openForm('statBonus')}
                                 >
                                     <div className="font-semibold">
-                                        ⚙ Stat bonus{' '}
+                                        Stat bonus{' '}
                                         <span className="text-xs text-theme-text-secondary font-normal">
                                             (advanced)
                                         </span>
@@ -468,7 +468,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         onAddPriority(p);
                                         backToList();
                                     }}
-                                    existingPriorities={priorities}
                                     editingValue={
                                         tweakView.editIndex !== null
                                             ? priorities[tweakView.editIndex]

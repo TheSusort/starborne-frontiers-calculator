@@ -212,7 +212,7 @@ export const AutogearPage: React.FC = () => {
                 statPriorities: [],
                 setPriorities: [],
                 statBonuses: [],
-                ignoreEquipped: true,
+                ignoreEquipped: false,
                 ignoreUnleveled: true,
                 useUpgradedStats: false,
                 tryToCompleteSets: false,
@@ -1144,7 +1144,7 @@ export const AutogearPage: React.FC = () => {
                     }
                     priorities={shipSettings ? getShipConfig(shipSettings.id).statPriorities : []}
                     ignoreEquipped={
-                        shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : true
+                        shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : false
                     }
                     ignoreUnleveled={
                         shipSettings ? getShipConfig(shipSettings.id).ignoreUnleveled : true
@@ -1341,7 +1341,7 @@ export const AutogearPage: React.FC = () => {
                                 statPriorities: [],
                                 setPriorities: [],
                                 statBonuses: [],
-                                ignoreEquipped: true,
+                                ignoreEquipped: false,
                                 ignoreUnleveled: true,
                                 useUpgradedStats: false,
                                 tryToCompleteSets: false,

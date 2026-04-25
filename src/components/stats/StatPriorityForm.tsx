@@ -19,8 +19,6 @@ const AVAILABLE_STATS: StatName[] = [
 
 interface Props {
     onAdd: (priority: StatPriority) => void;
-    existingPriorities: StatPriority[];
-    hideWeight?: boolean;
     hideMaxLimit?: boolean;
     hideMinLimit?: boolean;
     editingValue?: StatPriority;
@@ -30,8 +28,6 @@ interface Props {
 
 export const StatPriorityForm: React.FC<Props> = ({
     onAdd,
-    existingPriorities,
-    hideWeight,
     hideMaxLimit,
     hideMinLimit,
     editingValue,
@@ -41,7 +37,6 @@ export const StatPriorityForm: React.FC<Props> = ({
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
     const [minLimit, setMinLimit] = useState<string>('');
-    const [weight, setWeight] = useState<number>(1);
     const [hardRequirement, setHardRequirement] = useState<boolean>(false);
     const [showHardTooltip, setShowHardTooltip] = useState<boolean>(false);
     const hardLabelRef = useRef<HTMLDivElement>(null);
@@ -51,13 +46,11 @@ export const StatPriorityForm: React.FC<Props> = ({
             setSelectedStat(editingValue.stat);
             setMinLimit(editingValue.minLimit !== undefined ? String(editingValue.minLimit) : '');
             setMaxLimit(editingValue.maxLimit !== undefined ? String(editingValue.maxLimit) : '');
-            setWeight(editingValue.weight ?? 1);
             setHardRequirement(editingValue.hardRequirement ?? false);
         } else {
             setSelectedStat(AVAILABLE_STATS[0]);
             setMinLimit('');
             setMaxLimit('');
-            setWeight(1);
             setHardRequirement(false);
         }
     }, [editingValue]);
@@ -72,7 +65,7 @@ export const StatPriorityForm: React.FC<Props> = ({
             stat: selectedStat,
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
-            weight: hideWeight ? 1 : weight,
+            weight: 1,
             hardRequirement: hardFlag,
         };
 
@@ -86,9 +79,6 @@ export const StatPriorityForm: React.FC<Props> = ({
         setMaxLimit('');
         setMinLimit('');
         setHardRequirement(false);
-        if (!hideWeight) {
-            setWeight(existingPriorities.length > 0 ? existingPriorities.length + 1 : 1);
-        }
         setSelectedStat(AVAILABLE_STATS[0]);
     };
 
@@ -105,19 +95,6 @@ export const StatPriorityForm: React.FC<Props> = ({
                     }))}
                     helpLabel="Set a stat priority to be met by the gear you equip. A min or max value is required."
                 />
-                {!hideWeight && (
-                    <div className="w-32">
-                        <Input
-                            label="Weight"
-                            type="number"
-                            value={weight}
-                            onChange={(e) => setWeight(Number(e.target.value))}
-                            placeholder="Enter weight"
-                            className="mt-4"
-                            helpLabel="Set a weight for the stat priority. The higher the weight, the more important the stat is."
-                        />
-                    </div>
-                )}
             </div>
 
             <div className="space-y-2 grid grid-cols-2 gap-4 items-end">
