@@ -99,11 +99,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
                 role="presentation"
             />
-            <div className="fixed inset-0 z-[70]">
-                <div
-                    className="flex h-full max-h-[calc(100vh-2rem)] items-center justify-center p-4"
-                    onClick={onClose}
-                >
+            <div className="fixed inset-0 z-[70]" onClick={onClose}>
+                <div className="flex h-full items-center justify-center p-4">
                     <div
                         className="relative bg-dark-lighter border border-dark-border shadow-xl w-full max-w-lg flex"
                         onClick={(e) => e.stopPropagation()}
@@ -154,7 +151,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                             onClick={handleBackToChoice}
                                             aria-label="Back to sign in options"
                                             data-testid="auth-back-to-choice"
-                                            className="text-theme-text-secondary hover:text-theme-text leading-none text-lg"
+                                            className="text-theme-text-secondary hover:text-theme-text leading-none text-lg p-1 -ml-1"
                                         >
                                             ←
                                         </button>
@@ -170,7 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                                     type="button"
                                     aria-label="Close modal"
                                     onClick={onClose}
-                                    className="text-theme-text-secondary hover:text-theme-text"
+                                    className="text-theme-text-secondary hover:text-theme-text p-1 -mr-1"
                                 >
                                     <CloseIcon />
                                 </button>
