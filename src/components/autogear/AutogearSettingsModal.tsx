@@ -67,7 +67,6 @@ export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({
             isOpen={isOpen}
             onClose={onClose}
             title={`Autogear Settings for ${settingsProps.selectedShip?.name || 'Ship'}`}
-            fullHeight={true}
         >
             <AutogearSettings {...settingsProps} onFindOptimalGear={handleFindOptimalGear} />
         </Modal>

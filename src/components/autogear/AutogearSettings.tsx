@@ -7,6 +7,7 @@ import {
     Input,
     CollapsibleAccordion,
     ChevronDownIcon,
+    ResetIcon,
     RoleSelector,
 } from '../ui';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
@@ -240,7 +241,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 <span className="text-xs uppercase tracking-wide text-theme-text-secondary">
                     Strategy
                 </span>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-end">
                     <div className="flex-1">
                         <RoleSelector
                             value={selectedShipRole || ''}
@@ -254,17 +255,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             aria-label="Reset to role defaults"
                             title="Reset to role defaults"
                             variant="secondary"
-                            size="sm"
                             onClick={onResetConfig}
                         >
-                            ↺
+                            <ResetIcon />
                         </Button>
                     )}
                 </div>
             </div>
 
             {selectedShipRole && (
-                <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-theme-primary' : ''}`}>
+                <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>
                     {tweakView.mode === 'list' && (
                         <>
                             <div className="flex justify-between items-center">
@@ -392,7 +392,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onClick={backToList}
                                     className="!p-0"
                                 >
-                                    ← Your tweaks
+                                    ← Back
                                 </Button>
                                 <span className="text-theme-text-secondary">·</span>
                                 <span>Add tweak</span>
@@ -404,10 +404,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
                                     onClick={() => openForm('priority')}
                                 >
-                                    <div className="font-semibold">Stat priority</div>
+                                    <div className="font-semibold">Stat limits</div>
                                     <div className="text-xs text-theme-text-secondary">
-                                        Prioritize a stat (e.g. crit damage). Optionally set min or
-                                        max.
+                                        Set minimum and maximum values for a stat (e.g. minimum 120
+                                        speed).
                                     </div>
                                 </button>
                                 <button
