@@ -387,8 +387,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}
-                            existingBonuses={statBonuses}
-                            onRemove={onRemoveStatBonus}
                             editingValue={editingStatBonus}
                             onSave={(bonus) => {
                                 if (editTarget?.kind === 'statBonus') {

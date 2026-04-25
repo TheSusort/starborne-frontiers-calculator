@@ -6,8 +6,6 @@ import { StatName } from '../../types/stats';
 
 interface StatBonusFormProps {
     onAdd: (bonus: StatBonus) => void;
-    existingBonuses: StatBonus[];
-    onRemove: (index: number) => void;
     editingValue?: StatBonus;
     onSave?: (bonus: StatBonus) => void;
     onCancel?: () => void;
