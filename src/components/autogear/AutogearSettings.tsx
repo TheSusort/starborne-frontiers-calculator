@@ -651,7 +651,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {tweakView.mode === 'list' && (
-                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-dark border-t border-dark-border">
+                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3">
                     <Button
                         onClick={onFindOptimalGear}
                         variant="primary"
@@ -663,7 +663,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </div>
             )}
             {tweakView.mode === 'picker' && (
-                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-dark border-t border-dark-border">
+                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3">
                     <Button onClick={backToList} variant="secondary" className="w-full">
                         Cancel
                     </Button>

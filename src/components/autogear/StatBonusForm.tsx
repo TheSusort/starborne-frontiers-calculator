@@ -91,7 +91,6 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                                 <Button
                                     type="button"
                                     variant={mode === 'additive' ? 'primary' : 'secondary'}
-                                    size="sm"
                                     onClick={() => setMode('additive')}
                                 >
                                     Additive
@@ -115,7 +114,6 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                                 <Button
                                     type="button"
                                     variant={mode === 'multiplier' ? 'primary' : 'secondary'}
-                                    size="sm"
                                     onClick={() => setMode('multiplier')}
                                 >
                                     Multiplier
