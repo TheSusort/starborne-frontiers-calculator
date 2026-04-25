@@ -274,25 +274,30 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     return (
         <div className="space-y-4">
             <div className="card space-y-2" data-tutorial="autogear-role-selector">
-                <div className="flex justify-between items-center">
-                    <span className="text-sm">Predefined Strategies</span>
+                <span className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                    Strategy
+                </span>
+                <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                        <RoleSelector
+                            value={selectedShipRole || ''}
+                            onChange={onRoleSelect}
+                            noDefaultSelection
+                            defaultOption="Manual"
+                        />
+                    </div>
                     {selectedShip && (
                         <Button
-                            variant="danger"
+                            aria-label="Reset to role defaults"
+                            title="Reset to role defaults"
+                            variant="secondary"
                             size="sm"
                             onClick={onResetConfig}
-                            className="text-xs"
                         >
-                            Reset Configuration
+                            ↺
                         </Button>
                     )}
                 </div>
-                <RoleSelector
-                    value={selectedShipRole || ''}
-                    onChange={onRoleSelect}
-                    noDefaultSelection
-                    defaultOption="Manual"
-                />
             </div>
 
             {selectedShipRole && (
