@@ -1181,6 +1181,16 @@ const DocumentationPage: React.FC = () => {
                                     Configuration Options
                                 </h3>
 
+                                <p className="text-theme-text mb-4">
+                                    Open Settings on a selected ship to pick a{' '}
+                                    <strong>Strategy</strong> (role) and add{' '}
+                                    <strong>Your tweaks</strong> on top — stat priorities, set
+                                    requirements, or stat bonuses. Click{' '}
+                                    <strong>+ Add tweak</strong> to choose a type, then fill in the
+                                    form. Each row has up/down chevrons to reorder it within its
+                                    list — order matters, higher tweaks weigh more in scoring.
+                                </p>
+
                                 <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Stat Priorities</h4>
                                     <p className="text-theme-text">
