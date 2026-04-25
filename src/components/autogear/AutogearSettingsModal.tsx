@@ -37,6 +37,7 @@ interface AutogearSettingsModalProps {
     onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
+    onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;

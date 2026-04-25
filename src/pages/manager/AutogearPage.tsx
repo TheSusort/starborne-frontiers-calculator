@@ -1285,6 +1285,16 @@ export const AutogearPage: React.FC = () => {
                             });
                         }
                     }}
+                    onUpdateStatBonus={(index, bonus) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statBonuses: config.statBonuses.map((b, i) =>
+                                    i === index ? bonus : b
+                                ),
+                            });
+                        }
+                    }}
                     onRemoveStatBonus={(index) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);

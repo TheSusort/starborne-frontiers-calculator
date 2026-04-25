@@ -4,7 +4,6 @@ import {
     Button,
     Select,
     Checkbox,
-    CloseIcon,
     Input,
     Tooltip,
     InfoIcon,
@@ -17,13 +16,13 @@ import { useTutorial } from '../../contexts/TutorialContext';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import { ShipTypeName, STATS } from '../../constants';
+import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
 import { SetPriorityRow } from './SetPriorityRow';
+import { StatBonusRow } from './StatBonusRow';
 
 type EditTarget =
     | { kind: 'priority'; index: number }
@@ -72,6 +71,7 @@ interface AutogearSettingsProps {
     onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
+    onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
@@ -184,6 +184,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onUpdateSetPriority,
     onRemoveSetPriority,
     onAddStatBonus,
+    onUpdateStatBonus,
     onRemoveStatBonus,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
@@ -240,6 +241,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 ? setPriorities[editTarget.index]
                 : undefined,
         [editTarget, setPriorities]
+    );
+
+    const editingStatBonus = useMemo(
+        () =>
+            editTarget?.kind === 'statBonus' && editTarget.index < statBonuses.length
+                ? statBonuses[editTarget.index]
+                : undefined,
+        [editTarget, statBonuses]
     );
 
     useTutorialTrigger('autogear-settings');
@@ -363,7 +372,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         />
                     </div>
 
-                    <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
+                    <div
+                        className="card space-y-2"
+                        data-tutorial="autogear-stat-bonuses"
+                        ref={statBonusFormRef}
+                    >
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-theme-text-secondary">
                             Add stat bonuses that contribute to the role score.
@@ -376,6 +389,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             onAdd={onAddStatBonus}
                             existingBonuses={statBonuses}
                             onRemove={onRemoveStatBonus}
+                            editingValue={editingStatBonus}
+                            onSave={(bonus) => {
+                                if (editTarget?.kind === 'statBonus') {
+                                    onUpdateStatBonus(editTarget.index, bonus);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
                         />
                     </div>
                 </div>
@@ -480,26 +501,25 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <>
                             <h3 className="font-semibold">Role Stat Bonuses</h3>
                             {statBonuses.map((bonus, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                    <span>
-                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
-                                        {' — '}
-                                        <span className="text-xs text-theme-text-secondary">
-                                            {bonus.mode === 'multiplier'
-                                                ? 'Multiplier'
-                                                : 'Additive'}
-                                        </span>
-                                    </span>
-                                    <Button
-                                        aria-label="Remove bonus"
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => onRemoveStatBonus(index)}
-                                        className="ml-auto"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
+                                <StatBonusRow
+                                    key={index}
+                                    bonus={bonus}
+                                    isEditing={
+                                        editTarget?.kind === 'statBonus' &&
+                                        editTarget.index === index
+                                    }
+                                    onUpdate={(updated) => onUpdateStatBonus(index, updated)}
+                                    onEdit={() => startEdit({ kind: 'statBonus', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'statBonus' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemoveStatBonus(index);
+                                    }}
+                                />
                             ))}
                             <hr className="my-2 border-dark-lighter" />
                         </>

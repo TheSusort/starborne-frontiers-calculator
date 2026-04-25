@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Select, Input } from '../ui';
 import { StatBonus } from '../../types/autogear';
 import { STATS, ALL_STAT_NAMES } from '../../constants';
@@ -8,20 +8,44 @@ interface StatBonusFormProps {
     onAdd: (bonus: StatBonus) => void;
     existingBonuses: StatBonus[];
     onRemove: (index: number) => void;
+    editingValue?: StatBonus;
+    onSave?: (bonus: StatBonus) => void;
+    onCancel?: () => void;
 }
 
-export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
+export const StatBonusForm: React.FC<StatBonusFormProps> = ({
+    onAdd,
+    editingValue,
+    onSave,
+    onCancel,
+}) => {
     const [selectedStat, setSelectedStat] = useState<StatName | ''>('');
     const [percentage, setPercentage] = useState<number>(0);
     const [mode, setMode] = useState<'additive' | 'multiplier'>('additive');
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedStat) {
-            onAdd({ stat: selectedStat, percentage, mode });
+    useEffect(() => {
+        if (editingValue) {
+            setSelectedStat(editingValue.stat as StatName);
+            setPercentage(editingValue.percentage);
+            setMode(editingValue.mode ?? 'additive');
+        } else {
             setSelectedStat('');
             setPercentage(0);
+            setMode('additive');
         }
+    }, [editingValue]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedStat) return;
+        const value = { stat: selectedStat, percentage, mode };
+        if (editingValue && onSave) {
+            onSave(value);
+            return;
+        }
+        onAdd(value);
+        setSelectedStat('');
+        setPercentage(0);
     };
 
     const helpText =
@@ -66,9 +90,20 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({ onAdd }) => {
                         onChange={(value) => setMode(value as 'additive' | 'multiplier')}
                         helpLabel={helpText}
                     />
-                    <Button type="submit" disabled={!selectedStat} variant="secondary">
-                        Add
-                    </Button>
+                    {editingValue ? (
+                        <>
+                            <Button type="submit" disabled={!selectedStat} variant="primary">
+                                Save
+                            </Button>
+                            <Button type="button" variant="secondary" onClick={onCancel}>
+                                Cancel
+                            </Button>
+                        </>
+                    ) : (
+                        <Button type="submit" disabled={!selectedStat} variant="secondary">
+                            Add
+                        </Button>
+                    )}
                 </div>
             </form>
         </div>
