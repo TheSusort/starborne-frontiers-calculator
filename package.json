@@ -86,7 +86,7 @@
         "jsdom": "^25.0.1",
         "knip": "^6.1.0",
         "lint-staged": "^15.2.11",
-        "postcss": "^8.4.49",
+        "postcss": "^8.5.10",
         "prettier": "^3.4.2",
         "puppeteer": "^24.40.0",
         "supabase": "^2.95.1",
