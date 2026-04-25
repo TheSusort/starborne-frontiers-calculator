@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
@@ -177,7 +177,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         if (!showSecondaryRequirements) {
             onToggleSecondaryRequirements(true);
         }
-        requestAnimationFrame(() => {
+        // CollapsibleForm has a 300ms expand transition; wait for it to settle before
+        // scrolling so the target's layout is final and scrollIntoView lands accurately.
+        setTimeout(() => {
             const ref =
                 target.kind === 'priority'
                     ? priorityFormRef
@@ -185,10 +187,21 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                       ? setPriorityFormRef
                       : statBonusFormRef;
             ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        });
+        }, 320);
     };
 
     const cancelEdit = () => setEditTarget(null);
+
+    // Memoize so <StatPriorityForm>'s editingValue keeps a stable reference between
+    // renders (prevents the form from resetting mid-edit if a future refactor changes
+    // how priorities are updated). Bounds-checked against the priorities length.
+    const editingPriority = useMemo(
+        () =>
+            editTarget?.kind === 'priority' && editTarget.index < priorities.length
+                ? priorities[editTarget.index]
+                : undefined,
+        [editTarget, priorities]
+    );
 
     useTutorialTrigger('autogear-settings');
 
@@ -282,11 +295,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             onAdd={onAddPriority}
                             existingPriorities={priorities}
                             hideWeight={showSecondaryRequirements}
-                            editingValue={
-                                editTarget?.kind === 'priority'
-                                    ? priorities[editTarget.index]
-                                    : undefined
-                            }
+                            editingValue={editingPriority}
                             onSave={(priority) => {
                                 if (editTarget?.kind === 'priority') {
                                     onUpdatePriority(editTarget.index, priority);
