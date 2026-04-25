@@ -1,19 +1,15 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
     Select,
     Checkbox,
     Input,
-    Tooltip,
-    InfoIcon,
-    CollapsibleForm,
     CollapsibleAccordion,
     ChevronDownIcon,
     RoleSelector,
 } from '../ui';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
-import { useTutorial } from '../../contexts/TutorialContext';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
@@ -25,11 +21,10 @@ import { StatPriorityRow } from './StatPriorityRow';
 import { SetPriorityRow } from './SetPriorityRow';
 import { StatBonusRow } from './StatBonusRow';
 
-type EditTarget =
-    | { kind: 'priority'; index: number }
-    | { kind: 'setPriority'; index: number }
-    | { kind: 'statBonus'; index: number }
-    | null;
+type TweakView =
+    | { mode: 'list' }
+    | { mode: 'picker' }
+    | { mode: 'form'; type: 'priority' | 'setPriority' | 'statBonus'; editIndex: number | null };
 
 function formatRuleSummary(rule: {
     factions: string[] | null;
@@ -170,7 +165,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     priorities,
     ignoreEquipped,
     ignoreUnleveled,
-    showSecondaryRequirements,
     setPriorities,
     statBonuses,
     useUpgradedStats,
@@ -184,7 +178,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onMovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
-    onToggleSecondaryRequirements,
     onAddSetPriority,
     onUpdateSetPriority,
     onRemoveSetPriority,
@@ -198,80 +191,35 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onOptimizeImplantsChange,
     onIncludeCalibratedGearChange,
     onResetConfig,
+    onFindOptimalGear,
     activeSeason,
     useArenaModifiers,
     onUseArenaModifiersChange,
 }) => {
-    const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
-        useState<boolean>(false);
-    const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
-
-    const [editTarget, setEditTarget] = useState<EditTarget>(null);
+    const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
-    const priorityFormRef = useRef<HTMLDivElement>(null);
-    const setPriorityFormRef = useRef<HTMLDivElement>(null);
-    const statBonusFormRef = useRef<HTMLDivElement>(null);
 
-    const startEdit = (target: NonNullable<EditTarget>) => {
-        setEditTarget(target);
-        if (!showSecondaryRequirements) {
-            onToggleSecondaryRequirements(true);
-        }
-        // CollapsibleForm has a 300ms expand transition; wait for it to settle before
-        // scrolling so the target's layout is final and scrollIntoView lands accurately.
-        setTimeout(() => {
-            const ref =
-                target.kind === 'priority'
-                    ? priorityFormRef
-                    : target.kind === 'setPriority'
-                      ? setPriorityFormRef
-                      : statBonusFormRef;
-            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 320);
-    };
+    const openPicker = () => setTweakView({ mode: 'picker' });
+    const openForm = (
+        type: 'priority' | 'setPriority' | 'statBonus',
+        editIndex: number | null = null
+    ) => setTweakView({ mode: 'form', type, editIndex });
+    const backToList = () => setTweakView({ mode: 'list' });
 
-    const cancelEdit = () => setEditTarget(null);
+    const isEditingPriority = (index: number) =>
+        tweakView.mode === 'form' && tweakView.type === 'priority' && tweakView.editIndex === index;
+    const isEditingSetPriority = (index: number) =>
+        tweakView.mode === 'form' &&
+        tweakView.type === 'setPriority' &&
+        tweakView.editIndex === index;
+    const isEditingStatBonus = (index: number) =>
+        tweakView.mode === 'form' &&
+        tweakView.type === 'statBonus' &&
+        tweakView.editIndex === index;
 
-    // Memoize so <StatPriorityForm>'s editingValue keeps a stable reference between
-    // renders (prevents the form from resetting mid-edit if a future refactor changes
-    // how priorities are updated). Bounds-checked against the priorities length.
-    const editingPriority = useMemo(
-        () =>
-            editTarget?.kind === 'priority' && editTarget.index < priorities.length
-                ? priorities[editTarget.index]
-                : undefined,
-        [editTarget, priorities]
-    );
-
-    const editingSetPriority = useMemo(
-        () =>
-            editTarget?.kind === 'setPriority' && editTarget.index < setPriorities.length
-                ? setPriorities[editTarget.index]
-                : undefined,
-        [editTarget, setPriorities]
-    );
-
-    const editingStatBonus = useMemo(
-        () =>
-            editTarget?.kind === 'statBonus' && editTarget.index < statBonuses.length
-                ? statBonuses[editTarget.index]
-                : undefined,
-        [editTarget, statBonuses]
-    );
+    const isSubFlow = tweakView.mode !== 'list';
 
     useTutorialTrigger('autogear-settings');
-
-    // Auto-expand secondary priorities when the settings tutorial is active
-    const { activeGroup } = useTutorial();
-    useEffect(() => {
-        if (
-            activeGroup?.id === 'autogear-settings' &&
-            selectedShipRole &&
-            !showSecondaryRequirements
-        ) {
-            onToggleSecondaryRequirements(true);
-        }
-    }, [activeGroup, selectedShipRole, showSecondaryRequirements, onToggleSecondaryRequirements]);
 
     const advancedEnabledCount =
         (ignoreEquipped ? 1 : 0) +
@@ -285,7 +233,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     return (
         <div className="space-y-4">
-            <div className="card space-y-2" data-tutorial="autogear-role-selector">
+            <div
+                className={`card space-y-2 ${isSubFlow ? 'opacity-60 pointer-events-none' : ''}`}
+                data-tutorial="autogear-role-selector"
+            >
                 <span className="text-xs uppercase tracking-wide text-theme-text-secondary">
                     Strategy
                 </span>
@@ -313,117 +264,280 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShipRole && (
-                <div className="card">
-                    <Button
-                        variant="link"
-                        onClick={() => onToggleSecondaryRequirements(!showSecondaryRequirements)}
-                        className="w-full flex justify-between items-center"
-                    >
-                        <span className="flex items-center gap-2">
-                            <ChevronDownIcon
-                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${
-                                    showSecondaryRequirements ? 'rotate-180' : ''
-                                }`}
-                            />
-                            {showSecondaryRequirements ? 'Hide' : 'Show'} Secondary Priorities
-                        </span>
+                <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-theme-primary' : ''}`}>
+                    {tweakView.mode === 'list' && (
+                        <>
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-semibold">
+                                    Your tweaks{' '}
+                                    <span className="font-normal text-theme-text-secondary">
+                                        (
+                                        {priorities.length +
+                                            setPriorities.length +
+                                            statBonuses.length}
+                                        )
+                                    </span>
+                                </h3>
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={openPicker}
+                                    data-tutorial="autogear-add-tweak"
+                                >
+                                    + Add tweak
+                                </Button>
+                            </div>
 
-                        <div
-                            ref={secondaryRequirementsTooltipRef}
-                            onMouseEnter={() => setShowSecondaryRequirementsTooltip(true)}
-                            onMouseLeave={() => setShowSecondaryRequirementsTooltip(false)}
-                        >
-                            <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
-                        </div>
-                    </Button>
-                    <Tooltip
-                        isVisible={showSecondaryRequirementsTooltip}
-                        className="bg-dark border border-dark-lighter p-2 w-[80%] max-w-[400px]"
-                        targetElement={secondaryRequirementsTooltipRef.current}
-                    >
-                        <p>
-                            Add additional minimum/maximum stat requirements, or wanted set pieces
-                            to the predefined role. These are soft capped and will penalize the
-                            score relatively if not met. <br />
-                            <br />
-                            For example higher hacking, speed targets, cap crit going over 100% for
-                            stats, or best attacker score with 2 stealth pieces.
-                        </p>
-                    </Tooltip>
+                            {priorities.length + setPriorities.length + statBonuses.length === 0 ? (
+                                <p className="text-sm text-theme-text-secondary text-center py-4">
+                                    No tweaks yet. The role&apos;s defaults will be used as-is.
+                                </p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {priorities.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                Stat priorities
+                                            </h4>
+                                            {priorities.map((priority, index) => (
+                                                <StatPriorityRow
+                                                    key={`priority-${index}`}
+                                                    priority={priority}
+                                                    isEditing={isEditingPriority(index)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < priorities.length - 1}
+                                                    onUpdate={(updated) =>
+                                                        onUpdatePriority(index, updated)
+                                                    }
+                                                    onEdit={() => openForm('priority', index)}
+                                                    onMoveUp={() =>
+                                                        onMovePriority(index, index - 1)
+                                                    }
+                                                    onMoveDown={() =>
+                                                        onMovePriority(index, index + 1)
+                                                    }
+                                                    onRemove={() => onRemovePriority(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {setPriorities.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                Set requirements
+                                            </h4>
+                                            {setPriorities.map((priority, index) => (
+                                                <SetPriorityRow
+                                                    key={`set-${index}`}
+                                                    priority={priority}
+                                                    isEditing={isEditingSetPriority(index)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < setPriorities.length - 1}
+                                                    onUpdate={(updated) =>
+                                                        onUpdateSetPriority(index, updated)
+                                                    }
+                                                    onEdit={() => openForm('setPriority', index)}
+                                                    onMoveUp={() =>
+                                                        onMoveSetPriority(index, index - 1)
+                                                    }
+                                                    onMoveDown={() =>
+                                                        onMoveSetPriority(index, index + 1)
+                                                    }
+                                                    onRemove={() => onRemoveSetPriority(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {statBonuses.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                Stat bonuses
+                                            </h4>
+                                            {statBonuses.map((bonus, index) => (
+                                                <StatBonusRow
+                                                    key={`bonus-${index}`}
+                                                    bonus={bonus}
+                                                    isEditing={isEditingStatBonus(index)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < statBonuses.length - 1}
+                                                    onUpdate={(updated) =>
+                                                        onUpdateStatBonus(index, updated)
+                                                    }
+                                                    onEdit={() => openForm('statBonus', index)}
+                                                    onMoveUp={() =>
+                                                        onMoveStatBonus(index, index - 1)
+                                                    }
+                                                    onMoveDown={() =>
+                                                        onMoveStatBonus(index, index + 1)
+                                                    }
+                                                    onRemove={() => onRemoveStatBonus(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-theme-text-secondary italic">
+                                        Order matters — higher tweaks weigh more.
+                                    </p>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {tweakView.mode === 'picker' && (
+                        <>
+                            <div className="flex items-center gap-2 text-sm">
+                                <Button
+                                    variant="link"
+                                    size="sm"
+                                    onClick={backToList}
+                                    className="!p-0"
+                                >
+                                    ← Your tweaks
+                                </Button>
+                                <span className="text-theme-text-secondary">·</span>
+                                <span>Add tweak</span>
+                            </div>
+                            <h3 className="font-semibold">What do you want to add?</h3>
+                            <div className="space-y-2">
+                                <button
+                                    type="button"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    onClick={() => openForm('priority')}
+                                >
+                                    <div className="font-semibold">📊 Stat priority</div>
+                                    <div className="text-xs text-theme-text-secondary">
+                                        Prioritize a stat (e.g. crit damage). Optionally set min,
+                                        max, or weight.
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    onClick={() => openForm('setPriority')}
+                                >
+                                    <div className="font-semibold">🛡 Set requirement</div>
+                                    <div className="text-xs text-theme-text-secondary">
+                                        Require a number of pieces from a gear set (e.g. 2×
+                                        Stealth).
+                                    </div>
+                                </button>
+                                <button
+                                    type="button"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    onClick={() => openForm('statBonus')}
+                                >
+                                    <div className="font-semibold">
+                                        ⚙ Stat bonus{' '}
+                                        <span className="text-xs text-theme-text-secondary font-normal">
+                                            (advanced)
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-theme-text-secondary">
+                                        Make scoring scale with another stat (e.g. hacking +50%
+                                        multiplier).
+                                    </div>
+                                </button>
+                            </div>
+                        </>
+                    )}
+
+                    {tweakView.mode === 'form' && (
+                        <>
+                            <div className="flex items-center gap-2 text-sm">
+                                <Button
+                                    variant="link"
+                                    size="sm"
+                                    onClick={backToList}
+                                    className="!p-0"
+                                >
+                                    ← Your tweaks
+                                </Button>
+                                <span className="text-theme-text-secondary">·</span>
+                                <span>
+                                    {tweakView.editIndex === null ? 'Add' : 'Edit'}{' '}
+                                    {tweakView.type === 'priority'
+                                        ? 'stat priority'
+                                        : tweakView.type === 'setPriority'
+                                          ? 'set requirement'
+                                          : 'stat bonus'}
+                                </span>
+                            </div>
+                            {tweakView.type === 'priority' && (
+                                <StatPriorityForm
+                                    onAdd={(p) => {
+                                        onAddPriority(p);
+                                        backToList();
+                                    }}
+                                    existingPriorities={priorities}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? priorities[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(p) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdatePriority(tweakView.editIndex, p);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                            {tweakView.type === 'setPriority' && (
+                                <SetPriorityForm
+                                    onAdd={(p) => {
+                                        onAddSetPriority(p);
+                                        backToList();
+                                    }}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? setPriorities[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(p) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdateSetPriority(tweakView.editIndex, p);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                            {tweakView.type === 'statBonus' && (
+                                <StatBonusForm
+                                    onAdd={(b) => {
+                                        onAddStatBonus(b);
+                                        backToList();
+                                    }}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? statBonuses[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(b) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdateStatBonus(tweakView.editIndex, b);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                        </>
+                    )}
                 </div>
             )}
 
-            <CollapsibleForm
-                isVisible={
-                    selectedShipRole === null ||
-                    selectedShipRole === '' ||
-                    showSecondaryRequirements
-                }
-            >
-                <div className="space-y-4">
-                    <div data-tutorial="autogear-stat-priorities" ref={priorityFormRef}>
-                        <StatPriorityForm
-                            onAdd={onAddPriority}
-                            existingPriorities={priorities}
-                            hideWeight={showSecondaryRequirements}
-                            editingValue={editingPriority}
-                            onSave={(priority) => {
-                                if (editTarget?.kind === 'priority') {
-                                    onUpdatePriority(editTarget.index, priority);
-                                    setEditTarget(null);
-                                }
-                            }}
-                            onCancel={cancelEdit}
-                        />
-                    </div>
-
-                    <div
-                        className="card space-y-2"
-                        data-tutorial="autogear-set-priorities"
-                        ref={setPriorityFormRef}
-                    >
-                        <SetPriorityForm
-                            onAdd={onAddSetPriority}
-                            editingValue={editingSetPriority}
-                            onSave={(priority) => {
-                                if (editTarget?.kind === 'setPriority') {
-                                    onUpdateSetPriority(editTarget.index, priority);
-                                    setEditTarget(null);
-                                }
-                            }}
-                            onCancel={cancelEdit}
-                        />
-                    </div>
-
-                    <div
-                        className="card space-y-2"
-                        data-tutorial="autogear-stat-bonuses"
-                        ref={statBonusFormRef}
-                    >
-                        <h3 className="font-semibold">Stat Bonuses</h3>
-                        <p className="text-sm text-theme-text-secondary">
-                            Add stat bonuses that contribute to the role score.
-                            <strong> Additive</strong> adds stat × % directly (e.g., defense@80% for
-                            a skill dealing 80% of defense as damage).
-                            <strong> Multiplier</strong> multiplies the role score by stat × %
-                            (e.g., hacking@50% makes DPS scale with hacking).
-                        </p>
-                        <StatBonusForm
-                            onAdd={onAddStatBonus}
-                            editingValue={editingStatBonus}
-                            onSave={(bonus) => {
-                                if (editTarget?.kind === 'statBonus') {
-                                    onUpdateStatBonus(editTarget.index, bonus);
-                                    setEditTarget(null);
-                                }
-                            }}
-                            onCancel={cancelEdit}
-                        />
-                    </div>
-                </div>
-            </CollapsibleForm>
-
-            <div className="card space-y-2">
+            <div className={`card space-y-2 ${isSubFlow ? 'opacity-60 pointer-events-none' : ''}`}>
                 <Button
                     variant="link"
                     onClick={() => setAdvancedOpen(!advancedOpen)}
@@ -537,102 +651,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </CollapsibleAccordion>
             </div>
 
-            {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
-                <div className="card space-y-2">
-                    {statBonuses.length > 0 && (
-                        <>
-                            <h3 className="font-semibold">Role Stat Bonuses</h3>
-                            {statBonuses.map((bonus, index) => (
-                                <StatBonusRow
-                                    key={index}
-                                    bonus={bonus}
-                                    isEditing={
-                                        editTarget?.kind === 'statBonus' &&
-                                        editTarget.index === index
-                                    }
-                                    canMoveUp={index > 0}
-                                    canMoveDown={index < statBonuses.length - 1}
-                                    onUpdate={(updated) => onUpdateStatBonus(index, updated)}
-                                    onEdit={() => startEdit({ kind: 'statBonus', index })}
-                                    onMoveUp={() => onMoveStatBonus(index, index - 1)}
-                                    onMoveDown={() => onMoveStatBonus(index, index + 1)}
-                                    onRemove={() => {
-                                        if (
-                                            editTarget?.kind === 'statBonus' &&
-                                            editTarget.index === index
-                                        ) {
-                                            setEditTarget(null);
-                                        }
-                                        onRemoveStatBonus(index);
-                                    }}
-                                />
-                            ))}
-                            <hr className="my-2 border-dark-lighter" />
-                        </>
-                    )}
-
-                    {priorities.length > 0 && (
-                        <>
-                            <h3 className="font-semibold">Stat Priority List</h3>
-                            {priorities.map((priority, index) => (
-                                <StatPriorityRow
-                                    key={index}
-                                    priority={priority}
-                                    isEditing={
-                                        editTarget?.kind === 'priority' &&
-                                        editTarget.index === index
-                                    }
-                                    canMoveUp={index > 0}
-                                    canMoveDown={index < priorities.length - 1}
-                                    onUpdate={(updated) => onUpdatePriority(index, updated)}
-                                    onEdit={() => startEdit({ kind: 'priority', index })}
-                                    onMoveUp={() => onMovePriority(index, index - 1)}
-                                    onMoveDown={() => onMovePriority(index, index + 1)}
-                                    onRemove={() => {
-                                        if (
-                                            editTarget?.kind === 'priority' &&
-                                            editTarget.index === index
-                                        ) {
-                                            setEditTarget(null);
-                                        }
-                                        onRemovePriority(index);
-                                    }}
-                                />
-                            ))}
-                            <hr className="my-2 border-dark-lighter" />
-                        </>
-                    )}
-
-                    {setPriorities.length > 0 && (
-                        <>
-                            <h3 className="font-semibold">Set Priority List</h3>
-                            {setPriorities.map((priority, index) => (
-                                <SetPriorityRow
-                                    key={index}
-                                    priority={priority}
-                                    isEditing={
-                                        editTarget?.kind === 'setPriority' &&
-                                        editTarget.index === index
-                                    }
-                                    canMoveUp={index > 0}
-                                    canMoveDown={index < setPriorities.length - 1}
-                                    onUpdate={(updated) => onUpdateSetPriority(index, updated)}
-                                    onEdit={() => startEdit({ kind: 'setPriority', index })}
-                                    onMoveUp={() => onMoveSetPriority(index, index - 1)}
-                                    onMoveDown={() => onMoveSetPriority(index, index + 1)}
-                                    onRemove={() => {
-                                        if (
-                                            editTarget?.kind === 'setPriority' &&
-                                            editTarget.index === index
-                                        ) {
-                                            setEditTarget(null);
-                                        }
-                                        onRemoveSetPriority(index);
-                                    }}
-                                />
-                            ))}
-                        </>
-                    )}
+            {tweakView.mode === 'list' && (
+                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-dark border-t border-dark-border">
+                    <Button
+                        onClick={onFindOptimalGear}
+                        variant="primary"
+                        className="w-full"
+                        data-testid="autogear-modal-start"
+                    >
+                        Find Optimal Gear
+                    </Button>
+                </div>
+            )}
+            {tweakView.mode === 'picker' && (
+                <div className="sticky bottom-0 -mx-4 -mb-4 px-4 py-3 bg-dark border-t border-dark-border">
+                    <Button onClick={backToList} variant="secondary" className="w-full">
+                        Cancel
+                    </Button>
                 </div>
             )}
         </div>

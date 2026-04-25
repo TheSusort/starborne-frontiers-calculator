@@ -99,44 +99,21 @@ const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
     steps: [
         {
             targetId: 'autogear-role-selector',
-            title: 'Predefined Strategies',
+            title: 'Strategy',
             description:
                 'Pick a role to auto-fill stat priorities, or choose Manual to configure everything yourself.',
         },
         {
-            targetId: 'autogear-stat-priorities',
-            title: 'Stat Priorities',
+            targetId: 'autogear-add-tweak',
+            title: 'Your tweaks',
             description:
-                "Set minimum and maximum targets for specific stats. The optimizer penalizes results that don't meet these thresholds. Toggle Hard Requirement to force a limit to be met — the optimizer will retry up to 5 times and fall back to the closest result if nothing satisfies it.",
+                'Add stat priorities, set requirements, or stat bonuses on top of the role defaults. Order matters — higher tweaks weigh more. Use the chevrons to reorder, or click Edit to change a value.',
         },
         {
-            targetId: 'autogear-set-priorities',
-            title: 'Set Priorities',
-            description: 'Require a specific number of pieces from a specific gear set.',
-        },
-        {
-            targetId: 'autogear-stat-bonuses',
-            title: 'Stat Bonuses',
+            targetId: 'autogear-advanced-options',
+            title: 'Advanced options',
             description:
-                'Add small score bonuses for secondary stats. Useful for hybrid builds like a defender that also needs hacking. No normalization, so play around with this to find the best balance.',
-        },
-        {
-            targetId: 'autogear-ignore-options',
-            title: 'Gear Filters',
-            description:
-                "Control which gear is available to the optimizer. Ignore equipped keeps other ships' gear untouched. Ignore unleveled skips level-0 gear.",
-        },
-        {
-            targetId: 'autogear-upgrade-options',
-            title: 'Upgrade Options',
-            description:
-                'Use upgraded stats simulates gear at higher levels. Complete sets adds a bonus for finishing gear set requirements (Not recommended if minmaxing).',
-        },
-        {
-            targetId: 'autogear-extra-options',
-            title: 'Extra Options',
-            description:
-                'Optimize implants includes implant slots in the search. Include calibrated gear allows gear calibrated for other ships (scored without the calibration bonus).',
+                'Filters that change which gear is available to the optimizer (ignore equipped, ignore unleveled, use upgraded stats, complete sets, optimize implants, include calibrated). Click to expand.',
         },
     ],
 };
