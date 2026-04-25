@@ -51,102 +51,103 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     };
 
     return (
-        <div className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
             <p className="text-sm text-theme-text-secondary">
                 Make scoring scale with another stat. Pick Additive or Multiplier below.
             </p>
-            <form onSubmit={handleSubmit} className="space-y-2">
-                <div className="flex gap-4 items-end">
-                    <Select
-                        label="Stat"
-                        className="flex-1"
-                        options={ALL_STAT_NAMES.map((key) => ({
-                            value: key,
-                            label: STATS[key].label,
-                        }))}
-                        value={selectedStat}
-                        onChange={(value) => setSelectedStat(value as StatName)}
-                        noDefaultSelection
+            <div className="flex gap-3 items-end flex-wrap">
+                <Select
+                    label="Stat"
+                    className="flex-1 min-w-[8rem]"
+                    options={ALL_STAT_NAMES.map((key) => ({
+                        value: key,
+                        label: STATS[key].label,
+                    }))}
+                    value={selectedStat}
+                    onChange={(value) => setSelectedStat(value as StatName)}
+                    noDefaultSelection
+                />
+                <div className="w-24">
+                    <Input
+                        label="Percentage"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={percentage}
+                        onChange={(e) => setPercentage(parseFloat(e.target.value))}
                     />
-                    <div className="w-32">
-                        <Input
-                            label="Percentage"
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={percentage}
-                            onChange={(e) => setPercentage(parseFloat(e.target.value))}
-                        />
-                    </div>
-                    <div>
-                        <span className="block text-xs uppercase tracking-wide text-theme-text-secondary mb-1">
-                            Mode
-                        </span>
-                        <div className="flex gap-2">
-                            <span
-                                ref={additiveRef}
-                                onMouseEnter={() => setShowAdditiveTip(true)}
-                                onMouseLeave={() => setShowAdditiveTip(false)}
-                            >
-                                <Button
-                                    type="button"
-                                    variant={mode === 'additive' ? 'primary' : 'secondary'}
-                                    onClick={() => setMode('additive')}
-                                >
-                                    Additive
-                                </Button>
-                            </span>
-                            <Tooltip
-                                isVisible={showAdditiveTip}
-                                targetElement={additiveRef.current}
-                                className="bg-dark border border-dark-lighter p-2 max-w-xs"
-                            >
-                                <p className="text-xs">
-                                    Adds stat × % directly to the role score (e.g. defense @ 80% for
-                                    a skill dealing 80% of defense as damage).
-                                </p>
-                            </Tooltip>
-                            <span
-                                ref={multiplierRef}
-                                onMouseEnter={() => setShowMultiplierTip(true)}
-                                onMouseLeave={() => setShowMultiplierTip(false)}
-                            >
-                                <Button
-                                    type="button"
-                                    variant={mode === 'multiplier' ? 'primary' : 'secondary'}
-                                    onClick={() => setMode('multiplier')}
-                                >
-                                    Multiplier
-                                </Button>
-                            </span>
-                            <Tooltip
-                                isVisible={showMultiplierTip}
-                                targetElement={multiplierRef.current}
-                                className="bg-dark border border-dark-lighter p-2 max-w-xs"
-                            >
-                                <p className="text-xs">
-                                    Multiplies the role score by stat × % (e.g. hacking @ 50% makes
-                                    DPS scale with hacking).
-                                </p>
-                            </Tooltip>
-                        </div>
-                    </div>
-                    {editingValue ? (
-                        <>
-                            <Button type="submit" disabled={!selectedStat} variant="primary">
-                                Save
-                            </Button>
-                            <Button type="button" variant="secondary" onClick={onCancel}>
-                                Cancel
-                            </Button>
-                        </>
-                    ) : (
-                        <Button type="submit" disabled={!selectedStat} variant="secondary">
-                            Add
-                        </Button>
-                    )}
                 </div>
-            </form>
-        </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <span className="block text-xs uppercase tracking-wide text-theme-text-secondary mb-1">
+                        Mode
+                    </span>
+                    <div className="flex gap-2">
+                        <span
+                            ref={additiveRef}
+                            onMouseEnter={() => setShowAdditiveTip(true)}
+                            onMouseLeave={() => setShowAdditiveTip(false)}
+                        >
+                            <Button
+                                type="button"
+                                variant={mode === 'additive' ? 'primary' : 'secondary'}
+                                onClick={() => setMode('additive')}
+                            >
+                                Additive
+                            </Button>
+                        </span>
+                        <Tooltip
+                            isVisible={showAdditiveTip}
+                            targetElement={additiveRef.current}
+                            className="bg-dark border border-dark-lighter p-2 max-w-xs"
+                        >
+                            <p className="text-xs">
+                                Adds stat × % directly to the role score (e.g. defense @ 80% for a
+                                skill dealing 80% of defense as damage).
+                            </p>
+                        </Tooltip>
+                        <span
+                            ref={multiplierRef}
+                            onMouseEnter={() => setShowMultiplierTip(true)}
+                            onMouseLeave={() => setShowMultiplierTip(false)}
+                        >
+                            <Button
+                                type="button"
+                                variant={mode === 'multiplier' ? 'primary' : 'secondary'}
+                                onClick={() => setMode('multiplier')}
+                            >
+                                Multiplier
+                            </Button>
+                        </span>
+                        <Tooltip
+                            isVisible={showMultiplierTip}
+                            targetElement={multiplierRef.current}
+                            className="bg-dark border border-dark-lighter p-2 max-w-xs"
+                        >
+                            <p className="text-xs">
+                                Multiplies the role score by stat × % (e.g. hacking @ 50% makes DPS
+                                scale with hacking).
+                            </p>
+                        </Tooltip>
+                    </div>
+                </div>
+                {editingValue ? (
+                    <div className="flex gap-2">
+                        <Button type="button" variant="secondary" onClick={onCancel}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={!selectedStat} variant="primary">
+                            Save
+                        </Button>
+                    </div>
+                ) : (
+                    <Button type="submit" disabled={!selectedStat} variant="secondary">
+                        Add
+                    </Button>
+                )}
+            </div>
+        </form>
     );
 };
