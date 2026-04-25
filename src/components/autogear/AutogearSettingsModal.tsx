@@ -29,6 +29,7 @@ interface AutogearSettingsModalProps {
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
+    onMovePriority: (fromIndex: number, toIndex: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;
@@ -36,9 +37,11 @@ interface AutogearSettingsModalProps {
     onAddSetPriority: (priority: SetPriority) => void;
     onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
+    onMoveSetPriority: (fromIndex: number, toIndex: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
+    onMoveStatBonus: (fromIndex: number, toIndex: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;

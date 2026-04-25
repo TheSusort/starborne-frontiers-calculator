@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
+import { arrayMove } from '../../utils/arrayMove';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
@@ -1351,6 +1352,30 @@ export const AutogearPage: React.FC = () => {
                                 useArenaModifiers: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
+                        }
+                    }}
+                    onMovePriority={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statPriorities: arrayMove(config.statPriorities, fromIndex, toIndex),
+                            });
+                        }
+                    }}
+                    onMoveSetPriority={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                setPriorities: arrayMove(config.setPriorities, fromIndex, toIndex),
+                            });
+                        }
+                    }}
+                    onMoveStatBonus={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statBonuses: arrayMove(config.statBonuses, fromIndex, toIndex),
+                            });
                         }
                     }}
                 />

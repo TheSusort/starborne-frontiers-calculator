@@ -63,6 +63,7 @@ interface AutogearSettingsProps {
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
+    onMovePriority: (fromIndex: number, toIndex: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;
@@ -70,9 +71,11 @@ interface AutogearSettingsProps {
     onAddSetPriority: (priority: SetPriority) => void;
     onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
+    onMoveSetPriority: (fromIndex: number, toIndex: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
+    onMoveStatBonus: (fromIndex: number, toIndex: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
@@ -177,15 +180,21 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddPriority,
     onUpdatePriority,
     onRemovePriority,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onMovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
     onToggleSecondaryRequirements,
     onAddSetPriority,
     onUpdateSetPriority,
     onRemoveSetPriority,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onMoveSetPriority,
     onAddStatBonus,
     onUpdateStatBonus,
     onRemoveStatBonus,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onMoveStatBonus,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
     onOptimizeImplantsChange,
