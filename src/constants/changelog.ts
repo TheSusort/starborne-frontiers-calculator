@@ -1,8 +1,18 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.55.0';
+export const CURRENT_VERSION = '1.56.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.56.0',
+        date: '2026-04-25',
+        changes: [
+            'Autogear settings redesigned — pick a role, then add stat priorities, set requirements, or stat bonuses via the new "Your tweaks" picker',
+            'Reorder tweaks with up/down chevrons — order matters, higher tweaks weigh more',
+            'Six rarely-changed filters tucked into an "Advanced options" accordion; "Ignore equipped" now defaults off',
+            'Game data import validates with a schema and caps file size at 30 MB',
+        ],
+    },
     {
         version: '1.55.0',
         date: '2026-04-24',
