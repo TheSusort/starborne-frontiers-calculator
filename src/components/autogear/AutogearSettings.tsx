@@ -22,54 +22,7 @@ import { GEAR_SETS } from '../../constants/gearSets';
 import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
-
-const StatPriorityRow: React.FC<{
-    priority: StatPriority;
-    onRemove: () => void;
-}> = ({ priority, onRemove }) => {
-    const [showTooltip, setShowTooltip] = useState(false);
-    const hardRef = useRef<HTMLSpanElement>(null);
-
-    return (
-        <div className="flex items-center text-sm">
-            <span>
-                {STATS[priority.stat].label}
-                {priority.minLimit && ` (min: ${priority.minLimit})`}
-                {priority.maxLimit && ` (max: ${priority.maxLimit})`}
-                {priority.weight && priority.weight !== 1 && ` (weight: ${priority.weight})`}
-                {priority.hardRequirement && (
-                    <>
-                        {' '}
-                        <span
-                            ref={hardRef}
-                            onMouseEnter={() => setShowTooltip(true)}
-                            onMouseLeave={() => setShowTooltip(false)}
-                            className="text-amber-400 cursor-help"
-                        >
-                            — Hard Requirement
-                        </span>
-                        <Tooltip
-                            isVisible={showTooltip}
-                            targetElement={hardRef.current}
-                            className="bg-dark border border-dark-lighter p-2"
-                        >
-                            <p className="text-xs">this time it&apos;s personal</p>
-                        </Tooltip>
-                    </>
-                )}
-            </span>
-            <Button
-                aria-label="Remove priority"
-                variant="danger"
-                size="sm"
-                onClick={onRemove}
-                className="ml-auto"
-            >
-                <CloseIcon />
-            </Button>
-        </div>
-    );
-};
+import { StatPriorityRow } from './StatPriorityRow';
 
 function formatRuleSummary(rule: {
     factions: string[] | null;
@@ -186,7 +139,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     includeCalibratedGear,
     onRoleSelect,
     onAddPriority,
-    onUpdatePriority: _onUpdatePriority,
+    onUpdatePriority,
     onRemovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
@@ -456,6 +409,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <StatPriorityRow
                                     key={index}
                                     priority={priority}
+                                    isEditing={false}
+                                    onUpdate={(updated) => onUpdatePriority(index, updated)}
+                                    onEdit={() => {}}
                                     onRemove={() => onRemovePriority(index)}
                                 />
                             ))}
