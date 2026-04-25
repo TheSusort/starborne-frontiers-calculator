@@ -1,5 +1,6 @@
 export * from './icons';
 
+export { CollapsibleAccordion } from './CollapsibleAccordion';
 export * from './layout/CollapsibleForm';
 export * from './layout/ConfirmModal';
 export * from './layout/Modal';

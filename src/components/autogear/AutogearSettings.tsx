@@ -8,6 +8,7 @@ import {
     Tooltip,
     InfoIcon,
     CollapsibleForm,
+    CollapsibleAccordion,
     ChevronDownIcon,
     RoleSelector,
 } from '../ui';
@@ -206,6 +207,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
 
     const [editTarget, setEditTarget] = useState<EditTarget>(null);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const priorityFormRef = useRef<HTMLDivElement>(null);
     const setPriorityFormRef = useRef<HTMLDivElement>(null);
     const statBonusFormRef = useRef<HTMLDivElement>(null);
@@ -270,6 +272,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             onToggleSecondaryRequirements(true);
         }
     }, [activeGroup, selectedShipRole, showSecondaryRequirements, onToggleSecondaryRequirements]);
+
+    const advancedEnabledCount =
+        (ignoreEquipped ? 1 : 0) +
+        (ignoreUnleveled ? 1 : 0) +
+        (useUpgradedStats ? 1 : 0) +
+        (tryToCompleteSets ? 1 : 0) +
+        (optimizeImplants ? 1 : 0) +
+        (includeCalibratedGear ? 1 : 0) +
+        (activeSeason && useArenaModifiers ? 1 : 0);
+    const advancedTotal = activeSeason ? 7 : 6;
 
     return (
         <div className="space-y-4">
@@ -412,96 +424,117 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </CollapsibleForm>
 
             <div className="card space-y-2">
-                <h3 className="font-semibold">Options</h3>
-                <div className="space-y-2">
-                    <div data-tutorial="autogear-ignore-options">
-                        <Checkbox
-                            id="ignoreEquipped"
-                            label="Ignore equipped gear on other ships"
-                            checked={ignoreEquipped}
-                            onChange={onIgnoreEquippedChange}
-                            helpLabel="When enabled, the autogear algorithm will ignore equipped gear on other ships. When disabled, it will include already equipped gear, except from ships with locked state, in the search."
+                <Button
+                    variant="link"
+                    onClick={() => setAdvancedOpen(!advancedOpen)}
+                    className="w-full flex justify-between items-center"
+                    data-tutorial="autogear-advanced-options"
+                >
+                    <span className="flex items-center gap-2">
+                        <ChevronDownIcon
+                            className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${
+                                advancedOpen ? 'rotate-180' : ''
+                            }`}
                         />
-                        <Checkbox
-                            id="ignoreUnleveled"
-                            label="Ignore unleveled gear"
-                            checked={ignoreUnleveled}
-                            onChange={onIgnoreUnleveledChange}
-                            helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable to include unleveled gear at its current (level 0) stats. This filter is bypassed when Use Upgraded Stats is on, since unleveled gear is then evaluated at its simulated level-16 stats."
-                        />
-                    </div>
-                    <div data-tutorial="autogear-upgrade-options">
-                        <Checkbox
-                            id="useUpgradedStats"
-                            label="Use upgraded stats"
-                            checked={useUpgradedStats}
-                            onChange={onUseUpgradedStatsChange}
-                            helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
-                        />
-                        <Checkbox
-                            id="tryToCompleteSets"
-                            label="Try to complete gear sets"
-                            checked={tryToCompleteSets}
-                            onChange={onTryToCompleteSetsChange}
-                            helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
-                        />
-                    </div>
-                    <div data-tutorial="autogear-extra-options">
-                        <Checkbox
-                            id="optimizeImplants"
-                            label="Optimize implants (EXPERIMENTAL)"
-                            checked={optimizeImplants}
-                            onChange={onOptimizeImplantsChange}
-                            helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
-                        />
-                        <Checkbox
-                            id="includeCalibratedGear"
-                            label="Include calibrated gear"
-                            checked={includeCalibratedGear}
-                            onChange={onIncludeCalibratedGearChange}
-                            helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
-                        />
-                        {activeSeason && (
-                            <div className="space-y-2">
-                                <Checkbox
-                                    id="useArenaModifiers"
-                                    label="Apply arena modifiers"
-                                    checked={useArenaModifiers || false}
-                                    onChange={() => onUseArenaModifiersChange?.(!useArenaModifiers)}
-                                    helpLabel="Apply the active arena season's stat modifiers to scoring."
-                                />
-                                {useArenaModifiers && (
-                                    <div className="ml-6 text-xs text-slate-400 space-y-1">
-                                        <div className="font-medium text-slate-300">
-                                            {activeSeason.name}
-                                            {activeSeason.ends_at && (
-                                                <span className="text-slate-500">
-                                                    {' '}
-                                                    (ends{' '}
-                                                    {new Date(
-                                                        activeSeason.ends_at
-                                                    ).toLocaleDateString()}
-                                                    )
-                                                </span>
-                                            )}
-                                        </div>
-                                        {activeSeason.rules.map((rule) => (
-                                            <div key={rule.id} className="text-slate-500">
-                                                {formatRuleSummary(rule)}:{' '}
-                                                {Object.entries(rule.modifiers)
-                                                    .map(
-                                                        ([stat, val]) =>
-                                                            `${stat} ${val > 0 ? '+' : ''}${val}%`
-                                                    )
-                                                    .join(', ')}
+                        Advanced options
+                    </span>
+                    <span className="text-xs text-theme-text-secondary">
+                        {advancedEnabledCount} of {advancedTotal} enabled
+                    </span>
+                </Button>
+                <CollapsibleAccordion isOpen={advancedOpen}>
+                    <div className="space-y-2">
+                        <div data-tutorial="autogear-ignore-options">
+                            <Checkbox
+                                id="ignoreEquipped"
+                                label="Ignore equipped gear on other ships"
+                                checked={ignoreEquipped}
+                                onChange={onIgnoreEquippedChange}
+                                helpLabel="When enabled, the autogear algorithm will ignore equipped gear on other ships. When disabled, it will include already equipped gear, except from ships with locked state, in the search."
+                            />
+                            <Checkbox
+                                id="ignoreUnleveled"
+                                label="Ignore unleveled gear"
+                                checked={ignoreUnleveled}
+                                onChange={onIgnoreUnleveledChange}
+                                helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable to include unleveled gear at its current (level 0) stats. This filter is bypassed when Use Upgraded Stats is on, since unleveled gear is then evaluated at its simulated level-16 stats."
+                            />
+                        </div>
+                        <div data-tutorial="autogear-upgrade-options">
+                            <Checkbox
+                                id="useUpgradedStats"
+                                label="Use upgraded stats"
+                                checked={useUpgradedStats}
+                                onChange={onUseUpgradedStatsChange}
+                                helpLabel="When enabled, the autogear algorithm will use the upgraded stats of gear pieces if they exist."
+                            />
+                            <Checkbox
+                                id="tryToCompleteSets"
+                                label="Try to complete gear sets"
+                                checked={tryToCompleteSets}
+                                onChange={onTryToCompleteSetsChange}
+                                helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
+                            />
+                        </div>
+                        <div data-tutorial="autogear-extra-options">
+                            <Checkbox
+                                id="optimizeImplants"
+                                label="Optimize implants (EXPERIMENTAL)"
+                                checked={optimizeImplants}
+                                onChange={onOptimizeImplantsChange}
+                                helpLabel="When enabled, the autogear algorithm will also optimize implants (Major and 3 Minor slots). Ultimate implants are not optimized but will be displayed."
+                            />
+                            <Checkbox
+                                id="includeCalibratedGear"
+                                label="Include calibrated gear"
+                                checked={includeCalibratedGear}
+                                onChange={onIncludeCalibratedGearChange}
+                                helpLabel="When enabled, gear calibrated to other ships will be included in the search. These will be scored using base stats (without calibration bonus)."
+                            />
+                            {activeSeason && (
+                                <div className="space-y-2">
+                                    <Checkbox
+                                        id="useArenaModifiers"
+                                        label="Apply arena modifiers"
+                                        checked={useArenaModifiers || false}
+                                        onChange={() =>
+                                            onUseArenaModifiersChange?.(!useArenaModifiers)
+                                        }
+                                        helpLabel="Apply the active arena season's stat modifiers to scoring."
+                                    />
+                                    {useArenaModifiers && (
+                                        <div className="ml-6 text-xs text-slate-400 space-y-1">
+                                            <div className="font-medium text-slate-300">
+                                                {activeSeason.name}
+                                                {activeSeason.ends_at && (
+                                                    <span className="text-slate-500">
+                                                        {' '}
+                                                        (ends{' '}
+                                                        {new Date(
+                                                            activeSeason.ends_at
+                                                        ).toLocaleDateString()}
+                                                        )
+                                                    </span>
+                                                )}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                            {activeSeason.rules.map((rule) => (
+                                                <div key={rule.id} className="text-slate-500">
+                                                    {formatRuleSummary(rule)}:{' '}
+                                                    {Object.entries(rule.modifiers)
+                                                        .map(
+                                                            ([stat, val]) =>
+                                                                `${stat} ${val > 0 ? '+' : ''}${val}%`
+                                                        )
+                                                        .join(', ')}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>
+                </CollapsibleAccordion>
             </div>
 
             {(statBonuses.length > 0 || priorities.length > 0 || setPriorities.length > 0) && (
