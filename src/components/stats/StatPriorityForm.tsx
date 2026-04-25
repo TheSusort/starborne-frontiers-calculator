@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Input, Select, Tooltip } from '../ui';
 import { StatName } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
@@ -23,6 +23,9 @@ interface Props {
     hideWeight?: boolean;
     hideMaxLimit?: boolean;
     hideMinLimit?: boolean;
+    editingValue?: StatPriority;
+    onSave?: (priority: StatPriority) => void;
+    onCancel?: () => void;
 }
 
 export const StatPriorityForm: React.FC<Props> = ({
@@ -31,6 +34,9 @@ export const StatPriorityForm: React.FC<Props> = ({
     hideWeight,
     hideMaxLimit,
     hideMinLimit,
+    editingValue,
+    onSave,
+    onCancel,
 }) => {
     const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
@@ -40,19 +46,36 @@ export const StatPriorityForm: React.FC<Props> = ({
     const [showHardTooltip, setShowHardTooltip] = useState<boolean>(false);
     const hardLabelRef = useRef<HTMLDivElement>(null);
 
+    useEffect(() => {
+        if (editingValue) {
+            setSelectedStat(editingValue.stat);
+            setMinLimit(editingValue.minLimit !== undefined ? String(editingValue.minLimit) : '');
+            setMaxLimit(editingValue.maxLimit !== undefined ? String(editingValue.maxLimit) : '');
+            setWeight(editingValue.weight ?? 1);
+            setHardRequirement(editingValue.hardRequirement ?? false);
+        }
+    }, [editingValue]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         const hasLimit = (!hideMinLimit && !!minLimit) || (!hideMaxLimit && !!maxLimit);
         const hardFlag = hasLimit && hardRequirement ? true : undefined;
 
-        onAdd({
+        const priority: StatPriority = {
             stat: selectedStat,
             maxLimit: hideMaxLimit ? undefined : maxLimit ? Number(maxLimit) : undefined,
             minLimit: hideMinLimit ? undefined : minLimit ? Number(minLimit) : undefined,
             weight: hideWeight ? 1 : weight,
             hardRequirement: hardFlag,
-        });
+        };
+
+        if (editingValue && onSave) {
+            onSave(priority);
+            return;
+        }
+
+        onAdd(priority);
 
         setMaxLimit('');
         setMinLimit('');
@@ -142,9 +165,31 @@ export const StatPriorityForm: React.FC<Props> = ({
             )}
 
             <div className="grow mt-4">
-                <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
-                    Add
-                </Button>
+                {editingValue ? (
+                    <div className="flex gap-2">
+                        <Button
+                            aria-label="Save priority"
+                            type="submit"
+                            variant="primary"
+                            fullWidth
+                        >
+                            Save
+                        </Button>
+                        <Button
+                            aria-label="Cancel edit"
+                            type="button"
+                            variant="secondary"
+                            fullWidth
+                            onClick={onCancel}
+                        >
+                            Cancel
+                        </Button>
+                    </div>
+                ) : (
+                    <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
+                        Add
+                    </Button>
+                )}
             </div>
         </form>
     );
