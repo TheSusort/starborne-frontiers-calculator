@@ -557,7 +557,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 </Button>
                 <CollapsibleAccordion isOpen={advancedOpen}>
                     <div className="space-y-2">
-                        <div data-tutorial="autogear-ignore-options">
+                        <div>
                             <Checkbox
                                 id="ignoreEquipped"
                                 label="Ignore equipped gear on other ships"
@@ -573,7 +573,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 helpLabel="When enabled, the autogear algorithm will ignore unleveled gear. Disable to include unleveled gear at its current (level 0) stats. This filter is bypassed when Use Upgraded Stats is on, since unleveled gear is then evaluated at its simulated level-16 stats."
                             />
                         </div>
-                        <div data-tutorial="autogear-upgrade-options">
+                        <div>
                             <Checkbox
                                 id="useUpgradedStats"
                                 label="Use upgraded stats"
@@ -589,7 +589,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 helpLabel="When enabled, the autogear algorithm will try to complete gear sets."
                             />
                         </div>
-                        <div data-tutorial="autogear-extra-options">
+                        <div>
                             <Checkbox
                                 id="optimizeImplants"
                                 label="Optimize implants (EXPERIMENTAL)"
