@@ -266,7 +266,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             {selectedShipRole && (
                 <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>
                     {tweakView.mode === 'list' && (
-                        <>
+                        <div key="list" className="animate-subview-enter space-y-3">
                             <div className="flex justify-between items-center">
                                 <h3 className="font-semibold">
                                     Your tweaks{' '}
@@ -380,11 +380,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     </p>
                                 </div>
                             )}
-                        </>
+                        </div>
                     )}
 
                     {tweakView.mode === 'picker' && (
-                        <>
+                        <div key="picker" className="animate-subview-enter space-y-3">
                             <div className="flex items-center gap-2 text-sm">
                                 <Button
                                     variant="link"
@@ -401,7 +401,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             <div className="space-y-2">
                                 <button
                                     type="button"
-                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
                                     onClick={() => openForm('priority')}
                                 >
                                     <div className="font-semibold">Stat limits</div>
@@ -412,7 +412,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 </button>
                                 <button
                                     type="button"
-                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
                                     onClick={() => openForm('setPriority')}
                                 >
                                     <div className="font-semibold">Set requirement</div>
@@ -423,7 +423,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 </button>
                                 <button
                                     type="button"
-                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-theme-primary rounded transition-colors"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
                                     onClick={() => openForm('statBonus')}
                                 >
                                     <div className="font-semibold">
@@ -438,11 +438,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     </div>
                                 </button>
                             </div>
-                        </>
+                        </div>
                     )}
 
                     {tweakView.mode === 'form' && (
-                        <>
+                        <div key="form" className="animate-subview-enter space-y-3">
                             <div className="flex items-center gap-2 text-sm">
                                 <Button
                                     variant="link"
@@ -531,7 +531,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onCancel={backToList}
                                 />
                             )}
-                        </>
+                        </div>
                     )}
                 </div>
             )}
