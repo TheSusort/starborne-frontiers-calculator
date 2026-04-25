@@ -1,10 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
     Select,
     Checkbox,
-    CloseIcon,
     Input,
     Tooltip,
     InfoIcon,
@@ -17,59 +16,19 @@ import { useTutorial } from '../../contexts/TutorialContext';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import { ShipTypeName, STATS } from '../../constants';
+import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
+import { StatPriorityRow } from './StatPriorityRow';
+import { SetPriorityRow } from './SetPriorityRow';
+import { StatBonusRow } from './StatBonusRow';
 
-const StatPriorityRow: React.FC<{
-    priority: StatPriority;
-    onRemove: () => void;
-}> = ({ priority, onRemove }) => {
-    const [showTooltip, setShowTooltip] = useState(false);
-    const hardRef = useRef<HTMLSpanElement>(null);
-
-    return (
-        <div className="flex items-center text-sm">
-            <span>
-                {STATS[priority.stat].label}
-                {priority.minLimit && ` (min: ${priority.minLimit})`}
-                {priority.maxLimit && ` (max: ${priority.maxLimit})`}
-                {priority.weight && priority.weight !== 1 && ` (weight: ${priority.weight})`}
-                {priority.hardRequirement && (
-                    <>
-                        {' '}
-                        <span
-                            ref={hardRef}
-                            onMouseEnter={() => setShowTooltip(true)}
-                            onMouseLeave={() => setShowTooltip(false)}
-                            className="text-amber-400 cursor-help"
-                        >
-                            — Hard Requirement
-                        </span>
-                        <Tooltip
-                            isVisible={showTooltip}
-                            targetElement={hardRef.current}
-                            className="bg-dark border border-dark-lighter p-2"
-                        >
-                            <p className="text-xs">this time it&apos;s personal</p>
-                        </Tooltip>
-                    </>
-                )}
-            </span>
-            <Button
-                aria-label="Remove priority"
-                variant="danger"
-                size="sm"
-                onClick={onRemove}
-                className="ml-auto"
-            >
-                <CloseIcon />
-            </Button>
-        </div>
-    );
-};
+type EditTarget =
+    | { kind: 'priority'; index: number }
+    | { kind: 'setPriority'; index: number }
+    | { kind: 'statBonus'; index: number }
+    | null;
 
 function formatRuleSummary(rule: {
     factions: string[] | null;
@@ -102,14 +61,17 @@ interface AutogearSettingsProps {
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
+    onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;
     onToggleSecondaryRequirements: (value: boolean) => void;
     onAddSetPriority: (priority: SetPriority) => void;
+    onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
+    onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
@@ -123,17 +85,34 @@ interface AutogearSettingsProps {
 
 const SetPriorityForm: React.FC<{
     onAdd: (priority: SetPriority) => void;
-}> = ({ onAdd }) => {
+    editingValue?: SetPriority;
+    onSave?: (priority: SetPriority) => void;
+    onCancel?: () => void;
+}> = ({ onAdd, editingValue, onSave, onCancel }) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedSet) {
-            onAdd({ setName: selectedSet, count });
+    useEffect(() => {
+        if (editingValue) {
+            setSelectedSet(editingValue.setName);
+            setCount(editingValue.count);
+        } else {
             setSelectedSet('');
             setCount(2);
         }
+    }, [editingValue]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedSet) return;
+        const value = { setName: selectedSet, count };
+        if (editingValue && onSave) {
+            onSave(value);
+            return;
+        }
+        onAdd(value);
+        setSelectedSet('');
+        setCount(2);
     };
 
     return (
@@ -162,9 +141,20 @@ const SetPriorityForm: React.FC<{
                         helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
                     />
                 </div>
-                <Button type="submit" disabled={!selectedSet} variant="secondary">
-                    Add
-                </Button>
+                {editingValue ? (
+                    <>
+                        <Button type="submit" disabled={!selectedSet} variant="primary">
+                            Save
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={onCancel}>
+                            Cancel
+                        </Button>
+                    </>
+                ) : (
+                    <Button type="submit" disabled={!selectedSet} variant="secondary">
+                        Add
+                    </Button>
+                )}
             </div>
         </form>
     );
@@ -185,13 +175,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     includeCalibratedGear,
     onRoleSelect,
     onAddPriority,
+    onUpdatePriority,
     onRemovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
     onToggleSecondaryRequirements,
     onAddSetPriority,
+    onUpdateSetPriority,
     onRemoveSetPriority,
     onAddStatBonus,
+    onUpdateStatBonus,
     onRemoveStatBonus,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
@@ -205,6 +198,58 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     const [showSecondaryRequirementsTooltip, setShowSecondaryRequirementsTooltip] =
         useState<boolean>(false);
     const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
+
+    const [editTarget, setEditTarget] = useState<EditTarget>(null);
+    const priorityFormRef = useRef<HTMLDivElement>(null);
+    const setPriorityFormRef = useRef<HTMLDivElement>(null);
+    const statBonusFormRef = useRef<HTMLDivElement>(null);
+
+    const startEdit = (target: NonNullable<EditTarget>) => {
+        setEditTarget(target);
+        if (!showSecondaryRequirements) {
+            onToggleSecondaryRequirements(true);
+        }
+        // CollapsibleForm has a 300ms expand transition; wait for it to settle before
+        // scrolling so the target's layout is final and scrollIntoView lands accurately.
+        setTimeout(() => {
+            const ref =
+                target.kind === 'priority'
+                    ? priorityFormRef
+                    : target.kind === 'setPriority'
+                      ? setPriorityFormRef
+                      : statBonusFormRef;
+            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 320);
+    };
+
+    const cancelEdit = () => setEditTarget(null);
+
+    // Memoize so <StatPriorityForm>'s editingValue keeps a stable reference between
+    // renders (prevents the form from resetting mid-edit if a future refactor changes
+    // how priorities are updated). Bounds-checked against the priorities length.
+    const editingPriority = useMemo(
+        () =>
+            editTarget?.kind === 'priority' && editTarget.index < priorities.length
+                ? priorities[editTarget.index]
+                : undefined,
+        [editTarget, priorities]
+    );
+
+    const editingSetPriority = useMemo(
+        () =>
+            editTarget?.kind === 'setPriority' && editTarget.index < setPriorities.length
+                ? setPriorities[editTarget.index]
+                : undefined,
+        [editTarget, setPriorities]
+    );
+
+    const editingStatBonus = useMemo(
+        () =>
+            editTarget?.kind === 'statBonus' && editTarget.index < statBonuses.length
+                ? statBonuses[editTarget.index]
+                : undefined,
+        [editTarget, statBonuses]
+    );
 
     useTutorialTrigger('autogear-settings');
 
@@ -293,19 +338,45 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 }
             >
                 <div className="space-y-4">
-                    <div data-tutorial="autogear-stat-priorities">
+                    <div data-tutorial="autogear-stat-priorities" ref={priorityFormRef}>
                         <StatPriorityForm
                             onAdd={onAddPriority}
                             existingPriorities={priorities}
                             hideWeight={showSecondaryRequirements}
+                            editingValue={editingPriority}
+                            onSave={(priority) => {
+                                if (editTarget?.kind === 'priority') {
+                                    onUpdatePriority(editTarget.index, priority);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
                         />
                     </div>
 
-                    <div className="card space-y-2" data-tutorial="autogear-set-priorities">
-                        <SetPriorityForm onAdd={onAddSetPriority} />
+                    <div
+                        className="card space-y-2"
+                        data-tutorial="autogear-set-priorities"
+                        ref={setPriorityFormRef}
+                    >
+                        <SetPriorityForm
+                            onAdd={onAddSetPriority}
+                            editingValue={editingSetPriority}
+                            onSave={(priority) => {
+                                if (editTarget?.kind === 'setPriority') {
+                                    onUpdateSetPriority(editTarget.index, priority);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
+                        />
                     </div>
 
-                    <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
+                    <div
+                        className="card space-y-2"
+                        data-tutorial="autogear-stat-bonuses"
+                        ref={statBonusFormRef}
+                    >
                         <h3 className="font-semibold">Stat Bonuses</h3>
                         <p className="text-sm text-theme-text-secondary">
                             Add stat bonuses that contribute to the role score.
@@ -316,8 +387,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         </p>
                         <StatBonusForm
                             onAdd={onAddStatBonus}
-                            existingBonuses={statBonuses}
-                            onRemove={onRemoveStatBonus}
+                            editingValue={editingStatBonus}
+                            onSave={(bonus) => {
+                                if (editTarget?.kind === 'statBonus') {
+                                    onUpdateStatBonus(editTarget.index, bonus);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
                         />
                     </div>
                 </div>
@@ -422,26 +499,25 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <>
                             <h3 className="font-semibold">Role Stat Bonuses</h3>
                             {statBonuses.map((bonus, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                    <span>
-                                        {STATS[bonus.stat as StatName].label} ({bonus.percentage}%)
-                                        {' — '}
-                                        <span className="text-xs text-theme-text-secondary">
-                                            {bonus.mode === 'multiplier'
-                                                ? 'Multiplier'
-                                                : 'Additive'}
-                                        </span>
-                                    </span>
-                                    <Button
-                                        aria-label="Remove bonus"
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => onRemoveStatBonus(index)}
-                                        className="ml-auto"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
+                                <StatBonusRow
+                                    key={index}
+                                    bonus={bonus}
+                                    isEditing={
+                                        editTarget?.kind === 'statBonus' &&
+                                        editTarget.index === index
+                                    }
+                                    onUpdate={(updated) => onUpdateStatBonus(index, updated)}
+                                    onEdit={() => startEdit({ kind: 'statBonus', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'statBonus' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemoveStatBonus(index);
+                                    }}
+                                />
                             ))}
                             <hr className="my-2 border-dark-lighter" />
                         </>
@@ -454,7 +530,21 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <StatPriorityRow
                                     key={index}
                                     priority={priority}
-                                    onRemove={() => onRemovePriority(index)}
+                                    isEditing={
+                                        editTarget?.kind === 'priority' &&
+                                        editTarget.index === index
+                                    }
+                                    onUpdate={(updated) => onUpdatePriority(index, updated)}
+                                    onEdit={() => startEdit({ kind: 'priority', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'priority' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemovePriority(index);
+                                    }}
                                 />
                             ))}
                             <hr className="my-2 border-dark-lighter" />
@@ -465,20 +555,25 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <>
                             <h3 className="font-semibold">Set Priority List</h3>
                             {setPriorities.map((priority, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                    <span>
-                                        {GEAR_SETS[priority.setName].name} ({priority.count} pieces)
-                                    </span>
-                                    <Button
-                                        aria-label="Remove set priority"
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => onRemoveSetPriority(index)}
-                                        className="ml-auto"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
+                                <SetPriorityRow
+                                    key={index}
+                                    priority={priority}
+                                    isEditing={
+                                        editTarget?.kind === 'setPriority' &&
+                                        editTarget.index === index
+                                    }
+                                    onUpdate={(updated) => onUpdateSetPriority(index, updated)}
+                                    onEdit={() => startEdit({ kind: 'setPriority', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'setPriority' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemoveSetPriority(index);
+                                    }}
+                                />
                             ))}
                         </>
                     )}

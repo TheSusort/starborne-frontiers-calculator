@@ -14,6 +14,7 @@ export * from './Checkbox';
 export * from './CheckboxGroup';
 export * from './FeatureCard';
 export * from './IconBadge';
+export * from './InlineNumberEdit';
 export * from './Input';
 export * from './Pagination';
 export * from './ProgressBar';
