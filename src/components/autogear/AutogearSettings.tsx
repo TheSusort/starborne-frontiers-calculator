@@ -191,7 +191,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddStatBonus,
     onUpdateStatBonus,
     onRemoveStatBonus,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onMoveStatBonus,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
@@ -513,8 +512,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         editTarget?.kind === 'statBonus' &&
                                         editTarget.index === index
                                     }
+                                    canMoveUp={index > 0}
+                                    canMoveDown={index < statBonuses.length - 1}
                                     onUpdate={(updated) => onUpdateStatBonus(index, updated)}
                                     onEdit={() => startEdit({ kind: 'statBonus', index })}
+                                    onMoveUp={() => onMoveStatBonus(index, index - 1)}
+                                    onMoveDown={() => onMoveStatBonus(index, index + 1)}
                                     onRemove={() => {
                                         if (
                                             editTarget?.kind === 'statBonus' &&
