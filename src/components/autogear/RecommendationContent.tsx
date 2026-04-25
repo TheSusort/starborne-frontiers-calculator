@@ -73,9 +73,7 @@ export const RecommendationContent: React.FC<RecommendationContentProps> = ({ su
                 {/* Stat Bonuses */}
                 {suggestion.statBonuses && suggestion.statBonuses.length > 0 && (
                     <div>
-                        <h5 className="text-sm font-semibold text-theme-text mb-2">
-                            Stat Bonuses:
-                        </h5>
+                        <h5 className="text-sm font-semibold text-theme-text mb-2">Boosts:</h5>
                         <div className="space-y-1">
                             {suggestion.statBonuses.map((bonus, index) => (
                                 <div

@@ -116,11 +116,11 @@ const SetPriorityForm: React.FC<{
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-2">
-            <div className="flex gap-4 items-end">
+        <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="flex gap-3 items-end flex-wrap">
                 <Select
                     label="Gear set"
-                    className="flex-1"
+                    className="flex-1 min-w-[8rem]"
                     options={Object.entries(GEAR_SETS).map(([key, set]) => ({
                         value: key,
                         label: set.name,
@@ -130,7 +130,7 @@ const SetPriorityForm: React.FC<{
                     noDefaultSelection
                     helpLabel="Select a gear set to be met by the gear you equip."
                 />
-                <div className="w-32">
+                <div className="w-24">
                     <Input
                         label="No. of pieces"
                         type="number"
@@ -138,16 +138,18 @@ const SetPriorityForm: React.FC<{
                         max="6"
                         value={count}
                         onChange={(e) => setCount(parseInt(e.target.value))}
-                        helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
                     />
                 </div>
+            </div>
+
+            <div className="flex justify-end gap-2 flex-wrap">
                 {editingValue ? (
                     <>
-                        <Button type="submit" disabled={!selectedSet} variant="primary">
-                            Save
-                        </Button>
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
+                        </Button>
+                        <Button type="submit" disabled={!selectedSet} variant="primary">
+                            Save
                         </Button>
                     </>
                 ) : (
@@ -351,7 +353,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     {statBonuses.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Stat bonuses
+                                                Boosts
                                             </h4>
                                             {statBonuses.map((bonus, index) => (
                                                 <StatBonusRow
@@ -456,10 +458,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <span>
                                     {tweakView.editIndex === null ? 'Add' : 'Edit'}{' '}
                                     {tweakView.type === 'priority'
-                                        ? 'stat priority'
+                                        ? 'limits'
                                         : tweakView.type === 'setPriority'
                                           ? 'set requirement'
-                                          : 'stat bonus'}
+                                          : 'boost'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (

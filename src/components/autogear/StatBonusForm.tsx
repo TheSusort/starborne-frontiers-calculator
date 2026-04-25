@@ -53,7 +53,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <p className="text-sm text-theme-text-secondary">
-                Make scoring scale with another stat. Pick Additive or Multiplier below.
+                Make scoring scale with another stat. Useful for skills that scale off a stat.
             </p>
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
@@ -81,7 +81,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
 
             <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div>
-                    <span className="block text-xs uppercase tracking-wide text-theme-text-secondary mb-1">
+                    <span className="block text-xs tracking-wide text-theme-text-secondary mb-1">
                         Mode
                     </span>
                     <div className="flex gap-2">
@@ -94,6 +94,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                                 type="button"
                                 variant={mode === 'additive' ? 'primary' : 'secondary'}
                                 onClick={() => setMode('additive')}
+                                size="sm"
                             >
                                 Additive
                             </Button>
@@ -117,6 +118,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                                 type="button"
                                 variant={mode === 'multiplier' ? 'primary' : 'secondary'}
                                 onClick={() => setMode('multiplier')}
+                                size="sm"
                             >
                                 Multiplier
                             </Button>
@@ -134,7 +136,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                     </div>
                 </div>
                 {editingValue ? (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mt-auto">
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
                         </Button>
@@ -143,7 +145,12 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                         </Button>
                     </div>
                 ) : (
-                    <Button type="submit" disabled={!selectedStat} variant="secondary">
+                    <Button
+                        type="submit"
+                        disabled={!selectedStat}
+                        variant="secondary"
+                        className="mt-auto"
+                    >
                         Add
                     </Button>
                 )}
