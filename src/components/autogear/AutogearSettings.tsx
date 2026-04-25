@@ -404,10 +404,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
                                     onClick={() => openForm('priority')}
                                 >
-                                    <div className="font-semibold">Stat limits</div>
+                                    <div className="font-semibold">Limits</div>
                                     <div className="text-xs text-theme-text-secondary">
                                         Set minimum and maximum values for a stat (e.g. minimum 120
-                                        speed).
+                                        Speed).
                                     </div>
                                 </button>
                                 <button
@@ -427,13 +427,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onClick={() => openForm('statBonus')}
                                 >
                                     <div className="font-semibold">
-                                        Stat bonus{' '}
+                                        Boost{' '}
                                         <span className="text-xs text-theme-text-secondary font-normal">
                                             (advanced)
                                         </span>
                                     </div>
                                     <div className="text-xs text-theme-text-secondary">
-                                        Make scoring scale with another stat (e.g. hacking +50%
+                                        Make scoring scale with another stat (e.g. HP +50%
                                         multiplier).
                                     </div>
                                 </button>
