@@ -1188,6 +1188,11 @@ const DocumentationPage: React.FC = () => {
                                         algorithm will try to keep stats within these ranges while
                                         optimizing the overall build.
                                     </p>
+                                    <p className="text-theme-text mt-2">
+                                        Each row has an <strong>Edit</strong> button (opens the form
+                                        pre-filled) and supports inline number editing — click any
+                                        number to change it directly.
+                                    </p>
                                 </div>
 
                                 <div className="p-4 bg-dark-lighter">
@@ -1222,6 +1227,11 @@ const DocumentationPage: React.FC = () => {
                                         count to 0, will prevent that gear set from being in the
                                         calculations.
                                     </p>
+                                    <p className="text-theme-text mt-2">
+                                        Each row has an <strong>Edit</strong> button (opens the form
+                                        pre-filled) and supports inline number editing — click any
+                                        number to change it directly.
+                                    </p>
                                 </div>
 
                                 <div className="p-4 bg-dark-lighter">
@@ -1230,6 +1240,11 @@ const DocumentationPage: React.FC = () => {
                                         Add bonus effects that contribute to the role score. For
                                         example, an attacker that gains extra damage equal to 10% of
                                         HP.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Each row has an <strong>Edit</strong> button (opens the form
+                                        pre-filled) and supports inline number editing — click any
+                                        number to change it directly.
                                     </p>
                                 </div>
 
