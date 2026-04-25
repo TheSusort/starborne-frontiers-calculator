@@ -638,7 +638,7 @@ Within the existing `<div className="flex gap-4 items-end">` row, replace the Mo
 </div>
 ```
 
-(The `Button` component already accepts a `ref` via `forwardRef` if it's set up that way; if not, wrap each in a `<span ref={additiveRef}>`/`<span ref={multiplierRef}>` and apply `onMouseEnter`/`onMouseLeave` on the span instead. Verify by inspecting `src/components/ui/Button.tsx` first.)
+(The `Button` component is currently `React.FC<Props>` and does **not** forward refs — wrap each in a `<span ref={additiveRef}>...</span>` / `<span ref={multiplierRef}>...</span>` and apply `onMouseEnter`/`onMouseLeave` on the span. The `ref` props on `<Button>` shown above will not compile; use the span-wrapper pattern from the start.)
 
 The `helpText` constant and the now-unused `helpLabel` props on the Stat select / Percentage input can be **removed** (the explanation lives in the Mode tooltips now). Keep the `Stat` and `Percentage` field labels intact.
 
@@ -1184,7 +1184,7 @@ Run `npm start`. Walk through each acceptance criterion from the spec (`docs/pla
 10. Advanced accordion is closed on open; count is correct; toggling a checkbox updates the count.
 11. Find Optimal Gear button visible in list view.
 12. Hard Requirement tooltip displays new copy.
-13. Stat Bonus form helpLabel tooltips on Stat/Mode/Percentage selectors still display additive/multiplier explanations.
+13. Stat Bonus form: caption "Make scoring scale with another stat..." appears at the top; Mode is a two-button picker (Additive / Multiplier); hovering each button shows its dedicated tooltip with the spec's full explanation.
 14. Tutorial flow completes: trigger the autogear-settings tutorial (open settings modal for first time, or use replay button), walk through all 3 steps without errors.
 
 - [ ] **Step 8: Commit**
