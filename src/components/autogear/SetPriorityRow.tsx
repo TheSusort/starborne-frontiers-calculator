@@ -1,25 +1,66 @@
 import React from 'react';
-import { Button, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
+import {
+    Button,
+    ChevronUpIcon,
+    ChevronDownIcon,
+    CloseIcon,
+    EditIcon,
+    InlineNumberEdit,
+} from '../ui';
 import { SetPriority } from '../../types/autogear';
 import { GEAR_SETS } from '../../constants/gearSets';
 
 interface SetPriorityRowProps {
     priority: SetPriority;
     isEditing: boolean;
+    canMoveUp: boolean;
+    canMoveDown: boolean;
     onUpdate: (priority: SetPriority) => void;
     onEdit: () => void;
+    onMoveUp: () => void;
+    onMoveDown: () => void;
     onRemove: () => void;
 }
 
 export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
     priority,
     isEditing,
+    canMoveUp,
+    canMoveDown,
     onUpdate,
     onEdit,
+    onMoveUp,
+    onMoveDown,
     onRemove,
 }) => {
     return (
         <div className={`flex items-center text-sm gap-2 ${isEditing ? 'opacity-60' : ''}`}>
+            <div className="flex flex-col">
+                {canMoveUp && (
+                    <Button
+                        aria-label="Move set priority up"
+                        variant="secondary"
+                        size="xs"
+                        onClick={onMoveUp}
+                        disabled={isEditing}
+                        className="!p-0.5"
+                    >
+                        <ChevronUpIcon className="w-3 h-3" />
+                    </Button>
+                )}
+                {canMoveDown && (
+                    <Button
+                        aria-label="Move set priority down"
+                        variant="secondary"
+                        size="xs"
+                        onClick={onMoveDown}
+                        disabled={isEditing}
+                        className="!p-0.5"
+                    >
+                        <ChevronDownIcon className="w-3 h-3" />
+                    </Button>
+                )}
+            </div>
             <span>
                 {GEAR_SETS[priority.setName].name} ({' '}
                 <InlineNumberEdit

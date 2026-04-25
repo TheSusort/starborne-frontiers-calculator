@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
+import { arrayMove } from '../../utils/arrayMove';
 import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
@@ -211,7 +212,7 @@ export const AutogearPage: React.FC = () => {
                 statPriorities: [],
                 setPriorities: [],
                 statBonuses: [],
-                ignoreEquipped: true,
+                ignoreEquipped: false,
                 ignoreUnleveled: true,
                 useUpgradedStats: false,
                 tryToCompleteSets: false,
@@ -1143,7 +1144,7 @@ export const AutogearPage: React.FC = () => {
                     }
                     priorities={shipSettings ? getShipConfig(shipSettings.id).statPriorities : []}
                     ignoreEquipped={
-                        shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : true
+                        shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : false
                     }
                     ignoreUnleveled={
                         shipSettings ? getShipConfig(shipSettings.id).ignoreUnleveled : true
@@ -1340,7 +1341,7 @@ export const AutogearPage: React.FC = () => {
                                 statPriorities: [],
                                 setPriorities: [],
                                 statBonuses: [],
-                                ignoreEquipped: true,
+                                ignoreEquipped: false,
                                 ignoreUnleveled: true,
                                 useUpgradedStats: false,
                                 tryToCompleteSets: false,
@@ -1351,6 +1352,34 @@ export const AutogearPage: React.FC = () => {
                                 useArenaModifiers: false,
                             });
                             addNotification('success', 'Reset configuration to defaults');
+                        }
+                    }}
+                    onMovePriority={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statPriorities: arrayMove(
+                                    config.statPriorities,
+                                    fromIndex,
+                                    toIndex
+                                ),
+                            });
+                        }
+                    }}
+                    onMoveSetPriority={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                setPriorities: arrayMove(config.setPriorities, fromIndex, toIndex),
+                            });
+                        }
+                    }}
+                    onMoveStatBonus={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statBonuses: arrayMove(config.statBonuses, fromIndex, toIndex),
+                            });
                         }
                     }}
                 />

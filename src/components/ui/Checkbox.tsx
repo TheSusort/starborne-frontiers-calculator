@@ -56,23 +56,20 @@ export const Checkbox: React.FC<CheckboxProps> = ({
                 <div
                     role="presentation"
                     className={`
-                        w-4 h-4
+                        w-4 h-4 shrink-0
                         flex items-center justify-center
                         border
-                        transition-all duration-200
+                        transition-colors duration-200
                         ${checked ? 'bg-primary border-primary' : 'border-dark-border bg-dark'}
                         ${!disabled && 'hover:border-primary'}
                         focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-0
                     `}
                 >
-                    <div
-                        className={`text-dark
-                        transition-all duration-200
-                        ${checked ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
-                    `}
-                    >
-                        {checked && <CheckIcon />}
-                    </div>
+                    <CheckIcon
+                        className={`!w-3 !h-3 text-dark transition-opacity duration-200 ${
+                            checked ? 'opacity-100' : 'opacity-0'
+                        }`}
+                    />
                 </div>
                 <span className=" select-none flex items-center justify-between gap-2 w-full">
                     {label.length > 0 && <>{label}</>}
