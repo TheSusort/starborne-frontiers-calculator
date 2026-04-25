@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogEntry[] = [
             'Reorder tweaks with up/down chevrons — order matters, higher tweaks weigh more',
             'Six rarely-changed filters tucked into an "Advanced options" accordion; "Ignore equipped" now defaults off',
             'Game data import validates with a schema and caps file size at 30 MB',
+            'Sign-in modal redesigned — split-pane layout with a branded left panel and a tighter form on the right',
         ],
     },
     {
