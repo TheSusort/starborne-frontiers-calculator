@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 interface DropdownProps {
-    trigger: React.ReactNode;
+    trigger: React.ReactNode | ((isOpen: boolean) => React.ReactNode);
     children: React.ReactNode;
     align?: 'left' | 'right';
     direction?: 'down' | 'up';
@@ -112,7 +112,7 @@ export const Dropdown: React.FC<DropdownProps> & {
                     setIsOpen(!isOpen);
                 }}
             >
-                {trigger}
+                {typeof trigger === 'function' ? trigger(isOpen) : trigger}
             </div>
             {isOpen && (
                 <div

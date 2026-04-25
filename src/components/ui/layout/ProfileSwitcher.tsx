@@ -33,10 +33,11 @@ export const ProfileSwitcherMenu: React.FC = () => {
                 const bName = displayName(b, main?.id ?? null);
                 return aName.localeCompare(bName);
             });
+        if (alts.length === 0) return [];
         return main ? [main, ...alts] : alts;
     }, [profiles]);
 
-    if (profilesLoading || !activeProfile) return null;
+    if (profilesLoading || !activeProfile || sortedProfiles.length === 0) return null;
 
     const mainProfile = sortedProfiles.find((p) => p.owner_auth_user_id === null) ?? null;
 
