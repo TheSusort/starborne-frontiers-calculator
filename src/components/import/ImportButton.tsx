@@ -5,6 +5,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../contexts/EngineeringStatsProvider';
 import { importPlayerData } from '../../utils/importPlayerData';
 import { useNotification } from '../../hooks/useNotification';
+import { validateExportedPlayData } from '../../schemas/exportedPlayData';
 import { ExportedPlayData } from '../../types/exportedPlayData';
 import { syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
 import { useAuth } from '../../contexts/AuthProvider';
@@ -109,8 +110,24 @@ export const ImportButton: React.FC<{
         async (file: File) => {
             try {
                 setLoading(true);
+                const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
+                if (file.size > MAX_FILE_SIZE) {
+                    addNotification(
+                        'error',
+                        `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 30 MB.`
+                    );
+                    setLoading(false);
+                    return;
+                }
                 const text = await file.text();
-                const data = JSON.parse(text) as ExportedPlayData;
+                const validation = validateExportedPlayData(JSON.parse(text));
+                if (!validation.success) {
+                    addNotification('error', validation.error);
+                    setLoading(false);
+                    return;
+                }
+                // Cast is safe — schema validated all required fields above
+                const data = validation.data as unknown as ExportedPlayData;
 
                 addNotification('info', 'Processing game data...', 10000);
                 const result = await importPlayerData(data);
