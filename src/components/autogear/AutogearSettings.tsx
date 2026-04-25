@@ -24,6 +24,12 @@ import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
 
+type EditTarget =
+    | { kind: 'priority'; index: number }
+    | { kind: 'setPriority'; index: number }
+    | { kind: 'statBonus'; index: number }
+    | null;
+
 function formatRuleSummary(rule: {
     factions: string[] | null;
     rarities: string[] | null;
@@ -161,6 +167,29 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         useState<boolean>(false);
     const secondaryRequirementsTooltipRef = useRef<HTMLDivElement>(null);
 
+    const [editTarget, setEditTarget] = useState<EditTarget>(null);
+    const priorityFormRef = useRef<HTMLDivElement>(null);
+    const setPriorityFormRef = useRef<HTMLDivElement>(null);
+    const statBonusFormRef = useRef<HTMLDivElement>(null);
+
+    const startEdit = (target: NonNullable<EditTarget>) => {
+        setEditTarget(target);
+        if (!showSecondaryRequirements) {
+            onToggleSecondaryRequirements(true);
+        }
+        requestAnimationFrame(() => {
+            const ref =
+                target.kind === 'priority'
+                    ? priorityFormRef
+                    : target.kind === 'setPriority'
+                      ? setPriorityFormRef
+                      : statBonusFormRef;
+            ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    };
+
+    const cancelEdit = () => setEditTarget(null);
+
     useTutorialTrigger('autogear-settings');
 
     // Auto-expand secondary priorities when the settings tutorial is active
@@ -248,11 +277,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 }
             >
                 <div className="space-y-4">
-                    <div data-tutorial="autogear-stat-priorities">
+                    <div data-tutorial="autogear-stat-priorities" ref={priorityFormRef}>
                         <StatPriorityForm
                             onAdd={onAddPriority}
                             existingPriorities={priorities}
                             hideWeight={showSecondaryRequirements}
+                            editingValue={
+                                editTarget?.kind === 'priority'
+                                    ? priorities[editTarget.index]
+                                    : undefined
+                            }
+                            onSave={(priority) => {
+                                if (editTarget?.kind === 'priority') {
+                                    onUpdatePriority(editTarget.index, priority);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
                         />
                     </div>
 
@@ -409,10 +450,21 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <StatPriorityRow
                                     key={index}
                                     priority={priority}
-                                    isEditing={false}
+                                    isEditing={
+                                        editTarget?.kind === 'priority' &&
+                                        editTarget.index === index
+                                    }
                                     onUpdate={(updated) => onUpdatePriority(index, updated)}
-                                    onEdit={() => {}}
-                                    onRemove={() => onRemovePriority(index)}
+                                    onEdit={() => startEdit({ kind: 'priority', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'priority' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemovePriority(index);
+                                    }}
                                 />
                             ))}
                             <hr className="my-2 border-dark-lighter" />
