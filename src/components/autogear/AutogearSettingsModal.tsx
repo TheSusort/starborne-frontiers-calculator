@@ -34,6 +34,7 @@ interface AutogearSettingsModalProps {
     onIgnoreUnleveledChange: (value: boolean) => void;
     onToggleSecondaryRequirements: (value: boolean) => void;
     onAddSetPriority: (priority: SetPriority) => void;
+    onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;

@@ -23,6 +23,7 @@ import { StatName } from '../../types/stats';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
+import { SetPriorityRow } from './SetPriorityRow';
 
 type EditTarget =
     | { kind: 'priority'; index: number }
@@ -68,6 +69,7 @@ interface AutogearSettingsProps {
     onIgnoreUnleveledChange: (value: boolean) => void;
     onToggleSecondaryRequirements: (value: boolean) => void;
     onAddSetPriority: (priority: SetPriority) => void;
+    onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
@@ -83,17 +85,34 @@ interface AutogearSettingsProps {
 
 const SetPriorityForm: React.FC<{
     onAdd: (priority: SetPriority) => void;
-}> = ({ onAdd }) => {
+    editingValue?: SetPriority;
+    onSave?: (priority: SetPriority) => void;
+    onCancel?: () => void;
+}> = ({ onAdd, editingValue, onSave, onCancel }) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedSet) {
-            onAdd({ setName: selectedSet, count });
+    useEffect(() => {
+        if (editingValue) {
+            setSelectedSet(editingValue.setName);
+            setCount(editingValue.count);
+        } else {
             setSelectedSet('');
             setCount(2);
         }
+    }, [editingValue]);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedSet) return;
+        const value = { setName: selectedSet, count };
+        if (editingValue && onSave) {
+            onSave(value);
+            return;
+        }
+        onAdd(value);
+        setSelectedSet('');
+        setCount(2);
     };
 
     return (
@@ -122,9 +141,20 @@ const SetPriorityForm: React.FC<{
                         helpLabel="Set the number of pieces in the gear set to be met by the gear you equip."
                     />
                 </div>
-                <Button type="submit" disabled={!selectedSet} variant="secondary">
-                    Add
-                </Button>
+                {editingValue ? (
+                    <>
+                        <Button type="submit" disabled={!selectedSet} variant="primary">
+                            Save
+                        </Button>
+                        <Button type="button" variant="secondary" onClick={onCancel}>
+                            Cancel
+                        </Button>
+                    </>
+                ) : (
+                    <Button type="submit" disabled={!selectedSet} variant="secondary">
+                        Add
+                    </Button>
+                )}
             </div>
         </form>
     );
@@ -151,6 +181,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onIgnoreUnleveledChange,
     onToggleSecondaryRequirements,
     onAddSetPriority,
+    onUpdateSetPriority,
     onRemoveSetPriority,
     onAddStatBonus,
     onRemoveStatBonus,
@@ -201,6 +232,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 ? priorities[editTarget.index]
                 : undefined,
         [editTarget, priorities]
+    );
+
+    const editingSetPriority = useMemo(
+        () =>
+            editTarget?.kind === 'setPriority' && editTarget.index < setPriorities.length
+                ? setPriorities[editTarget.index]
+                : undefined,
+        [editTarget, setPriorities]
     );
 
     useTutorialTrigger('autogear-settings');
@@ -306,8 +345,22 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         />
                     </div>
 
-                    <div className="card space-y-2" data-tutorial="autogear-set-priorities">
-                        <SetPriorityForm onAdd={onAddSetPriority} />
+                    <div
+                        className="card space-y-2"
+                        data-tutorial="autogear-set-priorities"
+                        ref={setPriorityFormRef}
+                    >
+                        <SetPriorityForm
+                            onAdd={onAddSetPriority}
+                            editingValue={editingSetPriority}
+                            onSave={(priority) => {
+                                if (editTarget?.kind === 'setPriority') {
+                                    onUpdateSetPriority(editTarget.index, priority);
+                                    setEditTarget(null);
+                                }
+                            }}
+                            onCancel={cancelEdit}
+                        />
                     </div>
 
                     <div className="card space-y-2" data-tutorial="autogear-stat-bonuses">
@@ -484,20 +537,25 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         <>
                             <h3 className="font-semibold">Set Priority List</h3>
                             {setPriorities.map((priority, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                    <span>
-                                        {GEAR_SETS[priority.setName].name} ({priority.count} pieces)
-                                    </span>
-                                    <Button
-                                        aria-label="Remove set priority"
-                                        variant="danger"
-                                        size="sm"
-                                        onClick={() => onRemoveSetPriority(index)}
-                                        className="ml-auto"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
+                                <SetPriorityRow
+                                    key={index}
+                                    priority={priority}
+                                    isEditing={
+                                        editTarget?.kind === 'setPriority' &&
+                                        editTarget.index === index
+                                    }
+                                    onUpdate={(updated) => onUpdateSetPriority(index, updated)}
+                                    onEdit={() => startEdit({ kind: 'setPriority', index })}
+                                    onRemove={() => {
+                                        if (
+                                            editTarget?.kind === 'setPriority' &&
+                                            editTarget.index === index
+                                        ) {
+                                            setEditTarget(null);
+                                        }
+                                        onRemoveSetPriority(index);
+                                    }}
+                                />
                             ))}
                         </>
                     )}
