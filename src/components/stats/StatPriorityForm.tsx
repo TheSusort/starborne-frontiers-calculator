@@ -82,11 +82,14 @@ export const StatPriorityForm: React.FC<Props> = ({
         setSelectedStat(AVAILABLE_STATS[0]);
     };
 
+    const limitsShown = !hideMinLimit || !hideMaxLimit;
+
     return (
-        <form onSubmit={handleSubmit} className="card" role="form">
-            <div className="space-y-2 flex gap-4 items-end">
+        <form onSubmit={handleSubmit} className="space-y-3" role="form">
+            <div className="flex gap-3 items-end flex-wrap">
                 <Select
                     label="Stat"
+                    className="flex-1 min-w-[8rem]"
                     value={selectedStat}
                     onChange={(value) => setSelectedStat(value as StatName)}
                     options={AVAILABLE_STATS.map((stat) => ({
@@ -95,33 +98,32 @@ export const StatPriorityForm: React.FC<Props> = ({
                     }))}
                     helpLabel="Set a stat priority to be met by the gear you equip. A min or max value is required."
                 />
-            </div>
-
-            <div className="space-y-2 grid grid-cols-2 gap-4 items-end">
                 {!hideMinLimit && (
-                    <Input
-                        label="Min"
-                        type="number"
-                        value={minLimit}
-                        onChange={(e) => setMinLimit(e.target.value)}
-                        placeholder="min value"
-                        helpLabel="Set a minimum value for the stat priority. The gear should have a value greater than or equal to this."
-                    />
+                    <div className="w-24">
+                        <Input
+                            label="Min"
+                            type="number"
+                            value={minLimit}
+                            onChange={(e) => setMinLimit(e.target.value)}
+                            placeholder="—"
+                        />
+                    </div>
                 )}
                 {!hideMaxLimit && (
-                    <Input
-                        label="Max"
-                        type="number"
-                        value={maxLimit}
-                        onChange={(e) => setMaxLimit(e.target.value)}
-                        placeholder="max value"
-                        helpLabel="Set a maximum value for the stat priority. The gear should have a value less than or equal to this."
-                    />
+                    <div className="w-24">
+                        <Input
+                            label="Max"
+                            type="number"
+                            value={maxLimit}
+                            onChange={(e) => setMaxLimit(e.target.value)}
+                            placeholder="—"
+                        />
+                    </div>
                 )}
             </div>
 
-            {(!hideMinLimit || !hideMaxLimit) && (
-                <div className="mt-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+                {limitsShown ? (
                     <div
                         ref={hardLabelRef}
                         onMouseEnter={() => setShowHardTooltip(true)}
@@ -137,41 +139,34 @@ export const StatPriorityForm: React.FC<Props> = ({
                             helpLabel="Force the optimizer to meet this limit. Unlike soft limits, hard requirements are must-meet — the optimizer will retry up to 5 times and fall back to the closest result if no combo can satisfy them."
                         />
                     </div>
-                    <Tooltip
-                        isVisible={showHardTooltip && hardRequirement}
-                        targetElement={hardLabelRef.current}
-                        className="bg-dark border border-dark-lighter p-2"
-                    >
-                        <p className="text-xs">
-                            Skip the entire suggestion if this stat target isn&apos;t reachable.
-                        </p>
-                    </Tooltip>
-                </div>
-            )}
-
-            <div className="grow mt-4">
+                ) : (
+                    <span />
+                )}
+                <Tooltip
+                    isVisible={showHardTooltip && hardRequirement}
+                    targetElement={hardLabelRef.current}
+                    className="bg-dark border border-dark-lighter p-2"
+                >
+                    <p className="text-xs">
+                        Skip the entire suggestion if this stat target isn&apos;t reachable.
+                    </p>
+                </Tooltip>
                 {editingValue ? (
                     <div className="flex gap-2">
-                        <Button
-                            aria-label="Save priority"
-                            type="submit"
-                            variant="primary"
-                            fullWidth
-                        >
-                            Save
-                        </Button>
                         <Button
                             aria-label="Cancel edit"
                             type="button"
                             variant="secondary"
-                            fullWidth
                             onClick={onCancel}
                         >
                             Cancel
                         </Button>
+                        <Button aria-label="Save priority" type="submit" variant="primary">
+                            Save
+                        </Button>
                     </div>
                 ) : (
-                    <Button aria-label="Add priority" type="submit" variant="secondary" fullWidth>
+                    <Button aria-label="Add priority" type="submit" variant="secondary">
                         Add
                     </Button>
                 )}
