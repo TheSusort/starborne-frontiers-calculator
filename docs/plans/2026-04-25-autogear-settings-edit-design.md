@@ -52,6 +52,7 @@ All other fields on the row are preserved untouched. The save calls the correspo
 - Numbers are styled with a dotted underline and `cursor-pointer` to communicate clickability.
 - The input that replaces the span uses the same font size as the row text and a fixed width sized to ~5 characters.
 - No "save" or "cancel" buttons — keyboard-driven only.
+- Out-of-range values (below `min` or above `max` props) revert rather than clamp — keeps the rule consistent with NaN handling.
 
 ### Implementation
 
@@ -77,7 +78,7 @@ Used by all three row components.
 
 ### Interaction
 
-Each row gets an **Edit** button placed between the row text and the existing **Remove** button: `[row text] [Edit] [Remove]`.
+Each row gets an **Edit** button placed between the row text and the existing **Remove** button: `[row text] [Edit] [Remove]`. The button uses `Button` from `src/components/ui/`, `variant="secondary"`, `size="sm"` to match the existing Remove button's footprint.
 
 Clicking Edit:
 
@@ -124,7 +125,7 @@ const statBonusFormRef = useRef<HTMLDivElement>(null);
 `startEdit(target)` helper:
 - sets `editTarget`
 - calls `onToggleSecondaryRequirements(true)` if currently false
-- calls `scrollIntoView` on the matching form ref (use `requestAnimationFrame` so the expand animation has started)
+- calls `scrollIntoView` on the matching form ref. Schedule the call via `requestAnimationFrame` so the expand animation has started; if a single rAF lands before `CollapsibleForm`'s transition settles, fall back to a `setTimeout` matching the transition duration (verify during implementation).
 
 Each list row gets an **Edit** button that calls `startEdit({ kind, index })`.
 
