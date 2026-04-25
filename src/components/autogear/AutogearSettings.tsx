@@ -187,7 +187,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddSetPriority,
     onUpdateSetPriority,
     onRemoveSetPriority,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onMoveSetPriority,
     onAddStatBonus,
     onUpdateStatBonus,
@@ -574,8 +573,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         editTarget?.kind === 'setPriority' &&
                                         editTarget.index === index
                                     }
+                                    canMoveUp={index > 0}
+                                    canMoveDown={index < setPriorities.length - 1}
                                     onUpdate={(updated) => onUpdateSetPriority(index, updated)}
                                     onEdit={() => startEdit({ kind: 'setPriority', index })}
+                                    onMoveUp={() => onMoveSetPriority(index, index - 1)}
+                                    onMoveDown={() => onMoveSetPriority(index, index + 1)}
                                     onRemove={() => {
                                         if (
                                             editTarget?.kind === 'setPriority' &&
