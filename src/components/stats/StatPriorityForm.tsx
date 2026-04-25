@@ -53,6 +53,12 @@ export const StatPriorityForm: React.FC<Props> = ({
             setMaxLimit(editingValue.maxLimit !== undefined ? String(editingValue.maxLimit) : '');
             setWeight(editingValue.weight ?? 1);
             setHardRequirement(editingValue.hardRequirement ?? false);
+        } else {
+            setSelectedStat(AVAILABLE_STATS[0]);
+            setMinLimit('');
+            setMaxLimit('');
+            setWeight(1);
+            setHardRequirement(false);
         }
     }, [editingValue]);
 
