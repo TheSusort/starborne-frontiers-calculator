@@ -1199,6 +1199,16 @@ export const AutogearPage: React.FC = () => {
                             });
                         }
                     }}
+                    onUpdatePriority={(index, priority) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                statPriorities: config.statPriorities.map((p, i) =>
+                                    i === index ? priority : p
+                                ),
+                            });
+                        }
+                    }}
                     onRemovePriority={(index) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);

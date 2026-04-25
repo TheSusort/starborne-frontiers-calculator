@@ -102,6 +102,7 @@ interface AutogearSettingsProps {
     onRoleSelect: (role: ShipTypeName) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
+    onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
@@ -185,6 +186,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     includeCalibratedGear,
     onRoleSelect,
     onAddPriority,
+    onUpdatePriority: _onUpdatePriority,
     onRemovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
