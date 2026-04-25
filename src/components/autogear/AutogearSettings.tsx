@@ -180,7 +180,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddPriority,
     onUpdatePriority,
     onRemovePriority,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onMovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
@@ -543,8 +542,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         editTarget?.kind === 'priority' &&
                                         editTarget.index === index
                                     }
+                                    canMoveUp={index > 0}
+                                    canMoveDown={index < priorities.length - 1}
                                     onUpdate={(updated) => onUpdatePriority(index, updated)}
                                     onEdit={() => startEdit({ kind: 'priority', index })}
+                                    onMoveUp={() => onMovePriority(index, index - 1)}
+                                    onMoveDown={() => onMovePriority(index, index + 1)}
                                     onRemove={() => {
                                         if (
                                             editTarget?.kind === 'priority' &&
