@@ -26,13 +26,8 @@ export const Tooltip: React.FC<Props> = ({
     className = '',
     targetElement,
 }) => {
-    const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
+    const [coords, setCoords] = useState({ left: 0, top: 0 });
     const tooltipRef = useRef<HTMLDivElement>(null);
-
-    // Reset coords when the tooltip is hidden so the next show starts uncommitted.
-    useEffect(() => {
-        if (!isVisible) setCoords(null);
-    }, [isVisible]);
 
     useEffect(() => {
         if (!isVisible || !tooltipRef.current) return;
@@ -89,16 +84,14 @@ export const Tooltip: React.FC<Props> = ({
 
     if (!isVisible) return null;
 
-    // Render hidden until coords are computed so the tooltip never flashes at (0,0).
     return createPortal(
         <div
             ref={tooltipRef}
             className={`pointer-events-auto ${className}`}
             style={{
                 position: 'fixed',
-                left: `${coords?.left ?? 0}px`,
-                top: `${coords?.top ?? 0}px`,
-                visibility: coords ? 'visible' : 'hidden',
+                left: `${coords.left}px`,
+                top: `${coords.top}px`,
             }}
         >
             {children}
