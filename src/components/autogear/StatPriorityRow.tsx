@@ -44,26 +44,30 @@ export const StatPriorityRow: React.FC<StatPriorityRowProps> = ({
     return (
         <div className={`flex items-center text-sm gap-2 ${isEditing ? 'opacity-60' : ''}`}>
             <div className="flex flex-col">
-                <Button
-                    aria-label="Move priority up"
-                    variant="secondary"
-                    size="xs"
-                    onClick={onMoveUp}
-                    disabled={!canMoveUp || isEditing}
-                    className="!p-0.5"
-                >
-                    <ChevronUpIcon className="w-3 h-3" />
-                </Button>
-                <Button
-                    aria-label="Move priority down"
-                    variant="secondary"
-                    size="xs"
-                    onClick={onMoveDown}
-                    disabled={!canMoveDown || isEditing}
-                    className="!p-0.5"
-                >
-                    <ChevronDownIcon className="w-3 h-3" />
-                </Button>
+                {canMoveUp && (
+                    <Button
+                        aria-label="Move priority up"
+                        variant="secondary"
+                        size="xs"
+                        onClick={onMoveUp}
+                        disabled={isEditing}
+                        className="!p-0.5"
+                    >
+                        <ChevronUpIcon className="w-3 h-3" />
+                    </Button>
+                )}
+                {canMoveDown && (
+                    <Button
+                        aria-label="Move priority down"
+                        variant="secondary"
+                        size="xs"
+                        onClick={onMoveDown}
+                        disabled={isEditing}
+                        className="!p-0.5"
+                    >
+                        <ChevronDownIcon className="w-3 h-3" />
+                    </Button>
+                )}
             </div>
             <span>
                 {STATS[priority.stat].label}
