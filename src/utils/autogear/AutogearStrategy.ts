@@ -1,11 +1,6 @@
 import type { Ship } from '../../types/ship';
 import type { GearPiece } from '../../types/gear';
-import type {
-    StatPriority,
-    GearSuggestion,
-    SetPriority,
-    StatBonus,
-} from '../../types/autogear';
+import type { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat, StatName } from '../../types/stats';
 
