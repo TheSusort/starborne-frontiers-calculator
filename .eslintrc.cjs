@@ -41,6 +41,7 @@ module.exports = {
         // React
         'react/prop-types': 'off',
         'react/display-name': 'off',
+        'react/no-danger': 'error',
 
         // Vite HMR
         'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
