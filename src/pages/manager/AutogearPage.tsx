@@ -1358,7 +1358,11 @@ export const AutogearPage: React.FC = () => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
                             updateShipConfig(shipSettings.id, {
-                                statPriorities: arrayMove(config.statPriorities, fromIndex, toIndex),
+                                statPriorities: arrayMove(
+                                    config.statPriorities,
+                                    fromIndex,
+                                    toIndex
+                                ),
                             });
                         }
                     }}

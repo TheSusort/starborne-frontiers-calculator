@@ -1,5 +1,12 @@
 import React from 'react';
-import { Button, ChevronUpIcon, ChevronDownIcon, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
+import {
+    Button,
+    ChevronUpIcon,
+    ChevronDownIcon,
+    CloseIcon,
+    EditIcon,
+    InlineNumberEdit,
+} from '../ui';
 import { SetPriority } from '../../types/autogear';
 import { GEAR_SETS } from '../../constants/gearSets';
 

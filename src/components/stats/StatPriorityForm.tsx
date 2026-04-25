@@ -165,7 +165,9 @@ export const StatPriorityForm: React.FC<Props> = ({
                         targetElement={hardLabelRef.current}
                         className="bg-dark border border-dark-lighter p-2"
                     >
-                        <p className="text-xs">Skip the entire suggestion if this stat target isn&apos;t reachable.</p>
+                        <p className="text-xs">
+                            Skip the entire suggestion if this stat target isn&apos;t reachable.
+                        </p>
                     </Tooltip>
                 </div>
             )}

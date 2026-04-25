@@ -1,5 +1,12 @@
 import React from 'react';
-import { Button, ChevronUpIcon, ChevronDownIcon, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
+import {
+    Button,
+    ChevronUpIcon,
+    ChevronDownIcon,
+    CloseIcon,
+    EditIcon,
+    InlineNumberEdit,
+} from '../ui';
 import { StatBonus } from '../../types/autogear';
 import { STATS } from '../../constants';
 import { StatName } from '../../types/stats';
