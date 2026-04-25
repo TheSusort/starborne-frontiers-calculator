@@ -383,7 +383,7 @@ export default defineConfig({
         reporters: ['verbose'],
         // Exclude the Playwright e2e workspace — those tests use @playwright/test,
         // not Vitest, and will fail if Vitest tries to execute them.
-        exclude: [...configDefaults.exclude, 'e2e/**'],
+        exclude: [...configDefaults.exclude, 'e2e/**', '.worktrees/**'],
         coverage: {
             reporter: ['text', 'json', 'html'],
             include: ['src/**/*'],
