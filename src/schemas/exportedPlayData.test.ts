@@ -18,7 +18,7 @@ describe('validateExportedPlayData', () => {
         const r = validateExportedPlayData({ Units: [], Equipment: [], Engineering: [] });
         expect(r.success).toBe(true);
     });
-    it('accepts equipment with null CalibrationLevel from game export', () => {
+    it('accepts equipment with null calibration fields (uncalibrated gear)', () => {
         const r = validateExportedPlayData({
             Units: [],
             Equipment: [
@@ -33,6 +33,29 @@ describe('validateExportedPlayData', () => {
                     Locked: false,
                     CalibratedForUnitId: null,
                     CalibrationLevel: null,
+                    MainStats: [],
+                    SubStats: [],
+                },
+            ],
+            Engineering: [],
+        });
+        expect(r.success).toBe(true);
+    });
+    it('accepts equipment with populated calibration fields', () => {
+        const r = validateExportedPlayData({
+            Units: [],
+            Equipment: [
+                {
+                    Id: 'gear-1',
+                    EquippedOnUnit: null,
+                    Slot: 'Weapon',
+                    Level: 1,
+                    Rank: 1,
+                    Set: 'Resilience',
+                    Rarity: 'Common',
+                    Locked: false,
+                    CalibratedForUnitId: '11111111-1111-1111-1111-111111111111',
+                    CalibrationLevel: 3,
                     MainStats: [],
                     SubStats: [],
                 },

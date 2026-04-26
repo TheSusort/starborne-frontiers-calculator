@@ -60,6 +60,8 @@ export const makeGearItem = (
     Set: 'Attack',
     Rarity: 'Epic',
     Locked: false,
+    CalibratedForUnitId: null,
+    CalibrationLevel: null,
     MainStats: [{ Level: 16, Attribute: { Attribute: 'Power', Type: 'Flat', Value: 1000 } }],
     SubStats: [
         { Level: 1, Attribute: { Attribute: 'HullPoints', Type: 'Flat', Value: 500 } },
@@ -80,6 +82,8 @@ export const makeImplantItem = (
     Set: 'Implant_Minor_Alpha_Power_Perc',
     Rarity: 'Epic',
     Locked: false,
+    CalibratedForUnitId: null,
+    CalibrationLevel: null,
     MainStats: [{ Level: 1, Attribute: { Attribute: 'Power', Type: 'Percentage', Value: 0.1 } }],
     SubStats: [],
     ...overrides,

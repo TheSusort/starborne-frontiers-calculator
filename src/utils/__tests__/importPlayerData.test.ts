@@ -292,22 +292,6 @@ describe('importPlayerData', () => {
             expect(gearPiece!.calibration).toBeUndefined();
         });
 
-        it('ignores undefined CalibratedForUnitId', async () => {
-            const gear = makeGearItem({ Id: 'gear-1' });
-            // CalibratedForUnitId not set at all (undefined)
-
-            const result = await importPlayerData(
-                makeExportData({
-                    Units: [makeUnit({ Id: 'ship-1' })],
-                    Equipment: [gear],
-                })
-            );
-
-            expect(result.success).toBe(true);
-            const gearPiece = result.data!.inventory.find((i) => i.id === 'gear-1');
-            expect(gearPiece!.calibration).toBeUndefined();
-        });
-
         it('preserves calibration on gear not equipped to any ship', async () => {
             const unit = makeUnit({ Id: 'ship-1' });
             const gear = makeGearItem({

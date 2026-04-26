@@ -80,8 +80,8 @@ export interface ExportedPlayData {
         Set: string;
         Rarity: string;
         Locked: boolean;
-        CalibratedForUnitId?: string | null;
-        CalibrationLevel?: number;
+        CalibratedForUnitId: string | null;
+        CalibrationLevel: number | null;
         MainStats: Array<{
             Level: number;
             Attribute: { Attribute: string; Type: string; Value: number };
