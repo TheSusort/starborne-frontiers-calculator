@@ -18,4 +18,27 @@ describe('validateExportedPlayData', () => {
         const r = validateExportedPlayData({ Units: [], Equipment: [], Engineering: [] });
         expect(r.success).toBe(true);
     });
+    it('accepts equipment with null CalibrationLevel from game export', () => {
+        const r = validateExportedPlayData({
+            Units: [],
+            Equipment: [
+                {
+                    Id: 'gear-1',
+                    EquippedOnUnit: null,
+                    Slot: 'Weapon',
+                    Level: 1,
+                    Rank: 1,
+                    Set: 'Resilience',
+                    Rarity: 'Common',
+                    Locked: false,
+                    CalibratedForUnitId: null,
+                    CalibrationLevel: null,
+                    MainStats: [],
+                    SubStats: [],
+                },
+            ],
+            Engineering: [],
+        });
+        expect(r.success).toBe(true);
+    });
 });

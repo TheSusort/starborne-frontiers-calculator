@@ -70,7 +70,6 @@ const equipmentSchema = z
         Rarity: z.string(),
         Locked: z.boolean(),
         CalibratedForUnitId: z.string().nullable().optional(),
-        CalibrationLevel: z.number().optional(),
         MainStats: z.array(statEntrySchema),
         SubStats: z.array(statEntrySchema),
     })
