@@ -59,7 +59,7 @@ export function useStatisticsSnapshot({
     const currentMonth = getFirstDayOfMonth(new Date());
     const previousMonth = getPreviousMonth(currentMonth);
 
-    // Load snapshot list and auto-create current month snapshot
+    // Load snapshot list and auto-create previous month snapshot on first visit of a new month
     useEffect(() => {
         if (!activeProfileId || !allContextsLoaded) return;
 
@@ -70,10 +70,11 @@ export function useStatisticsSnapshot({
             const list = await getSnapshotList(activeProfileId);
             setSnapshots(list);
 
-            // Auto-create current month snapshot if missing and user has data
-            const hasCurrentMonth = list.some((s) => s.snapshotMonth === currentMonth);
+            // On first visit of a new month, snapshot the previous month if not already saved.
+            // This captures the state at the month boundary and is immediately visible for comparison.
+            const hasPreviousMonthSnapshot = list.some((s) => s.snapshotMonth === previousMonth);
             if (
-                !hasCurrentMonth &&
+                !hasPreviousMonthSnapshot &&
                 !snapshotCreatedRef.current &&
                 (ships.length > 0 || gear.length > 0)
             ) {
@@ -83,27 +84,21 @@ export function useStatisticsSnapshot({
                 const implantsStats = calculateImplantStatistics(implants, ships);
                 const engStats = calculateEngineeringStatistics(engineeringStats);
 
-                await createSnapshot(activeProfileId, currentMonth, {
+                await createSnapshot(activeProfileId, previousMonth, {
                     shipsStats,
                     gearStats,
                     implantsStats,
                     engineeringStats: engStats,
                 });
 
-                // Refresh list after creating
                 const updatedList = await getSnapshotList(activeProfileId);
                 setSnapshots(updatedList);
             }
 
-            // Auto-select previous month if available
             const finalList = snapshotCreatedRef.current
                 ? await getSnapshotList(activeProfileId)
                 : list;
             setSnapshots(finalList);
-            const hasPreviousMonth = finalList.some((s) => s.snapshotMonth === previousMonth);
-            if (hasPreviousMonth) {
-                setSelectedMonth(previousMonth);
-            }
 
             setLoading(false);
         };

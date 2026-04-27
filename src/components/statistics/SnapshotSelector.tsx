@@ -29,8 +29,7 @@ export const SnapshotSelector: React.FC<SnapshotSelectorProps> = ({
         );
     }
 
-    const currentMonth = new Date();
-    const currentMonthStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`;
+    const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
 
     const options = [
         { value: 'none', label: 'No comparison' },

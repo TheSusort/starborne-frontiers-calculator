@@ -45,6 +45,15 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             setStars(editingPiece.stars);
             setSetBonus(editingPiece.setBonus || 'FORTITUDE');
             setLevel(editingPiece.level);
+        } else {
+            setShowAllFields(false);
+            setSlot('weapon');
+            setMainStat({ name: 'attack', value: 0, type: 'flat' } as Stat);
+            setSubStats([]);
+            setRarity('rare');
+            setStars(1);
+            setSetBonus('FORTITUDE');
+            setLevel(0);
         }
     }, [editingPiece]);
 
@@ -77,6 +86,23 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             }));
         }
     }, [stars, level, mainStat.name, mainStat.type, mainStat.value]);
+
+    // Auto-add one empty substat slot when editing in compact mode and a slot is available.
+    useEffect(() => {
+        if (!editingPiece || showAllFields) return;
+        const max = getMaxSubstatsForLevel(rarity, level);
+        const existingCount = editingPiece.subStats.length;
+        setSubStats((prev) => {
+            if (prev.length >= max) return prev;
+            // Don't add a second pending slot if one already exists
+            if (prev.slice(existingCount).some((s) => s.value === 0)) return prev;
+            const firstStat = Object.keys(STATS)[0] as StatName;
+            return [
+                ...prev,
+                { name: firstStat, value: 0, type: STATS[firstStat].allowedTypes[0] } as Stat,
+            ];
+        });
+    }, [editingPiece, showAllFields, level, rarity]);
 
     const handleMainStatChange = useCallback(
         (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
@@ -127,11 +153,17 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             return subStat;
         });
 
+        // Drop any zero-value substats that were auto-added but never filled in
+        const existingSubstatCount = editingPiece?.subStats.length ?? 0;
+        const filteredSubStats = validatedSubStats.filter(
+            (s, i) => i < existingSubstatCount || s.value !== 0
+        );
+
         const piece = {
             id: editingPiece?.id,
             slot,
             mainStat,
-            subStats: validatedSubStats as Stat[], // Use validated substats
+            subStats: filteredSubStats as Stat[],
             setBonus,
             stars,
             rarity,
@@ -165,60 +197,71 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     }));
 
     return (
-        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6 card">
+        <form
+            onSubmit={(e) => void handleSubmit(e)}
+            className={`bg-dark border p-4 ${RARITIES[rarity].borderColor} ${editingPiece && !showAllFields ? 'space-y-4 max-w-[400px] mx-auto w-full' : 'space-y-6'}`}
+        >
             {editingPiece && !showAllFields ? (
                 <>
-                    {/* Zone 1: read-only summary of locked fields */}
-                    <div className="flex flex-wrap items-center justify-between gap-y-2 pb-4 border-b border-dark-border">
-                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-                            <span className="text-theme-text-secondary">
-                                {GEAR_SLOTS[slot].label}
-                            </span>
-                            <span className="text-yellow-400">★ {stars}</span>
-                            <span className="text-theme-text-secondary capitalize">
-                                {RARITIES[rarity].label}
-                            </span>
-                            <span className="text-theme-text-secondary">
-                                {GEAR_SETS[setBonus].name}
-                            </span>
+                    {/* Card-style header — flush to the form border edges */}
+                    <div
+                        className={`-mx-4 -mt-4 px-4 py-3 border-b ${RARITIES[rarity].borderColor} flex justify-between items-start`}
+                    >
+                        <div>
+                            <div className="flex items-center gap-2">
+                                {GEAR_SETS[setBonus]?.iconUrl && (
+                                    <img
+                                        src={GEAR_SETS[setBonus].iconUrl}
+                                        alt={GEAR_SETS[setBonus].name}
+                                        className="w-5"
+                                    />
+                                )}
+                                <span className="font-secondary text-sm">
+                                    {GEAR_SETS[setBonus]?.name} {GEAR_SLOTS[slot].label}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-3 text-sm mt-1.5">
+                                <span className="text-yellow-400">★ {stars}</span>
+                                <span className="text-theme-text-secondary flex items-center gap-1.5">
+                                    Lvl
+                                    <div className="w-14 shrink-0">
+                                        <Input
+                                            type="number"
+                                            value={level}
+                                            min={0}
+                                            max={16}
+                                            className="!h-6 !py-0 !px-1 text-sm text-center"
+                                            onChange={(e) =>
+                                                setLevel(
+                                                    Math.min(
+                                                        16,
+                                                        Math.max(0, Number(e.target.value))
+                                                    )
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                </span>
+                            </div>
                         </div>
                         <Button
                             variant="secondary"
-                            size="xs"
+                            size="sm"
                             type="button"
                             onClick={() => setShowAllFields(true)}
                         >
-                            Edit all
+                            Full Edit
                         </Button>
                     </div>
 
-                    {/* Zone 2: level + auto-calculated main stat value */}
-                    <div className="flex items-end gap-8">
-                        <Input
-                            type="number"
-                            label="Level"
-                            value={level}
-                            min={0}
-                            max={16}
-                            className="w-20"
-                            onChange={(e) =>
-                                setLevel(Math.min(16, Math.max(0, Number(e.target.value))))
-                            }
-                        />
-                        <div className="pb-0.5">
-                            <span className="text-xs text-theme-text-secondary block mb-1">
-                                Main Stat
-                            </span>
-                            <span className="text-2xl font-bold">
+                    {/* Main stat — card body style */}
+                    <div>
+                        <div className="text-xs text-theme-text-secondary mb-1.5">Main Stat</div>
+                        <div className="flex justify-between items-center text-sm bg-dark-lighter px-3 py-2">
+                            <span>{STATS[mainStat.name].label}</span>
+                            <span className="font-medium">
                                 {mainStat.value}
-                                {mainStat.type === 'percentage' && (
-                                    <span className="text-base font-normal text-theme-text-secondary">
-                                        %
-                                    </span>
-                                )}
-                                <span className="text-base font-normal text-theme-text-secondary ml-1.5">
-                                    {STATS[mainStat.name].label}
-                                </span>
+                                {mainStat.type === 'percentage' ? '%' : ''}
                             </span>
                         </div>
                     </div>
@@ -307,8 +350,16 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             )}
 
             {/* Sub Stats Section */}
-            <div className="space-y-4">
-                <h4 className="text-sm font-medium">Sub Stats</h4>
+            <div className="space-y-2">
+                <h4
+                    className={
+                        editingPiece && !showAllFields
+                            ? 'text-xs text-theme-text-secondary'
+                            : 'text-sm font-medium'
+                    }
+                >
+                    Sub Stats
+                </h4>
                 <StatModifierInput
                     stats={subStats}
                     onChange={setSubStats}
@@ -319,11 +370,12 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     existingCount={
                         editingPiece && !showAllFields ? editingPiece.subStats.length : undefined
                     }
+                    compact={editingPiece !== undefined && !showAllFields}
                 />
             </div>
 
             {/* Submit Button */}
-            <div className="flex justify-end pt-4">
+            <div className="flex justify-end pt-2">
                 <Button
                     aria-label={editingPiece ? 'Save gear piece' : 'Add gear piece'}
                     type="submit"

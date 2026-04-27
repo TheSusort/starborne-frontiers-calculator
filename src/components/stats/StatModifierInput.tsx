@@ -12,9 +12,11 @@ interface Props {
     excludedStats?: Array<{ name: StatName; type: StatType }>;
     alwaysColumn?: boolean;
     defaultExpanded?: boolean;
-    // Stats at indices 0..existingCount-1 are treated as existing (locked type, no remove button).
-    // Stats at indices existingCount.. are newly added (editable type, removable).
+    // Stats at indices 0..existingCount-1 are treated as existing (locked name/type, no remove button).
+    // Stats at indices existingCount.. are newly added (editable, removable).
     existingCount?: number;
+    // Renders each stat row inline like a card stat line instead of a full grid form.
+    compact?: boolean;
 }
 
 const StatSummary: React.FC<{ stat: Stat }> = ({ stat }) => {
@@ -38,6 +40,7 @@ export const StatModifierInput: React.FC<Props> = ({
     alwaysColumn = false,
     defaultExpanded = true,
     existingCount,
+    compact = false,
 }) => {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -144,6 +147,104 @@ export const StatModifierInput: React.FC<Props> = ({
         );
     }
 
+    if (compact) {
+        return (
+            <div className="space-y-2">
+                {stats.map((stat, index) => {
+                    const isExisting = existingCount !== undefined && index < existingCount;
+                    const typeOptions =
+                        statOptions.find((o) => o.value === stat.name)?.allowedTypes || [];
+                    const hasMultipleTypes = typeOptions.length > 1;
+
+                    if (isExisting) {
+                        return (
+                            <div
+                                key={index}
+                                className="flex items-center h-10 bg-dark-lighter border border-dark-border focus-within:ring-2 focus-within:ring-primary focus-within:border-primary"
+                            >
+                                <span className="px-3 text-sm text-theme-text-secondary shrink-0 select-none">
+                                    {STATS[stat.name].label}
+                                </span>
+                                <div className="self-stretch w-px bg-dark-border shrink-0" />
+                                <input
+                                    type="number"
+                                    value={stat.value}
+                                    onChange={(e) =>
+                                        handleStatChange(index, 'value', e.target.value)
+                                    }
+                                    className="flex-1 bg-transparent px-3 text-sm text-right focus:outline-none min-w-0"
+                                />
+                                <span className="pr-3 text-sm text-theme-text-secondary select-none w-6 text-right">
+                                    {stat.type === 'percentage' ? '%' : ''}
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div key={index} className="flex items-center gap-2">
+                            <div className="shrink-0" style={{ minWidth: '8rem' }}>
+                                <Select
+                                    value={stat.name}
+                                    onChange={(value) =>
+                                        handleStatChange(index, 'name', value as StatName)
+                                    }
+                                    options={statOptions}
+                                />
+                            </div>
+                            <div className="flex items-center flex-1 h-10 bg-dark-lighter border border-dark-border focus-within:ring-2 focus-within:ring-primary min-w-0">
+                                <input
+                                    type="number"
+                                    value={stat.value}
+                                    onChange={(e) =>
+                                        handleStatChange(index, 'value', e.target.value)
+                                    }
+                                    className="flex-1 bg-transparent px-3 text-sm text-right focus:outline-none min-w-0"
+                                />
+                                {!hasMultipleTypes && (
+                                    <span className="pr-3 text-sm text-theme-text-secondary select-none w-6 text-right">
+                                        {stat.type === 'percentage' ? '%' : ''}
+                                    </span>
+                                )}
+                            </div>
+                            {hasMultipleTypes && (
+                                <div className="shrink-0 w-28">
+                                    <Select
+                                        value={stat.type}
+                                        onChange={(value) =>
+                                            handleStatChange(index, 'type', value as StatType)
+                                        }
+                                        options={typeOptions}
+                                    />
+                                </div>
+                            )}
+                            <Button
+                                aria-label="Remove stat"
+                                variant="secondary"
+                                size="sm"
+                                className="!h-10 shrink-0"
+                                onClick={() => removeStat(index)}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        </div>
+                    );
+                })}
+                {(!maxStats || stats.length < maxStats) && (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={addStat}
+                        type="button"
+                        aria-label="Add stat"
+                    >
+                        Add Stat
+                    </Button>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
             {stats.map((stat, index) => {
@@ -155,15 +256,26 @@ export const StatModifierInput: React.FC<Props> = ({
                                 alwaysColumn ? '' : 'md:grid-cols-3'
                             } gap-4 items-end w-full`}
                         >
-                            <Select
-                                label="Stat"
-                                value={stat.name}
-                                onChange={(value) =>
-                                    handleStatChange(index, 'name', value as StatName)
-                                }
-                                options={statOptions}
-                                className="w-full"
-                            />
+                            {isExisting ? (
+                                <div>
+                                    <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
+                                        Stat
+                                    </span>
+                                    <span className="text-sm text-theme-text-secondary">
+                                        {STATS[stat.name].label}
+                                    </span>
+                                </div>
+                            ) : (
+                                <Select
+                                    label="Stat"
+                                    value={stat.name}
+                                    onChange={(value) =>
+                                        handleStatChange(index, 'name', value as StatName)
+                                    }
+                                    options={statOptions}
+                                    className="w-full"
+                                />
+                            )}
                             <Input
                                 type="number"
                                 label="Value"

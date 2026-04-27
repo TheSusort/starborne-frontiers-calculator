@@ -142,7 +142,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const setChartData = previousStats
         ? mergeDistributions(
               setCurrentData,
-              previousStats.bySet
+              (previousStats.bySet ?? [])
                   .slice(0, 10)
                   .map((s) => ({ name: getSetLabel(s.setName), value: s.count }))
           )
@@ -155,7 +155,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const mainStatChartData = previousStats
         ? mergeDistributions(
               mainStatCurrentData,
-              previousStats.byMainStat.slice(0, 10).map((s) => ({
+              (previousStats.byMainStat ?? []).slice(0, 10).map((s) => ({
                   name: formatMainStat(s.statName, s.statType),
                   value: s.count,
               }))
@@ -173,7 +173,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const rarityBarData = previousStats
         ? mergeDistributions(
               rarityCurrentData,
-              previousStats.byRarity
+              (previousStats.byRarity ?? [])
                   .slice()
                   .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
                   .map((r) => ({
@@ -190,7 +190,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const starChartData = previousStats
         ? mergeDistributions(
               starCurrentData,
-              previousStats.byStarLevel.map((s) => ({
+              (previousStats.byStarLevel ?? []).map((s) => ({
                   name: String(s.stars) + ' ★',
                   value: s.count,
               }))
@@ -201,7 +201,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const levelChartData = previousStats
         ? mergeDistributions(
               levelCurrentData,
-              previousStats.byLevel.map((l) => ({ name: l.range, value: l.count }))
+              (previousStats.byLevel ?? []).map((l) => ({ name: l.range, value: l.count }))
           )
         : levelCurrentData;
 
@@ -212,7 +212,10 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const slotChartData = previousStats
         ? mergeDistributions(
               slotCurrentData,
-              previousStats.bySlot.map((s) => ({ name: getSlotLabel(s.slot), value: s.count }))
+              (previousStats.bySlot ?? []).map((s) => ({
+                  name: getSlotLabel(s.slot),
+                  value: s.count,
+              }))
           )
         : slotCurrentData;
 
@@ -365,13 +368,15 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                     value={stats.equippedCount}
                     subtitle={`${stats.equippedPercentage.toFixed(1)}%`}
                     color="green"
-                    previousValue={previousStats?.equippedPercentage}
+                    previousValue={previousStats?.equippedCount}
                 />
                 <StatCard
                     title="Unequipped"
                     value={stats.unequippedCount}
                     subtitle={`${stats.unequippedPercentage.toFixed(1)}%`}
                     color="yellow"
+                    previousValue={previousStats?.unequippedCount}
+                    positiveDirection="down"
                 />
                 <StatCard
                     title="Avg Level"
