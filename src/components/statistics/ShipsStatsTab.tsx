@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
 import { ShipTypeName, SHIP_TYPES, FACTIONS } from '../../constants';
-import { RarityName } from '../../constants/rarities';
+import { RarityName, RARITY_ORDER } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
 import { BaseChart, ChartTooltip } from '../ui/charts';
@@ -40,11 +40,11 @@ const getRoleColor = (name: string) => {
 };
 
 const RARITY_COLORS: Record<string, string> = {
-    common: '#9ca3af', // gray
-    uncommon: '#22c55e', // green
-    rare: '#3b82f6', // blue
-    epic: '#a855f7', // purple
-    legendary: '#f97316', // orange
+    common: '#d1d5db',
+    uncommon: '#a3e635',
+    rare: '#3b82f6',
+    epic: '#a855f7',
+    legendary: '#f59e0b',
 };
 
 export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousStats }) => {
@@ -61,11 +61,14 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
     }, [filteredShips]);
 
     // Prepare data for charts
-    const rarityChartData = stats.byRarity.map((r) => ({
-        name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
-        value: r.count,
-        percentage: r.percentage.toFixed(1),
-    }));
+    const rarityChartData = stats.byRarity
+        .slice()
+        .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
+        .map((r) => ({
+            name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+            value: r.count,
+            percentage: r.percentage.toFixed(1),
+        }));
 
     const getRoleLabel = (role: string) => SHIP_TYPES[role]?.name || role;
     const roleCurrentData = stats.byRole.map((r) => ({
@@ -75,7 +78,10 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
     const roleChartData = previousStats
         ? mergeDistributions(
               roleCurrentData,
-              previousStats.byRole.map((r) => ({ name: getRoleLabel(r.role), value: r.count }))
+              (previousStats.byRole ?? []).map((r) => ({
+                  name: getRoleLabel(r.role),
+                  value: r.count,
+              }))
           )
         : stats.byRole.map((r) => ({
               name: getRoleLabel(r.role),
@@ -87,9 +93,19 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
     const levelChartData = previousStats
         ? mergeDistributions(
               levelCurrentData,
-              previousStats.levels.map((l) => ({ name: l.range, value: l.count }))
+              (previousStats.levels ?? []).map((l) => ({ name: l.range, value: l.count }))
           )
         : stats.levels;
+
+    const rarityBarData = previousStats
+        ? mergeDistributions(
+              rarityChartData,
+              (previousStats.byRarity ?? []).map((r) => ({
+                  name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+                  value: r.count,
+              }))
+          )
+        : rarityChartData;
 
     const refitsCurrentData = stats.refits.byRarity.map((r) => ({
         name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
@@ -98,7 +114,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
     const refitsByRarityData = previousStats
         ? mergeDistributions(
               refitsCurrentData,
-              previousStats.refits.byRarity.map((r) => ({
+              (previousStats.refits?.byRarity ?? []).map((r) => ({
                   name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
                   value: r.count,
               }))
@@ -216,15 +232,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                     <h3 className="text-lg font-semibold mb-4">Rarity Distribution</h3>
                     <BaseChart height={300}>
                         {previousStats ? (
-                            <BarChart
-                                data={mergeDistributions(
-                                    rarityChartData,
-                                    previousStats.byRarity.map((r) => ({
-                                        name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
-                                        value: r.count,
-                                    }))
-                                )}
-                            >
+                            <BarChart data={rarityBarData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                                 <XAxis dataKey="name" stroke={colors.axisStroke} />
                                 <YAxis stroke={colors.axisStroke} />
@@ -232,8 +240,27 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                                     content={<ChartTooltip />}
                                     cursor={{ fill: 'transparent' }}
                                 />
-                                <Bar dataKey="current" fill="#3b82f6" name="Current" />
-                                <Bar dataKey="previous" fill="#3b82f666" name="Previous" />
+                                <Bar dataKey="current" name="Current">
+                                    {rarityBarData.map((entry, index) => (
+                                        <Cell
+                                            key={`current-${index}`}
+                                            fill={
+                                                RARITY_COLORS[entry.name.toLowerCase()] || '#3b82f6'
+                                            }
+                                        />
+                                    ))}
+                                </Bar>
+                                <Bar dataKey="previous" name="Previous">
+                                    {rarityBarData.map((entry, index) => (
+                                        <Cell
+                                            key={`previous-${index}`}
+                                            fill={
+                                                (RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                    '#3b82f6') + '66'
+                                            }
+                                        />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         ) : (
                             <PieChart>

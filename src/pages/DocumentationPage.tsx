@@ -772,7 +772,25 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         <span className="text-primary">Edit:</span> Modify gear
-                                        details (not available for implants)
+                                        details (not available for implants). Edit mode uses a
+                                        compact layout — slot, stars, rarity, set, and main stat
+                                        type are locked and shown as a read-only summary. Only level
+                                        and substats are editable:
+                                        <ul className="list-disc pl-4 mt-1">
+                                            <li>
+                                                <span className="text-primary">Level:</span>{' '}
+                                                Adjusting the level automatically recalculates the
+                                                main stat value from the game&apos;s lookup table.
+                                            </li>
+                                            <li>
+                                                <span className="text-primary">Substats:</span> The
+                                                number of substat slots available depends on rarity
+                                                and level. Rare gear unlocks a third slot at level
+                                                12 and a fourth at level 16. Epic gear unlocks a
+                                                fourth slot at level 16. Legendary gear starts with
+                                                all four slots available.
+                                            </li>
+                                        </ul>
                                     </li>
                                     <li>
                                         <span className="text-primary">Remove:</span> Delete the

@@ -12,6 +12,11 @@ interface Props {
     excludedStats?: Array<{ name: StatName; type: StatType }>;
     alwaysColumn?: boolean;
     defaultExpanded?: boolean;
+    // Stats at indices 0..existingCount-1 are treated as existing (locked name/type, no remove button).
+    // Stats at indices existingCount.. are newly added (editable, removable).
+    existingCount?: number;
+    // Renders each stat row inline like a card stat line instead of a full grid form.
+    compact?: boolean;
 }
 
 const StatSummary: React.FC<{ stat: Stat }> = ({ stat }) => {
@@ -34,6 +39,8 @@ export const StatModifierInput: React.FC<Props> = ({
     excludedStats = [],
     alwaysColumn = false,
     defaultExpanded = true,
+    existingCount,
+    compact = false,
 }) => {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -42,12 +49,10 @@ export const StatModifierInput: React.FC<Props> = ({
         const currentStat = newStats[index];
 
         if (field === 'name') {
-            // Get allowed types for the new stat name
             const allowedTypes =
                 allowedStats?.[value as StatName]?.allowedTypes ||
                 STATS[value as StatName].allowedTypes;
 
-            // Filter out excluded types for this stat name
             const validTypes = allowedTypes.filter(
                 (type) =>
                     !excludedStats?.some(
@@ -55,16 +60,12 @@ export const StatModifierInput: React.FC<Props> = ({
                     )
             );
 
-            // Use the first valid type
-            const defaultType = validTypes[0];
-
             newStats[index] = {
                 ...currentStat,
                 name: value,
-                type: defaultType,
+                type: validTypes[0],
             } as Stat;
         } else if (field === 'type') {
-            // Check if the new type would create an excluded combination
             const isExcluded = excludedStats?.some(
                 (excluded) => excluded.name === currentStat.name && excluded.type === value
             );
@@ -75,7 +76,6 @@ export const StatModifierInput: React.FC<Props> = ({
                     type: value,
                 } as Stat;
             }
-            // If excluded, don't update the type
         } else {
             newStats[index] = {
                 ...currentStat,
@@ -91,30 +91,19 @@ export const StatModifierInput: React.FC<Props> = ({
             const firstStat = Object.keys(allowedStats || STATS)[0] as StatName;
             const firstType = (allowedStats?.[firstStat]?.allowedTypes || ['flat'])[0];
 
-            const newStat = {
-                name: firstStat,
-                type: firstType,
-                value: 0,
-            } as Stat; // Type assertion to Stat
-
-            onChange([...stats, newStat]);
+            onChange([...stats, { name: firstStat, type: firstType, value: 0 } as Stat]);
         }
     };
 
     const removeStat = (index: number) => {
-        const newStats = stats.filter((_, i) => i !== index);
-        onChange(newStats);
+        onChange(stats.filter((_, i) => i !== index));
     };
 
-    // Filter out stats that don't have allowed types, match excluded stats, or are healModifier
     const statOptions = Object.entries(allowedStats || STATS)
-        .filter(
-            ([key, value]) => value.allowedTypes?.length && key !== 'healModifier' // Exclude healModifier
-        )
+        .filter(([key, value]) => value.allowedTypes?.length && key !== 'healModifier')
         .map(([key, value]) => {
             const allowedTypesForStat = value.allowedTypes?.filter(
                 (type) =>
-                    // Filter out types that match excluded stats
                     !excludedStats.some(
                         (excluded) => excluded.name === key && excluded.type === type
                     )
@@ -129,7 +118,6 @@ export const StatModifierInput: React.FC<Props> = ({
                 })),
             };
         })
-        // Only include stats that have at least one allowed type after filtering
         .filter((stat) => stat.allowedTypes && stat.allowedTypes.length > 0);
 
     if (!isExpanded) {
@@ -159,51 +147,180 @@ export const StatModifierInput: React.FC<Props> = ({
         );
     }
 
-    return (
-        <div className="space-y-4 me-12">
-            {stats.map((stat, index) => (
-                <div key={index} className="flex gap-4 items-end w-full">
-                    <div
-                        className={`grid grid-cols-1 ${
-                            alwaysColumn ? '' : 'md:grid-cols-3'
-                        } gap-4 items-end w-full`}
-                    >
-                        <Select
-                            label="Stat"
-                            value={stat.name}
-                            onChange={(value) => handleStatChange(index, 'name', value as StatName)}
-                            options={statOptions}
-                            className="w-full"
-                        />
-                        <Input
-                            type="number"
-                            label="Value"
-                            value={stat.value}
-                            onChange={(e) => handleStatChange(index, 'value', e.target.value)}
-                            className="w-full"
-                        />
-                        <Select
-                            label="Type"
-                            value={stat.type}
-                            onChange={(value) => handleStatChange(index, 'type', value as StatType)}
-                            options={
-                                statOptions.find((option) => option.value === stat.name)
-                                    ?.allowedTypes || []
-                            }
-                            className="w-full"
-                        />
-                    </div>
+    if (compact) {
+        return (
+            <div className="space-y-2">
+                {stats.map((stat, index) => {
+                    const isExisting = existingCount !== undefined && index < existingCount;
+                    const typeOptions =
+                        statOptions.find((o) => o.value === stat.name)?.allowedTypes || [];
+                    const hasMultipleTypes = typeOptions.length > 1;
+
+                    if (isExisting) {
+                        return (
+                            <div
+                                key={index}
+                                className="flex items-center h-10 bg-dark-lighter border border-dark-border focus-within:ring-2 focus-within:ring-primary focus-within:border-primary"
+                            >
+                                <span className="px-3 text-sm text-theme-text-secondary shrink-0 select-none">
+                                    {STATS[stat.name].label}
+                                </span>
+                                <div className="self-stretch w-px bg-dark-border shrink-0" />
+                                <input
+                                    type="number"
+                                    value={stat.value}
+                                    onChange={(e) =>
+                                        handleStatChange(index, 'value', e.target.value)
+                                    }
+                                    className="flex-1 bg-transparent px-3 text-sm text-right focus:outline-none min-w-0"
+                                />
+                                <span className="pr-3 text-sm text-theme-text-secondary select-none w-6 text-right">
+                                    {stat.type === 'percentage' ? '%' : ''}
+                                </span>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div key={index} className="flex items-center gap-2">
+                            <div className="shrink-0" style={{ minWidth: '8rem' }}>
+                                <Select
+                                    value={stat.name}
+                                    onChange={(value) =>
+                                        handleStatChange(index, 'name', value as StatName)
+                                    }
+                                    options={statOptions}
+                                />
+                            </div>
+                            <div className="flex items-center flex-1 h-10 bg-dark-lighter border border-dark-border focus-within:ring-2 focus-within:ring-primary min-w-0">
+                                <input
+                                    type="number"
+                                    value={stat.value}
+                                    onChange={(e) =>
+                                        handleStatChange(index, 'value', e.target.value)
+                                    }
+                                    className="flex-1 bg-transparent px-3 text-sm text-right focus:outline-none min-w-0"
+                                />
+                                {!hasMultipleTypes && (
+                                    <span className="pr-3 text-sm text-theme-text-secondary select-none w-6 text-right">
+                                        {stat.type === 'percentage' ? '%' : ''}
+                                    </span>
+                                )}
+                            </div>
+                            {hasMultipleTypes && (
+                                <div className="shrink-0 w-28">
+                                    <Select
+                                        value={stat.type}
+                                        onChange={(value) =>
+                                            handleStatChange(index, 'type', value as StatType)
+                                        }
+                                        options={typeOptions}
+                                    />
+                                </div>
+                            )}
+                            <Button
+                                aria-label="Remove stat"
+                                variant="secondary"
+                                size="sm"
+                                className="!h-10 shrink-0"
+                                onClick={() => removeStat(index)}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        </div>
+                    );
+                })}
+                {(!maxStats || stats.length < maxStats) && (
                     <Button
-                        aria-label="Remove stat"
                         variant="secondary"
                         size="sm"
-                        className="!h-10"
-                        onClick={() => removeStat(index)}
+                        onClick={addStat}
+                        type="button"
+                        aria-label="Add stat"
                     >
-                        <CloseIcon />
+                        Add Stat
                     </Button>
-                </div>
-            ))}
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {stats.map((stat, index) => {
+                const isExisting = existingCount !== undefined && index < existingCount;
+                return (
+                    <div key={index} className="flex gap-4 items-end w-full">
+                        <div
+                            className={`grid grid-cols-1 ${
+                                alwaysColumn ? '' : 'md:grid-cols-3'
+                            } gap-4 items-end w-full`}
+                        >
+                            {isExisting ? (
+                                <div>
+                                    <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
+                                        Stat
+                                    </span>
+                                    <span className="text-sm text-theme-text-secondary">
+                                        {STATS[stat.name].label}
+                                    </span>
+                                </div>
+                            ) : (
+                                <Select
+                                    label="Stat"
+                                    value={stat.name}
+                                    onChange={(value) =>
+                                        handleStatChange(index, 'name', value as StatName)
+                                    }
+                                    options={statOptions}
+                                    className="w-full"
+                                />
+                            )}
+                            <Input
+                                type="number"
+                                label="Value"
+                                value={stat.value}
+                                onChange={(e) => handleStatChange(index, 'value', e.target.value)}
+                                className="w-full"
+                            />
+                            {isExisting ? (
+                                <div>
+                                    <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
+                                        Type
+                                    </span>
+                                    <span className="text-sm text-theme-text-secondary">
+                                        {stat.type.charAt(0).toUpperCase() + stat.type.slice(1)}
+                                    </span>
+                                </div>
+                            ) : (
+                                <Select
+                                    label="Type"
+                                    value={stat.type}
+                                    onChange={(value) =>
+                                        handleStatChange(index, 'type', value as StatType)
+                                    }
+                                    options={
+                                        statOptions.find((option) => option.value === stat.name)
+                                            ?.allowedTypes || []
+                                    }
+                                    className="w-full"
+                                />
+                            )}
+                        </div>
+                        {!isExisting && (
+                            <Button
+                                aria-label="Remove stat"
+                                variant="secondary"
+                                size="sm"
+                                className="!h-10"
+                                onClick={() => removeStat(index)}
+                            >
+                                <CloseIcon />
+                            </Button>
+                        )}
+                    </div>
+                );
+            })}
             {(!maxStats || stats.length < maxStats) && (
                 <Button variant="secondary" onClick={addStat} type="button" aria-label="Add stat">
                     Add Stat

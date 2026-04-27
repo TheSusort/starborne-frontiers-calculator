@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { RarityName } from '../../constants/rarities';
+import { RarityName, RARITY_ORDER } from '../../constants/rarities';
 import { IMPLANTS } from '../../constants/implants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { Select, StatCard } from '../ui';
@@ -38,14 +38,12 @@ const CHART_COLORS = [
 ];
 
 const RARITY_COLORS: Record<string, string> = {
-    common: '#9ca3af', // gray
-    uncommon: '#22c55e', // green
-    rare: '#3b82f6', // blue
-    epic: '#a855f7', // purple
-    legendary: '#f97316', // orange
+    common: '#d1d5db',
+    uncommon: '#a3e635',
+    rare: '#3b82f6',
+    epic: '#a855f7',
+    legendary: '#f59e0b',
 };
-
-const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
 const IMPLANT_TYPE_LABELS: Record<string, string> = {
     implant_minor_alpha: 'Minor Alpha',
@@ -130,19 +128,25 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
     }, [filteredImplants, ships]);
 
     // Prepare chart data
-    const rarityChartData = stats.byRarity.map((r) => ({
-        name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
-        value: r.count,
-        percentage: r.percentage.toFixed(1),
-    }));
+    const rarityChartData = stats.byRarity
+        .slice()
+        .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
+        .map((r) => ({
+            name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+            value: r.count,
+            percentage: r.percentage.toFixed(1),
+        }));
 
     const rarityMergedData = previousStats
         ? mergeDistributions(
               rarityChartData.map((r) => ({ name: r.name, value: r.value })),
-              previousStats.byRarity.map((r) => ({
-                  name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
-                  value: r.count,
-              }))
+              (previousStats.byRarity ?? [])
+                  .slice()
+                  .sort((a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity))
+                  .map((r) => ({
+                      name: r.rarity.charAt(0).toUpperCase() + r.rarity.slice(1),
+                      value: r.count,
+                  }))
           )
         : null;
 
@@ -150,7 +154,7 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
     const typeMergedData = previousStats
         ? mergeDistributions(
               typeCurrentData,
-              previousStats.byType.map((t) => ({ name: t.type, value: t.count }))
+              (previousStats.byType ?? []).map((t) => ({ name: t.type, value: t.count }))
           )
         : null;
 
@@ -250,13 +254,15 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                     value={stats.equippedCount}
                     subtitle={`${stats.equippedPercentage.toFixed(1)}%`}
                     color="green"
-                    previousValue={previousStats?.equippedPercentage}
+                    previousValue={previousStats?.equippedCount}
                 />
                 <StatCard
                     title="Unequipped"
                     value={stats.unequippedCount}
                     subtitle={`${stats.unequippedPercentage.toFixed(1)}%`}
                     color="orange"
+                    previousValue={previousStats?.unequippedCount}
+                    positiveDirection="down"
                 />
             </div>
 
@@ -275,8 +281,27 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                                     content={<ChartTooltip />}
                                     cursor={{ fill: 'transparent' }}
                                 />
-                                <Bar dataKey="current" name="Current" fill="#3b82f6" />
-                                <Bar dataKey="previous" name="Previous" fill="#6b7280" />
+                                <Bar dataKey="current" name="Current">
+                                    {rarityMergedData.map((entry, index) => (
+                                        <Cell
+                                            key={`current-${index}`}
+                                            fill={
+                                                RARITY_COLORS[entry.name.toLowerCase()] || '#3b82f6'
+                                            }
+                                        />
+                                    ))}
+                                </Bar>
+                                <Bar dataKey="previous" name="Previous">
+                                    {rarityMergedData.map((entry, index) => (
+                                        <Cell
+                                            key={`previous-${index}`}
+                                            fill={
+                                                (RARITY_COLORS[entry.name.toLowerCase()] ||
+                                                    '#3b82f6') + '66'
+                                            }
+                                        />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         ) : (
                             <PieChart>
