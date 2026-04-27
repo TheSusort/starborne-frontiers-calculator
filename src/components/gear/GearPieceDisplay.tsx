@@ -132,8 +132,25 @@ export const GearPieceDisplay = memo(
             >
                 {/* Header */}
                 <div
-                    className={`py-2 ${rarityInfo.textColor} ${mode === 'subcompact' && !showDetails ? '' : 'border-b ' + rarityInfo.borderColor} flex justify-between items-center ${small ? 'px-2' : 'px-4'}`}
+                    className={`relative overflow-hidden py-2 ${rarityInfo.textColor} ${mode === 'subcompact' && !showDetails ? '' : 'border-b ' + rarityInfo.borderColor} flex justify-between items-center ${small ? 'px-2' : 'px-4'}`}
                 >
+                    {!isImplant && slotInfo && (
+                        <>
+                            <img
+                                src={slotInfo}
+                                alt=""
+                                aria-hidden="true"
+                                className="absolute right-0 top-1/2 -translate-y-1/2 h-[150%] w-auto opacity-20 pointer-events-none select-none z-0"
+                            />
+                            <div
+                                className="absolute inset-0 pointer-events-none z-0"
+                                style={{
+                                    background:
+                                        'linear-gradient(to right, rgb(var(--color-bg)) 40%, transparent)',
+                                }}
+                            />
+                        </>
+                    )}
                     <div>
                         <div className="flex items-center gap-2">
                             {isImplant && implantInfo && implantInfo.imageKey && (
