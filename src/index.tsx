@@ -5,6 +5,17 @@ import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
 
+// Redirect the legacy netlify.app URL to the canonical custom domain.
+// This fires after the service worker auto-updates and serves new code.
+if (window.location.hostname === 'starborne-planner.netlify.app') {
+    window.location.replace(
+        'https://starborneplanner.com' +
+            window.location.pathname +
+            window.location.search +
+            window.location.hash
+    );
+}
+
 // Register the service worker with auto-update
 registerSW({ immediate: true });
 
