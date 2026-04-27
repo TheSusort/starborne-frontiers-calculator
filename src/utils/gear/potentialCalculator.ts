@@ -83,7 +83,7 @@ function getBaseRoleStats(role: ShipTypeName): BaseStats {
     return ROLE_BASE_STATS.ATTACKER!;
 }
 
-const UPGRADE_LEVELS = {
+export const UPGRADE_LEVELS = {
     rare: {
         increases: [4, 8] as number[],
         additions: [12, 16] as number[],
@@ -100,6 +100,12 @@ const UPGRADE_LEVELS = {
         initialSubstats: 4,
     },
 };
+
+export function getMaxSubstatsForLevel(rarity: string, level: number): number {
+    const config = UPGRADE_LEVELS[rarity as keyof typeof UPGRADE_LEVELS];
+    if (!config) return 4;
+    return config.initialSubstats + config.additions.filter((l) => l <= level).length;
+}
 
 interface PotentialResult {
     piece: GearPiece;
