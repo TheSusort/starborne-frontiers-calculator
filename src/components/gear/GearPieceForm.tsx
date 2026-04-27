@@ -31,8 +31,11 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
     const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
+    const [showAllFields, setShowAllFields] = useState(false);
+
     useEffect(() => {
         if (editingPiece) {
+            setShowAllFields(false);
             setSlot(editingPiece.slot);
             setMainStat(
                 editingPiece.mainStat || ({ name: 'attack', value: 0, type: 'flat' } as Stat)
@@ -163,19 +166,31 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6 card">
-            {editingPiece ? (
+            {editingPiece && !showAllFields ? (
                 <>
                     {/* Zone 1: read-only summary of locked fields */}
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm pb-4 border-b border-dark-border">
-                        <span className="text-theme-text-secondary">{GEAR_SLOTS[slot].label}</span>
-                        <span className="text-yellow-400">★ {stars}</span>
-                        <span className="text-theme-text-secondary capitalize">
-                            {RARITIES[rarity].label}
-                        </span>
-                        <span className="text-theme-text-secondary">
-                            {GEAR_SETS[setBonus].name}
-                        </span>
-                        <span className="font-medium">{STATS[mainStat.name].label}</span>
+                    <div className="flex flex-wrap items-center justify-between gap-y-2 pb-4 border-b border-dark-border">
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                            <span className="text-theme-text-secondary">
+                                {GEAR_SLOTS[slot].label}
+                            </span>
+                            <span className="text-yellow-400">★ {stars}</span>
+                            <span className="text-theme-text-secondary capitalize">
+                                {RARITIES[rarity].label}
+                            </span>
+                            <span className="text-theme-text-secondary">
+                                {GEAR_SETS[setBonus].name}
+                            </span>
+                            <span className="font-medium">{STATS[mainStat.name].label}</span>
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            type="button"
+                            onClick={() => setShowAllFields(true)}
+                        >
+                            Edit all
+                        </Button>
                     </div>
 
                     {/* Zone 2: level + auto-calculated main stat value */}
@@ -295,9 +310,13 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                 <StatModifierInput
                     stats={subStats}
                     onChange={setSubStats}
-                    maxStats={editingPiece ? getMaxSubstatsForLevel(rarity, level) : 4}
+                    maxStats={
+                        editingPiece && !showAllFields ? getMaxSubstatsForLevel(rarity, level) : 4
+                    }
                     excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
-                    existingCount={editingPiece?.subStats.length}
+                    existingCount={
+                        editingPiece && !showAllFields ? editingPiece.subStats.length : undefined
+                    }
                 />
             </div>
 
