@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { GearUpgradeAnalysis } from '../GearUpgradeAnalysis';
 import type { ShipTypeName } from '../../../constants';
 import type { StatName } from '../../../types/stats';
@@ -45,7 +45,7 @@ describe('GearUpgradeAnalysis auto-start', () => {
         vi.clearAllMocks();
     });
 
-    it('auto-starts analysis when initialStats is non-empty', () => {
+    it('auto-starts analysis when initialStats is non-empty', async () => {
         render(
             <GearUpgradeAnalysis
                 inventory={[]}
@@ -54,8 +54,12 @@ describe('GearUpgradeAnalysis auto-start', () => {
                 initialStats={['security' as StatName]}
             />
         );
-        // Auto-start fires on mount — button should show loading state
+        // Loading state is synchronously set before the first await inside handleAnalyze
         expect(screen.getByRole('button', { name: /analyzing/i })).toBeInTheDocument();
+        // Drain pending microtasks and advance fake timers so the async tail settles cleanly
+        await act(async () => {
+            await vi.runAllTimersAsync();
+        });
     });
 
     it('does not auto-start when initialStats is absent', () => {
