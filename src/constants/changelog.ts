@@ -8,6 +8,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         date: '2026-04-27',
         changes: [
             'Added "Find Gear Upgrades" button to autogear results — navigates to Upgrade Analysis with ship, role, and stat priorities pre-filled and analysis auto-started',
+            'Updated gear edit form to streamline upgrading gear.',
         ],
     },
     {
