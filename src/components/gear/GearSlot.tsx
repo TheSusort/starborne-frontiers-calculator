@@ -101,6 +101,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                             onLockShip={onLockShip}
                             excludeLockShipId={excludeLockShipId}
                             suggestedForShipId={suggestedForShipId}
+                            showSetName={true}
                         />
                     </Tooltip>
                 </div>

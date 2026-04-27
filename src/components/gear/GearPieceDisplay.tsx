@@ -35,6 +35,7 @@ interface Props {
      *  so that calibrated gear shows base stats when suggested for a
      *  different ship. */
     suggestedForShipId?: string;
+    showSetName?: boolean;
 }
 
 export const GearPieceDisplay = memo(
@@ -52,6 +53,7 @@ export const GearPieceDisplay = memo(
         small = false,
         showCalibratedPreview = false,
         suggestedForShipId,
+        showSetName = false,
     }: Props) => {
         const { getShipFromGearId, getShipById, gearToShipMap } = useShips();
         const { getUpgrade } = useGearUpgrades();
@@ -147,14 +149,14 @@ export const GearPieceDisplay = memo(
                                         ref={setTooltipRef}
                                         src={slotInfo}
                                         alt={GEAR_SETS[gear.setBonus || '']?.name}
-                                        className={`h-auto ${small ? 'w-4' : 'w-6'} cursor-help`}
+                                        className={`h-auto ${small ? 'w-5' : 'w-6'} cursor-help`}
                                         onMouseEnter={() => setShowSetTooltip(true)}
                                         onMouseLeave={() => setShowSetTooltip(false)}
                                     />
                                     {gearSetInfo && (
                                         <Tooltip
                                             isVisible={showSetTooltip}
-                                            className="bg-dark p-2 border border-dark-border min-w-[200px] text-theme-text"
+                                            className="bg-dark p-2 border border-dark-border min-w-[200px] text-theme-text text-sm"
                                             targetElement={setTooltipRef.current}
                                         >
                                             <div className="space-y-2">
@@ -162,7 +164,7 @@ export const GearPieceDisplay = memo(
                                                     {gearSetInfo.name}
                                                 </div>
                                                 {typeof gearSetInfo.description === 'string' && (
-                                                    <div className="text-sm bg-dark-lighter p-2">
+                                                    <div className="bg-dark-lighter p-2">
                                                         {gearSetInfo.description}
                                                     </div>
                                                 )}
@@ -183,7 +185,11 @@ export const GearPieceDisplay = memo(
                             <span className={`font-secondary`}>
                                 {isImplant
                                     ? IMPLANTS[gear.setBonus as ImplantName]?.name
-                                    : GEAR_SLOTS[gear.slot]?.label}
+                                    : showSetName
+                                      ? GEAR_SETS[gear.setBonus || '']?.name +
+                                        ' ' +
+                                        GEAR_SLOTS[gear.slot]?.label
+                                      : GEAR_SLOTS[gear.slot]?.label}
                             </span>
                         </div>
                         <div className="flex items-center text-xs">
