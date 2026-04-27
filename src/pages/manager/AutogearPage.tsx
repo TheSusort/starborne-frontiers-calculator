@@ -242,7 +242,10 @@ export const AutogearPage: React.FC = () => {
         if (!ship) return;
         const config = getShipConfig(shipId);
         const role = config.shipRole ?? ship.type;
-        const statNames = config.statPriorities.map((p) => p.stat);
+        const statNames = [
+            ...config.statPriorities.map((p) => p.stat),
+            ...config.statBonuses.filter((b) => b.percentage >= 50).map((b) => b.stat),
+        ].filter((s, i, arr) => arr.indexOf(s) === i);
         const params = new URLSearchParams({ tab: 'analysis', shipId, role });
         if (statNames.length > 0) {
             params.set('stats', statNames.join(','));
@@ -949,17 +952,6 @@ export const AutogearPage: React.FC = () => {
                                                 />
                                             </div>
 
-                                            {/* Find Gear Upgrades shortcut */}
-                                            <div className="flex justify-end">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    onClick={() => handleFindGearUpgrades(shipId)}
-                                                >
-                                                    Find Gear Upgrades
-                                                </Button>
-                                            </div>
-
                                             {/* Show unmet priorities warning */}
                                             {getUnmetPriorities(
                                                 results.suggestedStats?.final || {},
@@ -1059,14 +1051,26 @@ export const AutogearPage: React.FC = () => {
                                         {results.currentSimulation &&
                                             results.suggestedSimulation && (
                                                 <div>
-                                                    <h4 className="text-lg font-semibold mb-2">
-                                                        Simulation Results (
-                                                        {
-                                                            SHIP_TYPES[shipConfig.shipRole || '']
-                                                                ?.name
-                                                        }
-                                                        )
-                                                    </h4>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h4 className="text-lg font-semibold">
+                                                            Simulation Results (
+                                                            {
+                                                                SHIP_TYPES[
+                                                                    shipConfig.shipRole || ''
+                                                                ]?.name
+                                                            }
+                                                            )
+                                                        </h4>
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                handleFindGearUpgrades(shipId)
+                                                            }
+                                                        >
+                                                            Find Gear Upgrades
+                                                        </Button>
+                                                    </div>
                                                     <p className="text-xs text-theme-text-secondary mb-4">
                                                         Damage calculated using skill damage of 100%
                                                         against 15k enemy defense

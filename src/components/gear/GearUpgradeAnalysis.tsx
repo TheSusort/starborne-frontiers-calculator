@@ -760,37 +760,6 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                         })}
                                     </div>
                                 </div>
-                                {selectedStats.length > 0 && (
-                                    <div className="space-y-2">
-                                        <h4 className="text-sm font-semibold">Selected Stats</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedStats.map((stat) => (
-                                                <div
-                                                    key={stat}
-                                                    className="flex items-center gap-2 px-3 py-1 bg-primary/20 rounded"
-                                                >
-                                                    <span className="text-sm">
-                                                        {STATS[stat].label}
-                                                    </span>
-                                                    <Button
-                                                        aria-label={`Remove ${STATS[stat].label}`}
-                                                        variant="danger"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            setSelectedStats(
-                                                                selectedStats.filter(
-                                                                    (s) => s !== stat
-                                                                )
-                                                            );
-                                                        }}
-                                                    >
-                                                        <CloseIcon />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
 
