@@ -27,6 +27,7 @@ export interface GearSetBonus {
     iconUrl?: string;
     minPieces?: number;
     description?: string | Record<string, string>;
+    color?: string;
 }
 
 export interface GearLoadout {

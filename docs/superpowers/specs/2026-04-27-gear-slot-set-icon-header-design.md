@@ -53,23 +53,27 @@ Only `GearPieceDisplay.tsx`. All modes (`manage`, `select`, `full`, `compact`, `
 ```tsx
 {!isImplant && slotInfo && (
     <>
-        {/* Large decorative set icon */}
+        {/* Large decorative set icon — z-0 keeps it behind the flex content */}
         <img
             src={slotInfo}
             alt=""
             aria-hidden="true"
-            className="absolute right-0 top-1/2 -translate-y-1/2 h-[150%] w-auto opacity-20 pointer-events-none select-none"
+            className="absolute right-0 top-1/2 -translate-y-1/2 h-[150%] w-auto opacity-20 pointer-events-none select-none z-0"
         />
         {/* Gradient overlay — masks the icon on the left so text is readable */}
         <div
-            className="absolute inset-0 pointer-events-none"
-            style={{ background: 'linear-gradient(to right, var(--color-dark) 40%, transparent)' }}
+            className="absolute inset-0 pointer-events-none z-0"
+            style={{ background: 'linear-gradient(to right, rgb(var(--color-bg)) 40%, transparent)' }}
         />
     </>
 )}
 ```
 
-**CSS variable:** the project uses `--color-dark` (Tailwind's `bg-dark` custom colour). If this variable is not available, fall back to an inline hex value matching the dark background (`#0f0f1a` or equivalent). Check `tailwind.config.ts` to confirm the exact variable name.
+**CSS variable:** `bg-dark` maps to `rgb(var(--color-bg) / <alpha-value>)` in `tailwind.config.js`. The gradient uses `rgb(var(--color-bg))` directly.
+
+**Z-index layering:** both decorative elements use `z-0`. The existing flex content (text, buttons, tooltip trigger) is rendered after them in the DOM and sits naturally on top. The gradient has `pointer-events-none` so no hover/click events are blocked. The existing set icon tooltip (which has its own portal) is unaffected.
+
+**Button readability:** the gradient goes from opaque (left 40%) to transparent (right). Action buttons sit at the right edge of the flex container where the gradient is fully transparent — buttons remain fully readable with no overlay.
 
 ### Why these values
 
