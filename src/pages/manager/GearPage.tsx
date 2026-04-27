@@ -9,7 +9,9 @@ import { CalibrationModal } from '../../components/gear/CalibrationModal';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
-import { SHIP_TYPES } from '../../constants';
+import { SHIP_TYPES, ALL_STAT_NAMES } from '../../constants';
+import { ShipTypeName } from '../../constants/shipTypes';
+import { StatName } from '../../types/stats';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
@@ -33,6 +35,8 @@ export const GearPage: React.FC = () => {
     const [calibrationInitialShipId, setCalibrationInitialShipId] = useState<string | null>(null);
     const [initialShipId, setInitialShipId] = useState<string | null>(null);
     const [initialSubTab, setInitialSubTab] = useState<'candidates' | 'ship' | null>(null);
+    const [initialRole, setInitialRole] = useState<ShipTypeName | null>(null);
+    const [initialStats, setInitialStats] = useState<StatName[] | undefined>(undefined);
     const tabs = [
         { id: 'inventory', label: 'Inventory', dataTutorial: 'gear-tab-inventory' },
         { id: 'analysis', label: 'Upgrade Analysis', dataTutorial: 'gear-tab-analysis' },
@@ -45,6 +49,8 @@ export const GearPage: React.FC = () => {
         const tab = searchParams.get('tab');
         const subTab = searchParams.get('subTab');
         const shipId = searchParams.get('shipId');
+        const role = searchParams.get('role');
+        const stats = searchParams.get('stats');
 
         if (tab && tabs.some((t) => t.id === tab)) {
             setActiveTab(tab);
@@ -58,8 +64,21 @@ export const GearPage: React.FC = () => {
             setInitialShipId(shipId);
         }
 
+        if (role && Object.keys(SHIP_TYPES).includes(role)) {
+            setInitialRole(role);
+        }
+
+        if (stats) {
+            const validStats = stats
+                .split(',')
+                .filter((s): s is StatName => ALL_STAT_NAMES.includes(s as StatName));
+            if (validStats.length > 0) {
+                setInitialStats(validStats);
+            }
+        }
+
         // Clear URL params after reading
-        if (tab || subTab || shipId) {
+        if (tab || subTab || shipId || role || stats) {
             window.history.replaceState({}, '', window.location.pathname);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,6 +213,9 @@ export const GearPage: React.FC = () => {
                         shipRoles={Object.keys(SHIP_TYPES)}
                         mode="analysis"
                         onEdit={handleEditPiece}
+                        initialShipId={initialShipId ?? undefined}
+                        initialRole={initialRole ?? undefined}
+                        initialStats={initialStats}
                     />
                 )}
                 {activeTab === 'calibration' && (
