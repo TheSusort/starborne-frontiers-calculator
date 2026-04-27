@@ -1,8 +1,15 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.56.0';
+export const CURRENT_VERSION = '1.57.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.57.0',
+        date: '2026-04-27',
+        changes: [
+            'Added "Find Gear Upgrades" button to autogear results — navigates to Upgrade Analysis with ship, role, and stat priorities pre-filled and analysis auto-started',
+        ],
+    },
     {
         version: '1.56.0',
         date: '2026-04-25',
