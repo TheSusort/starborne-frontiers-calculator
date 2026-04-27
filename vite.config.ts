@@ -22,6 +22,10 @@ export default defineConfig({
             workbox: {
                 skipWaiting: true,
                 clientsClaim: true,
+                // Inject redirect logic before workbox's own handlers
+                importScripts: ['sw-redirect.js'],
+                // Exclude the imported script from precaching (it has no content hash)
+                globIgnores: ['**/node_modules/**/*', 'sw-redirect.js'],
                 // Precache all built assets
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff,woff2}'],
                 runtimeCaching: [
