@@ -326,7 +326,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     {setPriorities.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Set requirements
+                                                Gear set
                                             </h4>
                                             {setPriorities.map((priority, index) => (
                                                 <SetPriorityRow
@@ -353,7 +353,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     {statBonuses.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Boosts
+                                                Scales
                                             </h4>
                                             {statBonuses.map((bonus, index) => (
                                                 <StatBonusRow
@@ -429,14 +429,14 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onClick={() => openForm('statBonus')}
                                 >
                                     <div className="font-semibold">
-                                        Boost{' '}
+                                        Scale{' '}
                                         <span className="text-xs text-theme-text-secondary font-normal">
                                             (advanced)
                                         </span>
                                     </div>
                                     <div className="text-xs text-theme-text-secondary">
-                                        Make scoring scale with another stat (e.g. HP +50%
-                                        multiplier).
+                                        Add a secondary stat to the scoring formula — use when a
+                                        skill scales off a non-standard stat (e.g. Defense at 80%).
                                     </div>
                                 </button>
                             </div>
@@ -461,7 +461,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         ? 'limits'
                                         : tweakView.type === 'setPriority'
                                           ? 'set requirement'
-                                          : 'boost'}
+                                          : 'scale'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (

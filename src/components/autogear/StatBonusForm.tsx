@@ -53,7 +53,8 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <p className="text-sm text-theme-text-secondary">
-                Make scoring scale with another stat. Useful for skills that scale off a stat.
+                Add a secondary stat to the scoring formula. Additive adds stat × % directly to the
+                score; multiplier scales the total score by stat × %.
             </p>
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
@@ -129,8 +130,8 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                             className="bg-dark border border-dark-lighter p-2 max-w-xs"
                         >
                             <p className="text-xs">
-                                Multiplies the role score by stat × % (e.g. hacking @ 50% makes DPS
-                                scale with hacking).
+                                Multiplies the role score by stat × % (e.g. speed @ 50% makes DPS
+                                scale with speed).
                             </p>
                         </Tooltip>
                     </div>
