@@ -181,7 +181,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <span className="text-theme-text-secondary">
                                 {GEAR_SETS[setBonus].name}
                             </span>
-                            <span className="font-medium">{STATS[mainStat.name].label}</span>
                         </div>
                         <Button
                             variant="secondary"
@@ -213,10 +212,13 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <span className="text-2xl font-bold">
                                 {mainStat.value}
                                 {mainStat.type === 'percentage' && (
-                                    <span className="text-base font-normal text-theme-text-secondary ml-1">
+                                    <span className="text-base font-normal text-theme-text-secondary">
                                         %
                                     </span>
                                 )}
+                                <span className="text-base font-normal text-theme-text-secondary ml-1.5">
+                                    {STATS[mainStat.name].label}
+                                </span>
                             </span>
                         </div>
                     </div>
