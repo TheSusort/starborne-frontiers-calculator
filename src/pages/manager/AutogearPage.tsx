@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
@@ -93,6 +93,7 @@ export const AutogearPage: React.FC = () => {
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const { getConfig, saveConfig, resetConfig } = useAutogearConfig();
     const { activeProfileId } = useActiveProfile();
     const { startGroup, hasCompletedGroup } = useTutorial();
@@ -234,6 +235,19 @@ export const AutogearPage: React.FC = () => {
                 ...updates,
             },
         }));
+    };
+
+    const handleFindGearUpgrades = (shipId: string) => {
+        const ship = getShipById(shipId);
+        if (!ship) return;
+        const config = getShipConfig(shipId);
+        const role = config.shipRole ?? ship.type;
+        const statNames = config.statPriorities.map((p) => p.stat);
+        const params = new URLSearchParams({ tab: 'analysis', shipId, role });
+        if (statNames.length > 0) {
+            params.set('stats', statNames.join(','));
+        }
+        void navigate(`/gear?${params.toString()}`);
     };
 
     useEffect(() => {
@@ -933,6 +947,17 @@ export const AutogearPage: React.FC = () => {
                                                     hardViolations={results.hardViolations}
                                                     attempts={results.attempts}
                                                 />
+                                            </div>
+
+                                            {/* Find Gear Upgrades shortcut */}
+                                            <div className="flex justify-end">
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={() => handleFindGearUpgrades(shipId)}
+                                                >
+                                                    Find Gear Upgrades
+                                                </Button>
                                             </div>
 
                                             {/* Show unmet priorities warning */}
