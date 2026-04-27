@@ -166,46 +166,41 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             {editingPiece ? (
                 <>
                     {/* Zone 1: read-only summary of locked fields */}
-                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-theme-text-secondary">
-                        <span>
-                            <span className="font-medium text-theme-text">Slot:</span>{' '}
-                            {GEAR_SLOTS[slot].label}
-                        </span>
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm pb-4 border-b border-dark-border">
+                        <span className="text-theme-text-secondary">{GEAR_SLOTS[slot].label}</span>
                         <span className="text-yellow-400">★ {stars}</span>
-                        <span>
-                            <span className="font-medium text-theme-text">Rarity:</span>{' '}
+                        <span className="text-theme-text-secondary capitalize">
                             {RARITIES[rarity].label}
                         </span>
-                        <span>
-                            <span className="font-medium text-theme-text">Set:</span>{' '}
+                        <span className="text-theme-text-secondary">
                             {GEAR_SETS[setBonus].name}
                         </span>
-                        <span>
-                            <span className="font-medium text-theme-text">Main Stat:</span>{' '}
-                            {STATS[mainStat.name].label}
-                        </span>
+                        <span className="font-medium">{STATS[mainStat.name].label}</span>
                     </div>
 
-                    {/* Zone 2: editable fields */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Zone 2: level + auto-calculated main stat value */}
+                    <div className="flex items-end gap-8">
                         <Input
                             type="number"
                             label="Level"
                             value={level}
                             min={0}
                             max={16}
+                            className="w-20"
                             onChange={(e) =>
                                 setLevel(Math.min(16, Math.max(0, Number(e.target.value))))
                             }
                         />
-                        <div>
-                            <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
-                                Main Stat Value
+                        <div className="pb-0.5">
+                            <span className="text-xs text-theme-text-secondary block mb-1">
+                                Main Stat
                             </span>
-                            <span className="text-sm">
+                            <span className="text-2xl font-bold">
                                 {mainStat.value}
                                 {mainStat.type === 'percentage' && (
-                                    <span className="text-theme-text-secondary ml-0.5">%</span>
+                                    <span className="text-base font-normal text-theme-text-secondary ml-1">
+                                        %
+                                    </span>
                                 )}
                             </span>
                         </div>
@@ -302,7 +297,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     onChange={setSubStats}
                     maxStats={editingPiece ? getMaxSubstatsForLevel(rarity, level) : 4}
                     excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
-                    lockTypes={!!editingPiece}
+                    existingCount={editingPiece?.subStats.length}
                 />
             </div>
 
