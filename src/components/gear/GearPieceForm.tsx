@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName, StatType, Stat } from '../../types/stats';
 import {
@@ -14,6 +14,7 @@ import {
 import { Button, Input, Select } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { calculateMainStatValue } from '../../utils/gear/mainStatValueFetcher';
+import { getMaxSubstatsForLevel } from '../../utils/gear/potentialCalculator';
 
 interface Props {
     onSubmit: (piece: GearPiece) => void;
@@ -30,8 +31,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
     const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
-    const isInitialMount = useRef(true);
-
     useEffect(() => {
         if (editingPiece) {
             setSlot(editingPiece.slot);
@@ -66,28 +65,15 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         }
     }, [slot, editingPiece, mainStat.name, mainStat.value]);
 
-    // Separate effect for value calculations
     useEffect(() => {
-        if (!editingPiece && !isInitialMount.current) {
-            const calculatedValue = calculateMainStatValue(
-                mainStat.name,
-                mainStat.type,
-                stars,
-                level
-            );
-            if (calculatedValue !== mainStat.value) {
-                setMainStat((prev) => ({
-                    ...prev,
-                    value: calculatedValue,
-                }));
-            }
+        const calculatedValue = calculateMainStatValue(mainStat.name, mainStat.type, stars, level);
+        if (calculatedValue !== mainStat.value) {
+            setMainStat((prev) => ({
+                ...prev,
+                value: calculatedValue,
+            }));
         }
-    }, [stars, level, mainStat.name, mainStat.type, mainStat.value, editingPiece]);
-
-    // Add isInitialMount ref to prevent first render calculation
-    useEffect(() => {
-        isInitialMount.current = false;
-    }, []);
+    }, [stars, level, mainStat.name, mainStat.type, mainStat.value]);
 
     const handleMainStatChange = useCallback(
         (changes: Partial<Pick<Stat, 'value' | 'name'>> & { type?: StatType }) => {
@@ -176,88 +162,143 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6 card">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Select
-                    label="Set Bonus"
-                    value={setBonus}
-                    onChange={(value) => setSetBonus(value)}
-                    options={setOptions}
-                />
+            {editingPiece ? (
+                <>
+                    {/* Zone 1: read-only summary of locked fields */}
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-theme-text-secondary">
+                        <span>
+                            <span className="font-medium text-theme-text">Slot:</span>{' '}
+                            {GEAR_SLOTS[slot].label}
+                        </span>
+                        <span>
+                            <span className="font-medium text-theme-text">Stars:</span>{' '}
+                            {'⭐'.repeat(stars)}
+                        </span>
+                        <span>
+                            <span className="font-medium text-theme-text">Rarity:</span>{' '}
+                            {RARITIES[rarity].label}
+                        </span>
+                        <span>
+                            <span className="font-medium text-theme-text">Set:</span>{' '}
+                            {GEAR_SETS[setBonus].name}
+                        </span>
+                        <span>
+                            <span className="font-medium text-theme-text">Main Stat:</span>{' '}
+                            {STATS[mainStat.name].label}
+                            {mainStat.type === 'percentage' ? ' %' : ''}
+                        </span>
+                    </div>
 
-                <Select
-                    label="Slot"
-                    value={slot}
-                    onChange={(value) => setSlot(value)}
-                    options={gearTypeOptions}
-                />
-
-                <Select
-                    label="Stars"
-                    value={stars.toString()}
-                    onChange={(value) => setStars(Number(value))}
-                    options={[1, 2, 3, 4, 5, 6].map((num) => ({
-                        value: num.toString(),
-                        label: `${num} ⭐`,
-                    }))}
-                />
-
-                <Input
-                    type="number"
-                    label="Level"
-                    value={level}
-                    min={0}
-                    max={16}
-                    onChange={(e) => setLevel(Math.min(16, Math.max(0, Number(e.target.value))))}
-                />
-
-                <Select
-                    label="Rarity"
-                    value={rarity}
-                    onChange={(value) => setRarity(value)}
-                    options={rarityOptions}
-                />
-
-                {/* Main Stat Section */}
-                <div className="grid grid-cols-2 gap-4">
-                    <Select
-                        label="Main Stat"
-                        value={mainStat.name}
-                        onChange={(value) => handleMainStatChange({ name: value as StatName })}
-                        options={getAvailableMainStats(slot).map((stat) => ({
-                            value: stat,
-                            label: STATS[stat].label,
-                        }))}
-                        data-testid="main-stat-select"
-                    />
-                    <Input
-                        label="Main Stat Value"
-                        type="number"
-                        value={mainStat.value}
-                        onChange={(e) => handleMainStatChange({ value: Number(e.target.value) })}
-                        className="w-32"
-                        labelClassName="invisible"
-                    />
-                    {(slot === 'sensor' || slot === 'software' || slot === 'thrusters') && (
-                        <Select
-                            value={mainStat.type}
-                            onChange={(value) => handleMainStatChange({ type: value as StatType })}
-                            options={getAvailableStatTypes(mainStat.name).map((type) => ({
-                                value: type,
-                                label: type.charAt(0).toUpperCase() + type.slice(1),
-                            }))}
-                            className="w-32"
+                    {/* Zone 2: editable fields */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            type="number"
+                            label="Level"
+                            value={level}
+                            min={0}
+                            max={16}
+                            onChange={(e) =>
+                                setLevel(Math.min(16, Math.max(0, Number(e.target.value))))
+                            }
                         />
-                    )}
+                        <Input
+                            label="Main Stat Value"
+                            type="number"
+                            value={mainStat.value}
+                            disabled
+                        />
+                    </div>
+                </>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Select
+                        label="Set Bonus"
+                        value={setBonus}
+                        onChange={(value) => setSetBonus(value)}
+                        options={setOptions}
+                    />
+
+                    <Select
+                        label="Slot"
+                        value={slot}
+                        onChange={(value) => setSlot(value)}
+                        options={gearTypeOptions}
+                    />
+
+                    <Select
+                        label="Stars"
+                        value={stars.toString()}
+                        onChange={(value) => setStars(Number(value))}
+                        options={[1, 2, 3, 4, 5, 6].map((num) => ({
+                            value: num.toString(),
+                            label: `${num} ⭐`,
+                        }))}
+                    />
+
+                    <Input
+                        type="number"
+                        label="Level"
+                        value={level}
+                        min={0}
+                        max={16}
+                        onChange={(e) =>
+                            setLevel(Math.min(16, Math.max(0, Number(e.target.value))))
+                        }
+                    />
+
+                    <Select
+                        label="Rarity"
+                        value={rarity}
+                        onChange={(value) => setRarity(value)}
+                        options={rarityOptions}
+                    />
+
+                    {/* Main Stat Section */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Main Stat"
+                            value={mainStat.name}
+                            onChange={(value) => handleMainStatChange({ name: value as StatName })}
+                            options={getAvailableMainStats(slot).map((stat) => ({
+                                value: stat,
+                                label: STATS[stat].label,
+                            }))}
+                            data-testid="main-stat-select"
+                        />
+                        <Input
+                            label="Main Stat Value"
+                            type="number"
+                            value={mainStat.value}
+                            onChange={(e) =>
+                                handleMainStatChange({ value: Number(e.target.value) })
+                            }
+                            className="w-32"
+                            labelClassName="invisible"
+                        />
+                        {(slot === 'sensor' || slot === 'software' || slot === 'thrusters') && (
+                            <Select
+                                value={mainStat.type}
+                                onChange={(value) =>
+                                    handleMainStatChange({ type: value as StatType })
+                                }
+                                options={getAvailableStatTypes(mainStat.name).map((type) => ({
+                                    value: type,
+                                    label: type.charAt(0).toUpperCase() + type.slice(1),
+                                }))}
+                                className="w-32"
+                            />
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Sub Stats Section */}
             <div className="space-y-4">
-                <h4 className="text-sm font-medium ">Sub Stats</h4>
+                <h4 className="text-sm font-medium">Sub Stats</h4>
                 <StatModifierInput
                     stats={subStats}
                     onChange={setSubStats}
-                    maxStats={4}
+                    maxStats={editingPiece ? getMaxSubstatsForLevel(rarity, level) : 4}
                     excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
                 />
             </div>
