@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { GearPiece } from '../../types/gear';
 import {
     SHIP_TYPES,
@@ -27,6 +27,9 @@ interface Props {
     shipRoles: ShipTypeName[];
     mode: 'analysis' | 'simulation';
     onEdit?: (piece: GearPiece) => void;
+    initialShipId?: string;
+    initialRole?: ShipTypeName;
+    initialStats?: StatName[];
 }
 
 const winnerColors = ['text-yellow-500', 'text-theme-text-secondary', 'text-amber-600'];
@@ -42,7 +45,15 @@ const RARITY_OPTIONS = [
 // legendary (40 → 120 simulations) and keeps wall-clock under 1s/role.
 const ROLE_FOCUSED_SIMULATION_MULTIPLIER = 3;
 
-export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mode, onEdit }) => {
+export const GearUpgradeAnalysis: React.FC<Props> = ({
+    inventory,
+    shipRoles,
+    mode,
+    onEdit,
+    initialShipId,
+    initialRole,
+    initialStats,
+}) => {
     useTutorialTrigger(mode === 'analysis' ? GEAR_ANALYSIS_TUTORIAL.id : '');
     const { simulateUpgrades, clearUpgrades } = useGearUpgrades();
     const { addNotification } = useNotification();
@@ -56,11 +67,14 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     } | null>(null);
     const [selectedRarity, setSelectedRarity] = useState<'rare' | 'epic' | 'legendary'>('rare');
     const [maxLevel, setMaxLevel] = useState<number>(16);
-    const [selectedRole, setSelectedRole] = useState<ShipTypeName | 'all'>('all');
-    const [selectedStats, setSelectedStats] = useState<StatName[]>([]);
-    const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>('AND');
+    const [selectedRole, setSelectedRole] = useState<ShipTypeName | 'all'>(initialRole ?? 'all');
+    const [selectedStats, setSelectedStats] = useState<StatName[]>(initialStats ?? []);
+    const [statFilterMode, setStatFilterMode] = useState<'AND' | 'OR'>(
+        initialStats?.length ? 'OR' : 'AND'
+    );
     const [selectedGearSets, setSelectedGearSets] = useState<string[]>([]);
-    const [selectedShipId, setSelectedShipId] = useState<string | 'none'>('none');
+    const [selectedShipId, setSelectedShipId] = useState<string | 'none'>(initialShipId ?? 'none');
+    const hasAutoStarted = useRef(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [results, setResults] = useState<
         Record<
@@ -317,6 +331,13 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({ inventory, shipRoles, mod
     };
 
     // Removed automatic analysis - now requires manual button click
+
+    useEffect(() => {
+        if (!initialStats?.length || hasAutoStarted.current) return;
+        hasAutoStarted.current = true;
+        void handleAnalyze();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleSlotChange = (role: ShipTypeName, slot: GearSlotName | 'all') => {
         setSelectedSlots((prev) => ({
