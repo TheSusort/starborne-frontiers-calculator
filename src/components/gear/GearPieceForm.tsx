@@ -134,6 +134,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             rarity,
             level,
             shipId: editingPiece?.shipId || '',
+            calibration: editingPiece?.calibration,
         };
         onSubmit(piece as GearPiece);
         setSubStats([]);
