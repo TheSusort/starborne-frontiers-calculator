@@ -19,7 +19,7 @@ export const Button: React.FC<Props> = ({
         primary:
             'text-dark clip-1-corner bg-gradient-to-br from-[rgb(var(--color-primary-gradient-from))] via-primary to-[rgb(var(--color-primary-gradient-to))]',
         secondary: 'bg-dark border border-dark-border text-theme-text hover:bg-dark-border',
-        danger: 'bg-gradient-to-r from-red-600 to-red-500 text-theme-text hover:bg-gradient-to-r hover:from-red-500 hover:to-red-500',
+        danger: 'bg-dark border border-dark-border text-theme-text-secondary hover:border-red-500 hover:text-red-400',
         link: 'text-theme-text hover:text-white !p-0 bg-dark',
     };
 

@@ -69,7 +69,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
                                         }}
                                         className="flex items-center gap-2"
                                     >
-                                        <InfoIcon /> Feeling lost?
+                                        <InfoIcon /> Docs
                                     </Link>
                                 </Button>
                                 <Tooltip

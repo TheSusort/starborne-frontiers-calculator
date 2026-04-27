@@ -849,7 +849,7 @@ export const AutogearPage: React.FC = () => {
             <Seo {...SEO_CONFIG.autogear} />
             <PageLayout
                 title="Autogear"
-                description="Find the best gear for your ship. Since the amount of combinations are so high, there's a lot of shortcuts taken to make it faster. The results are not always perfect, as it's based on about 30-40k comparisons, so run it a couple of times to make sure you're getting the best results."
+                description="Find the best gear for your ship. The algorithm evaluates tens of thousands of combinations in seconds — run it multiple times to explore different high-scoring configurations."
                 helpLink="/documentation#autogear"
                 tutorialGroupId={
                     ships.length > 0

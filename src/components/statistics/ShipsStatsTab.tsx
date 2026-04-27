@@ -27,6 +27,18 @@ const CHART_COLORS = [
     '#ec4899', // pink
 ];
 
+const ROLE_COLORS: Record<string, string> = {
+    Attacker: '#ef4444', // red
+    Defender: '#3b82f6', // blue
+    Debuffer: '#a855f7', // purple
+    Supporter: '#10b981', // green
+};
+
+const getRoleColor = (name: string) => {
+    const base = name.split('(')[0].trim();
+    return ROLE_COLORS[base] ?? '#6b7280';
+};
+
 const RARITY_COLORS: Record<string, string> = {
     common: '#9ca3af', // gray
     uncommon: '#22c55e', // green
@@ -262,11 +274,32 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                             <Tooltip content={<ChartTooltip />} cursor={{ fill: 'transparent' }} />
                             {previousStats ? (
                                 <>
-                                    <Bar dataKey="current" fill="#3b82f6" name="Current" />
-                                    <Bar dataKey="previous" fill="#3b82f666" name="Previous" />
+                                    <Bar dataKey="current" name="Current">
+                                        {roleChartData.map((entry, index) => (
+                                            <Cell
+                                                key={`current-${index}`}
+                                                fill={getRoleColor(entry.name)}
+                                            />
+                                        ))}
+                                    </Bar>
+                                    <Bar dataKey="previous" name="Previous">
+                                        {roleChartData.map((entry, index) => (
+                                            <Cell
+                                                key={`previous-${index}`}
+                                                fill={getRoleColor(entry.name) + '66'}
+                                            />
+                                        ))}
+                                    </Bar>
                                 </>
                             ) : (
-                                <Bar dataKey="value" fill="#3b82f6" />
+                                <Bar dataKey="value">
+                                    {roleChartData.map((entry, index) => (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={getRoleColor(entry.name)}
+                                        />
+                                    ))}
+                                </Bar>
                             )}
                         </BarChart>
                     </BaseChart>

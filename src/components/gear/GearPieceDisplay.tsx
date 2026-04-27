@@ -126,7 +126,7 @@ export const GearPieceDisplay = memo(
         if (!gear?.id) return null;
         return (
             <div
-                className={`bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className} ${small ? 'text-xs' : 'text-sm'}`}
+                className={`card-hover bg-dark shadow-md border ${rarityInfo.borderColor} overflow-hidden flex-grow flex flex-col ${className} ${small ? 'text-xs' : 'text-sm'}`}
             >
                 {/* Header */}
                 <div

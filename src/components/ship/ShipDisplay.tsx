@@ -98,7 +98,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         if (variant === 'compact') {
             return (
                 <div
-                    className={`flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
+                    className={`card-hover flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
                     onClick={onClick}
@@ -112,7 +112,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         return (
             <div
                 id={`ship-card-${ship.id}`}
-                className={`flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
+                className={`card-hover flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
                 onClick={onClick}

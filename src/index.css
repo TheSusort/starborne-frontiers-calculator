@@ -199,6 +199,16 @@
 @layer components {
     .card {
         @apply bg-dark border border-dark-border p-4;
+        transition: background-color 0.2s ease;
+    }
+
+    .card:hover,
+    .card-hover:hover {
+        background-color: rgb(var(--color-bg) / 0.4);
+    }
+
+    .card-hover {
+        transition: background-color 0.2s ease;
     }
 
     .ship-display-height {

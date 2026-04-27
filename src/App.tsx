@@ -8,7 +8,7 @@ import { AuthProvider } from './contexts/AuthProvider';
 import { InventoryProvider } from './contexts/InventoryProvider';
 import { ShipsProvider } from './contexts/ShipsContext';
 import { StorageKey } from './constants/storage';
-import { CHANGELOG, CURRENT_VERSION, AUTHOR, AUTHOR_EMAIL } from './constants';
+import { CHANGELOG, CURRENT_VERSION, AUTHOR } from './constants';
 import { ChangelogState } from './types/changelog';
 import { EngineeringStatsProvider } from './contexts/EngineeringStatsProvider';
 import Seo from './components/seo/Seo';
@@ -301,14 +301,7 @@ const App: React.FC = () => {
 
                                                                 {/* JokeCorner rendered in bottom-right stack below */}
                                                                 <footer className="text-center text-xs mt-auto pt-5">
-                                                                    Made with ❤️ by {AUTHOR} (
-                                                                    <a
-                                                                        href={`mailto:${AUTHOR_EMAIL}`}
-                                                                        className="hover:underline"
-                                                                    >
-                                                                        {AUTHOR_EMAIL}
-                                                                    </a>
-                                                                    )
+                                                                    Made with ❤️ by {AUTHOR}
                                                                     <br />
                                                                     <br />
                                                                     <a

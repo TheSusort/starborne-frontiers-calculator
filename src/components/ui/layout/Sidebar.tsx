@@ -215,6 +215,10 @@ export const Sidebar: React.FC = () => {
     const { theme, setTheme } = useTheme();
     const isSynthwave = theme === 'synthwave';
     const [isPlaying, setIsPlaying] = useState(false);
+    const [showThemeTooltip, setShowThemeTooltip] = useState(false);
+    const [showMobileThemeTooltip, setShowMobileThemeTooltip] = useState(false);
+    const themeButtonRef = useRef<HTMLButtonElement | null>(null);
+    const mobileThemeButtonRef = useRef<HTMLButtonElement | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const tracksRef = useRef<string[]>([]);
     const trackIndexRef = useRef(0);
@@ -377,12 +381,21 @@ export const Sidebar: React.FC = () => {
                         </button>
                     )}
                     <button
+                        ref={themeButtonRef}
                         onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                        onMouseEnter={() => setShowThemeTooltip(true)}
+                        onMouseLeave={() => setShowThemeTooltip(false)}
                         className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
-                        title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
                     >
                         {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
                     </button>
+                    <Tooltip
+                        isVisible={showThemeTooltip}
+                        className="bg-dark border border-dark-border p-2 text-xs"
+                        targetElement={themeButtonRef.current}
+                    >
+                        {`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
+                    </Tooltip>
                 </div>
             </div>
             <Link to="/" data-sidebar-title>
@@ -477,12 +490,21 @@ export const Sidebar: React.FC = () => {
                             </button>
                         )}
                         <button
+                            ref={mobileThemeButtonRef}
                             onClick={() => setTheme(theme === 'dark' ? 'synthwave' : 'dark')}
+                            onMouseEnter={() => setShowMobileThemeTooltip(true)}
+                            onMouseLeave={() => setShowMobileThemeTooltip(false)}
                             className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
-                            title={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
                         >
                             {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
                         </button>
+                        <Tooltip
+                            isVisible={showMobileThemeTooltip}
+                            className="bg-dark border border-dark-border p-2 text-xs"
+                            targetElement={mobileThemeButtonRef.current}
+                        >
+                            {`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
+                        </Tooltip>
                     </div>
                 </div>
             </div>
