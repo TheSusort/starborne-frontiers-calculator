@@ -394,7 +394,10 @@ export const Sidebar: React.FC = () => {
                 </h1>
             </Link>
 
-            <nav className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]">
+            <nav
+                className="space-y-2 h-[calc(100vh-100px)] overflow-y-auto w-[calc(100%+24px)] px-[12px] translate-x-[-12px] pt-[4px] translate-y-[-4px]"
+                style={{ scrollbarGutter: 'stable' }}
+            >
                 {navigationLinks.map((item) => (
                     <NavigationItem
                         key={item.path}
