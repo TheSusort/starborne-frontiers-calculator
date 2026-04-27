@@ -44,6 +44,7 @@
         "prepare": "husky install",
         "lint-staged": "lint-staged",
         "fetch-buffs": "tsx src/utils/dataUpdate/updateBuffsData.ts",
+        "fetch:gear-icons": "tsx scripts/fetch-gear-icons.ts",
         "admin:import": "tsx scripts/admin-import.ts",
         "e2e": "cd e2e && npm test",
         "e2e:headed": "cd e2e && npm run test:headed",
