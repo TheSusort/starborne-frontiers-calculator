@@ -12,6 +12,7 @@ interface Props {
     excludedStats?: Array<{ name: StatName; type: StatType }>;
     alwaysColumn?: boolean;
     defaultExpanded?: boolean;
+    lockTypes?: boolean;
 }
 
 const StatSummary: React.FC<{ stat: Stat }> = ({ stat }) => {
@@ -34,6 +35,7 @@ export const StatModifierInput: React.FC<Props> = ({
     excludedStats = [],
     alwaysColumn = false,
     defaultExpanded = true,
+    lockTypes = false,
 }) => {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -182,16 +184,29 @@ export const StatModifierInput: React.FC<Props> = ({
                             onChange={(e) => handleStatChange(index, 'value', e.target.value)}
                             className="w-full"
                         />
-                        <Select
-                            label="Type"
-                            value={stat.type}
-                            onChange={(value) => handleStatChange(index, 'type', value as StatType)}
-                            options={
-                                statOptions.find((option) => option.value === stat.name)
-                                    ?.allowedTypes || []
-                            }
-                            className="w-full"
-                        />
+                        {lockTypes ? (
+                            <div>
+                                <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
+                                    Type
+                                </span>
+                                <span className="text-sm text-theme-text-secondary">
+                                    {stat.type.charAt(0).toUpperCase() + stat.type.slice(1)}
+                                </span>
+                            </div>
+                        ) : (
+                            <Select
+                                label="Type"
+                                value={stat.type}
+                                onChange={(value) =>
+                                    handleStatChange(index, 'type', value as StatType)
+                                }
+                                options={
+                                    statOptions.find((option) => option.value === stat.name)
+                                        ?.allowedTypes || []
+                                }
+                                className="w-full"
+                            />
+                        )}
                     </div>
                     <Button
                         aria-label="Remove stat"

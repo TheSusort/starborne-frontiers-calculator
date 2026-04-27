@@ -171,10 +171,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                             <span className="font-medium text-theme-text">Slot:</span>{' '}
                             {GEAR_SLOTS[slot].label}
                         </span>
-                        <span>
-                            <span className="font-medium text-theme-text">Stars:</span>{' '}
-                            {'⭐'.repeat(stars)}
-                        </span>
+                        <span className="text-yellow-400">★ {stars}</span>
                         <span>
                             <span className="font-medium text-theme-text">Rarity:</span>{' '}
                             {RARITIES[rarity].label}
@@ -186,7 +183,6 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                         <span>
                             <span className="font-medium text-theme-text">Main Stat:</span>{' '}
                             {STATS[mainStat.name].label}
-                            {mainStat.type === 'percentage' ? ' %' : ''}
                         </span>
                     </div>
 
@@ -202,12 +198,17 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                                 setLevel(Math.min(16, Math.max(0, Number(e.target.value))))
                             }
                         />
-                        <Input
-                            label="Main Stat Value"
-                            type="number"
-                            value={mainStat.value}
-                            disabled
-                        />
+                        <div>
+                            <span className="flex text-sm font-medium items-center gap-2 justify-between mb-1.5">
+                                Main Stat Value
+                            </span>
+                            <span className="text-sm">
+                                {mainStat.value}
+                                {mainStat.type === 'percentage' && (
+                                    <span className="text-theme-text-secondary ml-0.5">%</span>
+                                )}
+                            </span>
+                        </div>
                     </div>
                 </>
             ) : (
@@ -301,6 +302,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     onChange={setSubStats}
                     maxStats={editingPiece ? getMaxSubstatsForLevel(rarity, level) : 4}
                     excludedStats={[{ name: mainStat.name, type: mainStat.type }]}
+                    lockTypes={!!editingPiece}
                 />
             </div>
 
