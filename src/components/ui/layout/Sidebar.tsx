@@ -359,6 +359,7 @@ export const Sidebar: React.FC = () => {
     // open flag on any Sidebar re-render.
     const renderSidebarContent = () => (
         <div className="space-y-2 flex flex-col h-full">
+            <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
             <div className="hidden lg:flex items-center justify-between">
                 <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
                 <div className="flex items-center gap-2">
@@ -398,9 +399,9 @@ export const Sidebar: React.FC = () => {
                     </Tooltip>
                 </div>
             </div>
-            <Link to="/" data-sidebar-title>
+            <Link to="/" data-sidebar-title className="hidden lg:flex">
                 <h1
-                    className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 hidden lg:flex gap-2 items-center`}
+                    className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 gap-2 items-center`}
                 >
                     <img src={logo} alt="logo" className="w-8 h-8" />
                     {APP_NAME}
