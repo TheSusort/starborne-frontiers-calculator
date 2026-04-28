@@ -113,7 +113,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                             className="hidden sm:flex flex-col justify-between w-2/5 p-4 relative overflow-hidden"
                             style={{
                                 backgroundImage:
-                                    "linear-gradient(180deg, rgba(11,16,24,.45) 0%, rgba(11,16,24,.85) 100%), url('/images/Deep_crevasse_01.png')",
+                                    "linear-gradient(180deg, rgba(11,16,24,.45) 0%, rgba(11,16,24,.85) 100%), url('/images/Deep_crevasse_01.webp')",
                                 backgroundSize: 'cover',
                                 backgroundPosition: 'center',
                             }}

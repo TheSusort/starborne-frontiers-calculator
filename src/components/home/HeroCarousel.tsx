@@ -20,7 +20,7 @@ const slides: Slide[] = [
         subtitle: 'Advanced gear calculations and fleet management for Starborne Frontiers',
         ctaText: 'Import Game Data',
         ctaLink: '#',
-        backgroundImage: '/images/Besieged_Station_01.png',
+        backgroundImage: '/images/Besieged_Station_01.webp',
         gradientClass: 'bg-gradient-to-br from-blue-900 via-slate-900 to-orange-900',
     },
     {
@@ -29,7 +29,7 @@ const slides: Slide[] = [
         subtitle: 'Explore the stories behind every ship in the Starborne universe',
         ctaText: 'View Ship Lore',
         ctaLink: '/ships/lore',
-        backgroundImage: '/images/Strange_encounter_01.png',
+        backgroundImage: '/images/Strange_encounter_01.webp',
         gradientClass: 'bg-gradient-to-br from-orange-900 via-red-900 to-rose-900',
     },
     {
@@ -39,7 +39,7 @@ const slides: Slide[] = [
             "See your fleet's strengths at a glance — rarity breakdowns, gear coverage, engineering investments and more",
         ctaText: 'View Statistics',
         ctaLink: '/statistics',
-        backgroundImage: '/images/Deep_crevasse_01.png',
+        backgroundImage: '/images/Deep_crevasse_01.webp',
         gradientClass: 'bg-gradient-to-br from-cyan-900 via-teal-900 to-emerald-900',
     },
     {
@@ -49,23 +49,29 @@ const slides: Slide[] = [
             'New to the calculator? Watch step-by-step tutorials on importing data, autogear, and more',
         ctaText: 'Watch on YouTube',
         ctaLink: 'https://www.youtube.com/playlist?list=PLinS17lD0vaA9PcYZwcFCQwglbmogOwqo',
-        backgroundImage: '/images/hero1.png',
+        backgroundImage: '/images/hero1.webp',
         gradientClass: 'bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900',
     },
 ];
 
 export const HeroCarousel: React.FC = () => {
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [loadedSlides, setLoadedSlides] = useState<Set<number>>(() => new Set([0]));
     const [isHovered, setIsHovered] = useState(false);
     const { theme } = useTheme();
     const isSynthwave = theme === 'synthwave';
 
     const nextSlide = useCallback(() => {
-        setCurrentSlide((prev) => (prev + 1) % slides.length);
+        setCurrentSlide((prev) => {
+            const next = (prev + 1) % slides.length;
+            setLoadedSlides((loaded) => new Set(loaded).add(next));
+            return next;
+        });
     }, []);
 
     const goToSlide = useCallback((index: number) => {
         setCurrentSlide(index);
+        setLoadedSlides((prev) => new Set(prev).add(index));
     }, []);
 
     // Auto-advance slides
@@ -110,7 +116,7 @@ export const HeroCarousel: React.FC = () => {
                                 : 'opacity-0 pointer-events-none'
                         }`}
                         style={
-                            isSynthwave
+                            isSynthwave || !loadedSlides.has(index)
                                 ? undefined
                                 : {
                                       backgroundImage: `url(${slide.backgroundImage})`,

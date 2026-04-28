@@ -29,7 +29,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const overlay = document.createElement('div');
         overlay.style.cssText = `
             position: fixed; inset: 0; z-index: 99999; pointer-events: none;
-            background: url('/images/transition.jpg');
+            background: url('/images/transition.webp');
             background-size: cover;
             animation: vhs-glitch 250ms steps(4) forwards;
             mix-blend-mode: darken;

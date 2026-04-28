@@ -116,7 +116,7 @@ const App: React.FC = () => {
                                                     />
                                                     <div id="synthwave-bg">
                                                         <img
-                                                            src="/images/synthwave-bg2.jpg"
+                                                            src="/images/synthwave-bg2.webp"
                                                             alt=""
                                                             aria-hidden="true"
                                                         />
