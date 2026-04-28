@@ -359,7 +359,7 @@ export const Sidebar: React.FC = () => {
     // open flag on any Sidebar re-render.
     const renderSidebarContent = () => (
         <div className="space-y-2 flex flex-col h-full">
-            <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
+            <span className="text-xs text-theme-text-secondary lg:hidden">v{CURRENT_VERSION}</span>
             <div className="hidden lg:flex items-center justify-between">
                 <span className="text-xs text-theme-text-secondary">v{CURRENT_VERSION}</span>
                 <div className="flex items-center gap-2">
