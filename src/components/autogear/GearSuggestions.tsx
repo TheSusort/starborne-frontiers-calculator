@@ -47,7 +47,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
     attempts = 1,
 }) => {
     const { getUpgrade } = useGearUpgrades();
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(() => window.innerWidth >= 768);
     const getSuggestionForSlot = (slotName: GearSlotName) => {
         return suggestions.find((s) => s.slotName === slotName);
     };
@@ -98,12 +98,12 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
             )}
 
             <div className="">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center pb-[22px] pt-[6px]">
                     <h3 className="text-lg font-semibold  w-full">{ship?.name}</h3>
                 </div>
-                <div className="card">
+                <div className="">
                     {!expanded && !isPrinting ? (
-                        <div className="grid grid-cols-3 gap-2 bg-dark p-4 w-fit mx-auto">
+                        <div className="grid grid-cols-3 gap-2 card w-fit mx-auto">
                             {GEAR_SLOT_ORDER.map((slotName) => {
                                 const suggestion = getSuggestionForSlot(slotName);
                                 return (
@@ -129,7 +129,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                             })}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {GEAR_SLOT_ORDER.map((slotName) => {
                                 const suggestion = getSuggestionForSlot(slotName);
                                 const gear = suggestion

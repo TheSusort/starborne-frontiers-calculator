@@ -59,17 +59,27 @@ export const GearPieceDisplay = memo(
         const { getUpgrade } = useGearUpgrades();
 
         // Use memoized map for O(1) lookup instead of searching through all ships
-        const { equippedShipId: equippedOnShipId, shipName } = useMemo(() => {
+        const {
+            equippedShipId: equippedOnShipId,
+            shipName,
+            shipImageKey,
+        } = useMemo(() => {
             const id = gearToShipMap.get(gear.id);
             if (id) {
                 const ship = getShipFromGearId(gear.id);
-                return { equippedShipId: id, shipName: ship?.name };
+                return {
+                    equippedShipId: id,
+                    shipName: ship?.name,
+                    shipImageKey: ship?.imageKey as string,
+                };
             }
-            return { equippedShipId: undefined, shipName: undefined };
+            return { equippedShipId: undefined, shipName: undefined, shipImageKey: undefined };
         }, [gear.id, gearToShipMap, getShipFromGearId]);
         const isImplant = gear.slot.startsWith('implant_');
         const [showSetTooltip, setShowSetTooltip] = useState(false);
         const setTooltipRef = React.useRef<HTMLImageElement>(null);
+        const [showLockTooltip, setShowLockTooltip] = useState(false);
+        const lockButtonRef = React.useRef<HTMLButtonElement>(null);
         const upgrade = getUpgrade(gear.id);
         const isMaxLevel = gear.level >= 16;
 
@@ -139,12 +149,13 @@ export const GearPieceDisplay = memo(
                 >
                     {!isImplant && slotInfo && (
                         <>
-                            <img
-                                src={slotInfo}
-                                alt=""
-                                aria-hidden="true"
-                                className={`absolute ${small ? 'right-0' : ''} top-1/2 -translate-y-1/2 h-[150%] w-auto pointer-events-none select-none`}
-                            />
+                            {small && (
+                                <img
+                                    src={slotInfo}
+                                    alt=""
+                                    className={`absolute right-0 top-1/2 -translate-y-1/2 h-[150%] w-auto pointer-events-none select-none`}
+                                />
+                            )}
                             <div
                                 className="absolute inset-0 pointer-events-none"
                                 style={{
@@ -302,7 +313,11 @@ export const GearPieceDisplay = memo(
                                 </div>
                                 <div className="space-y-1">
                                     <StatDisplay
-                                        stats={[displayMainStat as Stat]}
+                                        stats={
+                                            isCalibrationActive && !showCalibratedPreview
+                                                ? [gear.mainStat as Stat]
+                                                : [displayMainStat as Stat]
+                                        }
                                         upgradedStats={
                                             isCalibrationActive &&
                                             !showCalibratedPreview &&
@@ -356,48 +371,82 @@ export const GearPieceDisplay = memo(
                             </div>
                         )}
 
-                        {!isMaxLevel &&
-                            !isImplant &&
-                            (() => {
-                                const cost = calculateUpgradeCost(gear, 16);
-                                return cost > 0 ? (
-                                    <div className="text-xs text-theme-text-secondary">
-                                        Upgrade cost:{' '}
-                                        {Intl.NumberFormat('en', { notation: 'compact' }).format(
-                                            cost
-                                        )}
+                        <div className="flex items-end gap-2 !mt-auto text-xs pt-2">
+                            {shipImageKey && (
+                                <div className="relative w-8 h-8 overflow-hidden">
+                                    <Image
+                                        src={shipImageKey + '_Portrait.jpg'}
+                                        alt={shipName}
+                                        className="scale-150"
+                                    />
+                                </div>
+                            )}
+                            <div>
+                                {!isMaxLevel &&
+                                    !isImplant &&
+                                    (() => {
+                                        const cost = calculateUpgradeCost(gear, 16);
+                                        return cost > 0 ? (
+                                            <div className="text-theme-text-secondary">
+                                                Upgrade cost:{' '}
+                                                {Intl.NumberFormat('en', {
+                                                    notation: 'compact',
+                                                }).format(cost)}
+                                            </div>
+                                        ) : null;
+                                    })()}
+
+                                {shipName && mode !== 'subcompact' && (
+                                    <div className="flex items-center gap-1">
+                                        <span>
+                                            {'Equipped by: '}
+                                            {shipName}
+                                        </span>
+                                        {onLockShip &&
+                                            equippedOnShipId &&
+                                            equippedOnShipId !== excludeLockShipId && (
+                                                <>
+                                                    <button
+                                                        ref={lockButtonRef}
+                                                        className="text-primary p-0.5"
+                                                        aria-label={`Lock ${shipName}'s equipment and re-run autogear`}
+                                                        onMouseEnter={() =>
+                                                            setShowLockTooltip(true)
+                                                        }
+                                                        onMouseLeave={() =>
+                                                            setShowLockTooltip(false)
+                                                        }
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onLockShip(equippedOnShipId);
+                                                        }}
+                                                    >
+                                                        <UnlockedLockIcon className="w-3 h-3" />
+                                                    </button>
+                                                    <Tooltip
+                                                        isVisible={showLockTooltip}
+                                                        targetElement={lockButtonRef.current}
+                                                        className="bg-dark p-2 border border-dark-border text-theme-text text-xs whitespace-nowrap"
+                                                    >
+                                                        Lock {shipName}&apos;s equipment and re-run
+                                                        autogear
+                                                    </Tooltip>
+                                                </>
+                                            )}
                                     </div>
-                                ) : null;
-                            })()}
+                                )}
 
-                        {shipName && mode !== 'subcompact' && (
-                            <div className="text-xs !mt-auto pt-2 flex items-center gap-1">
-                                <span>Equipped by: {shipName}</span>
-                                {onLockShip &&
-                                    equippedOnShipId &&
-                                    equippedOnShipId !== excludeLockShipId && (
-                                        <button
-                                            className="text-yellow-400 hover:text-yellow-300 p-0.5"
-                                            title={`Lock ${shipName}'s equipment and re-run autogear`}
-                                            aria-label={`Lock ${shipName}'s equipment and re-run autogear`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onLockShip(equippedOnShipId);
-                                            }}
-                                        >
-                                            <UnlockedLockIcon className="w-3 h-3" />
-                                        </button>
-                                    )}
+                                {/* Calibration info */}
+                                {isCalibrated && calibratedShipName && mode !== 'subcompact' && (
+                                    <div className="text-cyan-400 flex items-center gap-1">
+                                        <span>
+                                            {'Calibrated to: '}
+                                            {calibratedShipName}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
-                        )}
-
-                        {/* Calibration info */}
-                        {isCalibrated && calibratedShipName && mode !== 'subcompact' && (
-                            <div className="text-xs text-cyan-400 flex items-center gap-1 pt-1">
-                                <CalibrationIcon className="w-3 h-3" />
-                                <span>Calibrated to: {calibratedShipName}</span>
-                            </div>
-                        )}
+                        </div>
                     </div>
                 )}
             </div>
