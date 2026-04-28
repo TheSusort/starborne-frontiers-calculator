@@ -17,6 +17,7 @@ export const JokeCorner: React.FC = () => {
             <div className="relative">
                 <span
                     ref={triggerRef}
+                    role="img"
                     className="w-8 h-8 rounded-full bg-primary hover:bg-primary-hover flex items-center justify-center text-white transition-colors duration-200 cursor-default"
                     onMouseEnter={handleMouseEnter}
                     onMouseLeave={() => setIsVisible(false)}

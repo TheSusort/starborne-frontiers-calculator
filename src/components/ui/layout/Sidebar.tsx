@@ -387,6 +387,7 @@ export const Sidebar: React.FC = () => {
                         onMouseEnter={() => setShowThemeTooltip(true)}
                         onMouseLeave={() => setShowThemeTooltip(false)}
                         className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                        aria-label={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
                     >
                         {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
                     </button>
@@ -496,6 +497,7 @@ export const Sidebar: React.FC = () => {
                             onMouseEnter={() => setShowMobileThemeTooltip(true)}
                             onMouseLeave={() => setShowMobileThemeTooltip(false)}
                             className="text-xs text-theme-text-secondary hover:text-theme-text transition-colors"
+                            aria-label={`Switch to ${theme === 'dark' ? 'Synthwave' : 'Dark'} theme`}
                         >
                             {theme === 'dark' ? <Sparkles size={14} /> : <Sun size={14} />}
                         </button>
