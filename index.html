@@ -43,14 +43,7 @@
             type="image/webp"
         />
         <title>Starborne Planner</title>
-        <script>
-            (function () {
-                var theme = localStorage.getItem('app_theme');
-                if (theme && theme !== 'dark') {
-                    document.documentElement.setAttribute('data-theme', theme);
-                }
-            })();
-        </script>
+        <script src="/theme-init.js"></script>
     </head>
 
     <body
