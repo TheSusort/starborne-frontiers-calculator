@@ -404,7 +404,7 @@ export const Sidebar: React.FC = () => {
             </div>
             <Link to="/" data-sidebar-title className="hidden lg:flex">
                 <h1
-                    className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 gap-2 items-center`}
+                    className={`${theme === 'synthwave' ? '' : 'text-xl'} font-bold mb-2 gap-2 items-center flex`}
                 >
                     <img src={logo} alt="logo" className="w-8 h-8" />
                     {APP_NAME}
@@ -457,7 +457,7 @@ export const Sidebar: React.FC = () => {
         <>
             {/* Mobile Header */}
             <div
-                className={`lg:hidden fixed top-0 left-0 right-0 px-4 py-3 z-20 ${isSynthwave ? 'bg-black/90' : "bg-dark bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-center"}`}
+                className={`lg:hidden fixed top-0 left-0 right-0 px-4 py-3 z-20 ${isSynthwave ? 'bg-black/90' : "bg-dark bg-[url('/images/Deep_crevasse_01.webp')] bg-cover bg-center"}`}
                 role="banner"
             >
                 <div className="flex justify-between items-center">
@@ -517,7 +517,7 @@ export const Sidebar: React.FC = () => {
             {/* Desktop Sidebar */}
             <div
                 data-testid="desktop-sidebar"
-                className={`hidden lg:block fixed top-0 left-0 h-full w-64 z-20 ${isSynthwave ? 'bg-black/70 lg:backdrop-blur-sm' : "bg-dark bg-[url('/images/Deep_crevasse_01.png')] bg-cover bg-right"}`}
+                className={`hidden lg:block fixed top-0 left-0 h-full w-64 z-20 ${isSynthwave ? 'bg-black/70 lg:backdrop-blur-sm' : "bg-dark bg-[url('/images/Deep_crevasse_01.webp')] bg-cover bg-right"}`}
             >
                 <div className="p-4 h-full">{renderSidebarContent()}</div>
             </div>
