@@ -20,6 +20,7 @@ import {
     ShipStatsDisplay,
     ShipCopiesBadge,
     PanelVariant,
+    AFFINITY_HEADER_COLORS,
 } from './shipDisplayComponents';
 
 const PANEL_VARIANTS: Record<
@@ -161,6 +162,13 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                     className={`flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''}`}
+                    style={
+                        ship.affinity
+                            ? {
+                                  background: `linear-gradient(to right, rgb(var(--color-bg)) 70%, ${AFFINITY_HEADER_COLORS[ship.affinity]})`,
+                              }
+                            : undefined
+                    }
                     onClick={onClick}
                 >
                     <ShipHeader ship={ship} variant="compact" />
@@ -235,6 +243,13 @@ export const ShipDisplayImage: React.FC<ShipDisplayProps> = memo(
                 >
                     <div
                         className={`px-4 py-2 ${ship.imageKey ? 'border-y' : 'border-b'} ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center relative`}
+                        style={
+                            ship.affinity
+                                ? {
+                                      background: `linear-gradient(to right, rgb(var(--color-bg)) 70%, ${AFFINITY_HEADER_COLORS[ship.affinity]})`,
+                                  }
+                                : undefined
+                        }
                     >
                         <ShipHeader ship={ship} />
                         {(onEdit ||
