@@ -17,7 +17,13 @@ if (window.location.hostname === 'starborne-planner.netlify.app') {
 }
 
 // Register the service worker with auto-update
-registerSW({ immediate: true });
+registerSW({
+    immediate: true,
+    onRegisteredSW(_swScriptUrl, registration) {
+        if (!registration) return;
+        setInterval(() => registration.update(), 5 * 60 * 1000);
+    },
+});
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
