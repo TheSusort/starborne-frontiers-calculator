@@ -43,7 +43,7 @@ const HomePage: React.FC = () => {
                             iconGradientFrom="from-blue-600"
                             iconGradientTo="to-blue-800"
                             title="1. Import Data"
-                            videoSrc="/videos/export.mov"
+                            videoSrc="/videos/export.mp4"
                             description={
                                 <>
                                     <Link
@@ -63,7 +63,7 @@ const HomePage: React.FC = () => {
                             iconGradientFrom="from-purple-600"
                             iconGradientTo="to-purple-800"
                             title="2. View Your Fleet"
-                            videoSrc="/videos/ships.mov"
+                            videoSrc="/videos/ships.mp4"
                             description={
                                 <>
                                     Browse your fleet in{' '}
@@ -89,7 +89,7 @@ const HomePage: React.FC = () => {
                             iconGradientFrom="from-orange-600"
                             iconGradientTo="to-orange-800"
                             title="3. Optimize Gear"
-                            videoSrc="/videos/autogear.mov"
+                            videoSrc="/videos/autogear.mp4"
                             description={
                                 <>
                                     Use the{' '}

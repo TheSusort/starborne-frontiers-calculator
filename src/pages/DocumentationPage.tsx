@@ -297,7 +297,7 @@ const DocumentationPage: React.FC = () => {
                                                     playsInline
                                                 >
                                                     <source
-                                                        src="/videos/export.mov"
+                                                        src="/videos/export.mp4"
                                                         type="video/mp4"
                                                     />
                                                     Your browser does not support the video tag.

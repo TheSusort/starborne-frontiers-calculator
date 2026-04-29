@@ -242,7 +242,9 @@ export const Sidebar: React.FC = () => {
         tracksRef.current = tracks;
         trackIndexRef.current = 0;
 
-        const audio = new Audio(tracks[0]);
+        const audio = new Audio();
+        audio.preload = 'none';
+        audio.src = tracks[0];
         audio.volume = 0.3;
         audio.addEventListener('ended', () => {
             trackIndexRef.current = (trackIndexRef.current + 1) % tracksRef.current.length;
