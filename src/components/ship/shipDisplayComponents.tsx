@@ -69,6 +69,13 @@ export const ShipIcon = memo(
 );
 ShipIcon.displayName = 'ShipIcon';
 
+export const AFFINITY_HEADER_COLORS: Record<AffinityName, string> = {
+    chemical: '#0d3b22',
+    electric: '#0a1a4a',
+    thermal: '#6b3a0d',
+    antimatter: '#2c1a59',
+};
+
 export const getAffinityClass = (affinity: AffinityName): string => {
     switch (affinity) {
         case 'chemical':

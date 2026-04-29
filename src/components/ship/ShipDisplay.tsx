@@ -15,6 +15,7 @@ import {
     ImplantsDisplay,
     ShipStatsDisplay,
     ShipCopiesBadge,
+    AFFINITY_HEADER_COLORS,
 } from './shipDisplayComponents';
 
 export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
@@ -101,6 +102,13 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
                     className={`card-hover flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
+                    style={
+                        ship.affinity
+                            ? {
+                                  background: `linear-gradient(to right, rgb(var(--color-bg)) 70%, ${AFFINITY_HEADER_COLORS[ship.affinity]})`,
+                              }
+                            : undefined
+                    }
                     onClick={onClick}
                 >
                     <ShipHeader ship={ship} variant="compact" minWidth />
@@ -119,6 +127,13 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
             >
                 <div
                     className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}
+                    style={
+                        ship.affinity
+                            ? {
+                                  background: `linear-gradient(to right, rgb(var(--color-bg)) 70%, ${AFFINITY_HEADER_COLORS[ship.affinity]})`,
+                              }
+                            : undefined
+                    }
                 >
                     <ShipHeader ship={ship} minWidth />
                     {(onEdit || onRemove || onToggleStarred || onLockEquipment || onQuickAdd) && (
