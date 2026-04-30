@@ -42,7 +42,7 @@ export const ImportButton: React.FC<{
 }) => {
     const { ships, setData: setShips, loadShips } = useShips();
     const { inventory, setData: setInventory, loadInventory } = useInventory();
-    const { engineeringStats, setData: setEngineeringStats } = useEngineeringStats();
+    const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const { activeProfileId } = useActiveProfile();
