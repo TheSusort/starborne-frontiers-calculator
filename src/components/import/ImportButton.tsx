@@ -139,9 +139,18 @@ export const ImportButton: React.FC<{
                 const result = await importPlayerData(data);
 
                 if (result.success && result.data) {
+                    // Preserve user-set fields that the game export doesn't include
+                    const oldShipById = new Map(oldShips.map((s) => [s.id, s]));
+                    const shipsToStore = result.data.ships.map((s) => {
+                        const prev = oldShipById.get(s.id);
+                        return prev
+                            ? { ...s, equipmentLocked: prev.equipmentLocked, starred: prev.starred }
+                            : s;
+                    });
+
                     // Update all states with the imported data
                     addNotification('info', 'Saving data locally...', 10000);
-                    await setShips(result.data.ships);
+                    await setShips(shipsToStore);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
 
@@ -196,7 +205,7 @@ export const ImportButton: React.FC<{
                         const syncResult = await syncMigratedDataToSupabase(
                             activeProfileId ?? user.id,
                             {
-                                ships: result.data.ships,
+                                ships: shipsToStore,
                                 inventory: result.data.inventory,
                                 encounters: [],
                                 loadouts: [],
