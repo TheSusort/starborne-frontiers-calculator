@@ -92,7 +92,8 @@ export function computeImportDiff(
                 added: epicAdded,
                 removed: epicRemoved,
             },
-            otherDelta: otherAdded - otherRemoved,
+            otherAdded,
+            otherRemoved,
         },
         gear: {
             added: gearAdded,
@@ -113,7 +114,8 @@ export function hasChanges(diff: ImportDiff): boolean {
         ships.epic.refitted.length > 0 ||
         ships.epic.added > 0 ||
         ships.epic.removed > 0 ||
-        ships.otherDelta !== 0 ||
+        ships.otherAdded > 0 ||
+        ships.otherRemoved > 0 ||
         gear.added > 0 ||
         gear.removed > 0 ||
         gear.newLegendary6Star.length > 0

@@ -171,25 +171,27 @@ describe('computeImportDiff — epic ships', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeImportDiff — other ships', () => {
-    it('computes positive otherDelta for new common ships', () => {
+    it('counts new common ships in otherAdded', () => {
         const ships = [
             makeShip({ id: 'c-1', rarity: 'common' }),
             makeShip({ id: 'c-2', rarity: 'rare' }),
         ];
         const diff = computeImportDiff([], [], ships, []);
-        expect(diff.ships.otherDelta).toBe(2);
+        expect(diff.ships.otherAdded).toBe(2);
+        expect(diff.ships.otherRemoved).toBe(0);
     });
 
-    it('computes negative otherDelta for removed common ships', () => {
+    it('counts removed common ships in otherRemoved', () => {
         const old = [makeShip({ id: 'c-1', rarity: 'common' })];
         const diff = computeImportDiff(old, [], [], []);
-        expect(diff.ships.otherDelta).toBe(-1);
+        expect(diff.ships.otherRemoved).toBe(1);
+        expect(diff.ships.otherAdded).toBe(0);
     });
 
-    it('counts uncommon ships in otherDelta', () => {
+    it('counts uncommon ships in otherAdded', () => {
         const ship = makeShip({ id: 'u-1', rarity: 'uncommon' });
         const diff = computeImportDiff([], [], [ship], []);
-        expect(diff.ships.otherDelta).toBe(1);
+        expect(diff.ships.otherAdded).toBe(1);
     });
 
     it('does not track rare ships in legendary or epic', () => {
@@ -259,7 +261,8 @@ describe('hasChanges', () => {
         ships: {
             legendary: { added: [], leveled: [], refitted: [], removed: [] },
             epic: { leveled: [], refitted: [], added: 0, removed: 0 },
-            otherDelta: 0,
+            otherAdded: 0,
+            otherRemoved: 0,
         },
         gear: { added: 0, removed: 0, newLegendary6Star: [] },
     };
@@ -287,8 +290,11 @@ describe('hasChanges', () => {
         expect(hasChanges(diff)).toBe(true);
     });
 
-    it('returns true when otherDelta is non-zero', () => {
-        const diff: ImportDiff = { ...emptyDiff, ships: { ...emptyDiff.ships, otherDelta: -2 } };
+    it('returns true when otherRemoved is non-zero', () => {
+        const diff: ImportDiff = {
+            ...emptyDiff,
+            ships: { ...emptyDiff.ships, otherRemoved: 2 },
+        };
         expect(hasChanges(diff)).toBe(true);
     });
 });

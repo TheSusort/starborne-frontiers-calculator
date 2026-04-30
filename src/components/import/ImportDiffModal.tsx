@@ -65,7 +65,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
         ships.epic.added > 0 ||
         ships.epic.removed > 0;
 
-    const hasOtherChanges = ships.otherDelta !== 0;
+    const hasOtherChanges = ships.otherAdded > 0 || ships.otherRemoved > 0;
     const hasShipChanges = hasLegendaryChanges || hasEpicChanges || hasOtherChanges;
     const hasGearChanges = gear.added > 0 || gear.removed > 0 || gear.newLegendary6Star.length > 0;
 
@@ -196,10 +196,21 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                         <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1 border-b border-dark-border pb-0.5">
                                             Other
                                         </div>
-                                        <span className="text-sm text-theme-text-secondary">
-                                            {ships.otherDelta > 0 ? '+' : ''}
-                                            {ships.otherDelta} ships
-                                        </span>
+                                        <div className="text-theme-text-secondary text-xs mt-1">
+                                            {ships.otherAdded > 0 && (
+                                                <span className="text-green-400">
+                                                    +{ships.otherAdded} new
+                                                </span>
+                                            )}
+                                            {ships.otherAdded > 0 && ships.otherRemoved > 0 && (
+                                                <span> · </span>
+                                            )}
+                                            {ships.otherRemoved > 0 && (
+                                                <span className="text-red-400">
+                                                    -{ships.otherRemoved} removed
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>

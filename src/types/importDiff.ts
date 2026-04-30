@@ -33,7 +33,8 @@ export interface ImportDiff {
             added: number; // gross count of epics new in this import
             removed: number; // gross count of epics absent from this import
         };
-        otherDelta: number; // (non-legendary/epic added) - (non-legendary/epic removed)
+        otherAdded: number;
+        otherRemoved: number;
     };
     gear: {
         added: number; // gross non-implant pieces new in this import
