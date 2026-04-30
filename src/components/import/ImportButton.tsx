@@ -261,7 +261,6 @@ export const ImportButton: React.FC<{
         [
             ships,
             inventory,
-            engineeringStats,
             setShips,
             setInventory,
             setEngineeringStats,

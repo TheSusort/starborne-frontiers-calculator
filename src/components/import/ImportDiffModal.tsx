@@ -24,7 +24,7 @@ function formatFileAge(timestamp: number): string {
 }
 
 function Stars({ count }: { count: number }) {
-    return <span className="text-yellow-400">{'★'.repeat(count)}</span>;
+    return <span className="text-yellow-400">★{count}</span>;
 }
 
 function ShipName({ ship }: { ship: Ship }) {
@@ -36,7 +36,6 @@ function GearLine({ gear }: { gear: GearPiece }) {
     const slotLabel = GEAR_SLOTS[gear.slot]?.label ?? gear.slot;
     const setIcon = gear.setBonus ? GEAR_SETS[gear.setBonus]?.iconUrl : null;
     const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
-    const rarityLabel = RARITIES[gear.rarity]?.label ?? gear.rarity;
     const mainStatLabel = gear.mainStat
         ? (STATS[gear.mainStat.name]?.shortLabel ?? gear.mainStat.name) +
           (gear.mainStat.type === 'percentage' ? '%' : '')
@@ -44,15 +43,13 @@ function GearLine({ gear }: { gear: GearPiece }) {
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
             <Stars count={gear.stars} />
-            <span className={RARITIES[gear.rarity]?.textColor}>{rarityLabel}</span>
-            <span className="text-theme-text">{slotLabel}</span>
+            <span className={`${RARITIES[gear.rarity]?.textColor}`}>{slotLabel}</span>
             {mainStatLabel && (
                 <span className="text-theme-text-secondary text-xs">{mainStatLabel}</span>
             )}
             {setIcon && (
                 <img src={setIcon} alt={setName ?? ''} className="w-4 h-4 object-contain" />
             )}
-            <span className="text-green-400 text-xs">(new)</span>
         </div>
     );
 }
@@ -63,12 +60,8 @@ function ImplantLine({ implant }: { implant: GearPiece }) {
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
             <Stars count={implant.stars} />
-            <span className={RARITIES[implant.rarity]?.textColor}>
-                {RARITIES[implant.rarity]?.label ?? implant.rarity}
-            </span>
-            <span className="text-theme-text">{implantName}</span>
+            <span className={`${RARITIES[implant.rarity]?.textColor}`}>{implantName}</span>
             <span className="text-theme-text-secondary text-xs">{slotLabel}</span>
-            <span className="text-green-400 text-xs">(new)</span>
         </div>
     );
 }
@@ -134,27 +127,25 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                 <div className="space-y-4">
                     {/* Ships */}
                     {hasShipChanges && (
-                        <div>
-                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2">
+                        <div className="card">
+                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
                                 Ships
                             </h4>
                             <div className="space-y-3">
                                 {/* Legendary */}
                                 {hasLegendaryChanges && (
                                     <div>
-                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1 border-b border-dark-border pb-0.5">
+                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
                                             Legendary
                                         </div>
                                         <div className="space-y-0.5 text-sm">
                                             {ships.legendary.added.map((s) => (
                                                 <div
                                                     key={s.id}
-                                                    className="flex items-baseline gap-2"
+                                                    className="flex items-baseline gap-2 text-xs"
                                                 >
                                                     <ShipName ship={s} />
-                                                    <span className="text-green-400 text-xs">
-                                                        (new)
-                                                    </span>
+                                                    <span className="text-green-400">(new)</span>
                                                 </div>
                                             ))}
                                             {ships.legendary.leveled.map(({ ship, oldLevel }) => (
@@ -163,7 +154,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                                     className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
-                                                    <span className="text-theme-text-secondary text-xs">
+                                                    <span className="text-theme-text-secondary">
                                                         {oldLevel} → {ship.level}
                                                     </span>
                                                 </div>
@@ -175,7 +166,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                                         className="flex items-baseline gap-2"
                                                     >
                                                         <ShipName ship={ship} />
-                                                        <span className="text-theme-text-secondary text-xs">
+                                                        <span className="text-theme-text-secondary">
                                                             R{oldRefitCount} → R{ship.refits.length}
                                                         </span>
                                                     </div>
@@ -184,14 +175,12 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                             {ships.legendary.removed.map((s) => (
                                                 <div
                                                     key={`rm-${s.id}`}
-                                                    className="flex items-baseline gap-2"
+                                                    className="flex items-baseline gap-2 text-xs"
                                                 >
                                                     <span className={RARITIES[s.rarity]?.textColor}>
                                                         {s.name}
                                                     </span>
-                                                    <span className="text-red-400 text-xs">
-                                                        (lost)
-                                                    </span>
+                                                    <span className="text-red-400">(removed)</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -201,7 +190,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                 {/* Epic */}
                                 {hasEpicChanges && (
                                     <div>
-                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1 border-b border-dark-border pb-0.5">
+                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
                                             Epic
                                         </div>
                                         <div className="space-y-0.5 text-sm">
@@ -211,7 +200,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                                     className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
-                                                    <span className="text-theme-text-secondary text-xs">
+                                                    <span className="text-theme-text-secondary">
                                                         {oldLevel} → {ship.level}
                                                     </span>
                                                 </div>
@@ -222,7 +211,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                                     className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
-                                                    <span className="text-theme-text-secondary text-xs">
+                                                    <span className="text-theme-text-secondary">
                                                         R{oldRefitCount} → R{ship.refits.length}
                                                     </span>
                                                 </div>
@@ -250,8 +239,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                 {/* Other */}
                                 {hasOtherChanges && (
                                     <div>
-                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1 border-b border-dark-border pb-0.5">
-                                            Other
+                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                            Rare / Uncommon / Common
                                         </div>
                                         <div className="text-theme-text-secondary text-xs mt-1">
                                             {ships.otherAdded > 0 && (
@@ -276,8 +265,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
 
                     {/* Gear */}
                     {hasGearChanges && (
-                        <div>
-                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2">
+                        <div className="card">
+                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
                                 Gear
                             </h4>
                             {(gear.added > 0 || gear.removed > 0) && (
@@ -291,6 +280,13 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                     )}
                                 </p>
                             )}
+                            {gear.newLegendary6Star.length > 0 && (
+                                <div>
+                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                        Notable Gear
+                                    </div>
+                                </div>
+                            )}
                             {gear.newLegendary6Star.map((g) => (
                                 <GearLine key={g.id} gear={g} />
                             ))}
@@ -299,8 +295,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
 
                     {/* Implants */}
                     {hasImplantChanges && (
-                        <div>
-                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2">
+                        <div className="card">
+                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
                                 Implants
                             </h4>
                             {(implants.added > 0 || implants.removed > 0) && (
@@ -317,6 +313,13 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                         </span>
                                     )}
                                 </p>
+                            )}
+                            {implants.newLegendary.length > 0 && (
+                                <div>
+                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                        Notable Implants
+                                    </div>
+                                </div>
                             )}
                             {implants.newLegendary.map((g) => (
                                 <ImplantLine key={g.id} implant={g} />
