@@ -456,6 +456,7 @@ export const ShipInventory: React.FC<Props> = ({
                             <div
                                 key={ship.id}
                                 {...(index === 0 ? { 'data-tutorial': 'ships-first-card' } : {})}
+                                className="flex"
                             >
                                 <ShipCard
                                     ship={ship}

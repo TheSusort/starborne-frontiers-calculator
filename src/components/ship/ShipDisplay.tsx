@@ -120,9 +120,9 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         return (
             <div
                 id={`ship-card-${ship.id}`}
-                className={`card-hover flex flex-col flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
+                className={`card-hover flex flex-col w-full flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
-                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
+                } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName || ''}`}
                 onClick={onClick}
             >
                 <div
