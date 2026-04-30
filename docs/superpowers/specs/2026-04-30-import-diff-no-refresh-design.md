@@ -144,7 +144,7 @@ export function computeImportDiff(
 
 `otherDelta = otherAdded - otherRemoved`
 
-**Gear matching:** by `gear.id`. Build `Set<id>` for old and new. **Implants are excluded** — filter to only pieces whose `slot` is in `Object.keys(GEAR_SLOTS)` before computing any gear diff values.
+**Gear matching:** by `gear.id`. Both `oldInventory` (from context) and `result.data.inventory` (from the import) contain a mix of gear and implants. **Implants are excluded from all gear diff values** — filter both arrays to only pieces whose `slot` is in `Object.keys(GEAR_SLOTS)` before computing anything.
 - `added` = count of gear IDs (non-implant) in new not in old
 - `removed` = count of gear IDs (non-implant) in old not in new
 - `newLegendary6Star` = new gear pieces (non-implant, id not in old) where `rarity === 'legendary' && stars === 6`
@@ -179,17 +179,17 @@ Uses the existing `Modal` component.
 
 ### Modal state
 
-`ImportButton` holds `const [diffResult, setDiffResult] = useState<ImportDiff | null>(null)`. Pass it to `ImportDiffModal` as `diff={diffResult}` with `isOpen={diffResult !== null}` and `onClose={() => setDiffResult(null)}`. The modal derives its open/close from the `diff` prop being non-null.
+`ImportButton` holds `const [diffResult, setDiffResult] = useState<ImportDiff | null>(null)`. Pass it to `ImportDiffModal` as `diff={diffResult}` and `onClose={() => setDiffResult(null)}`. `ImportDiffModal` accepts `diff: ImportDiff | null` and `onClose: () => void` — it derives `isOpen` internally as `diff !== null`. No separate `isOpen` prop is passed from `ImportButton`.
 
 ### When to open (in `processFileImport`)
 
-1. Snapshot `oldShips` / `oldInventory` from context (add them to the `useShips()` / `useInventory()` destructurings alongside `setData`/`loadShips`/`loadInventory`).
+1. Snapshot `oldShips` / `oldInventory` from context at the top of the function. Add `ships` and `inventory` to the `useShips()` / `useInventory()` destructurings alongside `setData`, `loadShips`, and `loadInventory`.
 2. Run import + `setData` calls as today.
 3. Compute `diff = computeImportDiff(oldShips, oldInventory, result.data.ships, result.data.inventory)`. The diff uses `result.data` directly — not context state — so it is not affected by async storage writes.
-4. Call `setDiffResult(diff)`, which opens the modal.
-5. **Then** (for authenticated users after sync success): fire `void Promise.all([loadShips(), loadInventory()])` — non-blocking. The modal is already open; fresh Supabase data (including ship `imageKey`) loads in the background. `loadInventory` will emit its own "Syncing gear…" / "Loaded N gear pieces" notifications — this is acceptable UX alongside the diff modal.
+4. **Call `setDiffResult(diff)` unconditionally** — outside both the `if (user)` and the unauthenticated else branch — so the modal opens for every successful import. This is after `result.success && result.data` is confirmed but before/outside the sync block.
+5. **For authenticated users, inside `if (user) { if (syncResult.success) { ... } }`:** fire `void Promise.all([loadShips(), loadInventory()])` — non-blocking. The modal is already open; fresh Supabase data (including ship `imageKey`) loads in the background. `loadInventory` will emit its own "Syncing gear…" / "Loaded N gear pieces" notifications — this is acceptable UX alongside the diff modal.
 
-**`shareData` path:** `refreshPage` currently skips the reload when `shareData` is true. With the new design, remove this condition entirely — the diff modal opens on every successful import regardless of `shareData`.
+**`shareData` path:** `refreshPage` currently skips the reload when `shareData` is true. With the new design, remove `refreshPage` entirely — the diff modal opens on every successful import regardless of `shareData`.
 
 The modal is non-blocking. `loadShips`/`loadInventory` complete in the background; the user sees updated ships/gear when they navigate after closing the modal.
 
@@ -230,7 +230,7 @@ The modal is non-blocking. `loadShips`/`loadInventory` complete in the backgroun
 - Gear section: omit if `added === 0 && removed === 0 && newLegendary6Star.length === 0`.
 - If `!hasChanges(diff)`: render "No changes detected." instead of any sections.
 - Ship name entries use `RARITIES[ship.rarity].textColor` for the name.
-- Legendary 6-star gear lines show: stars (★ × `stars`), rarity label, slot, set name.
+- Legendary 6-star gear lines show: stars (★ repeated `stars` times), rarity label (`RARITIES[gear.rarity].label`), slot label (`GEAR_SLOTS[gear.slot].label`), and set name (`GEAR_SETS[gear.setBonus].name`). If `setBonus` is `null`, omit the set name and brackets entirely.
 
 ---
 
