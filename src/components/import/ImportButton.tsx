@@ -24,7 +24,10 @@ import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName } from '../../constants/shipTypes';
 import { StorageKey } from '../../constants/storage';
+import { ImportDiff } from '../../types/importDiff';
+import { computeImportDiff } from '../../utils/import/computeImportDiff';
 import { HangarNameModal } from './HangarNameModal';
+import { ImportDiffModal } from './ImportDiffModal';
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -37,8 +40,8 @@ export const ImportButton: React.FC<{
     setShareData: externalSetShareData,
     testId,
 }) => {
-    const { setData: setShips } = useShips();
-    const { setData: setInventory } = useInventory();
+    const { ships, setData: setShips, loadShips } = useShips();
+    const { inventory, setData: setInventory, loadInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
@@ -49,6 +52,8 @@ export const ImportButton: React.FC<{
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [diffResult, setDiffResult] = useState<ImportDiff | null>(null);
+    const [importFileTimestamp, setImportFileTimestamp] = useState<number | null>(null);
     // Unique id per ImportButton instance so multiple mounts (e.g. HomePage CTA
     // + Sidebar) don't collide on a single DOM id. The id is used for the
     // hidden-input click delegation below.
@@ -106,8 +111,21 @@ export const ImportButton: React.FC<{
         }
     };
 
+    const extractFileTimestamp = (file: File): number => {
+        const match = file.name.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+        if (match) {
+            const [, year, month, day, hour, minute, second] = match;
+            const ts = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`).getTime();
+            if (!isNaN(ts)) return ts;
+        }
+        return file.lastModified;
+    };
+
     const processFileImport = useCallback(
         async (file: File) => {
+            const oldShips = ships;
+            const oldInventory = inventory;
+            const fileTimestamp = extractFileTimestamp(file);
             try {
                 setLoading(true);
                 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
@@ -133,9 +151,18 @@ export const ImportButton: React.FC<{
                 const result = await importPlayerData(data);
 
                 if (result.success && result.data) {
+                    // Preserve user-set fields that the game export doesn't include
+                    const oldShipById = new Map(oldShips.map((s) => [s.id, s]));
+                    const shipsToStore = result.data.ships.map((s) => {
+                        const prev = oldShipById.get(s.id);
+                        return prev
+                            ? { ...s, equipmentLocked: prev.equipmentLocked, starred: prev.starred }
+                            : s;
+                    });
+
                     // Update all states with the imported data
                     addNotification('info', 'Saving data locally...', 10000);
-                    await setShips(result.data.ships);
+                    await setShips(shipsToStore);
                     await setInventory(result.data.inventory);
                     await setEngineeringStats(result.data.engineeringStats);
 
@@ -176,13 +203,21 @@ export const ImportButton: React.FC<{
                     // Track data import (for both logged-in and anonymous users)
                     await trackDataImport(activeProfileId);
 
+                    const diff = computeImportDiff(
+                        oldShips,
+                        oldInventory,
+                        result.data.ships,
+                        result.data.inventory,
+                        result.data.engineeringStats
+                    );
+
                     // sync to supabase if user is logged in
                     if (user) {
                         addNotification('info', 'Syncing to cloud...', 30000);
                         const syncResult = await syncMigratedDataToSupabase(
                             activeProfileId ?? user.id,
                             {
-                                ships: result.data.ships,
+                                ships: shipsToStore,
                                 inventory: result.data.inventory,
                                 encounters: [],
                                 loadouts: [],
@@ -192,7 +227,11 @@ export const ImportButton: React.FC<{
                         );
 
                         if (syncResult.success) {
-                            refreshPage('Data synced successfully, refreshing in 3 seconds...');
+                            if (localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false') {
+                                setImportFileTimestamp(fileTimestamp);
+                                setDiffResult(diff);
+                            }
+                            void Promise.all([loadShips(), loadInventory()]);
                         } else {
                             addNotification(
                                 'error',
@@ -201,7 +240,10 @@ export const ImportButton: React.FC<{
                             );
                         }
                     } else {
-                        refreshPage('Data imported successfully, refreshing in 3 seconds...');
+                        if (localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false') {
+                            setImportFileTimestamp(fileTimestamp);
+                            setDiffResult(diff);
+                        }
                     }
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
@@ -220,12 +262,14 @@ export const ImportButton: React.FC<{
                 if (fileInput) fileInput.value = '';
             }
         },
-        // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [
+            ships,
+            inventory,
             setShips,
             setInventory,
             setEngineeringStats,
+            loadShips,
+            loadInventory,
             addNotification,
             user,
             activeProfileId,
@@ -336,18 +380,6 @@ export const ImportButton: React.FC<{
         void handleFile(file);
     };
 
-    const refreshPage = useCallback(
-        (message: string) => {
-            addNotification('success', message);
-            if (!shareData) {
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
-            }
-        },
-        [addNotification, shareData]
-    );
-
     return (
         <div>
             <Checkbox
@@ -404,6 +436,14 @@ export const ImportButton: React.FC<{
                 onSubmit={(name: string) => void handleHangarNameSubmit(name)}
                 loading={uploadingToCubedweb}
                 fileSize={selectedFile?.size}
+            />
+            <ImportDiffModal
+                diff={diffResult}
+                fileTimestamp={importFileTimestamp}
+                onClose={() => {
+                    setDiffResult(null);
+                    setImportFileTimestamp(null);
+                }}
             />
         </div>
     );

@@ -20,18 +20,22 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     title: string;
+    subtitle?: string;
     children: React.ReactNode;
     fullHeight?: boolean;
     highZIndex?: boolean;
+    maxWidth?: string;
 }
 
 export const Modal: React.FC<Props> = ({
     isOpen,
     onClose,
     title,
+    subtitle,
     children,
     fullHeight = false,
     highZIndex = false,
+    maxWidth = 'max-w-4xl',
 }) => {
     useEffect(() => {
         if (isOpen) {
@@ -77,16 +81,23 @@ export const Modal: React.FC<Props> = ({
                     onClick={onClose}
                 >
                     <div
-                        className="relative transform overflow-hidden bg-dark-lighter border border-dark-border shadow-xl transition-all w-full max-w-4xl flex flex-col"
+                        className={`relative transform overflow-hidden bg-dark-lighter border border-dark-border shadow-xl transition-all w-full ${maxWidth} flex flex-col`}
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-labelledby="modal-title"
                     >
                         {/* Header */}
                         <div className="px-6 py-4 border-b border-dark-border flex justify-between items-center">
-                            <h3 id="modal-title" className="text-xl font-semibold ">
-                                {title}
-                            </h3>
+                            <div>
+                                <h3 id="modal-title" className="text-xl font-semibold">
+                                    {title}
+                                </h3>
+                                {subtitle && (
+                                    <p className="text-xs text-theme-text-secondary mt-0.5">
+                                        {subtitle}
+                                    </p>
+                                )}
+                            </div>
                             <Button aria-label="Close modal" variant="secondary" onClick={onClose}>
                                 <CloseIcon />
                             </Button>

@@ -320,8 +320,13 @@ const DocumentationPage: React.FC = () => {
                                                 Click the button and select your exported JSON file
                                             </li>
                                             <li>
-                                                It will process your data and update all relevant
-                                                sections
+                                                An <strong>Import Complete</strong> summary appears
+                                                showing what changed: new/leveled/refitted ships by
+                                                rarity, gear count delta, and any new legendary
+                                                6-star gear highlights
+                                            </li>
+                                            <li>
+                                                The app updates in-place — no page reload required
                                             </li>
                                         </ol>
                                     </div>

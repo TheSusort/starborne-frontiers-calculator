@@ -20,6 +20,7 @@ import {
     UserUsageStats,
     TopShipRanking,
 } from '../services/userProfileService';
+import { StorageKey } from '../constants/storage';
 import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
@@ -43,6 +44,9 @@ export const ProfilePage: React.FC = () => {
     const [isPublic, setIsPublic] = useState(false);
     const [usernameError, setUsernameError] = useState<string | null>(null);
     const [checkingUsername, setCheckingUsername] = useState(false);
+    const [showImportSummary, setShowImportSummary] = useState(
+        () => localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false'
+    );
 
     useEffect(() => {
         if (!user?.id || !activeProfileId) {
@@ -277,6 +281,23 @@ export const ProfilePage: React.FC = () => {
 
                     {/* Alt Accounts — only visible on the main profile */}
                     {!isOnAlt && <AltAccountsSection />}
+
+                    {/* App Preferences */}
+                    <div className="card space-y-4">
+                        <h2 className="text-xl font-semibold">App Preferences</h2>
+                        <Checkbox
+                            label="Show import summary after importing"
+                            checked={showImportSummary}
+                            onChange={(checked) => {
+                                setShowImportSummary(checked);
+                                localStorage.setItem(
+                                    StorageKey.SHOW_IMPORT_SUMMARY,
+                                    String(checked)
+                                );
+                            }}
+                            helpLabel="When enabled, a summary of what changed is shown after each import."
+                        />
+                    </div>
 
                     {/* Statistics */}
                     {stats && (

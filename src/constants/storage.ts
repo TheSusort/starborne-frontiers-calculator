@@ -10,6 +10,7 @@ export const StorageKey = {
     GEAR_UPGRADES: 'gear_upgrades',
     AUTOGEAR_CONFIGS: 'autogear_configs',
     DEMO_DATA_LOADED: 'demo_data_loaded',
+    SHOW_IMPORT_SUMMARY: 'show_import_summary',
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];
