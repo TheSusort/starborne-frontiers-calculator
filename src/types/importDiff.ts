@@ -14,6 +14,7 @@ export interface RefittedShip {
 }
 
 export interface RemovedShip {
+    id: string;
     name: string; // from the old ship in context
     rarity: RarityName;
 }

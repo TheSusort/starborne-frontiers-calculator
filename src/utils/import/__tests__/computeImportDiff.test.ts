@@ -186,6 +186,12 @@ describe('computeImportDiff — other ships', () => {
         expect(diff.ships.otherDelta).toBe(-1);
     });
 
+    it('counts uncommon ships in otherDelta', () => {
+        const ship = makeShip({ id: 'u-1', rarity: 'uncommon' });
+        const diff = computeImportDiff([], [], [ship], []);
+        expect(diff.ships.otherDelta).toBe(1);
+    });
+
     it('does not track rare ships in legendary or epic', () => {
         const ship = makeShip({ id: 'r-1', rarity: 'rare' });
         const diff = computeImportDiff([], [], [ship], []);

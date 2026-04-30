@@ -59,7 +59,7 @@ export function computeImportDiff(
     for (const old of oldShips) {
         if (!newShipMap.has(old.id)) {
             if (old.rarity === 'legendary')
-                legendaryRemoved.push({ name: old.name, rarity: old.rarity });
+                legendaryRemoved.push({ id: old.id, name: old.name, rarity: old.rarity });
             else if (old.rarity === 'epic') epicRemoved++;
             else otherRemoved++;
         }

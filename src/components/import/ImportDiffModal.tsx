@@ -112,7 +112,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                             )}
                                             {ships.legendary.removed.map((s) => (
                                                 <div
-                                                    key={`rm-${s.name}`}
+                                                    key={`rm-${s.id}`}
                                                     className="flex justify-between"
                                                 >
                                                     <span className={RARITIES[s.rarity]?.textColor}>
