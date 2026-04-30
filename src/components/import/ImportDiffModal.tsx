@@ -28,7 +28,8 @@ function GearLine({ gear }: { gear: GearPiece }) {
     const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
     const rarityLabel = RARITIES[gear.rarity]?.label ?? gear.rarity;
     const mainStatLabel = gear.mainStat
-        ? (STATS[gear.mainStat.name]?.shortLabel ?? gear.mainStat.name)
+        ? (STATS[gear.mainStat.name]?.shortLabel ?? gear.mainStat.name) +
+          (gear.mainStat.type === 'percentage' ? '%' : '')
         : null;
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
