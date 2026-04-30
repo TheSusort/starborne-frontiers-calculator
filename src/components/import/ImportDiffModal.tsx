@@ -70,7 +70,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
     const hasGearChanges = gear.added > 0 || gear.removed > 0 || gear.newLegendary6Star.length > 0;
 
     return (
-        <Modal isOpen={true} onClose={onClose} title="Import Complete">
+        <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
             {!hasChanges(diff) ? (
                 <p className="text-theme-text-secondary">No changes detected.</p>
             ) : (
@@ -90,7 +90,10 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                         </div>
                                         <div className="space-y-0.5 text-sm">
                                             {ships.legendary.added.map((s) => (
-                                                <div key={s.id} className="flex justify-between">
+                                                <div
+                                                    key={s.id}
+                                                    className="flex items-baseline gap-2"
+                                                >
                                                     <ShipName ship={s} />
                                                     <span className="text-green-400 text-xs">
                                                         (new)
@@ -100,7 +103,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                             {ships.legendary.leveled.map(({ ship, oldLevel }) => (
                                                 <div
                                                     key={`lv-${ship.id}`}
-                                                    className="flex justify-between"
+                                                    className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
                                                     <span className="text-theme-text-secondary text-xs">
@@ -112,7 +115,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                                 ({ ship, oldRefitCount }) => (
                                                     <div
                                                         key={`rf-${ship.id}`}
-                                                        className="flex justify-between"
+                                                        className="flex items-baseline gap-2"
                                                     >
                                                         <ShipName ship={ship} />
                                                         <span className="text-theme-text-secondary text-xs">
@@ -124,7 +127,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                             {ships.legendary.removed.map((s) => (
                                                 <div
                                                     key={`rm-${s.id}`}
-                                                    className="flex justify-between"
+                                                    className="flex items-baseline gap-2"
                                                 >
                                                     <span className={RARITIES[s.rarity]?.textColor}>
                                                         {s.name}
@@ -148,7 +151,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                             {ships.epic.leveled.map(({ ship, oldLevel }) => (
                                                 <div
                                                     key={`ep-lv-${ship.id}`}
-                                                    className="flex justify-between"
+                                                    className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
                                                     <span className="text-theme-text-secondary text-xs">
@@ -159,7 +162,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                                             {ships.epic.refitted.map(({ ship, oldRefitCount }) => (
                                                 <div
                                                     key={`ep-rf-${ship.id}`}
-                                                    className="flex justify-between"
+                                                    className="flex items-baseline gap-2"
                                                 >
                                                     <ShipName ship={ship} />
                                                     <span className="text-theme-text-secondary text-xs">

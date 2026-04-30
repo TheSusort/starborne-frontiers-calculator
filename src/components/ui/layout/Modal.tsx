@@ -23,6 +23,7 @@ interface Props {
     children: React.ReactNode;
     fullHeight?: boolean;
     highZIndex?: boolean;
+    maxWidth?: string;
 }
 
 export const Modal: React.FC<Props> = ({
@@ -32,6 +33,7 @@ export const Modal: React.FC<Props> = ({
     children,
     fullHeight = false,
     highZIndex = false,
+    maxWidth = 'max-w-4xl',
 }) => {
     useEffect(() => {
         if (isOpen) {
@@ -77,7 +79,7 @@ export const Modal: React.FC<Props> = ({
                     onClick={onClose}
                 >
                     <div
-                        className="relative transform overflow-hidden bg-dark-lighter border border-dark-border shadow-xl transition-all w-full max-w-4xl flex flex-col"
+                        className={`relative transform overflow-hidden bg-dark-lighter border border-dark-border shadow-xl transition-all w-full ${maxWidth} flex flex-col`}
                         onClick={(e) => e.stopPropagation()}
                         role="dialog"
                         aria-labelledby="modal-title"
