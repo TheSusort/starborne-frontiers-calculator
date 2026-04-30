@@ -24,7 +24,10 @@ import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName } from '../../constants/shipTypes';
 import { StorageKey } from '../../constants/storage';
+import { ImportDiff } from '../../types/importDiff';
+import { computeImportDiff } from '../../utils/import/computeImportDiff';
 import { HangarNameModal } from './HangarNameModal';
+import { ImportDiffModal } from './ImportDiffModal';
 
 export const ImportButton: React.FC<{
     className?: string;
@@ -37,8 +40,8 @@ export const ImportButton: React.FC<{
     setShareData: externalSetShareData,
     testId,
 }) => {
-    const { setData: setShips } = useShips();
-    const { setData: setInventory } = useInventory();
+    const { ships, setData: setShips, loadShips } = useShips();
+    const { inventory, setData: setInventory, loadInventory } = useInventory();
     const { setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
@@ -49,6 +52,7 @@ export const ImportButton: React.FC<{
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [diffResult, setDiffResult] = useState<ImportDiff | null>(null);
     // Unique id per ImportButton instance so multiple mounts (e.g. HomePage CTA
     // + Sidebar) don't collide on a single DOM id. The id is used for the
     // hidden-input click delegation below.
@@ -108,6 +112,8 @@ export const ImportButton: React.FC<{
 
     const processFileImport = useCallback(
         async (file: File) => {
+            const oldShips = ships;
+            const oldInventory = inventory;
             try {
                 setLoading(true);
                 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
@@ -176,6 +182,13 @@ export const ImportButton: React.FC<{
                     // Track data import (for both logged-in and anonymous users)
                     await trackDataImport(activeProfileId);
 
+                    const diff = computeImportDiff(
+                        oldShips,
+                        oldInventory,
+                        result.data.ships,
+                        result.data.inventory
+                    );
+
                     // sync to supabase if user is logged in
                     if (user) {
                         addNotification('info', 'Syncing to cloud...', 30000);
@@ -192,7 +205,8 @@ export const ImportButton: React.FC<{
                         );
 
                         if (syncResult.success) {
-                            refreshPage('Data synced successfully, refreshing in 3 seconds...');
+                            setDiffResult(diff);
+                            void Promise.all([loadShips(), loadInventory()]);
                         } else {
                             addNotification(
                                 'error',
@@ -201,7 +215,7 @@ export const ImportButton: React.FC<{
                             );
                         }
                     } else {
-                        refreshPage('Data imported successfully, refreshing in 3 seconds...');
+                        setDiffResult(diff);
                     }
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
@@ -220,12 +234,14 @@ export const ImportButton: React.FC<{
                 if (fileInput) fileInput.value = '';
             }
         },
-        // refreshPage is intentionally excluded to avoid circular dependency - it's a stable callback
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [
+            ships,
+            inventory,
             setShips,
             setInventory,
             setEngineeringStats,
+            loadShips,
+            loadInventory,
             addNotification,
             user,
             activeProfileId,
@@ -336,18 +352,6 @@ export const ImportButton: React.FC<{
         void handleFile(file);
     };
 
-    const refreshPage = useCallback(
-        (message: string) => {
-            addNotification('success', message);
-            if (!shareData) {
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
-            }
-        },
-        [addNotification, shareData]
-    );
-
     return (
         <div>
             <Checkbox
@@ -405,6 +409,7 @@ export const ImportButton: React.FC<{
                 loading={uploadingToCubedweb}
                 fileSize={selectedFile?.size}
             />
+            <ImportDiffModal diff={diffResult} onClose={() => setDiffResult(null)} />
         </div>
     );
 };
