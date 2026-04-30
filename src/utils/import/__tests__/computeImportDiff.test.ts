@@ -253,11 +253,81 @@ describe('computeImportDiff — gear', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Implants
+// ---------------------------------------------------------------------------
+
+describe('computeImportDiff — implants', () => {
+    it('counts new implants in implants.added', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const g = makeGear({ id: 'imp-1', slot: 'implant_major' as any });
+        const diff = computeImportDiff([], [], [], [g]);
+        expect(diff.implants.added).toBe(1);
+        expect(diff.gear.added).toBe(0);
+    });
+
+    it('counts removed implants in implants.removed', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const g = makeGear({ id: 'imp-1', slot: 'implant_major' as any });
+        const diff = computeImportDiff([], [g], [], []);
+        expect(diff.implants.removed).toBe(1);
+        expect(diff.gear.removed).toBe(0);
+    });
+
+    it('highlights new legendary implants', () => {
+        const g = makeGear({
+            id: 'imp-1',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            slot: 'implant_major' as any,
+            rarity: 'legendary',
+        });
+        const diff = computeImportDiff([], [], [], [g]);
+        expect(diff.implants.newLegendary).toHaveLength(1);
+        expect(diff.implants.newLegendary[0].id).toBe('imp-1');
+    });
+
+    it('does not highlight existing legendary implants', () => {
+        const g = makeGear({
+            id: 'imp-1',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            slot: 'implant_major' as any,
+            rarity: 'legendary',
+        });
+        const diff = computeImportDiff([], [g], [], [g]);
+        expect(diff.implants.newLegendary).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Fresh import detection
+// ---------------------------------------------------------------------------
+
+describe('computeImportDiff — isFreshImport', () => {
+    it('is true when both old arrays are empty', () => {
+        const ship = makeShip({ id: 's-1', rarity: 'legendary' });
+        const diff = computeImportDiff([], [], [ship], []);
+        expect(diff.isFreshImport).toBe(true);
+    });
+
+    it('is false when old ships exist', () => {
+        const ship = makeShip({ id: 's-1', rarity: 'legendary' });
+        const diff = computeImportDiff([ship], [], [ship], []);
+        expect(diff.isFreshImport).toBe(false);
+    });
+
+    it('is false when old inventory exists', () => {
+        const g = makeGear({ id: 'g-1' });
+        const diff = computeImportDiff([], [g], [], [g]);
+        expect(diff.isFreshImport).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // hasChanges helper
 // ---------------------------------------------------------------------------
 
 describe('hasChanges', () => {
     const emptyDiff: ImportDiff = {
+        isFreshImport: false,
         ships: {
             legendary: { added: [], leveled: [], refitted: [], removed: [] },
             epic: { leveled: [], refitted: [], added: 0, removed: 0 },
@@ -265,6 +335,8 @@ describe('hasChanges', () => {
             otherRemoved: 0,
         },
         gear: { added: 0, removed: 0, newLegendary6Star: [] },
+        implants: { added: 0, removed: 0, newLegendary: [] },
+        engineeringStatsCount: 0,
     };
 
     it('returns false for an empty diff', () => {
@@ -294,6 +366,14 @@ describe('hasChanges', () => {
         const diff: ImportDiff = {
             ...emptyDiff,
             ships: { ...emptyDiff.ships, otherRemoved: 2 },
+        };
+        expect(hasChanges(diff)).toBe(true);
+    });
+
+    it('returns true when implants were added', () => {
+        const diff: ImportDiff = {
+            ...emptyDiff,
+            implants: { added: 1, removed: 0, newLegendary: [] },
         };
         expect(hasChanges(diff)).toBe(true);
     });

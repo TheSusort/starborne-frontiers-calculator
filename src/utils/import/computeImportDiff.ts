@@ -1,20 +1,29 @@
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
+import { EngineeringStats } from '../../types/stats';
 import { ImportDiff, LeveledShip, RefittedShip, RemovedShip } from '../../types/importDiff';
-import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { GEAR_SLOTS, IMPLANT_SLOTS } from '../../constants/gearTypes';
 
 const STANDARD_SLOTS = new Set(Object.keys(GEAR_SLOTS));
+const IMPLANT_SLOT_SET = new Set(Object.keys(IMPLANT_SLOTS));
 
 function isGear(piece: GearPiece): boolean {
     return STANDARD_SLOTS.has(piece.slot);
+}
+
+function isImplant(piece: GearPiece): boolean {
+    return IMPLANT_SLOT_SET.has(piece.slot);
 }
 
 export function computeImportDiff(
     oldShips: Ship[],
     oldInventory: GearPiece[],
     newShips: Ship[],
-    newInventory: GearPiece[]
+    newInventory: GearPiece[],
+    newEngStats: EngineeringStats | null = null
 ): ImportDiff {
+    const isFreshImport = oldShips.length === 0 && oldInventory.length === 0;
+
     // ── Ships ──────────────────────────────────────────────────────────────
     const oldShipMap = new Map(oldShips.map((s) => [s.id, s]));
     const newShipMap = new Map(newShips.map((s) => [s.id, s]));
@@ -78,7 +87,25 @@ export function computeImportDiff(
         (g) => !oldGearIds.has(g.id) && g.rarity === 'legendary' && g.stars === 6
     );
 
+    // ── Implants ───────────────────────────────────────────────────────────
+    const oldImplants = oldInventory.filter(isImplant);
+    const newImplants = newInventory.filter(isImplant);
+
+    const oldImplantIds = new Set(oldImplants.map((g) => g.id));
+    const newImplantIds = new Set(newImplants.map((g) => g.id));
+
+    const implantsAdded = newImplants.filter((g) => !oldImplantIds.has(g.id)).length;
+    const implantsRemoved = oldImplants.filter((g) => !newImplantIds.has(g.id)).length;
+    const newLegendaryImplants = newImplants.filter(
+        (g) => !oldImplantIds.has(g.id) && g.rarity === 'legendary'
+    );
+
+    // ── Engineering stats ──────────────────────────────────────────────────
+    const engineeringStatsCount =
+        newEngStats?.stats.reduce((sum, s) => sum + s.stats.length, 0) ?? 0;
+
     return {
+        isFreshImport,
         ships: {
             legendary: {
                 added: legendaryAdded,
@@ -100,11 +127,17 @@ export function computeImportDiff(
             removed: gearRemoved,
             newLegendary6Star,
         },
+        implants: {
+            added: implantsAdded,
+            removed: implantsRemoved,
+            newLegendary: newLegendaryImplants,
+        },
+        engineeringStatsCount,
     };
 }
 
 export function hasChanges(diff: ImportDiff): boolean {
-    const { ships, gear } = diff;
+    const { ships, gear, implants } = diff;
     return (
         ships.legendary.added.length > 0 ||
         ships.legendary.leveled.length > 0 ||
@@ -118,6 +151,9 @@ export function hasChanges(diff: ImportDiff): boolean {
         ships.otherRemoved > 0 ||
         gear.added > 0 ||
         gear.removed > 0 ||
-        gear.newLegendary6Star.length > 0
+        gear.newLegendary6Star.length > 0 ||
+        implants.added > 0 ||
+        implants.removed > 0 ||
+        implants.newLegendary.length > 0
     );
 }

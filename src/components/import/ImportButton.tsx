@@ -42,7 +42,7 @@ export const ImportButton: React.FC<{
 }) => {
     const { ships, setData: setShips, loadShips } = useShips();
     const { inventory, setData: setInventory, loadInventory } = useInventory();
-    const { setData: setEngineeringStats } = useEngineeringStats();
+    const { engineeringStats, setData: setEngineeringStats } = useEngineeringStats();
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const { activeProfileId } = useActiveProfile();
@@ -186,7 +186,8 @@ export const ImportButton: React.FC<{
                         oldShips,
                         oldInventory,
                         result.data.ships,
-                        result.data.inventory
+                        result.data.inventory,
+                        result.data.engineeringStats
                     );
 
                     // sync to supabase if user is logged in
@@ -237,6 +238,7 @@ export const ImportButton: React.FC<{
         [
             ships,
             inventory,
+            engineeringStats,
             setShips,
             setInventory,
             setEngineeringStats,

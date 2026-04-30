@@ -4,8 +4,9 @@ import { ImportDiff } from '../../types/importDiff';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { RARITIES } from '../../constants/rarities';
-import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { GEAR_SLOTS, IMPLANT_SLOTS } from '../../constants/gearTypes';
 import { GEAR_SETS } from '../../constants/gearSets';
+import { IMPLANTS } from '../../constants/implants';
 import { STATS } from '../../constants/stats';
 import { hasChanges } from '../../utils/import/computeImportDiff';
 
@@ -48,10 +49,42 @@ function GearLine({ gear }: { gear: GearPiece }) {
     );
 }
 
+function ImplantLine({ implant }: { implant: GearPiece }) {
+    const implantName = IMPLANTS[implant.setBonus ?? '']?.name ?? implant.setBonus ?? implant.slot;
+    const slotLabel = IMPLANT_SLOTS[implant.slot]?.label ?? implant.slot;
+    return (
+        <div className="flex items-center gap-2 text-sm py-0.5">
+            <Stars count={implant.stars} />
+            <span className={RARITIES[implant.rarity]?.textColor}>
+                {RARITIES[implant.rarity]?.label ?? implant.rarity}
+            </span>
+            <span className="text-theme-text">{implantName}</span>
+            <span className="text-theme-text-secondary text-xs">{slotLabel}</span>
+            <span className="text-green-400 text-xs">(new)</span>
+        </div>
+    );
+}
+
 export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
     if (!diff) return null;
 
-    const { ships, gear } = diff;
+    const { ships, gear, implants } = diff;
+
+    if (diff.isFreshImport) {
+        const totalShips = ships.legendary.added.length + ships.epic.added + ships.otherAdded;
+        const parts: string[] = [];
+        if (totalShips > 0) parts.push(`${totalShips} ships`);
+        if (gear.added > 0) parts.push(`${gear.added} gear`);
+        if (implants.added > 0) parts.push(`${implants.added} implants`);
+        if (diff.engineeringStatsCount > 0)
+            parts.push(`${diff.engineeringStatsCount} engineering stats`);
+
+        return (
+            <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
+                <p className="text-sm text-theme-text-secondary">{parts.join(' · ')}</p>
+            </Modal>
+        );
+    }
 
     const hasLegendaryChanges =
         ships.legendary.added.length > 0 ||
@@ -68,6 +101,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
     const hasOtherChanges = ships.otherAdded > 0 || ships.otherRemoved > 0;
     const hasShipChanges = hasLegendaryChanges || hasEpicChanges || hasOtherChanges;
     const hasGearChanges = gear.added > 0 || gear.removed > 0 || gear.newLegendary6Star.length > 0;
+    const hasImplantChanges =
+        implants.added > 0 || implants.removed > 0 || implants.newLegendary.length > 0;
 
     return (
         <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
@@ -236,6 +271,33 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
                             )}
                             {gear.newLegendary6Star.map((g) => (
                                 <GearLine key={g.id} gear={g} />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Implants */}
+                    {hasImplantChanges && (
+                        <div>
+                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2">
+                                Implants
+                            </h4>
+                            {(implants.added > 0 || implants.removed > 0) && (
+                                <p className="text-sm text-theme-text-secondary mb-2">
+                                    {implants.added > 0 && (
+                                        <span className="text-green-400">
+                                            +{implants.added} pieces
+                                        </span>
+                                    )}
+                                    {implants.added > 0 && implants.removed > 0 && ' / '}
+                                    {implants.removed > 0 && (
+                                        <span className="text-red-400">
+                                            -{implants.removed} pieces
+                                        </span>
+                                    )}
+                                </p>
+                            )}
+                            {implants.newLegendary.map((g) => (
+                                <ImplantLine key={g.id} implant={g} />
                             ))}
                         </div>
                     )}

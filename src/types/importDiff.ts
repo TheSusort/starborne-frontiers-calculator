@@ -20,6 +20,7 @@ export interface RemovedShip {
 }
 
 export interface ImportDiff {
+    isFreshImport: boolean;
     ships: {
         legendary: {
             added: Ship[];
@@ -41,4 +42,10 @@ export interface ImportDiff {
         removed: number; // gross non-implant pieces absent from this import
         newLegendary6Star: GearPiece[]; // new non-implant pieces: rarity==='legendary' && stars===6
     };
+    implants: {
+        added: number;
+        removed: number;
+        newLegendary: GearPiece[];
+    };
+    engineeringStatsCount: number;
 }
