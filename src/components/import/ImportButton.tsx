@@ -53,6 +53,7 @@ export const ImportButton: React.FC<{
     const [uploadingToCubedweb, setUploadingToCubedweb] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [diffResult, setDiffResult] = useState<ImportDiff | null>(null);
+    const [importFileTimestamp, setImportFileTimestamp] = useState<number | null>(null);
     // Unique id per ImportButton instance so multiple mounts (e.g. HomePage CTA
     // + Sidebar) don't collide on a single DOM id. The id is used for the
     // hidden-input click delegation below.
@@ -110,10 +111,21 @@ export const ImportButton: React.FC<{
         }
     };
 
+    const extractFileTimestamp = (file: File): number => {
+        const match = file.name.match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+        if (match) {
+            const [, year, month, day, hour, minute, second] = match;
+            const ts = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`).getTime();
+            if (!isNaN(ts)) return ts;
+        }
+        return file.lastModified;
+    };
+
     const processFileImport = useCallback(
         async (file: File) => {
             const oldShips = ships;
             const oldInventory = inventory;
+            const fileTimestamp = extractFileTimestamp(file);
             try {
                 setLoading(true);
                 const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
@@ -215,6 +227,7 @@ export const ImportButton: React.FC<{
                         );
 
                         if (syncResult.success) {
+                            setImportFileTimestamp(fileTimestamp);
                             setDiffResult(diff);
                             void Promise.all([loadShips(), loadInventory()]);
                         } else {
@@ -225,6 +238,7 @@ export const ImportButton: React.FC<{
                             );
                         }
                     } else {
+                        setImportFileTimestamp(fileTimestamp);
                         setDiffResult(diff);
                     }
                 } else {
@@ -420,7 +434,14 @@ export const ImportButton: React.FC<{
                 loading={uploadingToCubedweb}
                 fileSize={selectedFile?.size}
             />
-            <ImportDiffModal diff={diffResult} onClose={() => setDiffResult(null)} />
+            <ImportDiffModal
+                diff={diffResult}
+                fileTimestamp={importFileTimestamp}
+                onClose={() => {
+                    setDiffResult(null);
+                    setImportFileTimestamp(null);
+                }}
+            />
         </div>
     );
 };

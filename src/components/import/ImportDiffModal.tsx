@@ -12,7 +12,15 @@ import { hasChanges } from '../../utils/import/computeImportDiff';
 
 interface Props {
     diff: ImportDiff | null;
+    fileTimestamp: number | null;
     onClose: () => void;
+}
+
+function formatFileAge(timestamp: number): string {
+    const days = Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'from today';
+    if (days === 1) return '1 day old';
+    return `${days} days old`;
 }
 
 function Stars({ count }: { count: number }) {
@@ -65,10 +73,12 @@ function ImplantLine({ implant }: { implant: GearPiece }) {
     );
 }
 
-export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
+export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose }) => {
     if (!diff) return null;
 
     const { ships, gear, implants } = diff;
+
+    const fileAgeNote = fileTimestamp !== null ? formatFileAge(fileTimestamp) : null;
 
     if (diff.isFreshImport) {
         const totalShips = ships.legendary.added.length + ships.epic.added + ships.otherAdded;
@@ -82,6 +92,9 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
         return (
             <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
                 <p className="text-sm text-theme-text-secondary">{parts.join(' · ')}</p>
+                {fileAgeNote && (
+                    <p className="text-xs text-theme-text-secondary mt-2">{fileAgeNote}</p>
+                )}
             </Modal>
         );
     }
@@ -106,6 +119,7 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, onClose }) => {
 
     return (
         <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
+            {fileAgeNote && <p className="text-xs text-theme-text-secondary mb-3">{fileAgeNote}</p>}
             {!hasChanges(diff) ? (
                 <p className="text-theme-text-secondary">No changes detected.</p>
             ) : (
