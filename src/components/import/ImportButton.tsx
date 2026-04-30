@@ -227,8 +227,10 @@ export const ImportButton: React.FC<{
                         );
 
                         if (syncResult.success) {
-                            setImportFileTimestamp(fileTimestamp);
-                            setDiffResult(diff);
+                            if (localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false') {
+                                setImportFileTimestamp(fileTimestamp);
+                                setDiffResult(diff);
+                            }
                             void Promise.all([loadShips(), loadInventory()]);
                         } else {
                             addNotification(
@@ -238,8 +240,10 @@ export const ImportButton: React.FC<{
                             );
                         }
                     } else {
-                        setImportFileTimestamp(fileTimestamp);
-                        setDiffResult(diff);
+                        if (localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false') {
+                            setImportFileTimestamp(fileTimestamp);
+                            setDiffResult(diff);
+                        }
                     }
                 } else {
                     addNotification('error', result.error || 'Failed to import data');
