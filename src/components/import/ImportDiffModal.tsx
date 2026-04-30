@@ -6,6 +6,7 @@ import { GearPiece } from '../../types/gear';
 import { RARITIES } from '../../constants/rarities';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { GEAR_SETS } from '../../constants/gearSets';
+import { STATS } from '../../constants/stats';
 import { hasChanges } from '../../utils/import/computeImportDiff';
 
 interface Props {
@@ -26,11 +27,17 @@ function GearLine({ gear }: { gear: GearPiece }) {
     const slotLabel = GEAR_SLOTS[gear.slot]?.label ?? gear.slot;
     const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
     const rarityLabel = RARITIES[gear.rarity]?.label ?? gear.rarity;
+    const mainStatLabel = gear.mainStat
+        ? (STATS[gear.mainStat.name]?.shortLabel ?? gear.mainStat.name)
+        : null;
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
             <Stars count={gear.stars} />
             <span className={RARITIES[gear.rarity]?.textColor}>{rarityLabel}</span>
             <span className="text-theme-text">{slotLabel}</span>
+            {mainStatLabel && (
+                <span className="text-theme-text-secondary text-xs">{mainStatLabel}</span>
+            )}
             {setName && <span className="text-theme-text-secondary">[{setName}]</span>}
             <span className="text-green-400 text-xs">(new)</span>
         </div>
