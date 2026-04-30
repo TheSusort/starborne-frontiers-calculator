@@ -90,11 +90,14 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
             parts.push(`${diff.engineeringStatsCount} engineering stats`);
 
         return (
-            <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
+            <Modal
+                isOpen={true}
+                onClose={onClose}
+                title="Import Complete"
+                subtitle={fileAgeNote ?? undefined}
+                maxWidth="max-w-sm"
+            >
                 <p className="text-sm text-theme-text-secondary">{parts.join(' · ')}</p>
-                {fileAgeNote && (
-                    <p className="text-xs text-theme-text-secondary mt-2">{fileAgeNote}</p>
-                )}
             </Modal>
         );
     }
@@ -118,8 +121,13 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
         implants.added > 0 || implants.removed > 0 || implants.newLegendary.length > 0;
 
     return (
-        <Modal isOpen={true} onClose={onClose} title="Import Complete" maxWidth="max-w-sm">
-            {fileAgeNote && <p className="text-xs text-theme-text-secondary mb-3">{fileAgeNote}</p>}
+        <Modal
+            isOpen={true}
+            onClose={onClose}
+            title="Import Complete"
+            subtitle={fileAgeNote ?? undefined}
+            maxWidth="max-w-sm"
+        >
             {!hasChanges(diff) ? (
                 <p className="text-theme-text-secondary">No changes detected.</p>
             ) : (
