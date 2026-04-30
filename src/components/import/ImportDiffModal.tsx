@@ -25,6 +25,7 @@ function ShipName({ ship }: { ship: Ship }) {
 
 function GearLine({ gear }: { gear: GearPiece }) {
     const slotLabel = GEAR_SLOTS[gear.slot]?.label ?? gear.slot;
+    const setIcon = gear.setBonus ? GEAR_SETS[gear.setBonus]?.iconUrl : null;
     const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
     const rarityLabel = RARITIES[gear.rarity]?.label ?? gear.rarity;
     const mainStatLabel = gear.mainStat
@@ -39,7 +40,9 @@ function GearLine({ gear }: { gear: GearPiece }) {
             {mainStatLabel && (
                 <span className="text-theme-text-secondary text-xs">{mainStatLabel}</span>
             )}
-            {setName && <span className="text-theme-text-secondary">[{setName}]</span>}
+            {setIcon && (
+                <img src={setIcon} alt={setName ?? ''} className="w-4 h-4 object-contain" />
+            )}
             <span className="text-green-400 text-xs">(new)</span>
         </div>
     );
