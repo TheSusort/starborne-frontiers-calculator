@@ -16,9 +16,9 @@ describe('compareIndividuals', () => {
         expect(compareIndividuals(b, a)).toBeGreaterThan(0);
     });
 
-    it('among infeasible, lower violation ranks first', () => {
-        const a = { fitness: 10, violation: 0.1 };
-        const b = { fitness: 1000, violation: 0.2 };
+    it('among infeasible, higher fitness ranks first', () => {
+        const a = { fitness: 1000, violation: 0.2 };
+        const b = { fitness: 10, violation: 0.1 };
         expect(compareIndividuals(a, b)).toBeLessThan(0);
         expect(compareIndividuals(b, a)).toBeGreaterThan(0);
     });
@@ -45,7 +45,7 @@ describe('compareIndividuals', () => {
         ];
         arr.sort(compareIndividuals);
         // feasible individuals (violation===0) rank first, sorted by fitness desc: 100, 10
-        // infeasible individuals rank after, sorted by violation asc: 500(0.1), 1000(0.5)
-        expect(arr.map((x) => x.fitness)).toEqual([100, 10, 500, 1000]);
+        // infeasible individuals rank after, sorted by fitness desc: 1000(0.5), 500(0.1)
+        expect(arr.map((x) => x.fitness)).toEqual([100, 10, 1000, 500]);
     });
 });
