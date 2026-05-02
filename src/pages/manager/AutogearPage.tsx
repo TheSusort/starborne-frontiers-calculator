@@ -222,6 +222,7 @@ export const AutogearPage: React.FC = () => {
                 optimizeImplants: false,
                 includeCalibratedGear: false,
                 useArenaModifiers: false,
+                excludedImplantTypes: [],
             }
         );
     };
