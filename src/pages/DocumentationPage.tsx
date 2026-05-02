@@ -1282,6 +1282,19 @@ const DocumentationPage: React.FC = () => {
                                 </div>
 
                                 <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold">Fleet Buffs</h4>
+                                    <p className="text-theme-text">
+                                        Add external commander or fleet ability buffs as tweaks
+                                        (e.g. Volk&apos;s +30% crit rate). The scorer inflates the
+                                        ship&apos;s stats before optimising, so gear choices reflect
+                                        the ship&apos;s true in-combat performance. Percentage-only
+                                        stats (crit, crit power, def pen, etc.) receive the buff as
+                                        a flat addition; flat stats (attack, HP, defence, etc.)
+                                        receive it as a percentage multiplier.
+                                    </p>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
                                     <h4 className="font-semibold">Equipment Constraints</h4>
                                     <ul className="text-theme-text list-disc pl-4 space-y-1">
                                         <li>
