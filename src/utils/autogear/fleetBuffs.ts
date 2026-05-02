@@ -10,7 +10,7 @@ export function applyFleetBuffs(stats: BaseStats, buffs: FleetBuff[]): BaseStats
         const current = modified[buff.stat];
         if (typeof current !== 'number') continue;
         if (PERCENTAGE_ONLY_SET.has(buff.stat)) {
-            (modified as Record<StatName, number>)[buff.stat] = current + buff.percentage / 100;
+            (modified as Record<StatName, number>)[buff.stat] = current + buff.percentage;
         } else {
             (modified as Record<StatName, number>)[buff.stat] =
                 current * (1 + buff.percentage / 100);

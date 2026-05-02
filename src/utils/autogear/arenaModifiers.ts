@@ -1,5 +1,7 @@
 import { ArenaSeasonRule } from '../../types/arena';
-import { BaseStats } from '../../types/stats';
+import { BaseStats, PERCENTAGE_ONLY_STATS, StatName } from '../../types/stats';
+
+const PERCENTAGE_ONLY_SET = new Set<StatName>(PERCENTAGE_ONLY_STATS);
 
 /**
  * Check if a rule matches a ship based on faction, rarity, and role.
@@ -59,7 +61,10 @@ export function applyArenaModifiers(
     const modified = { ...stats } as unknown as Record<string, number>;
     const original = stats as unknown as Record<string, number>;
     for (const [stat, percentage] of entries) {
-        if (stat in modified) {
+        if (!(stat in modified)) continue;
+        if (PERCENTAGE_ONLY_SET.has(stat as StatName)) {
+            modified[stat] = original[stat] + percentage;
+        } else {
             modified[stat] = original[stat] * (1 + percentage / 100);
         }
     }
