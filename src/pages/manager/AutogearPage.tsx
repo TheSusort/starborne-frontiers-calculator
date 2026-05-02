@@ -1382,12 +1382,12 @@ export const AutogearPage: React.FC = () => {
                     onAddExcludedImplantTypes={(keys) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
+                            const existing = config.excludedImplantTypes ?? [];
+                            const newKeys = [...new Set(keys)];
                             updateShipConfig(shipSettings.id, {
                                 excludedImplantTypes: [
-                                    ...(config.excludedImplantTypes ?? []),
-                                    ...keys.filter(
-                                        (k) => !(config.excludedImplantTypes ?? []).includes(k)
-                                    ),
+                                    ...existing,
+                                    ...newKeys.filter((k) => !existing.includes(k)),
                                 ],
                             });
                         }
