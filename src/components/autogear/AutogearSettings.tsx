@@ -267,7 +267,7 @@ const ExcludedImplantEditForm: React.FC<{
                 </Button>
                 <Button
                     type="button"
-                    variant="secondary"
+                    variant="primary"
                     disabled={selected === editKey}
                     onClick={() => onSave(selected)}
                 >
