@@ -3,6 +3,8 @@ import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
     CheckboxGroup,
+    CloseIcon,
+    EditIcon,
     SearchInput,
     Select,
     Checkbox,
@@ -456,9 +458,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ))}
                                         </div>
                                     )}
-                                    <p className="text-xs text-theme-text-secondary italic">
-                                        Order matters — higher tweaks weigh more.
-                                    </p>
                                     {excludedImplantTypes.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
@@ -473,34 +472,38 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                 return (
                                                     <div
                                                         key={key}
-                                                        className="flex items-center justify-between gap-2 p-2 bg-dark border border-dark-border rounded text-sm"
+                                                        className="flex items-center text-sm gap-2"
                                                     >
                                                         <span>{label}</span>
-                                                        <div className="flex gap-1">
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    openForm('excludedImplant')
-                                                                }
-                                                            >
-                                                                Edit
-                                                            </Button>
-                                                            <Button
-                                                                variant="danger"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    onRemoveExcludedImplantType(key)
-                                                                }
-                                                            >
-                                                                Remove
-                                                            </Button>
-                                                        </div>
+                                                        <Button
+                                                            aria-label="Edit excluded implant types"
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                openForm('excludedImplant')
+                                                            }
+                                                            className="ml-auto"
+                                                        >
+                                                            <EditIcon />
+                                                        </Button>
+                                                        <Button
+                                                            aria-label="Remove excluded implant type"
+                                                            variant="danger"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                onRemoveExcludedImplantType(key)
+                                                            }
+                                                        >
+                                                            <CloseIcon />
+                                                        </Button>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     )}
+                                    <p className="text-xs text-theme-text-secondary italic">
+                                        Order matters — higher tweaks weigh more.
+                                    </p>
                                 </div>
                             )}
                         </div>
