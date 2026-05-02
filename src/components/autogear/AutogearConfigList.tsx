@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import { GEAR_SETS, ShipTypeName } from '../../constants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { STATS } from '../../constants/stats';
@@ -10,6 +10,7 @@ interface AutogearConfigListProps {
     statPriorities: StatPriority[];
     setPriorities: SetPriority[];
     statBonuses: StatBonus[];
+    fleetBuffs?: FleetBuff[];
     ignoreEquipped: boolean;
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
@@ -22,6 +23,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
     statPriorities,
     setPriorities,
     statBonuses,
+    fleetBuffs = [],
     ignoreEquipped,
     ignoreUnleveled,
     useUpgradedStats,
@@ -32,6 +34,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
         statPriorities.length > 0 ||
         setPriorities.length > 0 ||
         statBonuses.length > 0 ||
+        fleetBuffs.length > 0 ||
         optimizeImplants ||
         ignoreEquipped ||
         ignoreUnleveled ||
@@ -99,6 +102,17 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                                 {STATS[bonus.stat as StatName]?.label}{' '}
                                 {bonus.mode === 'multiplier' ? '×' : '+'}
                                 {bonus.percentage}%
+                            </span>
+                        ))}
+                    </>
+                )}
+
+                {/* Fleet Buffs */}
+                {fleetBuffs.length > 0 && (
+                    <>
+                        {fleetBuffs.map((buff, index) => (
+                            <span key={index}>
+                                {STATS[buff.stat]?.label} +{buff.percentage}%
                             </span>
                         ))}
                     </>

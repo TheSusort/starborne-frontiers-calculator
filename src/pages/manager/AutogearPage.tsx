@@ -316,7 +316,10 @@ export const AutogearPage: React.FC = () => {
                 // Load saved config for this ship
                 const savedConfig = getConfig(shipId);
                 if (savedConfig) {
-                    updateShipConfig(shipId, savedConfig);
+                    updateShipConfig(shipId, {
+                        ...savedConfig,
+                        fleetBuffs: savedConfig.fleetBuffs ?? [],
+                    });
                     addNotification('success', 'Loaded saved configuration');
                 }
             }
@@ -499,6 +502,7 @@ export const AutogearPage: React.FC = () => {
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
                 useArenaModifiers: shipConfig.useArenaModifiers,
+                fleetBuffs: shipConfig.fleetBuffs,
                 excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
             };
             void saveConfig(config);
@@ -638,7 +642,8 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.setPriorities,
                     shipConfig.statBonuses,
                     shipConfig.tryToCompleteSets,
-                    arenaModifiers
+                    arenaModifiers,
+                    shipConfig.fleetBuffs
                 )
             );
             const newSuggestions = strategyResult.suggestions;
