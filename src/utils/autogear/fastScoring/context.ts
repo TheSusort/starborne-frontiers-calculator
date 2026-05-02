@@ -17,6 +17,7 @@ export interface FastScoringContext {
     readonly shipRole: ShipTypeName | undefined;
     readonly tryToCompleteSets: boolean | undefined;
     readonly arenaModifiers: Record<string, number> | null | undefined;
+    readonly fleetBuffs: readonly FleetBuff[] | undefined;
 
     readonly gearRegistry: GearRegistry;
     readonly implantRegistry: GearRegistry;
@@ -121,6 +122,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         shipRole: input.shipRole,
         tryToCompleteSets: input.tryToCompleteSets,
         arenaModifiers: input.arenaModifiers,
+        fleetBuffs: input.fleetBuffs,
         gearRegistry,
         implantRegistry,
         shipPrefix,
