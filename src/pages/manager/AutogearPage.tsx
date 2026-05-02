@@ -490,6 +490,14 @@ export const AutogearPage: React.FC = () => {
                         return false;
                     }
 
+                    // Exclude implant types the user has blacklisted for this ship
+                    if (
+                        isImplant &&
+                        shipConfig.excludedImplantTypes?.includes(gear.setBonus ?? '')
+                    ) {
+                        return false;
+                    }
+
                     // Exclude already used gear
                     if (usedGearIds.has(gear.id)) {
                         return false;
