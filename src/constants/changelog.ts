@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.57.0';
+export const CURRENT_VERSION = '1.58.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.58.0',
+        date: '2026-05-02',
+        changes: [
+            'Added Exclude implant types to autogear settings — users can now prevent specific implant types (e.g. Bulwark) from being used in autogear runs',
+            'Added Buffs to autogear settings — users can now specify external stat buffs per ship in the autogear optimisation',
+            'Added import summary to game import modal — shows the number of ships, gear, and implants imported',
+        ],
+    },
     {
         version: '1.57.0',
         date: '2026-04-27',
