@@ -50,6 +50,10 @@ interface AutogearSettingsModalProps {
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;
     onUseArenaModifiersChange?: (value: boolean) => void;
+    availableImplantTypes: { key: string; name: string }[];
+    excludedImplantTypes: string[];
+    onAddExcludedImplantType: (key: string) => void;
+    onRemoveExcludedImplantType: (key: string) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({

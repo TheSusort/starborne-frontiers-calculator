@@ -18,6 +18,7 @@ import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { IMPLANTS } from '../../constants/implants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { GearSuggestions } from '../../components/autogear/GearSuggestions';
@@ -202,6 +203,19 @@ export const AutogearPage: React.FC = () => {
 
         return targets;
     }, [donorContext, ships]);
+
+    const availableImplantTypes = useMemo(() => {
+        const seen = new Set<string>();
+        const result: { key: string; name: string }[] = [];
+        for (const gear of inventory) {
+            if (!gear.slot.startsWith('implant_') || !gear.setBonus) continue;
+            const key = gear.setBonus;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push({ key, name: IMPLANTS[key]?.name ?? key });
+        }
+        return result;
+    }, [inventory]);
 
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
@@ -1357,6 +1371,30 @@ export const AutogearPage: React.FC = () => {
                     onOptimizeImplantsChange={(optimizeImplants) => {
                         if (shipSettings) {
                             updateShipConfig(shipSettings.id, { optimizeImplants });
+                        }
+                    }}
+                    availableImplantTypes={availableImplantTypes}
+                    excludedImplantTypes={
+                        shipSettings
+                            ? (getShipConfig(shipSettings.id).excludedImplantTypes ?? [])
+                            : []
+                    }
+                    onAddExcludedImplantType={(key) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                excludedImplantTypes: [...(config.excludedImplantTypes ?? []), key],
+                            });
+                        }
+                    }}
+                    onRemoveExcludedImplantType={(key) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                excludedImplantTypes: (config.excludedImplantTypes ?? []).filter(
+                                    (k) => k !== key
+                                ),
+                            });
                         }
                     }}
                     onIncludeCalibratedGearChange={(includeCalibratedGear) => {
