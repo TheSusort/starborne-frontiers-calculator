@@ -125,6 +125,7 @@ export const AutogearPage: React.FC = () => {
                 optimizeImplants: boolean;
                 includeCalibratedGear: boolean;
                 useArenaModifiers: boolean;
+                excludedImplantTypes: string[];
             }
         >
     >({});
