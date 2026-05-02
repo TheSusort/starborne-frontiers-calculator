@@ -1,7 +1,7 @@
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type { EngineeringStat, BaseStats } from '../../../types/stats';
-import type { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
 import { FastCache } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
@@ -51,6 +51,7 @@ export interface BuildContextInput {
     shipRole?: ShipTypeName;
     tryToCompleteSets?: boolean;
     arenaModifiers?: Record<string, number> | null;
+    fleetBuffs?: FleetBuff[];
     engineeringStats: EngineeringStat | undefined;
     /**
      * Used only when the GA is NOT optimizing implants — so the context can

@@ -2,6 +2,7 @@ import { AutogearStrategy, AutogearResult, HardRequirementViolation } from '../A
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import type { FleetBuff } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import { calculateTotalScore, calculateHardViolation, clearScoreCache } from '../scoring';
@@ -10,6 +11,7 @@ import { compareIndividuals } from '../individualComparator';
 import { BaseStrategy } from '../BaseStrategy';
 import { performanceTracker } from '../performanceTimer';
 import { applyArenaModifiers } from '../arenaModifiers';
+import { applyFleetBuffs } from '../fleetBuffs';
 import { buildFastScoringContext, type FastScoringContext } from '../fastScoring/context';
 import { USE_FAST_SCORING, VERIFY_FAST_SCORING } from '../fastScoring/featureFlag';
 import { fastScore } from '../fastScoring/fastScore';
@@ -100,7 +102,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null
+        arenaModifiers?: Record<string, number> | null,
+        fleetBuffs?: FleetBuff[]
     ): Promise<AutogearResult> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
@@ -135,6 +138,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                   shipRole,
                   tryToCompleteSets,
                   arenaModifiers,
+                  fleetBuffs,
                   engineeringStats: getEngineeringStatsForShipType(ship.type),
                   resolveGearPiece: cachedGetGearPiece,
               })
@@ -169,6 +173,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 statBonuses,
                 tryToCompleteSets,
                 arenaModifiers,
+                fleetBuffs,
                 populationSize,
                 generations,
                 eliteSize,
@@ -204,7 +209,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 priorities,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
-                arenaModifiers
+                arenaModifiers,
+                fleetBuffs
             );
         }
         return result;
@@ -222,6 +228,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses: StatBonus[] | undefined,
         tryToCompleteSets: boolean | undefined,
         arenaModifiers: Record<string, number> | null | undefined,
+        fleetBuffs: FleetBuff[] | undefined,
         populationSize: number,
         generations: number,
         eliteSize: number,
@@ -249,6 +256,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             statBonuses,
             tryToCompleteSets,
             arenaModifiers,
+            fleetBuffs,
             fastContext
         );
         performanceTracker.endTimer('InitialEvaluation');
@@ -291,6 +299,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 statBonuses,
                 tryToCompleteSets,
                 arenaModifiers,
+                fleetBuffs,
                 fastContext
             );
             performanceTracker.endTimer('Evaluation');
@@ -319,7 +328,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        arenaModifiers: Record<string, number> | null | undefined
+        arenaModifiers: Record<string, number> | null | undefined,
+        fleetBuffs?: FleetBuff[]
     ): HardRequirementViolation[] {
         const gearOnly: Partial<Record<GearSlotName, string>> = {};
         const implantsOnly: Partial<Record<GearSlotName, string>> = {};
@@ -339,10 +349,14 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getEngineeringStatsForShipType(shipForStats.type),
             shipForStats.id
         );
-        const stats =
+        const statsAfterArena =
             arenaModifiers && Object.keys(arenaModifiers).length > 0
                 ? applyArenaModifiers(totalStats.final, arenaModifiers)
                 : totalStats.final;
+        const stats =
+            fleetBuffs && fleetBuffs.length > 0
+                ? applyFleetBuffs(statsAfterArena, fleetBuffs)
+                : statsAfterArena;
 
         const violations: HardRequirementViolation[] = [];
         for (const p of priorities) {
@@ -411,6 +425,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null,
+        fleetBuffs?: FleetBuff[],
         fastContext?: FastScoringContext | null
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
@@ -428,6 +443,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     statBonuses,
                     tryToCompleteSets,
                     arenaModifiers,
+                    fleetBuffs,
                     fastContext
                 );
                 return { ...individual, fitness, violation };
@@ -449,6 +465,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null,
+        fleetBuffs?: FleetBuff[],
         fastContext?: FastScoringContext | null
     ): { fitness: number; violation: number } {
         performanceTracker.startTimer('CalculateFitness');
@@ -475,6 +492,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     statBonuses,
                     tryToCompleteSets,
                     arenaModifiers,
+                    fleetBuffs,
                     fitness,
                     violation
                 );
@@ -515,7 +533,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities,
             statBonuses,
             tryToCompleteSets,
-            arenaModifiers
+            arenaModifiers,
+            fleetBuffs
         );
 
         // Only compute violation when at least one priority is hard-flagged.
@@ -532,10 +551,14 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 getEngineeringStatsForShipType(shipWithNewImplants.type),
                 shipWithNewImplants.id
             );
-            const statsForViolation =
+            const statsAfterArena =
                 arenaModifiers && Object.keys(arenaModifiers).length > 0
                     ? applyArenaModifiers(totalStats.final, arenaModifiers)
                     : totalStats.final;
+            const statsForViolation =
+                fleetBuffs && fleetBuffs.length > 0
+                    ? applyFleetBuffs(statsAfterArena, fleetBuffs)
+                    : statsAfterArena;
             violation = calculateHardViolation(statsForViolation, priorities);
         }
 
@@ -694,6 +717,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         statBonuses: StatBonus[] | undefined,
         tryToCompleteSets: boolean | undefined,
         arenaModifiers: Record<string, number> | null | undefined,
+        fleetBuffs: FleetBuff[] | undefined,
         fastFitness: number,
         _fastViolation: number
     ): void {
@@ -719,7 +743,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             setPriorities,
             statBonuses,
             tryToCompleteSets,
-            arenaModifiers
+            arenaModifiers,
+            fleetBuffs
         );
 
         const relTol = 1e-6;

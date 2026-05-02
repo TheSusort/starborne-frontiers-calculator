@@ -1,6 +1,12 @@
 import type { Ship } from '../../types/ship';
 import type { GearPiece } from '../../types/gear';
-import type { StatPriority, GearSuggestion, SetPriority, StatBonus } from '../../types/autogear';
+import type {
+    StatPriority,
+    GearSuggestion,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+} from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat, StatName } from '../../types/stats';
 
@@ -42,7 +48,8 @@ export interface AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null
+        arenaModifiers?: Record<string, number> | null,
+        fleetBuffs?: FleetBuff[]
     ): Promise<AutogearResult> | AutogearResult;
     setProgressCallback(callback: (progress: AutogearProgress) => void): void;
 }
