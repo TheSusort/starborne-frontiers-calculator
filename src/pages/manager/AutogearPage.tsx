@@ -4,7 +4,13 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { arrayMove } from '../../utils/arrayMove';
-import { GearSuggestion, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import {
+    GearSuggestion,
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+} from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
@@ -142,6 +148,7 @@ export const AutogearPage: React.FC = () => {
                 includeCalibratedGear: boolean;
                 useArenaModifiers: boolean;
                 excludedImplantTypes: string[];
+                fleetBuffs: FleetBuff[];
             }
         >
     >({});
@@ -257,6 +264,7 @@ export const AutogearPage: React.FC = () => {
                 includeCalibratedGear: false,
                 useArenaModifiers: false,
                 excludedImplantTypes: [],
+                fleetBuffs: [],
             }
         );
     };
@@ -1476,6 +1484,41 @@ export const AutogearPage: React.FC = () => {
                             const config = getShipConfig(shipSettings.id);
                             updateShipConfig(shipSettings.id, {
                                 statBonuses: arrayMove(config.statBonuses, fromIndex, toIndex),
+                            });
+                        }
+                    }}
+                    fleetBuffs={shipSettings ? getShipConfig(shipSettings.id).fleetBuffs : []}
+                    onAddFleetBuff={(buff) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                fleetBuffs: [...config.fleetBuffs, buff],
+                            });
+                        }
+                    }}
+                    onUpdateFleetBuff={(index, buff) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                fleetBuffs: config.fleetBuffs.map((b, i) =>
+                                    i === index ? buff : b
+                                ),
+                            });
+                        }
+                    }}
+                    onRemoveFleetBuff={(index) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                fleetBuffs: config.fleetBuffs.filter((_, i) => i !== index),
+                            });
+                        }
+                    }}
+                    onMoveFleetBuff={(fromIndex, toIndex) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                fleetBuffs: arrayMove(config.fleetBuffs, fromIndex, toIndex),
                             });
                         }
                     }}

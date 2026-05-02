@@ -17,7 +17,7 @@ import {
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
-import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
@@ -26,13 +26,15 @@ import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
 import { SetPriorityRow } from './SetPriorityRow';
 import { StatBonusRow } from './StatBonusRow';
+import { FleetBuffForm } from './FleetBuffForm';
+import { FleetBuffRow } from './FleetBuffRow';
 
 type TweakView =
     | { mode: 'list' }
     | { mode: 'picker' }
     | {
           mode: 'form';
-          type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant';
+          type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'excludedImplant';
           editIndex: number | null;
       };
 
@@ -82,6 +84,11 @@ interface AutogearSettingsProps {
     onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
     onMoveStatBonus: (fromIndex: number, toIndex: number) => void;
+    fleetBuffs: FleetBuff[];
+    onAddFleetBuff: (buff: FleetBuff) => void;
+    onUpdateFleetBuff: (index: number, buff: FleetBuff) => void;
+    onRemoveFleetBuff: (index: number) => void;
+    onMoveFleetBuff: (fromIndex: number, toIndex: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
@@ -261,6 +268,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onUpdateStatBonus,
     onRemoveStatBonus,
     onMoveStatBonus,
+    fleetBuffs,
+    onAddFleetBuff,
+    onUpdateFleetBuff,
+    onRemoveFleetBuff,
+    onMoveFleetBuff,
     onUseUpgradedStatsChange,
     onTryToCompleteSetsChange,
     onOptimizeImplantsChange,
@@ -280,7 +292,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
-        type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant',
+        type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'excludedImplant',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
     const backToList = () => setTweakView({ mode: 'list' });
@@ -294,6 +306,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     const isEditingStatBonus = (index: number) =>
         tweakView.mode === 'form' &&
         tweakView.type === 'statBonus' &&
+        tweakView.editIndex === index;
+    const isEditingFleetBuff = (index: number) =>
+        tweakView.mode === 'form' &&
+        tweakView.type === 'fleetBuff' &&
         tweakView.editIndex === index;
 
     const isSubFlow = tweakView.mode !== 'list';
@@ -353,6 +369,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         {priorities.length +
                                             setPriorities.length +
                                             statBonuses.length +
+                                            fleetBuffs.length +
                                             excludedImplantTypes.length}
                                         )
                                     </span>
@@ -370,6 +387,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             {priorities.length +
                                 setPriorities.length +
                                 statBonuses.length +
+                                fleetBuffs.length +
                                 excludedImplantTypes.length ===
                             0 ? (
                                 <p className="text-sm text-theme-text-secondary text-center py-4">
@@ -454,6 +472,33 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                         onMoveStatBonus(index, index + 1)
                                                     }
                                                     onRemove={() => onRemoveStatBonus(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {fleetBuffs.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                Fleet buffs
+                                            </h4>
+                                            {fleetBuffs.map((buff, index) => (
+                                                <FleetBuffRow
+                                                    key={`fleetbuff-${index}`}
+                                                    buff={buff}
+                                                    isEditing={isEditingFleetBuff(index)}
+                                                    canMoveUp={index > 0}
+                                                    canMoveDown={index < fleetBuffs.length - 1}
+                                                    onUpdate={(updated) =>
+                                                        onUpdateFleetBuff(index, updated)
+                                                    }
+                                                    onEdit={() => openForm('fleetBuff', index)}
+                                                    onMoveUp={() =>
+                                                        onMoveFleetBuff(index, index - 1)
+                                                    }
+                                                    onMoveDown={() =>
+                                                        onMoveFleetBuff(index, index + 1)
+                                                    }
+                                                    onRemove={() => onRemoveFleetBuff(index)}
                                                 />
                                             ))}
                                         </div>
@@ -563,6 +608,17 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         skill scales off a non-standard stat (e.g. Defense at 80%).
                                     </div>
                                 </button>
+                                <button
+                                    type="button"
+                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                    onClick={() => openForm('fleetBuff')}
+                                >
+                                    <div className="font-semibold">Fleet buff</div>
+                                    <div className="text-xs text-theme-text-secondary">
+                                        Apply a commander or fleet ability stat boost (e.g.
+                                        Volk&apos;s +30% crit rate).
+                                    </div>
+                                </button>
                                 {optimizeImplants && availableImplantTypes.length > 0 && (
                                     <button
                                         type="button"
@@ -604,7 +660,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                           ? 'set requirement'
                                           : tweakView.type === 'statBonus'
                                             ? 'scale'
-                                            : 'excluded implant type'}
+                                            : tweakView.type === 'fleetBuff'
+                                              ? 'fleet buff'
+                                              : 'excluded implant type'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (
@@ -670,6 +728,29 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             tweakView.editIndex !== null
                                         ) {
                                             onUpdateStatBonus(tweakView.editIndex, b);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                            {tweakView.type === 'fleetBuff' && (
+                                <FleetBuffForm
+                                    onAdd={(b) => {
+                                        onAddFleetBuff(b);
+                                        backToList();
+                                    }}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? fleetBuffs[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(b) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdateFleetBuff(tweakView.editIndex, b);
                                             backToList();
                                         }
                                     }}
