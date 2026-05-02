@@ -21,6 +21,7 @@ export * from './Pagination';
 export * from './ProgressBar';
 export * from './QuickStartCard';
 export * from './SectionHeader';
+export * from './SearchInput';
 export * from './Select';
 export * from './RoleSelector';
 export * from './StatCard';

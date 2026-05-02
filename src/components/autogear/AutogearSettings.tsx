@@ -3,6 +3,7 @@ import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
     CheckboxGroup,
+    SearchInput,
     Select,
     Checkbox,
     Input,
@@ -179,11 +180,15 @@ const ExcludedImplantForm: React.FC<{
     onCancel: () => void;
 }> = ({ availableImplantTypes, excludedImplantTypes, onAdd, onCancel }) => {
     const [selected, setSelected] = useState<string[]>([]);
-    const options = availableImplantTypes
+    const [searchTerm, setSearchTerm] = useState('');
+    const allOptions = availableImplantTypes
         .filter((t) => !excludedImplantTypes.includes(t.key))
         .map((t) => ({ value: t.key, label: t.label }));
+    const options = searchTerm
+        ? allOptions.filter((o) => o.label.toLowerCase().includes(searchTerm.toLowerCase()))
+        : allOptions;
 
-    if (options.length === 0) {
+    if (allOptions.length === 0) {
         return (
             <div className="space-y-3">
                 <p className="text-sm text-theme-text-secondary">
@@ -200,12 +205,23 @@ const ExcludedImplantForm: React.FC<{
 
     return (
         <div className="space-y-3">
-            <CheckboxGroup
-                label="Implant types"
-                options={options}
-                values={selected}
-                onChange={setSelected}
+            <SearchInput
+                value={searchTerm}
+                onChange={setSearchTerm}
+                placeholder="Search implant types..."
             />
+            {options.length === 0 ? (
+                <p className="text-sm text-theme-text-secondary">
+                    No implant types match your search.
+                </p>
+            ) : (
+                <CheckboxGroup
+                    label="Implant types"
+                    options={options}
+                    values={selected}
+                    onChange={setSelected}
+                />
+            )}
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={onCancel}>
                     Cancel
