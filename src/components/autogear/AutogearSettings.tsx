@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
+    CheckboxGroup,
     Select,
     Checkbox,
     Input,
@@ -84,7 +85,7 @@ interface AutogearSettingsProps {
     onIncludeCalibratedGearChange: (value: boolean) => void;
     availableImplantTypes?: { key: string; name: string }[];
     excludedImplantTypes?: string[];
-    onAddExcludedImplantType?: (key: string) => void;
+    onAddExcludedImplantTypes?: (keys: string[]) => void;
     onRemoveExcludedImplantType?: (key: string) => void;
     onResetConfig: () => void;
     activeSeason?: ArenaSeason | null;
@@ -174,40 +175,51 @@ const SetPriorityForm: React.FC<{
 const ExcludedImplantForm: React.FC<{
     availableImplantTypes: { key: string; name: string }[];
     excludedImplantTypes: string[];
-    onAdd: (key: string) => void;
+    onAdd: (keys: string[]) => void;
     onCancel: () => void;
 }> = ({ availableImplantTypes, excludedImplantTypes, onAdd, onCancel }) => {
-    const [selected, setSelected] = useState('');
+    const [selected, setSelected] = useState<string[]>([]);
     const options = availableImplantTypes
         .filter((t) => !excludedImplantTypes.includes(t.key))
         .map((t) => ({ value: t.key, label: t.name }));
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selected) return;
-        onAdd(selected);
-        setSelected('');
-    };
+    if (options.length === 0) {
+        return (
+            <div className="space-y-3">
+                <p className="text-sm text-theme-text-secondary">
+                    All available implant types are already excluded.
+                </p>
+                <div className="flex justify-end">
+                    <Button type="button" variant="secondary" onClick={onCancel}>
+                        Cancel
+                    </Button>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-3">
-            <Select
-                label="Implant type"
+        <div className="space-y-3">
+            <CheckboxGroup
+                label="Implant types"
                 options={options}
-                value={selected}
+                values={selected}
                 onChange={setSelected}
-                noDefaultSelection
-                helpLabel="Select an implant type to exclude from autogear for this ship."
             />
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={onCancel}>
                     Cancel
                 </Button>
-                <Button type="submit" disabled={!selected} variant="secondary">
-                    Add
+                <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={selected.length === 0}
+                    onClick={() => onAdd(selected)}
+                >
+                    Add selected
                 </Button>
             </div>
-        </form>
+        </div>
     );
 };
 
@@ -244,7 +256,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onIncludeCalibratedGearChange,
     availableImplantTypes = [],
     excludedImplantTypes = [],
-    onAddExcludedImplantType = () => {},
+    onAddExcludedImplantTypes = () => {},
     onRemoveExcludedImplantType = () => {},
     onResetConfig,
     onFindOptimalGear,
@@ -637,8 +649,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 <ExcludedImplantForm
                                     availableImplantTypes={availableImplantTypes}
                                     excludedImplantTypes={excludedImplantTypes}
-                                    onAdd={(key) => {
-                                        onAddExcludedImplantType(key);
+                                    onAdd={(keys) => {
+                                        onAddExcludedImplantTypes(keys);
                                         backToList();
                                     }}
                                     onCancel={backToList}
