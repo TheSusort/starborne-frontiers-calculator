@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
@@ -266,13 +266,17 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    const tweaksCardRef = useRef<HTMLDivElement>(null);
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
         type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
-    const backToList = () => setTweakView({ mode: 'list' });
+    const backToList = () => {
+        setTweakView({ mode: 'list' });
+        tweaksCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
 
     const isEditingPriority = (index: number) =>
         tweakView.mode === 'form' && tweakView.type === 'priority' && tweakView.editIndex === index;
@@ -331,7 +335,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShipRole && (
-                <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>
+                <div
+                    ref={tweaksCardRef}
+                    className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}
+                >
                     {tweakView.mode === 'list' && (
                         <div key="list" className="animate-subview-enter space-y-3">
                             <div className="flex justify-between items-center">
