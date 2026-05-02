@@ -1421,6 +1421,16 @@ export const AutogearPage: React.FC = () => {
                             });
                         }
                     }}
+                    onUpdateExcludedImplantType={(oldKey, newKey) => {
+                        if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            updateShipConfig(shipSettings.id, {
+                                excludedImplantTypes: (config.excludedImplantTypes ?? []).map(
+                                    (k) => (k === oldKey ? newKey : k)
+                                ),
+                            });
+                        }
+                    }}
                     onIncludeCalibratedGearChange={(includeCalibratedGear) => {
                         if (shipSettings) {
                             updateShipConfig(shipSettings.id, { includeCalibratedGear });

@@ -32,6 +32,7 @@ type TweakView =
           mode: 'form';
           type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant';
           editIndex: number | null;
+          editKey?: string;
       };
 
 function formatRuleSummary(rule: {
@@ -88,6 +89,7 @@ interface AutogearSettingsProps {
     excludedImplantTypes?: string[];
     onAddExcludedImplantTypes?: (keys: string[]) => void;
     onRemoveExcludedImplantType?: (key: string) => void;
+    onUpdateExcludedImplantType?: (oldKey: string, newKey: string) => void;
     onResetConfig: () => void;
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;
@@ -239,6 +241,43 @@ const ExcludedImplantForm: React.FC<{
     );
 };
 
+const ExcludedImplantEditForm: React.FC<{
+    availableImplantTypes: { key: string; name: string; label: string }[];
+    excludedImplantTypes: string[];
+    editKey: string;
+    onSave: (newKey: string) => void;
+    onCancel: () => void;
+}> = ({ availableImplantTypes, excludedImplantTypes, editKey, onSave, onCancel }) => {
+    const [selected, setSelected] = useState(editKey);
+    const options = availableImplantTypes
+        .filter((t) => !excludedImplantTypes.includes(t.key) || t.key === editKey)
+        .map((t) => ({ value: t.key, label: t.label }));
+
+    return (
+        <div className="space-y-3">
+            <Select
+                label="Replace with"
+                options={options}
+                value={selected}
+                onChange={setSelected}
+            />
+            <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={onCancel}>
+                    Cancel
+                </Button>
+                <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={selected === editKey}
+                    onClick={() => onSave(selected)}
+                >
+                    Save
+                </Button>
+            </div>
+        </div>
+    );
+};
+
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedShip,
     selectedShipRole,
@@ -274,6 +313,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     excludedImplantTypes = [],
     onAddExcludedImplantTypes = () => {},
     onRemoveExcludedImplantType = () => {},
+    onUpdateExcludedImplantType = () => {},
     onResetConfig,
     onFindOptimalGear,
     activeSeason,
@@ -286,8 +326,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
         type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant',
-        editIndex: number | null = null
-    ) => setTweakView({ mode: 'form', type, editIndex });
+        editIndex: number | null = null,
+        editKey?: string
+    ) => setTweakView({ mode: 'form', type, editIndex, editKey });
     const backToList = () => setTweakView({ mode: 'list' });
 
     const isEditingPriority = (index: number) =>
@@ -483,15 +524,30 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                         className="flex items-center justify-between gap-2 p-2 bg-dark border border-dark-border rounded text-sm"
                                                     >
                                                         <span>{label}</span>
-                                                        <Button
-                                                            variant="danger"
-                                                            size="xs"
-                                                            onClick={() =>
-                                                                onRemoveExcludedImplantType(key)
-                                                            }
-                                                        >
-                                                            Remove
-                                                        </Button>
+                                                        <div className="flex gap-1">
+                                                            <Button
+                                                                variant="secondary"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    openForm(
+                                                                        'excludedImplant',
+                                                                        null,
+                                                                        key
+                                                                    )
+                                                                }
+                                                            >
+                                                                Edit
+                                                            </Button>
+                                                            <Button
+                                                                variant="danger"
+                                                                size="xs"
+                                                                onClick={() =>
+                                                                    onRemoveExcludedImplantType(key)
+                                                                }
+                                                            >
+                                                                Remove
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -586,7 +642,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 </Button>
                                 <span className="text-theme-text-secondary">·</span>
                                 <span>
-                                    {tweakView.editIndex === null ? 'Add' : 'Edit'}{' '}
+                                    {tweakView.type === 'excludedImplant'
+                                        ? tweakView.editKey !== undefined
+                                            ? 'Edit'
+                                            : 'Add'
+                                        : tweakView.editIndex === null
+                                          ? 'Add'
+                                          : 'Edit'}{' '}
                                     {tweakView.type === 'priority'
                                         ? 'limits'
                                         : tweakView.type === 'setPriority'
@@ -665,17 +727,29 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onCancel={backToList}
                                 />
                             )}
-                            {tweakView.type === 'excludedImplant' && (
-                                <ExcludedImplantForm
-                                    availableImplantTypes={availableImplantTypes}
-                                    excludedImplantTypes={excludedImplantTypes}
-                                    onAdd={(keys) => {
-                                        onAddExcludedImplantTypes(keys);
-                                        backToList();
-                                    }}
-                                    onCancel={backToList}
-                                />
-                            )}
+                            {tweakView.type === 'excludedImplant' &&
+                                (tweakView.editKey !== undefined ? (
+                                    <ExcludedImplantEditForm
+                                        availableImplantTypes={availableImplantTypes}
+                                        excludedImplantTypes={excludedImplantTypes}
+                                        editKey={tweakView.editKey}
+                                        onSave={(newKey) => {
+                                            onUpdateExcludedImplantType(tweakView.editKey!, newKey);
+                                            backToList();
+                                        }}
+                                        onCancel={backToList}
+                                    />
+                                ) : (
+                                    <ExcludedImplantForm
+                                        availableImplantTypes={availableImplantTypes}
+                                        excludedImplantTypes={excludedImplantTypes}
+                                        onAdd={(keys) => {
+                                            onAddExcludedImplantTypes(keys);
+                                            backToList();
+                                        }}
+                                        onCancel={backToList}
+                                    />
+                                ))}
                         </div>
                     )}
                 </div>

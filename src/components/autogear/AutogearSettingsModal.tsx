@@ -54,6 +54,7 @@ interface AutogearSettingsModalProps {
     excludedImplantTypes: string[];
     onAddExcludedImplantTypes: (keys: string[]) => void;
     onRemoveExcludedImplantType: (key: string) => void;
+    onUpdateExcludedImplantType: (oldKey: string, newKey: string) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({
