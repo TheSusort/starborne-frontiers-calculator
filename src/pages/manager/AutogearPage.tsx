@@ -458,6 +458,7 @@ export const AutogearPage: React.FC = () => {
                 optimizeImplants: shipConfig.optimizeImplants,
                 includeCalibratedGear: shipConfig.includeCalibratedGear,
                 useArenaModifiers: shipConfig.useArenaModifiers,
+                excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
             };
             void saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
@@ -1389,6 +1390,7 @@ export const AutogearPage: React.FC = () => {
                                 optimizeImplants: false,
                                 includeCalibratedGear: false,
                                 useArenaModifiers: false,
+                                excludedImplantTypes: [],
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }
