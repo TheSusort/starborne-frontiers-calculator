@@ -67,6 +67,7 @@ Replace the existing `ExcludedImplantForm` (single `Select` + Add button) with a
 - Internal state: `selected: string[]` (starts empty).
 - "Add selected" `Button` (primary variant) disabled when `selected.length === 0`.
 - On submit: call `onAdd(selected)`, navigate back to list.
+- "Add selected" button uses `variant="secondary"`, consistent with the Add buttons in `SetPriorityForm` and other forms in the same file.
 - Empty state: when `options` is empty (all available types already excluded), render a `<p>` with "All available implant types are already excluded." instead of the checkboxes. The Cancel button remains.
 
 The form prop interface changes from:
@@ -76,6 +77,21 @@ onAdd: (key: string) => void
 to:
 ```typescript
 onAdd: (keys: string[]) => void
+```
+
+The call site in `AutogearSettings.tsx` where `ExcludedImplantForm` is rendered must also be updated from:
+```typescript
+onAdd={(key) => {
+    onAddExcludedImplantType(key);
+    backToList();
+}}
+```
+to:
+```typescript
+onAdd={(keys) => {
+    onAddExcludedImplantTypes(keys);
+    backToList();
+}}
 ```
 
 ---
