@@ -28,7 +28,7 @@ export const CheckboxGroup: React.FC<Props> = ({
     return (
         <div className={className}>
             <label className="block text-sm font-medium  mb-2">{label}</label>
-            <div className="space-y-2 max-h-[200px] overflow-y-auto overscroll-y-contain">
+            <div className="space-y-2">
                 {options.map((option) => (
                     <Checkbox
                         key={option.value}
