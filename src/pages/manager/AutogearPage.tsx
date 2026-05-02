@@ -890,7 +890,10 @@ export const AutogearPage: React.FC = () => {
         // Load saved config for this ship if it exists
         const savedConfig = getConfig(ship.id);
         if (savedConfig) {
-            updateShipConfig(ship.id, savedConfig);
+            updateShipConfig(ship.id, {
+                ...savedConfig,
+                fleetBuffs: savedConfig.fleetBuffs ?? [],
+            });
         }
     };
 
@@ -1460,6 +1463,7 @@ export const AutogearPage: React.FC = () => {
                                 includeCalibratedGear: false,
                                 useArenaModifiers: false,
                                 excludedImplantTypes: [],
+                                fleetBuffs: [],
                             });
                             addNotification('success', 'Reset configuration to defaults');
                         }
