@@ -52,9 +52,8 @@ interface AutogearSettingsModalProps {
     onUseArenaModifiersChange?: (value: boolean) => void;
     availableImplantTypes: { key: string; name: string; label: string }[];
     excludedImplantTypes: string[];
-    onAddExcludedImplantTypes: (keys: string[]) => void;
+    onSetExcludedImplantTypes: (keys: string[]) => void;
     onRemoveExcludedImplantType: (key: string) => void;
-    onUpdateExcludedImplantType: (oldKey: string, newKey: string) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({

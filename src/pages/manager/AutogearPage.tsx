@@ -1398,16 +1398,10 @@ export const AutogearPage: React.FC = () => {
                             ? (getShipConfig(shipSettings.id).excludedImplantTypes ?? [])
                             : []
                     }
-                    onAddExcludedImplantTypes={(keys) => {
+                    onSetExcludedImplantTypes={(keys) => {
                         if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            const existing = config.excludedImplantTypes ?? [];
-                            const newKeys = [...new Set(keys)];
                             updateShipConfig(shipSettings.id, {
-                                excludedImplantTypes: [
-                                    ...existing,
-                                    ...newKeys.filter((k) => !existing.includes(k)),
-                                ],
+                                excludedImplantTypes: keys,
                             });
                         }
                     }}
@@ -1417,16 +1411,6 @@ export const AutogearPage: React.FC = () => {
                             updateShipConfig(shipSettings.id, {
                                 excludedImplantTypes: (config.excludedImplantTypes ?? []).filter(
                                     (k) => k !== key
-                                ),
-                            });
-                        }
-                    }}
-                    onUpdateExcludedImplantType={(oldKey, newKey) => {
-                        if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                excludedImplantTypes: (config.excludedImplantTypes ?? []).map(
-                                    (k) => (k === oldKey ? newKey : k)
                                 ),
                             });
                         }
