@@ -16,6 +16,7 @@ import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
+import { IMPLANTS } from '../../constants/implants';
 import { ArenaSeason } from '../../types/arena';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
@@ -25,7 +26,11 @@ import { StatBonusRow } from './StatBonusRow';
 type TweakView =
     | { mode: 'list' }
     | { mode: 'picker' }
-    | { mode: 'form'; type: 'priority' | 'setPriority' | 'statBonus'; editIndex: number | null };
+    | {
+          mode: 'form';
+          type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant';
+          editIndex: number | null;
+      };
 
 function formatRuleSummary(rule: {
     factions: string[] | null;
@@ -77,6 +82,10 @@ interface AutogearSettingsProps {
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
+    availableImplantTypes?: { key: string; name: string }[];
+    excludedImplantTypes?: string[];
+    onAddExcludedImplantType?: (key: string) => void;
+    onRemoveExcludedImplantType?: (key: string) => void;
     onResetConfig: () => void;
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;
@@ -162,6 +171,46 @@ const SetPriorityForm: React.FC<{
     );
 };
 
+const ExcludedImplantForm: React.FC<{
+    availableImplantTypes: { key: string; name: string }[];
+    excludedImplantTypes: string[];
+    onAdd: (key: string) => void;
+    onCancel: () => void;
+}> = ({ availableImplantTypes, excludedImplantTypes, onAdd, onCancel }) => {
+    const [selected, setSelected] = useState('');
+    const options = availableImplantTypes
+        .filter((t) => !excludedImplantTypes.includes(t.key))
+        .map((t) => ({ value: t.key, label: t.name }));
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selected) return;
+        onAdd(selected);
+        setSelected('');
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-3">
+            <Select
+                label="Implant type"
+                options={options}
+                value={selected}
+                onChange={setSelected}
+                noDefaultSelection
+                helpLabel="Select an implant type to exclude from autogear for this ship."
+            />
+            <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={onCancel}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={!selected} variant="secondary">
+                    Add
+                </Button>
+            </div>
+        </form>
+    );
+};
+
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedShip,
     selectedShipRole,
@@ -193,6 +242,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onTryToCompleteSetsChange,
     onOptimizeImplantsChange,
     onIncludeCalibratedGearChange,
+    availableImplantTypes = [],
+    excludedImplantTypes = [],
+    onAddExcludedImplantType = () => {},
+    onRemoveExcludedImplantType = () => {},
     onResetConfig,
     onFindOptimalGear,
     activeSeason,
@@ -204,7 +257,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
-        type: 'priority' | 'setPriority' | 'statBonus',
+        type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
     const backToList = () => setTweakView({ mode: 'list' });
@@ -276,7 +329,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         (
                                         {priorities.length +
                                             setPriorities.length +
-                                            statBonuses.length}
+                                            statBonuses.length +
+                                            excludedImplantTypes.length}
                                         )
                                     </span>
                                 </h3>
@@ -290,7 +344,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 </Button>
                             </div>
 
-                            {priorities.length + setPriorities.length + statBonuses.length === 0 ? (
+                            {priorities.length +
+                                setPriorities.length +
+                                statBonuses.length +
+                                excludedImplantTypes.length ===
+                            0 ? (
                                 <p className="text-sm text-theme-text-secondary text-center py-4">
                                     No tweaks yet. The role&apos;s defaults will be used as-is.
                                 </p>
@@ -380,6 +438,33 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     <p className="text-xs text-theme-text-secondary italic">
                                         Order matters — higher tweaks weigh more.
                                     </p>
+                                    {excludedImplantTypes.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                Excluded implants
+                                            </h4>
+                                            {excludedImplantTypes.map((key) => {
+                                                const name = IMPLANTS[key]?.name ?? key;
+                                                return (
+                                                    <div
+                                                        key={key}
+                                                        className="flex items-center justify-between gap-2 p-2 bg-dark border border-dark-border rounded text-sm"
+                                                    >
+                                                        <span>{name}</span>
+                                                        <Button
+                                                            variant="danger"
+                                                            size="xs"
+                                                            onClick={() =>
+                                                                onRemoveExcludedImplantType(key)
+                                                            }
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -439,6 +524,19 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         skill scales off a non-standard stat (e.g. Defense at 80%).
                                     </div>
                                 </button>
+                                {optimizeImplants && availableImplantTypes.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                        onClick={() => openForm('excludedImplant')}
+                                    >
+                                        <div className="font-semibold">Excluded implant type</div>
+                                        <div className="text-xs text-theme-text-secondary">
+                                            Prevent a specific implant type from being used in
+                                            autogear (e.g. Bulwark).
+                                        </div>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -461,7 +559,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         ? 'limits'
                                         : tweakView.type === 'setPriority'
                                           ? 'set requirement'
-                                          : 'scale'}
+                                          : tweakView.type === 'statBonus'
+                                            ? 'scale'
+                                            : 'excluded implant type'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (
@@ -529,6 +629,17 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             onUpdateStatBonus(tweakView.editIndex, b);
                                             backToList();
                                         }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                            {tweakView.type === 'excludedImplant' && (
+                                <ExcludedImplantForm
+                                    availableImplantTypes={availableImplantTypes}
+                                    excludedImplantTypes={excludedImplantTypes}
+                                    onAdd={(key) => {
+                                        onAddExcludedImplantType(key);
+                                        backToList();
                                     }}
                                     onCancel={backToList}
                                 />
