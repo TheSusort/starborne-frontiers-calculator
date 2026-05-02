@@ -1,5 +1,6 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import type { FleetBuff } from '../../types/autogear';
 import { GearSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -7,6 +8,7 @@ import { GearPiece } from '../../types/gear';
 import { RarityName } from '../../constants/rarities';
 import { performanceTracker } from './performanceTimer';
 import { applyArenaModifiers } from './arenaModifiers';
+import { applyFleetBuffs } from './fleetBuffs';
 import {
     calculatePriorityScore,
     calculateDamageReduction,
@@ -148,7 +150,8 @@ export function calculateTotalScore(
     setPriorities?: SetPriority[],
     statBonuses?: StatBonus[],
     tryToCompleteSets?: boolean,
-    arenaModifiers?: Record<string, number> | null
+    arenaModifiers?: Record<string, number> | null,
+    fleetBuffs?: FleetBuff[]
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -198,7 +201,10 @@ export function calculateTotalScore(
               .map(([s, v]) => `${s}:${v}`)
               .join(',')
         : 'none';
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}`;
+    const fleetBuffsKey = fleetBuffs?.length
+        ? fleetBuffs.map((b) => `${b.stat}:${b.percentage}`).join(',')
+        : '';
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -241,10 +247,14 @@ export function calculateTotalScore(
     performanceTracker.endTimer('CalculateArcaneSiege');
 
     // Apply arena modifiers to stats for scoring (does not affect displayed stats)
-    const statsForScoring =
+    const statsAfterArena =
         arenaModifiers && Object.keys(arenaModifiers).length > 0
             ? applyArenaModifiers(totalStats.final, arenaModifiers)
             : totalStats.final;
+    const statsForScoring =
+        fleetBuffs && fleetBuffs.length > 0
+            ? applyFleetBuffs(statsAfterArena, fleetBuffs)
+            : statsAfterArena;
 
     performanceTracker.startTimer('CalculatePriorityScore');
     const score = calculatePriorityScore(
