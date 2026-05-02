@@ -479,7 +479,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     {fleetBuffs.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Fleet buffs
+                                                Buffs
                                             </h4>
                                             {fleetBuffs.map((buff, index) => (
                                                 <FleetBuffRow
@@ -613,7 +613,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
                                     onClick={() => openForm('fleetBuff')}
                                 >
-                                    <div className="font-semibold">Fleet buff</div>
+                                    <div className="font-semibold">Buff</div>
                                     <div className="text-xs text-theme-text-secondary">
                                         Apply a commander or fleet ability stat boost (e.g.
                                         Volk&apos;s +30% crit rate).
@@ -661,7 +661,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                           : tweakView.type === 'statBonus'
                                             ? 'scale'
                                             : tweakView.type === 'fleetBuff'
-                                              ? 'fleet buff'
+                                              ? 'buff'
                                               : 'excluded implant type'}
                                 </span>
                             </div>

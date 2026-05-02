@@ -54,8 +54,8 @@ export const FleetBuffForm: React.FC<FleetBuffFormProps> = ({
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <p className="text-sm text-theme-text-secondary">
-                Add a fleet or commander buff that boosts this ship&apos;s stats during combat. The
-                scorer will account for it when choosing gear.
+                Add a buff that boosts this ship&apos;s stats during combat (e.g. a commander or
+                fleet ability). The scorer will account for it when choosing gear.
             </p>
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
