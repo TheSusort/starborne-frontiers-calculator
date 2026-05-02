@@ -1,6 +1,7 @@
 import type { BaseStats } from '../../../types/stats';
-import type { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
 import { applyArenaModifiers } from '../arenaModifiers';
+import { applyFleetBuffs } from '../fleetBuffs';
 import { calculatePriorityScore } from '../priorityScore';
 import { buildFastCacheKey } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats } from '../../fastScoring/statVector';
@@ -73,10 +74,14 @@ export function fastScore(
     const finalStats = statVectorToBaseStats(workspace.stats);
 
     // Apply arena modifiers (same as scoring.ts)
-    const statsForScoring =
+    const statsAfterArena =
         context.arenaModifiers && Object.keys(context.arenaModifiers).length > 0
             ? applyArenaModifiers(finalStats, context.arenaModifiers)
             : finalStats;
+    const statsForScoring =
+        context.fleetBuffs && context.fleetBuffs.length > 0
+            ? applyFleetBuffs(statsAfterArena, context.fleetBuffs as FleetBuff[])
+            : statsAfterArena;
 
     // Build setCount as Record<string, number> for the priority scorer
     const setCount: Record<string, number> = {};
