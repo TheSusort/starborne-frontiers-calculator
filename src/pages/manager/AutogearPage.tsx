@@ -55,6 +55,21 @@ interface UnmetPriority {
     type: 'min' | 'max';
 }
 
+function formatImplantType(type: string): string {
+    if (type === 'major') return 'Major';
+    if (type === 'ultimate') return 'Ultimate';
+    const match = type.match(/^(\w+)\((\w+)\)$/);
+    if (!match) return type.charAt(0).toUpperCase() + type.slice(1);
+    const [, variant, category] = match;
+    return (
+        category.charAt(0).toUpperCase() +
+        category.slice(1) +
+        ' ' +
+        variant.charAt(0).toUpperCase() +
+        variant.slice(1)
+    );
+}
+
 export const AutogearPage: React.FC = () => {
     // Helper functions (before hooks)
     const getSuggestedEquipment = (suggestions: GearSuggestion[], ship: Ship | null) => {
@@ -206,15 +221,19 @@ export const AutogearPage: React.FC = () => {
 
     const availableImplantTypes = useMemo(() => {
         const seen = new Set<string>();
-        const result: { key: string; name: string }[] = [];
+        const result: { key: string; name: string; label: string }[] = [];
         for (const gear of inventory) {
             if (!gear.slot.startsWith('implant_') || !gear.setBonus) continue;
             const key = gear.setBonus;
             if (seen.has(key)) continue;
             seen.add(key);
-            result.push({ key, name: IMPLANTS[key]?.name ?? key });
+            const implant = IMPLANTS[key];
+            const name = implant?.name ?? key;
+            const typeLabel = implant?.type ? formatImplantType(implant.type) : '';
+            const label = typeLabel ? `${name} (${typeLabel})` : name;
+            result.push({ key, name, label });
         }
-        return result;
+        return result.sort((a, b) => a.label.localeCompare(b.label));
     }, [inventory]);
 
     // Helper function to get config for a specific ship

@@ -50,7 +50,7 @@ interface AutogearSettingsModalProps {
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;
     onUseArenaModifiersChange?: (value: boolean) => void;
-    availableImplantTypes: { key: string; name: string }[];
+    availableImplantTypes: { key: string; name: string; label: string }[];
     excludedImplantTypes: string[];
     onAddExcludedImplantTypes: (keys: string[]) => void;
     onRemoveExcludedImplantType: (key: string) => void;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
@@ -83,7 +83,7 @@ interface AutogearSettingsProps {
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;
     onIncludeCalibratedGearChange: (value: boolean) => void;
-    availableImplantTypes?: { key: string; name: string }[];
+    availableImplantTypes?: { key: string; name: string; label: string }[];
     excludedImplantTypes?: string[];
     onAddExcludedImplantTypes?: (keys: string[]) => void;
     onRemoveExcludedImplantType?: (key: string) => void;
@@ -173,7 +173,7 @@ const SetPriorityForm: React.FC<{
 };
 
 const ExcludedImplantForm: React.FC<{
-    availableImplantTypes: { key: string; name: string }[];
+    availableImplantTypes: { key: string; name: string; label: string }[];
     excludedImplantTypes: string[];
     onAdd: (keys: string[]) => void;
     onCancel: () => void;
@@ -181,7 +181,7 @@ const ExcludedImplantForm: React.FC<{
     const [selected, setSelected] = useState<string[]>([]);
     const options = availableImplantTypes
         .filter((t) => !excludedImplantTypes.includes(t.key))
-        .map((t) => ({ value: t.key, label: t.name }));
+        .map((t) => ({ value: t.key, label: t.label }));
 
     if (options.length === 0) {
         return (
@@ -266,17 +266,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
-    const tweaksCardRef = useRef<HTMLDivElement>(null);
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
         type: 'priority' | 'setPriority' | 'statBonus' | 'excludedImplant',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
-    const backToList = () => {
-        setTweakView({ mode: 'list' });
-        tweaksCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
+    const backToList = () => setTweakView({ mode: 'list' });
 
     const isEditingPriority = (index: number) =>
         tweakView.mode === 'form' && tweakView.type === 'priority' && tweakView.editIndex === index;
@@ -335,10 +331,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShipRole && (
-                <div
-                    ref={tweaksCardRef}
-                    className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}
-                >
+                <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>
                     {tweakView.mode === 'list' && (
                         <div key="list" className="animate-subview-enter space-y-3">
                             <div className="flex justify-between items-center">
@@ -463,13 +456,17 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                 Excluded implants
                                             </h4>
                                             {excludedImplantTypes.map((key) => {
-                                                const name = IMPLANTS[key]?.name ?? key;
+                                                const label =
+                                                    availableImplantTypes.find((t) => t.key === key)
+                                                        ?.label ??
+                                                    IMPLANTS[key]?.name ??
+                                                    key;
                                                 return (
                                                     <div
                                                         key={key}
                                                         className="flex items-center justify-between gap-2 p-2 bg-dark border border-dark-border rounded text-sm"
                                                     >
-                                                        <span>{name}</span>
+                                                        <span>{label}</span>
                                                         <Button
                                                             variant="danger"
                                                             size="xs"
