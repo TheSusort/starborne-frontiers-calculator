@@ -32,7 +32,6 @@ describe('applyFleetBuffs', () => {
     });
 
     it('adds buff directly to percentage-only stats (additive)', () => {
-        // crit 70% + 30% = 100%
         const result = applyFleetBuffs(BASE, [{ stat: 'crit', percentage: 30 }]);
         expect(result.crit).toBeCloseTo(1.0);
     });
@@ -44,7 +43,6 @@ describe('applyFleetBuffs', () => {
     });
 
     it('multiplies flat stats by (1 + pct/100)', () => {
-        // attack 5000 + 45% = 7250
         const result = applyFleetBuffs(BASE, [{ stat: 'attack', percentage: 45 }]);
         expect(result.attack).toBeCloseTo(7250);
     });
@@ -74,9 +72,16 @@ describe('applyFleetBuffs', () => {
         expect(result).toEqual(BASE);
     });
 
-    it('handles optional stats that are zero', () => {
-        // defensePenetration is a percentage-only optional stat present at 0.10
+    it('handles optional percentage-only stat', () => {
         const result = applyFleetBuffs(BASE, [{ stat: 'defensePenetration', percentage: 10 }]);
         expect(result.defensePenetration).toBeCloseTo(0.2);
+    });
+
+    it('compounds multiple buffs on the same flat stat sequentially', () => {
+        const result = applyFleetBuffs(BASE, [
+            { stat: 'attack', percentage: 10 },
+            { stat: 'attack', percentage: 10 },
+        ]);
+        expect(result.attack).toBeCloseTo(BASE.attack * 1.1 * 1.1);
     });
 });
