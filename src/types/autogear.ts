@@ -27,6 +27,11 @@ export interface StatBonus {
     mode?: 'additive' | 'multiplier';
 }
 
+export interface FleetBuff {
+    stat: StatName;
+    percentage: number; // e.g. 30 for +30%
+}
+
 export interface SavedAutogearConfig {
     shipId: string;
     shipRole: ShipTypeName | null;
@@ -42,4 +47,5 @@ export interface SavedAutogearConfig {
     includeCalibratedGear?: boolean;
     useArenaModifiers?: boolean;
     excludedImplantTypes?: string[];
+    fleetBuffs?: FleetBuff[];
 }

@@ -21,7 +21,7 @@ registerSW({
     immediate: true,
     onRegisteredSW(_swScriptUrl, registration) {
         if (!registration) return;
-        setInterval(() => registration.update(), 5 * 60 * 1000);
+        setInterval(() => void registration.update(), 5 * 60 * 1000);
     },
 });
 
