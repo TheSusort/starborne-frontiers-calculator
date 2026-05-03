@@ -128,11 +128,11 @@ export const ImportButton: React.FC<{
             const fileTimestamp = extractFileTimestamp(file);
             try {
                 setLoading(true);
-                const MAX_FILE_SIZE = 30 * 1024 * 1024; // 30 MB
+                const MAX_FILE_SIZE = 40 * 1024 * 1024; // 40 MB
                 if (file.size > MAX_FILE_SIZE) {
                     addNotification(
                         'error',
-                        `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 30 MB.`
+                        `File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum allowed size is 40 MB.`
                     );
                     setLoading(false);
                     return;
