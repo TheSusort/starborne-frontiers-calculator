@@ -41,7 +41,7 @@ const estimateDataSize = (data: any): number => {
 
 // IndexedDB operations
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getFromIndexedDB = async (key: string): Promise<any> => {
+export const getFromIndexedDB = async (key: string): Promise<any> => {
     const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction(STORE_NAME, 'readonly');
