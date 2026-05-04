@@ -25,7 +25,8 @@ import { StorageKey } from '../constants/storage';
 import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
-import { TrophyIcon } from '../components/ui/icons';
+import { TrophyIcon, ChevronDownIcon } from '../components/ui/icons';
+import { CollapsibleAccordion } from '../components/ui/CollapsibleAccordion';
 import { AuthModal } from '../components/auth/AuthModal';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -66,6 +67,7 @@ export const ProfilePage: React.FC = () => {
     );
 
     // Data management state
+    const [dataManagementOpen, setDataManagementOpen] = useState(false);
     const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
     const [syncLoading, setSyncLoading] = useState(false);
     const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
@@ -428,70 +430,85 @@ export const ProfilePage: React.FC = () => {
                     )}
 
                     {/* Data Management */}
-                    <div className="card space-y-6">
-                        <h2 className="text-xl font-semibold">Data Management</h2>
+                    <div className="card overflow-hidden">
+                        <button
+                            className="w-full flex justify-between items-center"
+                            onClick={() => setDataManagementOpen((prev) => !prev)}
+                        >
+                            <h2 className="text-xl font-semibold">Data Management</h2>
+                            <ChevronDownIcon
+                                className={`transition-transform duration-300 ${dataManagementOpen ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+                        <CollapsibleAccordion isOpen={dataManagementOpen}>
+                            <div className="space-y-6">
+                                {/* Cloud Sync Toggle — main account only */}
+                                {user && !isOnAlt && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <h3 className="text-base font-medium">Cloud Sync</h3>
+                                            <p className="text-sm text-theme-text-secondary mt-1">
+                                                When enabled, your data is automatically saved to
+                                                the cloud and accessible on any device.
+                                            </p>
+                                        </div>
+                                        <p className="text-sm">
+                                            Status:{' '}
+                                            <span
+                                                className={
+                                                    syncEnabled
+                                                        ? 'text-green-400'
+                                                        : 'text-yellow-400'
+                                                }
+                                            >
+                                                {syncEnabled
+                                                    ? 'Sync enabled'
+                                                    : 'Sync disabled (local only)'}
+                                            </span>
+                                        </p>
+                                        <div className="flex gap-3">
+                                            {syncEnabled ? (
+                                                <Button
+                                                    variant="danger"
+                                                    size="sm"
+                                                    disabled={syncLoading}
+                                                    onClick={() => setShowSyncOffConfirm(true)}
+                                                >
+                                                    {syncLoading ? 'Working...' : 'Disable Sync'}
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    variant="primary"
+                                                    size="sm"
+                                                    disabled={syncLoading}
+                                                    onClick={() => void handleSyncToggleOn()}
+                                                >
+                                                    {syncLoading ? 'Working...' : 'Enable Sync'}
+                                                </Button>
+                                            )}
+                                            {syncEnabled && (
+                                                <Button
+                                                    variant="danger"
+                                                    size="sm"
+                                                    disabled={syncLoading}
+                                                    onClick={() => setShowClearReSyncConfirm(true)}
+                                                >
+                                                    Clear &amp; re-sync
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* Cloud Sync Toggle — main account only */}
-                        {user && !isOnAlt && (
-                            <div className="space-y-3">
+                                {/* Backup & Restore */}
                                 <div>
-                                    <h3 className="text-base font-medium">Cloud Sync</h3>
-                                    <p className="text-sm text-theme-text-secondary mt-1">
-                                        When enabled, your data is automatically saved to the cloud
-                                        and accessible on any device.
-                                    </p>
-                                </div>
-                                <p className="text-sm">
-                                    Status:{' '}
-                                    <span
-                                        className={
-                                            syncEnabled ? 'text-green-400' : 'text-yellow-400'
-                                        }
-                                    >
-                                        {syncEnabled
-                                            ? 'Sync enabled'
-                                            : 'Sync disabled (local only)'}
-                                    </span>
-                                </p>
-                                <div className="flex gap-3">
-                                    {syncEnabled ? (
-                                        <Button
-                                            variant="danger"
-                                            size="sm"
-                                            disabled={syncLoading}
-                                            onClick={() => setShowSyncOffConfirm(true)}
-                                        >
-                                            {syncLoading ? 'Working...' : 'Disable Sync'}
-                                        </Button>
-                                    ) : (
-                                        <Button
-                                            variant="primary"
-                                            size="sm"
-                                            disabled={syncLoading}
-                                            onClick={() => void handleSyncToggleOn()}
-                                        >
-                                            {syncLoading ? 'Working...' : 'Enable Sync'}
-                                        </Button>
-                                    )}
-                                    {syncEnabled && (
-                                        <Button
-                                            variant="danger"
-                                            size="sm"
-                                            disabled={syncLoading}
-                                            onClick={() => setShowClearReSyncConfirm(true)}
-                                        >
-                                            Clear &amp; re-sync
-                                        </Button>
-                                    )}
+                                    <h3 className="text-base font-medium mb-3">
+                                        Backup &amp; Restore
+                                    </h3>
+                                    <BackupRestoreData />
                                 </div>
                             </div>
-                        )}
-
-                        {/* Backup & Restore */}
-                        <div>
-                            <h3 className="text-base font-medium mb-3">Backup &amp; Restore</h3>
-                            <BackupRestoreData />
-                        </div>
+                        </CollapsibleAccordion>
                     </div>
 
                     {/* Engineering Leaderboards */}
