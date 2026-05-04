@@ -11,6 +11,8 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { Ship } from '../../types/ship';
+import { ShipSelector } from '../../components/ship/ShipSelector';
 
 interface BuffDebuff {
     value: number;
@@ -86,6 +88,15 @@ const DamageDeconstructionPage: React.FC = () => {
     const [initialForm] = useState(getInitialForm);
     const [form, setForm] = useState<DamageDeconstructionForm>(initialForm);
 
+    const getInitialShip = (): Ship | null => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            return getShipById(shipId) ?? null;
+        }
+        return null;
+    };
+    const [selectedShip, setSelectedShip] = useState<Ship | null>(getInitialShip);
+
     // Clear shipId from URL after initialization
     useEffect(() => {
         if (shipInitialized.current) return;
@@ -95,6 +106,27 @@ const DamageDeconstructionPage: React.FC = () => {
             setSearchParams(searchParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
+
+    const handleShipSelect = (ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        );
+        const final = statsBreakdown.final;
+        setSelectedShip(ship);
+        setForm((prev) => ({
+            ...prev,
+            shipAttack: Math.round(final.attack),
+            critDamagePercent: Math.round(final.critDamage),
+            defensePenetration: Math.round(final.defensePenetration || 0),
+        }));
+    };
 
     const [results, setResults] = useState<{
         damageReduction: number;
@@ -274,6 +306,11 @@ const DamageDeconstructionPage: React.FC = () => {
                 Remember affinity disadvantage/advantage on the attacker.
             "
             >
+                <ShipSelector
+                    selected={selectedShip}
+                    onSelect={handleShipSelect}
+                    variant="compact"
+                />
                 <div className="mb-6 card">
                     <div className="space-y-4">
                         <h4 className="text-lg font-bold">Attacker</h4>
