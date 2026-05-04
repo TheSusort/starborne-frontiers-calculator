@@ -65,7 +65,7 @@ export const LoginButton: React.FC = () => {
             <ChevronDownIcon
                 className={`flex-shrink-0 transition-transform duration-200 mr-2 ${isOpen ? 'rotate-180' : ''}`}
             />
-            <span className="flex-1 text-right">Profile / Sign in</span>
+            <span className="flex-1 text-right">Profile</span>
         </div>
     );
 
