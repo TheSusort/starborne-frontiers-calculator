@@ -14,7 +14,8 @@ export const Button: React.FC<Props> = ({
     className = '',
     ...props
 }) => {
-    const baseStyles = 'transition-colors whitespace-nowrap shine-effect relative overflow-hidden';
+    const baseStyles =
+        'transition-colors whitespace-nowrap shine-effect relative overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none';
     const variants = {
         primary:
             'text-dark clip-1-corner bg-gradient-to-br from-[rgb(var(--color-primary-gradient-from))] via-primary to-[rgb(var(--color-primary-gradient-to))]',

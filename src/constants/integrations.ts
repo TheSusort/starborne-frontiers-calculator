@@ -17,7 +17,7 @@ export const INTEGRATIONS: Integration[] = [
     {
         id: 'sf-api',
         name: 'Starborne Frontiers API',
-        description: 'Official game API access for community toolers.',
+        description: 'Official game API access.',
         status: 'coming-soon',
     },
 ];

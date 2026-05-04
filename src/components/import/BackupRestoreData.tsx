@@ -417,12 +417,31 @@ export const BackupRestoreData: React.FC = () => {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-4">
-                <Button variant="secondary" onClick={handleBackup} aria-label="Backup data">
-                    Backup Data
+        <div className="">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="text-sm font-medium text-theme-text">Backup Data</p>
+                    <p className="text-sm text-theme-text-secondary mt-0.5">
+                        Download a local JSON backup of all your planner data.
+                    </p>
+                </div>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleBackup}
+                    aria-label="Backup data"
+                >
+                    Backup
                 </Button>
+            </div>
 
+            <div className="flex items-start justify-between gap-4 border-t border-dark-border pt-4 mt-4">
+                <div>
+                    <p className="text-sm font-medium text-theme-text">Restore Data</p>
+                    <p className="text-sm text-theme-text-secondary mt-0.5">
+                        Restore from a previously downloaded backup file.
+                    </p>
+                </div>
                 <div>
                     <input
                         ref={fileInputRef}
@@ -433,26 +452,46 @@ export const BackupRestoreData: React.FC = () => {
                     />
                     <Button
                         variant="secondary"
+                        size="sm"
                         onClick={handleRestoreClick}
                         aria-label="Restore data"
                     >
-                        Restore Data
+                        Restore
                     </Button>
                 </div>
             </div>
-            <div className="border-t pt-4 mt-4">
-                <h3 className="text-lg font-medium mb-2">Danger Zone</h3>
-                <div className="flex flex-col gap-2">
-                    <Button variant="danger" onClick={() => setShowDeleteLocalStorageConfirm(true)}>
-                        Delete Local Storage
-                    </Button>
-                    {user && (
-                        <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
-                            Delete Account
-                        </Button>
-                    )}
+
+            <div className="flex items-start justify-between gap-4 border-t border-dark-border pt-4 mt-4">
+                <div>
+                    <p className="text-sm font-medium text-theme-text">Delete Local Storage</p>
+                    <p className="text-sm text-theme-text-secondary mt-0.5">
+                        Wipes all locally stored data. Cloud data is unaffected if you&apos;re
+                        signed in.
+                    </p>
                 </div>
+                <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setShowDeleteLocalStorageConfirm(true)}
+                >
+                    Delete
+                </Button>
             </div>
+
+            {user && (
+                <div className="flex items-start justify-between gap-4 border-t border-dark-border pt-4 mt-4">
+                    <div>
+                        <p className="text-sm font-medium text-theme-text">Delete Account</p>
+                        <p className="text-sm text-theme-text-secondary mt-0.5">
+                            Permanently deletes your account and all associated data. Cannot be
+                            undone.
+                        </p>
+                    </div>
+                    <Button variant="danger" size="sm" onClick={() => setShowDeleteConfirm(true)}>
+                        Delete
+                    </Button>
+                </div>
+            )}
 
             <ConfirmModal
                 isOpen={showDeleteLocalStorageConfirm}
