@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Checkbox } from '../components/ui/Checkbox';
 import { Loader } from '../components/ui/Loader';
 import { StatCard } from '../components/ui/StatCard';
+import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
 import {
     getUserProfile,
     updateUserProfile,
@@ -26,6 +27,9 @@ import { EngineeringLeaderboards } from '../components/engineering/EngineeringLe
 import Seo from '../components/seo/Seo';
 import { TrophyIcon } from '../components/ui/icons';
 import { AuthModal } from '../components/auth/AuthModal';
+import { BackupRestoreData } from '../components/import/BackupRestoreData';
+import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
+import { deleteUserSupabaseData, reuploadLocalDataToSupabase } from '../services/userDataService';
 
 function AuthRequired({ label, onSignIn }: { label: string; onSignIn: () => void }) {
     return (
@@ -60,6 +64,12 @@ export const ProfilePage: React.FC = () => {
     const [showImportSummary, setShowImportSummary] = useState(
         () => localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false'
     );
+
+    // Data management state
+    const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
+    const [syncLoading, setSyncLoading] = useState(false);
+    const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
+    const [showClearReSyncConfirm, setShowClearReSyncConfirm] = useState(false);
 
     useEffect(() => {
         if (!user?.id || !activeProfileId) {
@@ -219,6 +229,39 @@ export const ProfilePage: React.FC = () => {
             addNotification('error', 'Failed to update profile');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSyncToggleOff = async () => {
+        setSyncLoading(true);
+        try {
+            await deleteUserSupabaseData(user!.id);
+            setSupabaseSyncEnabled(false);
+            setSyncEnabled(false);
+        } finally {
+            setSyncLoading(false);
+        }
+    };
+
+    const handleSyncToggleOn = async () => {
+        setSyncLoading(true);
+        try {
+            setSupabaseSyncEnabled(true);
+            setSyncEnabled(true);
+            await deleteUserSupabaseData(user!.id);
+            await reuploadLocalDataToSupabase(user!.id);
+        } finally {
+            setSyncLoading(false);
+        }
+    };
+
+    const handleClearAndReSync = async () => {
+        setSyncLoading(true);
+        try {
+            await deleteUserSupabaseData(user!.id);
+            await reuploadLocalDataToSupabase(user!.id);
+        } finally {
+            setSyncLoading(false);
         }
     };
 
@@ -384,6 +427,73 @@ export const ProfilePage: React.FC = () => {
                         />
                     )}
 
+                    {/* Data Management */}
+                    <div className="card space-y-6">
+                        <h2 className="text-xl font-semibold">Data Management</h2>
+
+                        {/* Cloud Sync Toggle — main account only */}
+                        {user && !isOnAlt && (
+                            <div className="space-y-3">
+                                <div>
+                                    <h3 className="text-base font-medium">Cloud Sync</h3>
+                                    <p className="text-sm text-theme-text-secondary mt-1">
+                                        When enabled, your data is automatically saved to the cloud
+                                        and accessible on any device.
+                                    </p>
+                                </div>
+                                <p className="text-sm">
+                                    Status:{' '}
+                                    <span
+                                        className={
+                                            syncEnabled ? 'text-green-400' : 'text-yellow-400'
+                                        }
+                                    >
+                                        {syncEnabled
+                                            ? 'Sync enabled'
+                                            : 'Sync disabled (local only)'}
+                                    </span>
+                                </p>
+                                <div className="flex gap-3">
+                                    {syncEnabled ? (
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            disabled={syncLoading}
+                                            onClick={() => setShowSyncOffConfirm(true)}
+                                        >
+                                            {syncLoading ? 'Working...' : 'Disable Sync'}
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            disabled={syncLoading}
+                                            onClick={() => void handleSyncToggleOn()}
+                                        >
+                                            {syncLoading ? 'Working...' : 'Enable Sync'}
+                                        </Button>
+                                    )}
+                                    {syncEnabled && (
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            disabled={syncLoading}
+                                            onClick={() => setShowClearReSyncConfirm(true)}
+                                        >
+                                            Clear &amp; re-sync
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Backup & Restore */}
+                        <div>
+                            <h3 className="text-base font-medium mb-3">Backup &amp; Restore</h3>
+                            <BackupRestoreData />
+                        </div>
+                    </div>
+
                     {/* Engineering Leaderboards */}
                     <div className="card">
                         <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
@@ -448,6 +558,24 @@ export const ProfilePage: React.FC = () => {
                 </div>
             </PageLayout>
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+            <ConfirmModal
+                isOpen={showSyncOffConfirm}
+                onClose={() => setShowSyncOffConfirm(false)}
+                onConfirm={() => void handleSyncToggleOff()}
+                title="Disable Cloud Sync"
+                message="This will delete all your cloud data and disable sync. Your local data is unaffected. This cannot be undone."
+                confirmLabel="Disable Sync"
+                cancelLabel="Cancel"
+            />
+            <ConfirmModal
+                isOpen={showClearReSyncConfirm}
+                onClose={() => setShowClearReSyncConfirm(false)}
+                onConfirm={() => void handleClearAndReSync()}
+                title="Clear & Re-sync"
+                message="This will delete all your cloud data and immediately re-upload from your local data. Sync remains enabled."
+                confirmLabel="Clear & Re-sync"
+                cancelLabel="Cancel"
+            />
         </>
     );
 };
