@@ -11,6 +11,7 @@ export const StorageKey = {
     AUTOGEAR_CONFIGS: 'autogear_configs',
     DEMO_DATA_LOADED: 'demo_data_loaded',
     SHOW_IMPORT_SUMMARY: 'show_import_summary',
+    SUPABASE_SYNC_ENABLED: 'supabase_sync_enabled',
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];
