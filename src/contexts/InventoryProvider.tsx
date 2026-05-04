@@ -140,6 +140,9 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
     const { activeProfileId, profilesLoading } = useActiveProfile();
+    // Ref so async callbacks (loadInventory) can detect sign-out without being stale.
+    const activeProfileIdRef = useRef<string | null>(activeProfileId);
+    activeProfileIdRef.current = activeProfileId;
     // Initialize loading to false so unauthenticated / demo users are never stranded.
     // loadInventory sets it to true before async work, so the authenticated path is correct.
     const [loading, setLoading] = useState(false);
@@ -300,6 +303,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // Once all items are loaded, update the main inventory and
             // cache to IndexedDB so the next visit can hydrate instantly
             // via the `cacheLoaded` fast path instead of blocking on Supabase.
+            // Guard against sign-out racing with an in-flight load — if the profile
+            // changed while we were awaiting Supabase, discard the stale result.
+            if (activeProfileIdRef.current !== activeProfileId) return;
             setLocalInventory(allItems);
             void setStorageInventory(allItems);
             setLoadingProgress(100);
@@ -368,9 +374,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                // Clear through useStorage so IndexedDB is wiped too —
-                // otherwise a refresh re-hydrates the signed-out user's inventory.
-                void setStorageInventory([]);
+                // Remove the profile-keyed entry directly so it's gone even if an
+                // in-flight loadInventory call completes after this handler runs.
+                // Using removeFromIndexedDB instead of setStorageInventory([]) avoids
+                // a race where the async write arrives after the entry is "cleared".
+                void removeFromIndexedDB(inventoryCacheKey);
+                setLocalInventory([]);
             }
         };
 
@@ -378,7 +387,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [setStorageInventory, isMigrating]);
+    }, [isMigrating, inventoryCacheKey]);
 
     // Reset in-memory inventory state when the active profile changes.
     // The activeProfileId-keyed loadInventory effect will refetch automatically.
