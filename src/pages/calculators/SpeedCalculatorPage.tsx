@@ -9,6 +9,8 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { Ship } from '../../types/ship';
+import { ShipSelector } from '../../components/ship/ShipSelector';
 
 // Interface for a speed modifier
 interface SpeedModifier {
@@ -74,10 +76,19 @@ const SpeedCalculatorPage: React.FC = () => {
         return 120;
     };
 
+    const getInitialShip = (): Ship | null => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            return getShipById(shipId) ?? null;
+        }
+        return null;
+    };
+
     const [activeMode, setActiveMode] = useState<'forward' | 'reverse'>('forward');
 
     // Mode 1 (Forward) state
     const [initialSpeed] = useState(getInitialSpeed);
+    const [selectedShip, setSelectedShip] = useState<Ship | null>(getInitialShip);
     const [baseSpeed, setBaseSpeed] = useState<number>(initialSpeed);
 
     // Clear shipId from URL after initialization
@@ -143,6 +154,21 @@ const SpeedCalculatorPage: React.FC = () => {
         setModifiers(modifiers.map((mod) => (mod.id === id ? { ...mod, label } : mod)));
     };
 
+    const handleShipSelect = (ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        );
+        setSelectedShip(ship);
+        setBaseSpeed(Math.round(statsBreakdown.final.speed));
+    };
+
     // Mode 2 functions
     const addReverseModifier = () => {
         const newModifier: SpeedModifier = {
@@ -196,6 +222,12 @@ const SpeedCalculatorPage: React.FC = () => {
                     {/* Mode 1: Forward Calculation */}
                     {activeMode === 'forward' && (
                         <div className="space-y-6">
+                            <ShipSelector
+                                selected={selectedShip}
+                                onSelect={handleShipSelect}
+                                variant="compact"
+                            />
+
                             <div className="card">
                                 <h3 className="text-lg font-bold mb-4">Base Speed</h3>
                                 <Input
