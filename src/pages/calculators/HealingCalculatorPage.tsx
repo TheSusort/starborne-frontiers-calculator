@@ -23,10 +23,13 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { Ship } from '../../types/ship';
+import { ShipSelector } from '../../components/ship/ShipSelector';
 
 // Define the type for a healer configuration
 interface HealerConfig {
     id: string;
+    shipId?: string; // links config to a selected player ship
     name: string;
     hp: number;
     healPercent: number; // Base healing percentage (e.g., 15 for 15%)
@@ -104,6 +107,7 @@ const HealingCalculatorPage: React.FC = () => {
                 return [
                     {
                         id: '1',
+                        shipId: ship.id,
                         name: ship.name,
                         hp: Math.round(final.hp),
                         healPercent: 15,
@@ -225,6 +229,40 @@ const HealingCalculatorPage: React.FC = () => {
         });
 
         setConfigs(updatedConfigs);
+    };
+
+    const selectShipForConfig = (configId: string, ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        );
+        const final = statsBreakdown.final;
+        setConfigs((prev) =>
+            prev.map((c) => {
+                if (c.id !== configId) return c;
+                const updated = {
+                    ...c,
+                    shipId: ship.id,
+                    name: ship.name,
+                    hp: Math.round(final.hp),
+                    crit: Math.round(final.crit),
+                    critDamage: Math.round(final.critDamage),
+                };
+                const { baseHealing, critMultiplier, effectiveHealing } = calculateHealing(updated);
+                return {
+                    ...updated,
+                    healing: baseHealing,
+                    healingWithCrit: baseHealing * critMultiplier,
+                    effectiveHealing,
+                };
+            })
+        );
     };
 
     // Generate data for HP impact chart
@@ -384,6 +422,17 @@ const HealingCalculatorPage: React.FC = () => {
                                         : ''
                                 }`}
                             >
+                                <div className="mb-4">
+                                    <ShipSelector
+                                        selected={
+                                            config.shipId
+                                                ? (getShipById(config.shipId) ?? null)
+                                                : null
+                                        }
+                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
+                                        variant="compact"
+                                    />
+                                </div>
                                 <div className="flex justify-between items-center mb-4">
                                     <Input
                                         value={config.name}
