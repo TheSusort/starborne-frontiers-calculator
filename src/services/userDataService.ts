@@ -9,6 +9,7 @@ import { EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
 
 const BATCH_SIZE = 500;
+const CHILD_BATCH_SIZE = 50;
 
 /**
  * Deletes all Supabase data for a given user.
@@ -20,99 +21,169 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
     const steps: Array<() => Promise<void>> = [
         // team_loadout_equipment / team_loadout_ships → team_loadouts → user_id
         async () => {
-            const { data: tl } = await supabase
+            const { data: tl, error: selError } = await supabase
                 .from('team_loadouts')
                 .select('id')
                 .eq('user_id', userId);
+            if (selError) throw selError;
             if (!tl?.length) return;
             const ids = tl.map((r) => r.id);
-            await supabase.from('team_loadout_equipment').delete().in('team_loadout_id', ids);
-            await supabase.from('team_loadout_ships').delete().in('team_loadout_id', ids);
+            const { error: eqError } = await supabase
+                .from('team_loadout_equipment')
+                .delete()
+                .in('team_loadout_id', ids);
+            if (eqError) throw eqError;
+            const { error: shError } = await supabase
+                .from('team_loadout_ships')
+                .delete()
+                .in('team_loadout_id', ids);
+            if (shError) throw shError;
         },
         async () => {
-            await supabase.from('team_loadouts').delete().eq('user_id', userId);
+            const { error } = await supabase.from('team_loadouts').delete().eq('user_id', userId);
+            if (error) throw error;
         },
         // loadout_equipment → loadouts → user_id
         async () => {
-            const { data: lo } = await supabase.from('loadouts').select('id').eq('user_id', userId);
+            const { data: lo, error: selError } = await supabase
+                .from('loadouts')
+                .select('id')
+                .eq('user_id', userId);
+            if (selError) throw selError;
             if (!lo?.length) return;
-            await supabase
+            const { error } = await supabase
                 .from('loadout_equipment')
                 .delete()
                 .in(
                     'loadout_id',
                     lo.map((r) => r.id)
                 );
+            if (error) throw error;
         },
         async () => {
-            await supabase.from('loadouts').delete().eq('user_id', userId);
+            const { error } = await supabase.from('loadouts').delete().eq('user_id', userId);
+            if (error) throw error;
         },
-        // encounter_formations → encounter_notes → user_id
+        // encounter_votes (FK child of encounter_notes) → encounter_formations → encounter_notes
         async () => {
-            const { data: en } = await supabase
+            const { data: en, error: selError } = await supabase
                 .from('encounter_notes')
                 .select('id')
                 .eq('user_id', userId);
+            if (selError) throw selError;
             if (!en?.length) return;
-            await supabase
+            const { error } = await supabase
+                .from('encounter_votes')
+                .delete()
+                .in(
+                    'encounter_id',
+                    en.map((r) => r.id)
+                );
+            if (error) throw error;
+        },
+        // encounter_formations → encounter_notes → user_id
+        async () => {
+            const { data: en, error: selError } = await supabase
+                .from('encounter_notes')
+                .select('id')
+                .eq('user_id', userId);
+            if (selError) throw selError;
+            if (!en?.length) return;
+            const { error } = await supabase
                 .from('encounter_formations')
                 .delete()
                 .in(
                     'note_id',
                     en.map((r) => r.id)
                 );
+            if (error) throw error;
         },
         // ship child tables — scope via ships → user_id
         async () => {
-            const { data: sh } = await supabase.from('ships').select('id').eq('user_id', userId);
+            const { data: sh, error: selShError } = await supabase
+                .from('ships')
+                .select('id')
+                .eq('user_id', userId);
+            if (selShError) throw selShError;
             if (!sh?.length) return;
             const shipIds = sh.map((r) => r.id);
-            await supabase.from('ship_equipment').delete().in('ship_id', shipIds);
-            const { data: imp } = await supabase
+            const { error: seqError } = await supabase
+                .from('ship_equipment')
+                .delete()
+                .in('ship_id', shipIds);
+            if (seqError) throw seqError;
+            const { data: imp, error: selImpError } = await supabase
                 .from('ship_implants')
                 .select('id')
                 .in('ship_id', shipIds);
+            if (selImpError) throw selImpError;
             if (imp?.length) {
-                await supabase
+                const { error: impStatsError } = await supabase
                     .from('ship_implant_stats')
                     .delete()
                     .in(
                         'implant_id',
                         imp.map((r) => r.id)
                     );
+                if (impStatsError) throw impStatsError;
             }
-            await supabase.from('ship_implants').delete().in('ship_id', shipIds);
-            const { data: ref } = await supabase
+            const { error: impError } = await supabase
+                .from('ship_implants')
+                .delete()
+                .in('ship_id', shipIds);
+            if (impError) throw impError;
+            const { data: ref, error: selRefError } = await supabase
                 .from('ship_refits')
                 .select('id')
                 .in('ship_id', shipIds);
+            if (selRefError) throw selRefError;
             if (ref?.length) {
-                await supabase
+                const { error: refStatsError } = await supabase
                     .from('ship_refit_stats')
                     .delete()
                     .in(
                         'refit_id',
                         ref.map((r) => r.id)
                     );
+                if (refStatsError) throw refStatsError;
             }
-            await supabase.from('ship_refits').delete().in('ship_id', shipIds);
-            await supabase.from('ship_base_stats').delete().in('ship_id', shipIds);
+            const { error: refError } = await supabase
+                .from('ship_refits')
+                .delete()
+                .in('ship_id', shipIds);
+            if (refError) throw refError;
+            const { error: bsError } = await supabase
+                .from('ship_base_stats')
+                .delete()
+                .in('ship_id', shipIds);
+            if (bsError) throw bsError;
         },
         async () => {
-            await supabase.from('encounter_notes').delete().eq('user_id', userId);
+            const { error } = await supabase.from('encounter_notes').delete().eq('user_id', userId);
+            if (error) throw error;
         },
         // inventory_items must go before ships (calibration_ship_id FK)
         async () => {
-            await supabase.from('inventory_items').delete().eq('user_id', userId);
+            const { error } = await supabase.from('inventory_items').delete().eq('user_id', userId);
+            if (error) throw error;
         },
         async () => {
-            await supabase.from('ships').delete().eq('user_id', userId);
+            const { error } = await supabase.from('ships').delete().eq('user_id', userId);
+            if (error) throw error;
         },
         async () => {
-            await supabase.from('engineering_stats').delete().eq('user_id', userId);
+            const { error } = await supabase
+                .from('engineering_stats')
+                .delete()
+                .eq('user_id', userId);
+            if (error) throw error;
         },
         async () => {
-            await supabase.from('autogear_configs').delete().eq('user_id', userId);
+            const { error } = await supabase
+                .from('autogear_configs')
+                .delete()
+                .eq('user_id', userId);
+            if (error) throw error;
         },
     ];
 
@@ -449,9 +520,8 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
             }
         }
 
-        const batchSize = 50;
-        for (let i = 0; i < loadoutEquipmentRecords.length; i += batchSize) {
-            const batch = loadoutEquipmentRecords.slice(i, i + batchSize);
+        for (let i = 0; i < loadoutEquipmentRecords.length; i += CHILD_BATCH_SIZE) {
+            const batch = loadoutEquipmentRecords.slice(i, i + CHILD_BATCH_SIZE);
             const { error } = await supabase.from('loadout_equipment').insert(batch);
             if (error) throw error;
         }
@@ -490,9 +560,8 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                 }))
         );
 
-        const batchSize = 50;
-        for (let i = 0; i < teamShipRecords.length; i += batchSize) {
-            const batch = teamShipRecords.slice(i, i + batchSize);
+        for (let i = 0; i < teamShipRecords.length; i += CHILD_BATCH_SIZE) {
+            const batch = teamShipRecords.slice(i, i + CHILD_BATCH_SIZE);
             const { error } = await supabase.from('team_loadout_ships').insert(batch);
             if (error) throw error;
         }
@@ -512,8 +581,8 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                 )
         );
 
-        for (let i = 0; i < teamEquipmentRecords.length; i += batchSize) {
-            const batch = teamEquipmentRecords.slice(i, i + batchSize);
+        for (let i = 0; i < teamEquipmentRecords.length; i += CHILD_BATCH_SIZE) {
+            const batch = teamEquipmentRecords.slice(i, i + CHILD_BATCH_SIZE);
             const { error } = await supabase.from('team_loadout_equipment').insert(batch);
             if (error) throw error;
         }
@@ -543,9 +612,8 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
             .eq('user_id', userId);
         if (deleteError) throw deleteError;
 
-        const batchSize = 50;
-        for (let i = 0; i < statsRecords.length; i += batchSize) {
-            const batch = statsRecords.slice(i, i + batchSize);
+        for (let i = 0; i < statsRecords.length; i += CHILD_BATCH_SIZE) {
+            const batch = statsRecords.slice(i, i + CHILD_BATCH_SIZE);
             const { error } = await supabase.from('engineering_stats').insert(batch);
             if (error) throw error;
         }
