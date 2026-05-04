@@ -1,8 +1,16 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.58.0';
+export const CURRENT_VERSION = '1.59.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.59.0',
+        date: '2026-05-04',
+        changes: [
+            'Updated profile page with a bunch of data management features. Disable cloud sync, clear cloud data. Moved backup/restore into profile.',
+            'Added ship selection to calculator pages to quickly set own ships. ',
+        ],
+    },
     {
         version: '1.58.0',
         date: '2026-05-02',
