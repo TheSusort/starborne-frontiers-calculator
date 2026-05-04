@@ -12,10 +12,13 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { Ship } from '../../types/ship';
+import { ShipSelector } from '../../components/ship/ShipSelector';
 
 // Define the type for a ship configuration
 interface ShipConfig {
     id: string;
+    shipId?: string; // links config to a selected player ship
     name: string;
     hp: number;
     defense: number;
@@ -53,6 +56,7 @@ const DefenseCalculatorPage: React.FC = () => {
                 return [
                     {
                         id: '1',
+                        shipId: ship.id,
                         name: ship.name,
                         hp,
                         defense,
@@ -160,6 +164,37 @@ const DefenseCalculatorPage: React.FC = () => {
         setConfigs(updatedConfigs);
     };
 
+    const selectShipForConfig = (configId: string, ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        );
+        const final = statsBreakdown.final;
+        const hp = Math.round(final.hp);
+        const defense = Math.round(final.defence); // note: stats field is 'defence', form field is 'defense'
+        setConfigs((prev) =>
+            prev.map((c) =>
+                c.id === configId
+                    ? {
+                          ...c,
+                          shipId: ship.id,
+                          name: ship.name,
+                          hp,
+                          defense,
+                          damageReduction: calculateDamageReduction(defense),
+                          effectiveHP: calculateEffectiveHP(hp, defense),
+                      }
+                    : c
+            )
+        );
+    };
+
     // Find the ship with the highest effective HP
     const bestShip = configs.reduce(
         (best, current) => {
@@ -195,6 +230,17 @@ const DefenseCalculatorPage: React.FC = () => {
                                     bestShip && bestShip.id === config.id ? 'border-primary' : ''
                                 }`}
                             >
+                                <div className="mb-4">
+                                    <ShipSelector
+                                        selected={
+                                            config.shipId
+                                                ? (getShipById(config.shipId) ?? null)
+                                                : null
+                                        }
+                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
+                                        variant="compact"
+                                    />
+                                </div>
                                 <div className="flex justify-between items-center mb-4">
                                     <Input
                                         value={config.name}
