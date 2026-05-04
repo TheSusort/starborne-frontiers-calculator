@@ -9,6 +9,7 @@ import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage, removeFromIndexedDB } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface InventoryContextType {
@@ -434,6 +435,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 void syncToStorage([...localInventory, optimisticGear]);
 
                 if (!activeProfileId) return optimisticGear;
+                if (!isSupabaseSyncEnabled()) return optimisticGear;
 
                 // Create gear record with stats JSONB
                 const statsJsonb = {
@@ -508,6 +510,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 void syncToStorage(updatedInventory);
 
                 if (!activeProfileId) return;
+                if (!isSupabaseSyncEnabled()) return;
 
                 // Build update object
                 const updateData: Record<string, unknown> = {
@@ -564,7 +567,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setLocalInventory(updatedInventory);
                 void syncToStorage(updatedInventory);
 
-                if (activeProfileId) {
+                if (activeProfileId && isSupabaseSyncEnabled()) {
                     // Delete gear record (this will cascade delete related records)
                     const { error } = await supabase
                         .from('inventory_items')

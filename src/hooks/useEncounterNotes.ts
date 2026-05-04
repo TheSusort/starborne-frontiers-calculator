@@ -10,6 +10,7 @@ import { supabase } from '../config/supabase';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { useShips } from '../contexts/ShipsContext';
 import { StorageKey } from '../constants/storage';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useStorage } from './useStorage';
 import { useNotification } from './useNotification';
 
@@ -145,6 +146,7 @@ export const useEncounterNotes = () => {
             void setEncounters((prev) => [...prev, optimisticEncounter]);
 
             if (!activeProfileId) return optimisticEncounter;
+            if (!isSupabaseSyncEnabled()) return optimisticEncounter;
 
             try {
                 // Create encounter note
@@ -223,6 +225,7 @@ export const useEncounterNotes = () => {
             );
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Update encounter note
@@ -281,6 +284,7 @@ export const useEncounterNotes = () => {
             void setEncounters((prev) => prev.filter((e) => e.id !== encounterId));
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const { error } = await supabase

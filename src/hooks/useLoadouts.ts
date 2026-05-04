@@ -5,6 +5,7 @@ import { GearSlotName } from '../constants';
 import { supabase } from '../config/supabase';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from '../contexts/ActiveProfileProvider';
 import { StorageKey } from '../constants/storage';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useStorage } from './useStorage';
 import { useNotification } from './useNotification';
 
@@ -192,6 +193,10 @@ export const useLoadouts = () => {
                 addNotification('success', 'Loadout added');
                 return newLoadout.id;
             }
+            if (!isSupabaseSyncEnabled()) {
+                addNotification('success', 'Loadout added');
+                return newLoadout.id;
+            }
 
             // Otherwise, sync with Supabase
             try {
@@ -277,6 +282,10 @@ export const useLoadouts = () => {
                 addNotification('success', 'Loadout updated');
                 return;
             }
+            if (!isSupabaseSyncEnabled()) {
+                addNotification('success', 'Loadout updated');
+                return;
+            }
 
             // Otherwise, sync with Supabase
             try {
@@ -340,6 +349,10 @@ export const useLoadouts = () => {
                 addNotification('success', 'Loadout deleted');
                 return;
             }
+            if (!isSupabaseSyncEnabled()) {
+                addNotification('success', 'Loadout deleted');
+                return;
+            }
 
             // Otherwise, sync with Supabase
             try {
@@ -399,6 +412,10 @@ export const useLoadouts = () => {
 
             // If user is not authenticated, we're done (data already saved to localStorage)
             if (!activeProfileId) {
+                addNotification('success', 'Team loadout added');
+                return newTeamLoadout.id;
+            }
+            if (!isSupabaseSyncEnabled()) {
                 addNotification('success', 'Team loadout added');
                 return newTeamLoadout.id;
             }
@@ -516,6 +533,10 @@ export const useLoadouts = () => {
                 addNotification('success', 'Team loadout updated');
                 return;
             }
+            if (!isSupabaseSyncEnabled()) {
+                addNotification('success', 'Team loadout updated');
+                return;
+            }
 
             // Otherwise, sync with Supabase
             try {
@@ -619,6 +640,10 @@ export const useLoadouts = () => {
 
             // If user is not authenticated, we're done (data already saved to localStorage)
             if (!activeProfileId) {
+                addNotification('success', 'Team loadout deleted');
+                return;
+            }
+            if (!isSupabaseSyncEnabled()) {
                 addNotification('success', 'Team loadout deleted');
                 return;
             }

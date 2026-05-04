@@ -4,6 +4,7 @@ import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface AutogearConfigContextType {
@@ -133,6 +134,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
             })); // Optimistic update
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const { error } = await supabase.from('autogear_configs').upsert(
@@ -176,6 +178,7 @@ export const AutogearConfigProvider: React.FC<{ children: React.ReactNode }> = (
             }); // Optimistic update
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const { error } = await supabase

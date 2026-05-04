@@ -6,6 +6,7 @@ import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 // -- Start of merged context definition --
@@ -159,6 +160,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
             void setEngineeringStats(statsToSave); // Optimistic update
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const shipTypes = statsToSave.stats.map((stat) => stat.shipType);
@@ -207,6 +209,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
             })); // Optimistic update
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const { error } = await supabase

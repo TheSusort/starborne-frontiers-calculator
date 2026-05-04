@@ -10,6 +10,7 @@ import { RarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
+import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface ShipsContextType {
@@ -426,6 +427,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips([...localShips, optimisticShip]);
 
             if (!activeProfileId) return getShipById(tempId) as Ship;
+            if (!isSupabaseSyncEnabled()) return getShipById(tempId) as Ship;
 
             try {
                 // Create ship record
@@ -533,6 +535,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Update ship record
@@ -662,6 +665,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Delete ship record (this will cascade delete related records)
@@ -712,6 +716,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Delete existing equipment
@@ -777,6 +782,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Delete existing equipment for all gear being equipped
@@ -830,6 +836,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Remove equipment from database
@@ -869,6 +876,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Delete existing implant in this slot for this ship
@@ -917,6 +925,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Remove implant from database
@@ -953,6 +962,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Update lock state
@@ -1021,6 +1031,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 // Remove all equipment from database
@@ -1065,6 +1076,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             void setStorageShips(updatedShips);
 
             if (!activeProfileId) return;
+            if (!isSupabaseSyncEnabled()) return;
 
             try {
                 const { error } = await supabase
