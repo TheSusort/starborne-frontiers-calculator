@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
-import { Button } from '../ui/Button';
 import { Dropdown } from '../ui/Dropdown';
 import { ChevronDownIcon, UserIcon } from '../ui/icons';
 import { ProfileSwitcherMenu } from '../ui/layout/ProfileSwitcher';
@@ -58,18 +57,34 @@ export const LoginButton: React.FC = () => {
         );
     }
 
+    const trigger = (isOpen: boolean) => (
+        <div
+            className="w-full flex cursor-pointer px-3 py-2 bg-dark border border-dark-border hover:bg-dark-lighter transition-colors"
+            title="Account menu"
+        >
+            <ChevronDownIcon
+                className={`flex-shrink-0 transition-transform duration-200 mr-2 ${isOpen ? 'rotate-180' : ''}`}
+            />
+            <span className="flex-1 text-right">Profile / Sign in</span>
+        </div>
+    );
+
     return (
         <>
-            <Button
-                onClick={() => setShowAuthModal(true)}
-                fullWidth
-                variant="secondary"
-                type="button"
-                className="text-right"
-                data-testid="open-auth-modal"
-            >
-                Sign In
-            </Button>
+            <Dropdown trigger={trigger} align="left" direction="up">
+                <Dropdown.Item
+                    onClick={() => void navigate('/profile')}
+                    className="text-gray-400 text-sm"
+                >
+                    Profile
+                </Dropdown.Item>
+                <Dropdown.Item
+                    onClick={() => setShowAuthModal(true)}
+                    className="text-gray-400 text-sm"
+                >
+                    Sign in
+                </Dropdown.Item>
+            </Dropdown>
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
         </>
     );
