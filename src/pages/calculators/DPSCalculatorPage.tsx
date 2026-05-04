@@ -97,6 +97,7 @@ const DPSCalculatorPage: React.FC = () => {
                     configs: [
                         {
                             id: '1',
+                            shipId: ship.id,
                             name: ship.name,
                             attack: Math.round(final.attack),
                             crit: Math.round(final.crit),
