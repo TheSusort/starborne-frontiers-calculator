@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthProvider';
 import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 import { useNotification } from '../hooks/useNotification';
@@ -9,6 +10,7 @@ import { Checkbox } from '../components/ui/Checkbox';
 import { Loader } from '../components/ui/Loader';
 import { StatCard } from '../components/ui/StatCard';
 import { ConfirmModal } from '../components/ui/layout/ConfirmModal';
+import { Tabs } from '../components/ui/layout/Tabs';
 import {
     getUserProfile,
     updateUserProfile,
@@ -26,8 +28,7 @@ import { INTEGRATIONS, IntegrationStatus } from '../constants/integrations';
 import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
-import { TrophyIcon, ChevronDownIcon } from '../components/ui/icons';
-import { CollapsibleAccordion } from '../components/ui/CollapsibleAccordion';
+import { TrophyIcon } from '../components/ui/icons';
 import { AuthModal } from '../components/auth/AuthModal';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -62,6 +63,12 @@ function AuthRequired({ label, onSignIn }: { label: string; onSignIn: () => void
     );
 }
 
+const PROFILE_TABS = [
+    { id: 'account', label: 'Account & Settings' },
+    { id: 'statistics', label: 'Statistics' },
+    { id: 'data', label: 'Data & Integrations' },
+];
+
 export const ProfilePage: React.FC = () => {
     const { user } = useAuth();
     const { activeProfileId, isOnAlt, refreshProfiles } = useActiveProfile();
@@ -85,13 +92,16 @@ export const ProfilePage: React.FC = () => {
         () => localStorage.getItem(StorageKey.SHOW_IMPORT_SUMMARY) !== 'false'
     );
 
-    // Data management state
-    const [dataManagementOpen, setDataManagementOpen] = useState(false);
-    const [integrationsOpen, setIntegrationsOpen] = useState(false);
+    // Sync state
     const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
     const [syncLoading, setSyncLoading] = useState(false);
     const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
     const [showClearReSyncConfirm, setShowClearReSyncConfirm] = useState(false);
+
+    // Tab state via URL search params
+    const [searchParams, setSearchParams] = useSearchParams();
+    const activeTab = searchParams.get('tab') ?? 'account';
+    const handleTabChange = (tabId: string) => setSearchParams({ tab: tabId }, { replace: true });
 
     useEffect(() => {
         if (!user?.id || !activeProfileId) {
@@ -303,353 +313,321 @@ export const ProfilePage: React.FC = () => {
                 description="Manage your profile settings, view statistics, and see your leaderboard rankings"
             />
             <PageLayout title="Profile" description="Manage your profile and view your statistics">
-                <div className="space-y-8">
-                    {/* Profile Settings */}
-                    {user ? (
-                        <div className="card space-y-4">
-                            <h2 className="text-xl font-semibold">Profile Settings</h2>
+                <div>
+                    <Tabs tabs={PROFILE_TABS} activeTab={activeTab} onChange={handleTabChange} />
 
-                            <div className="space-y-4">
-                                <Input
-                                    label="Username"
-                                    value={username}
-                                    onChange={(e) => void handleUsernameChange(e.target.value)}
-                                    placeholder="Enter username (3-20 characters)"
-                                    error={usernameError || undefined}
-                                    helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
-                                />
+                    {/* Account & Settings tab */}
+                    {activeTab === 'account' && (
+                        <div className="space-y-6">
+                            {user ? (
+                                <>
+                                    {/* Profile Settings */}
+                                    <div className="card space-y-4">
+                                        <h2 className="text-xl font-semibold">Profile Settings</h2>
 
-                                <Input
-                                    label="In-Game ID"
-                                    value={inGameId}
-                                    onChange={(e) => setInGameId(e.target.value)}
-                                    placeholder="Enter your in-game ID"
-                                    helpLabel="Your in-game ID for friend requests and duels"
-                                />
-
-                                <Checkbox
-                                    label="Show in Public Leaderboards"
-                                    checked={isPublic}
-                                    onChange={setIsPublic}
-                                    helpLabel="When enabled, your username will appear in public leaderboards. When disabled, you'll appear as 'Anonymous'."
-                                />
-
-                                <div className="flex justify-end pt-2">
-                                    <Button
-                                        onClick={() => void handleSave()}
-                                        disabled={
-                                            !hasChanges ||
-                                            saving ||
-                                            checkingUsername ||
-                                            !!usernameError
-                                        }
-                                        variant="primary"
-                                    >
-                                        {saving ? 'Saving...' : 'Save Changes'}
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <AuthRequired
-                            label="your profile settings"
-                            onSignIn={() => setShowAuthModal(true)}
-                        />
-                    )}
-
-                    {/* Alt Accounts — only visible on the main profile */}
-                    {user ? (
-                        !isOnAlt && <AltAccountsSection />
-                    ) : (
-                        <AuthRequired
-                            label="alt accounts"
-                            onSignIn={() => setShowAuthModal(true)}
-                        />
-                    )}
-
-                    {/* App Preferences */}
-                    {user ? (
-                        <div className="card space-y-4">
-                            <h2 className="text-xl font-semibold">App Preferences</h2>
-                            <Checkbox
-                                label="Show import summary after importing"
-                                checked={showImportSummary}
-                                onChange={(checked) => {
-                                    setShowImportSummary(checked);
-                                    localStorage.setItem(
-                                        StorageKey.SHOW_IMPORT_SUMMARY,
-                                        String(checked)
-                                    );
-                                }}
-                                helpLabel="When enabled, a summary of what changed is shown after each import."
-                            />
-                        </div>
-                    ) : (
-                        <AuthRequired
-                            label="app preferences"
-                            onSignIn={() => setShowAuthModal(true)}
-                        />
-                    )}
-
-                    {/* Statistics */}
-                    {user ? (
-                        stats && (
-                            <div>
-                                <h2 className="text-xl font-semibold mb-4">Statistics</h2>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                    <StatCard title="Ships" value={stats.shipCount} />
-                                    <StatCard title="Gear Pieces" value={stats.gearCount} />
-                                    <StatCard title="Implants" value={stats.implantCount} />
-                                    <StatCard
-                                        title="Engineering Points"
-                                        value={stats.engineeringPoints.toLocaleString()}
-                                    />
-                                    <StatCard
-                                        title="Tokens Spent"
-                                        value={stats.engineeringTokens.toLocaleString()}
-                                    />
-                                </div>
-                            </div>
-                        )
-                    ) : (
-                        <AuthRequired
-                            label="your statistics"
-                            onSignIn={() => setShowAuthModal(true)}
-                        />
-                    )}
-
-                    {/* Usage Statistics */}
-                    {user ? (
-                        usageStats && (
-                            <div>
-                                <h2 className="text-xl font-semibold mb-4">Usage Statistics</h2>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <StatCard
-                                        title="Autogear Runs"
-                                        value={usageStats.total_autogear_runs.toLocaleString()}
-                                        color="blue"
-                                    />
-                                    <StatCard
-                                        title="Data Imports"
-                                        value={usageStats.total_data_imports.toLocaleString()}
-                                        color="green"
-                                    />
-                                    <StatCard
-                                        title="Total Activity"
-                                        value={usageStats.total_activity.toLocaleString()}
-                                        color="yellow"
-                                    />
-                                </div>
-                            </div>
-                        )
-                    ) : (
-                        <AuthRequired
-                            label="usage statistics"
-                            onSignIn={() => setShowAuthModal(true)}
-                        />
-                    )}
-
-                    {/* Data Management */}
-                    <div className="card overflow-hidden">
-                        <button
-                            type="button"
-                            aria-expanded={dataManagementOpen}
-                            className="w-full flex justify-between items-center"
-                            onClick={() => setDataManagementOpen((prev) => !prev)}
-                        >
-                            <h2 className="text-xl font-semibold">Data Management</h2>
-                            <ChevronDownIcon
-                                className={`transition-transform duration-300 ${dataManagementOpen ? 'rotate-180' : ''}`}
-                            />
-                        </button>
-                        <CollapsibleAccordion isOpen={dataManagementOpen}>
-                            <div className="space-y-6">
-                                {/* Cloud Sync Toggle — main account only */}
-                                {user && !isOnAlt && (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <h3 className="text-base font-medium">Cloud Sync</h3>
-                                            <p className="text-sm text-theme-text-secondary mt-1">
-                                                When enabled, your data is automatically saved to
-                                                the cloud and accessible on any device.
-                                            </p>
-                                        </div>
-                                        <p className="text-sm">
-                                            Status:{' '}
-                                            <span
-                                                className={
-                                                    syncEnabled
-                                                        ? 'text-green-400'
-                                                        : 'text-yellow-400'
+                                        <div className="space-y-4">
+                                            <Input
+                                                label="Username"
+                                                value={username}
+                                                onChange={(e) =>
+                                                    void handleUsernameChange(e.target.value)
                                                 }
-                                            >
-                                                {syncEnabled
-                                                    ? 'Sync enabled'
-                                                    : 'Sync disabled (local only)'}
-                                            </span>
-                                        </p>
-                                        <div className="flex gap-3">
-                                            {syncEnabled ? (
+                                                placeholder="Enter username (3-20 characters)"
+                                                error={usernameError || undefined}
+                                                helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
+                                            />
+
+                                            <Input
+                                                label="In-Game ID"
+                                                value={inGameId}
+                                                onChange={(e) => setInGameId(e.target.value)}
+                                                placeholder="Enter your in-game ID"
+                                                helpLabel="Your in-game ID for friend requests and duels"
+                                            />
+
+                                            <Checkbox
+                                                label="Show in Public Leaderboards"
+                                                checked={isPublic}
+                                                onChange={setIsPublic}
+                                                helpLabel="When enabled, your username will appear in public leaderboards. When disabled, you'll appear as 'Anonymous'."
+                                            />
+
+                                            <div className="flex justify-end pt-2">
                                                 <Button
-                                                    variant="danger"
-                                                    size="sm"
-                                                    disabled={syncLoading}
-                                                    onClick={() => setShowSyncOffConfirm(true)}
-                                                >
-                                                    {syncLoading ? 'Working...' : 'Disable Sync'}
-                                                </Button>
-                                            ) : (
-                                                <Button
+                                                    onClick={() => void handleSave()}
+                                                    disabled={
+                                                        !hasChanges ||
+                                                        saving ||
+                                                        checkingUsername ||
+                                                        !!usernameError
+                                                    }
                                                     variant="primary"
-                                                    size="sm"
-                                                    disabled={syncLoading}
-                                                    onClick={() => void handleSyncToggleOn()}
                                                 >
-                                                    {syncLoading ? 'Working...' : 'Enable Sync'}
+                                                    {saving ? 'Saving...' : 'Save Changes'}
                                                 </Button>
-                                            )}
-                                            {syncEnabled && (
-                                                <Button
-                                                    variant="danger"
-                                                    size="sm"
-                                                    disabled={syncLoading}
-                                                    onClick={() => setShowClearReSyncConfirm(true)}
-                                                >
-                                                    Clear &amp; re-sync
-                                                </Button>
-                                            )}
+                                            </div>
                                         </div>
                                     </div>
-                                )}
 
-                                {/* Backup & Restore */}
-                                <div>
-                                    <h3 className="text-base font-medium mb-3">
-                                        Backup &amp; Restore
-                                    </h3>
-                                    <BackupRestoreData />
-                                </div>
-                            </div>
-                        </CollapsibleAccordion>
-                    </div>
+                                    {/* Alt Accounts — main account only */}
+                                    {!isOnAlt && <AltAccountsSection />}
 
-                    {/* Connected Integrations */}
-                    <div className="card overflow-hidden">
-                        <button
-                            type="button"
-                            aria-expanded={integrationsOpen}
-                            className="w-full flex justify-between items-center"
-                            onClick={() => setIntegrationsOpen((prev) => !prev)}
-                        >
-                            <h2 className="text-xl font-semibold">Connected Integrations</h2>
-                            <ChevronDownIcon
-                                className={`transition-transform duration-300 ${integrationsOpen ? 'rotate-180' : ''}`}
-                            />
-                        </button>
-                        <CollapsibleAccordion isOpen={integrationsOpen}>
-                            {!user ? (
+                                    {/* App Preferences */}
+                                    <div className="card space-y-4">
+                                        <h2 className="text-xl font-semibold">App Preferences</h2>
+                                        <Checkbox
+                                            label="Show import summary after importing"
+                                            checked={showImportSummary}
+                                            onChange={(checked) => {
+                                                setShowImportSummary(checked);
+                                                localStorage.setItem(
+                                                    StorageKey.SHOW_IMPORT_SUMMARY,
+                                                    String(checked)
+                                                );
+                                            }}
+                                            helpLabel="When enabled, a summary of what changed is shown after each import."
+                                        />
+                                    </div>
+                                </>
+                            ) : (
                                 <AuthRequired
-                                    label="integrations"
+                                    label="Account & Settings"
                                     onSignIn={() => setShowAuthModal(true)}
                                 />
+                            )}
+                        </div>
+                    )}
+
+                    {/* Statistics tab */}
+                    {activeTab === 'statistics' && (
+                        <div className="space-y-6">
+                            {user ? (
+                                <>
+                                    {stats && (
+                                        <div>
+                                            <h2 className="text-xl font-semibold mb-4">
+                                                Fleet Statistics
+                                            </h2>
+                                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                                <StatCard title="Ships" value={stats.shipCount} />
+                                                <StatCard
+                                                    title="Gear Pieces"
+                                                    value={stats.gearCount}
+                                                />
+                                                <StatCard
+                                                    title="Implants"
+                                                    value={stats.implantCount}
+                                                />
+                                                <StatCard
+                                                    title="Engineering Points"
+                                                    value={stats.engineeringPoints.toLocaleString()}
+                                                />
+                                                <StatCard
+                                                    title="Tokens Spent"
+                                                    value={stats.engineeringTokens.toLocaleString()}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    {usageStats && (
+                                        <div>
+                                            <h2 className="text-xl font-semibold mb-4">
+                                                Usage Statistics
+                                            </h2>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <StatCard
+                                                    title="Autogear Runs"
+                                                    value={usageStats.total_autogear_runs.toLocaleString()}
+                                                    color="blue"
+                                                />
+                                                <StatCard
+                                                    title="Data Imports"
+                                                    value={usageStats.total_data_imports.toLocaleString()}
+                                                    color="green"
+                                                />
+                                                <StatCard
+                                                    title="Total Activity"
+                                                    value={usageStats.total_activity.toLocaleString()}
+                                                    color="yellow"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div className="card">
+                                        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                                            <TrophyIcon className="w-6 h-6" />
+                                            Engineering Leaderboards
+                                        </h2>
+                                        <EngineeringLeaderboards />
+                                    </div>
+                                    <div className="card">
+                                        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                                            <TrophyIcon className="w-6 h-6" />
+                                            Top Ship Rankings
+                                        </h2>
+                                        {shipsLoading ? (
+                                            <div className="relative min-h-[200px]">
+                                                <Loader size="sm" />
+                                            </div>
+                                        ) : topShips.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {topShips.map((ship, index) => (
+                                                    <div
+                                                        key={`${ship.shipName}-${index}`}
+                                                        className="flex justify-between items-center p-3 border border-dark-border"
+                                                    >
+                                                        <div>
+                                                            <div className="font-semibold">
+                                                                {ship.shipName}
+                                                            </div>
+                                                            <div className="text-sm text-theme-text-secondary">
+                                                                {ship.shipType}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-bold">
+                                                                Rank #{ship.rank}
+                                                            </div>
+                                                            <div className="text-xs text-theme-text-secondary">
+                                                                out of {ship.totalEntries}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-8 text-theme-text-secondary">
+                                                No ship rankings available
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
                             ) : (
-                                <div className="space-y-3">
-                                    {INTEGRATIONS.map((integration) => (
-                                        <div
-                                            key={integration.id}
-                                            className="card p-4 flex items-start justify-between gap-4"
+                                <AuthRequired
+                                    label="Statistics"
+                                    onSignIn={() => setShowAuthModal(true)}
+                                />
+                            )}
+                        </div>
+                    )}
+
+                    {/* Data & Integrations tab */}
+                    {activeTab === 'data' && (
+                        <div className="space-y-6">
+                            {/* Cloud Sync — auth-required, main account only */}
+                            {user && !isOnAlt && (
+                                <div className="card space-y-4">
+                                    <h2 className="text-xl font-semibold">Cloud Sync</h2>
+                                    {/* Toggle row */}
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                            <p className="text-sm font-medium text-theme-text">
+                                                Sync enabled
+                                            </p>
+                                            <p className="text-sm text-theme-text-secondary mt-0.5">
+                                                Automatically saves your data to the cloud and keeps
+                                                it accessible on any device.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={syncEnabled}
+                                            disabled={syncLoading}
+                                            onClick={() =>
+                                                syncEnabled
+                                                    ? setShowSyncOffConfirm(true)
+                                                    : void handleSyncToggleOn()
+                                            }
+                                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                syncEnabled ? 'bg-primary' : 'bg-dark-border'
+                                            }`}
                                         >
+                                            <span
+                                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                                                    syncEnabled ? 'translate-x-5' : 'translate-x-0'
+                                                }`}
+                                            />
+                                        </button>
+                                    </div>
+                                    {/* Clear & re-sync — only when sync is ON */}
+                                    {syncEnabled && (
+                                        <div className="flex items-center justify-between border-t border-dark-border pt-4">
                                             <div>
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-theme-text font-medium">
-                                                        {integration.name}
-                                                    </span>
-                                                    <StatusBadge status={integration.status} />
-                                                </div>
-                                                <p className="text-theme-text-secondary text-sm">
-                                                    {integration.description}
+                                                <p className="text-sm font-medium text-theme-text">
+                                                    Clear &amp; re-sync
+                                                </p>
+                                                <p className="text-xs text-theme-text-secondary mt-0.5">
+                                                    Wipes cloud data and re-uploads from local. Sync
+                                                    stays enabled.
                                                 </p>
                                             </div>
                                             <Button
-                                                variant="secondary"
+                                                variant="danger"
                                                 size="sm"
-                                                disabled={
-                                                    integration.status === 'deprecated' ||
-                                                    integration.status === 'coming-soon'
-                                                }
+                                                disabled={syncLoading}
+                                                onClick={() => setShowClearReSyncConfirm(true)}
                                             >
-                                                {integration.status === 'connected'
-                                                    ? 'Disconnect'
-                                                    : 'Connect'}
+                                                {syncLoading ? 'Working...' : 'Clear & re-sync'}
                                             </Button>
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             )}
-                        </CollapsibleAccordion>
-                    </div>
 
-                    {/* Engineering Leaderboards */}
-                    <div className="card">
-                        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <TrophyIcon className="w-6 h-6" />
-                            Engineering Leaderboards
-                        </h2>
-                        {user ? (
-                            <EngineeringLeaderboards />
-                        ) : (
-                            <AuthRequired
-                                label="engineering leaderboards"
-                                onSignIn={() => setShowAuthModal(true)}
-                            />
-                        )}
-                    </div>
+                            {/* Backup & Restore (includes Danger Zone) — always visible */}
+                            <div className="card">
+                                <h2 className="text-xl font-semibold mb-4">Backup &amp; Restore</h2>
+                                <BackupRestoreData />
+                            </div>
 
-                    {/* Top Ship Rankings */}
-                    <div className="card">
-                        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                            <TrophyIcon className="w-6 h-6" />
-                            Top Ship Rankings
-                        </h2>
-                        {user ? (
-                            shipsLoading ? (
-                                <div className="relative min-h-[200px]">
-                                    <Loader size="sm" />
-                                </div>
-                            ) : topShips.length > 0 ? (
-                                <div className="space-y-2">
-                                    {topShips.map((ship, index) => (
-                                        <div
-                                            key={`${ship.shipName}-${index}`}
-                                            className="flex justify-between items-center p-3 border border-dark-border"
-                                        >
-                                            <div>
-                                                <div className="font-semibold">{ship.shipName}</div>
-                                                <div className="text-sm text-theme-text-secondary">
-                                                    {ship.shipType}
+                            {/* Connected Integrations */}
+                            <div className="card">
+                                <h2 className="text-xl font-semibold mb-4">
+                                    Connected Integrations
+                                </h2>
+                                {!user ? (
+                                    <AuthRequired
+                                        label="integrations"
+                                        onSignIn={() => setShowAuthModal(true)}
+                                    />
+                                ) : (
+                                    <div className="space-y-3">
+                                        {INTEGRATIONS.map((integration) => (
+                                            <div
+                                                key={integration.id}
+                                                className="card p-4 flex items-start justify-between gap-4"
+                                            >
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-theme-text font-medium">
+                                                            {integration.name}
+                                                        </span>
+                                                        <StatusBadge status={integration.status} />
+                                                    </div>
+                                                    <p className="text-theme-text-secondary text-sm">
+                                                        {integration.description}
+                                                    </p>
                                                 </div>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    disabled={
+                                                        integration.status === 'deprecated' ||
+                                                        integration.status === 'coming-soon'
+                                                    }
+                                                >
+                                                    {integration.status === 'connected'
+                                                        ? 'Disconnect'
+                                                        : 'Connect'}
+                                                </Button>
                                             </div>
-                                            <div className="text-right">
-                                                <div className="font-bold">Rank #{ship.rank}</div>
-                                                <div className="text-xs text-theme-text-secondary">
-                                                    out of {ship.totalEntries}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-8 text-theme-text-secondary">
-                                    No ship rankings available
-                                </div>
-                            )
-                        ) : (
-                            <AuthRequired
-                                label="top ship rankings"
-                                onSignIn={() => setShowAuthModal(true)}
-                            />
-                        )}
-                    </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </PageLayout>
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
