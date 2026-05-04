@@ -22,6 +22,7 @@ import {
     TopShipRanking,
 } from '../services/userProfileService';
 import { StorageKey } from '../constants/storage';
+import { INTEGRATIONS, IntegrationStatus } from '../constants/integrations';
 import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
@@ -31,6 +32,24 @@ import { AuthModal } from '../components/auth/AuthModal';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
 import { deleteUserSupabaseData, reuploadLocalDataToSupabase } from '../services/userDataService';
+
+function StatusBadge({ status }: { status: IntegrationStatus }) {
+    const labels: Record<IntegrationStatus, string> = {
+        deprecated: 'Deprecated',
+        'coming-soon': 'Coming Soon',
+        available: 'Available',
+        connected: 'Connected',
+    };
+    const colors: Record<IntegrationStatus, string> = {
+        deprecated: 'bg-red-900/40 text-red-400',
+        'coming-soon': 'bg-yellow-900/40 text-yellow-400',
+        available: 'bg-green-900/40 text-green-400',
+        connected: 'bg-blue-900/40 text-blue-400',
+    };
+    return (
+        <span className={`text-xs px-2 py-0.5 rounded ${colors[status]}`}>{labels[status]}</span>
+    );
+}
 
 function AuthRequired({ label, onSignIn }: { label: string; onSignIn: () => void }) {
     return (
@@ -68,6 +87,7 @@ export const ProfilePage: React.FC = () => {
 
     // Data management state
     const [dataManagementOpen, setDataManagementOpen] = useState(false);
+    const [integrationsOpen, setIntegrationsOpen] = useState(false);
     const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
     const [syncLoading, setSyncLoading] = useState(false);
     const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
@@ -510,6 +530,62 @@ export const ProfilePage: React.FC = () => {
                                     <BackupRestoreData />
                                 </div>
                             </div>
+                        </CollapsibleAccordion>
+                    </div>
+
+                    {/* Connected Integrations */}
+                    <div className="card overflow-hidden">
+                        <button
+                            type="button"
+                            aria-expanded={integrationsOpen}
+                            className="w-full flex justify-between items-center"
+                            onClick={() => setIntegrationsOpen((prev) => !prev)}
+                        >
+                            <h2 className="text-xl font-semibold">Connected Integrations</h2>
+                            <ChevronDownIcon
+                                className={`transition-transform duration-300 ${integrationsOpen ? 'rotate-180' : ''}`}
+                            />
+                        </button>
+                        <CollapsibleAccordion isOpen={integrationsOpen}>
+                            {!user ? (
+                                <AuthRequired
+                                    label="integrations"
+                                    onSignIn={() => setShowAuthModal(true)}
+                                />
+                            ) : (
+                                <div className="space-y-3">
+                                    {INTEGRATIONS.map((integration) => (
+                                        <div
+                                            key={integration.id}
+                                            className="card p-4 flex items-start justify-between gap-4"
+                                        >
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-theme-text font-medium">
+                                                        {integration.name}
+                                                    </span>
+                                                    <StatusBadge status={integration.status} />
+                                                </div>
+                                                <p className="text-theme-text-secondary text-sm">
+                                                    {integration.description}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                disabled={
+                                                    integration.status === 'deprecated' ||
+                                                    integration.status === 'coming-soon'
+                                                }
+                                            >
+                                                {integration.status === 'connected'
+                                                    ? 'Disconnect'
+                                                    : 'Connect'}
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </CollapsibleAccordion>
                     </div>
 
