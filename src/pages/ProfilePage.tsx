@@ -432,6 +432,8 @@ export const ProfilePage: React.FC = () => {
                     {/* Data Management */}
                     <div className="card overflow-hidden">
                         <button
+                            type="button"
+                            aria-expanded={dataManagementOpen}
                             className="w-full flex justify-between items-center"
                             onClick={() => setDataManagementOpen((prev) => !prev)}
                         >
