@@ -25,18 +25,31 @@ import { AltAccountsSection } from '../components/profile/AltAccountsSection';
 import { EngineeringLeaderboards } from '../components/engineering/EngineeringLeaderboards';
 import Seo from '../components/seo/Seo';
 import { TrophyIcon } from '../components/ui/icons';
+import { AuthModal } from '../components/auth/AuthModal';
+
+function AuthRequired({ label, onSignIn }: { label: string; onSignIn: () => void }) {
+    return (
+        <div className="card p-6 text-center text-theme-text-secondary">
+            <p className="mb-3">Sign in to view {label}</p>
+            <Button variant="primary" size="sm" onClick={onSignIn}>
+                Sign in
+            </Button>
+        </div>
+    );
+}
 
 export const ProfilePage: React.FC = () => {
     const { user } = useAuth();
     const { activeProfileId, isOnAlt, refreshProfiles } = useActiveProfile();
     const { addNotification } = useNotification();
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [stats, setStats] = useState<UserStats | null>(null);
     const [usageStats, setUsageStats] = useState<UserUsageStats | null>(null);
     const [topShips, setTopShips] = useState<TopShipRanking[]>([]);
     const [shipsLoading, setShipsLoading] = useState(false);
+    const [showAuthModal, setShowAuthModal] = useState(false);
 
     // Form state
     const [username, setUsername] = useState('');
@@ -209,16 +222,6 @@ export const ProfilePage: React.FC = () => {
         }
     };
 
-    if (!user) {
-        return (
-            <PageLayout title="Profile">
-                <div className="text-center py-8">
-                    <p className="text-theme-text-secondary">Please sign in to view your profile</p>
-                </div>
-            </PageLayout>
-        );
-    }
-
     if (loading) {
         return <Loader />;
     }
@@ -237,110 +240,148 @@ export const ProfilePage: React.FC = () => {
             <PageLayout title="Profile" description="Manage your profile and view your statistics">
                 <div className="space-y-8">
                     {/* Profile Settings */}
-                    <div className="card space-y-4">
-                        <h2 className="text-xl font-semibold">Profile Settings</h2>
+                    {user ? (
+                        <div className="card space-y-4">
+                            <h2 className="text-xl font-semibold">Profile Settings</h2>
 
-                        <div className="space-y-4">
-                            <Input
-                                label="Username"
-                                value={username}
-                                onChange={(e) => void handleUsernameChange(e.target.value)}
-                                placeholder="Enter username (3-20 characters)"
-                                error={usernameError || undefined}
-                                helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
-                            />
+                            <div className="space-y-4">
+                                <Input
+                                    label="Username"
+                                    value={username}
+                                    onChange={(e) => void handleUsernameChange(e.target.value)}
+                                    placeholder="Enter username (3-20 characters)"
+                                    error={usernameError || undefined}
+                                    helpLabel="Username will appear in leaderboards if you're set to public. Must be unique."
+                                />
 
-                            <Input
-                                label="In-Game ID"
-                                value={inGameId}
-                                onChange={(e) => setInGameId(e.target.value)}
-                                placeholder="Enter your in-game ID"
-                                helpLabel="Your in-game ID for friend requests and duels"
-                            />
+                                <Input
+                                    label="In-Game ID"
+                                    value={inGameId}
+                                    onChange={(e) => setInGameId(e.target.value)}
+                                    placeholder="Enter your in-game ID"
+                                    helpLabel="Your in-game ID for friend requests and duels"
+                                />
 
-                            <Checkbox
-                                label="Show in Public Leaderboards"
-                                checked={isPublic}
-                                onChange={setIsPublic}
-                                helpLabel="When enabled, your username will appear in public leaderboards. When disabled, you'll appear as 'Anonymous'."
-                            />
+                                <Checkbox
+                                    label="Show in Public Leaderboards"
+                                    checked={isPublic}
+                                    onChange={setIsPublic}
+                                    helpLabel="When enabled, your username will appear in public leaderboards. When disabled, you'll appear as 'Anonymous'."
+                                />
 
-                            <div className="flex justify-end pt-2">
-                                <Button
-                                    onClick={() => void handleSave()}
-                                    disabled={
-                                        !hasChanges || saving || checkingUsername || !!usernameError
-                                    }
-                                    variant="primary"
-                                >
-                                    {saving ? 'Saving...' : 'Save Changes'}
-                                </Button>
+                                <div className="flex justify-end pt-2">
+                                    <Button
+                                        onClick={() => void handleSave()}
+                                        disabled={
+                                            !hasChanges ||
+                                            saving ||
+                                            checkingUsername ||
+                                            !!usernameError
+                                        }
+                                        variant="primary"
+                                    >
+                                        {saving ? 'Saving...' : 'Save Changes'}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    ) : (
+                        <AuthRequired
+                            label="your profile settings"
+                            onSignIn={() => setShowAuthModal(true)}
+                        />
+                    )}
 
                     {/* Alt Accounts — only visible on the main profile */}
-                    {!isOnAlt && <AltAccountsSection />}
+                    {user ? (
+                        !isOnAlt && <AltAccountsSection />
+                    ) : (
+                        <AuthRequired
+                            label="alt accounts"
+                            onSignIn={() => setShowAuthModal(true)}
+                        />
+                    )}
 
                     {/* App Preferences */}
-                    <div className="card space-y-4">
-                        <h2 className="text-xl font-semibold">App Preferences</h2>
-                        <Checkbox
-                            label="Show import summary after importing"
-                            checked={showImportSummary}
-                            onChange={(checked) => {
-                                setShowImportSummary(checked);
-                                localStorage.setItem(
-                                    StorageKey.SHOW_IMPORT_SUMMARY,
-                                    String(checked)
-                                );
-                            }}
-                            helpLabel="When enabled, a summary of what changed is shown after each import."
+                    {user ? (
+                        <div className="card space-y-4">
+                            <h2 className="text-xl font-semibold">App Preferences</h2>
+                            <Checkbox
+                                label="Show import summary after importing"
+                                checked={showImportSummary}
+                                onChange={(checked) => {
+                                    setShowImportSummary(checked);
+                                    localStorage.setItem(
+                                        StorageKey.SHOW_IMPORT_SUMMARY,
+                                        String(checked)
+                                    );
+                                }}
+                                helpLabel="When enabled, a summary of what changed is shown after each import."
+                            />
+                        </div>
+                    ) : (
+                        <AuthRequired
+                            label="app preferences"
+                            onSignIn={() => setShowAuthModal(true)}
                         />
-                    </div>
+                    )}
 
                     {/* Statistics */}
-                    {stats && (
-                        <div>
-                            <h2 className="text-xl font-semibold mb-4">Statistics</h2>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                <StatCard title="Ships" value={stats.shipCount} />
-                                <StatCard title="Gear Pieces" value={stats.gearCount} />
-                                <StatCard title="Implants" value={stats.implantCount} />
-                                <StatCard
-                                    title="Engineering Points"
-                                    value={stats.engineeringPoints.toLocaleString()}
-                                />
-                                <StatCard
-                                    title="Tokens Spent"
-                                    value={stats.engineeringTokens.toLocaleString()}
-                                />
+                    {user ? (
+                        stats && (
+                            <div>
+                                <h2 className="text-xl font-semibold mb-4">Statistics</h2>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <StatCard title="Ships" value={stats.shipCount} />
+                                    <StatCard title="Gear Pieces" value={stats.gearCount} />
+                                    <StatCard title="Implants" value={stats.implantCount} />
+                                    <StatCard
+                                        title="Engineering Points"
+                                        value={stats.engineeringPoints.toLocaleString()}
+                                    />
+                                    <StatCard
+                                        title="Tokens Spent"
+                                        value={stats.engineeringTokens.toLocaleString()}
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        )
+                    ) : (
+                        <AuthRequired
+                            label="your statistics"
+                            onSignIn={() => setShowAuthModal(true)}
+                        />
                     )}
 
                     {/* Usage Statistics */}
-                    {usageStats && (
-                        <div>
-                            <h2 className="text-xl font-semibold mb-4">Usage Statistics</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <StatCard
-                                    title="Autogear Runs"
-                                    value={usageStats.total_autogear_runs.toLocaleString()}
-                                    color="blue"
-                                />
-                                <StatCard
-                                    title="Data Imports"
-                                    value={usageStats.total_data_imports.toLocaleString()}
-                                    color="green"
-                                />
-                                <StatCard
-                                    title="Total Activity"
-                                    value={usageStats.total_activity.toLocaleString()}
-                                    color="yellow"
-                                />
+                    {user ? (
+                        usageStats && (
+                            <div>
+                                <h2 className="text-xl font-semibold mb-4">Usage Statistics</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <StatCard
+                                        title="Autogear Runs"
+                                        value={usageStats.total_autogear_runs.toLocaleString()}
+                                        color="blue"
+                                    />
+                                    <StatCard
+                                        title="Data Imports"
+                                        value={usageStats.total_data_imports.toLocaleString()}
+                                        color="green"
+                                    />
+                                    <StatCard
+                                        title="Total Activity"
+                                        value={usageStats.total_activity.toLocaleString()}
+                                        color="yellow"
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        )
+                    ) : (
+                        <AuthRequired
+                            label="usage statistics"
+                            onSignIn={() => setShowAuthModal(true)}
+                        />
                     )}
 
                     {/* Engineering Leaderboards */}
@@ -349,7 +390,14 @@ export const ProfilePage: React.FC = () => {
                             <TrophyIcon className="w-6 h-6" />
                             Engineering Leaderboards
                         </h2>
-                        <EngineeringLeaderboards />
+                        {user ? (
+                            <EngineeringLeaderboards />
+                        ) : (
+                            <AuthRequired
+                                label="engineering leaderboards"
+                                onSignIn={() => setShowAuthModal(true)}
+                            />
+                        )}
                     </div>
 
                     {/* Top Ship Rankings */}
@@ -358,40 +406,48 @@ export const ProfilePage: React.FC = () => {
                             <TrophyIcon className="w-6 h-6" />
                             Top Ship Rankings
                         </h2>
-                        {shipsLoading ? (
-                            <div className="relative min-h-[200px]">
-                                <Loader size="sm" />
-                            </div>
-                        ) : topShips.length > 0 ? (
-                            <div className="space-y-2">
-                                {topShips.map((ship, index) => (
-                                    <div
-                                        key={`${ship.shipName}-${index}`}
-                                        className="flex justify-between items-center p-3 border border-dark-border"
-                                    >
-                                        <div>
-                                            <div className="font-semibold">{ship.shipName}</div>
-                                            <div className="text-sm text-theme-text-secondary">
-                                                {ship.shipType}
+                        {user ? (
+                            shipsLoading ? (
+                                <div className="relative min-h-[200px]">
+                                    <Loader size="sm" />
+                                </div>
+                            ) : topShips.length > 0 ? (
+                                <div className="space-y-2">
+                                    {topShips.map((ship, index) => (
+                                        <div
+                                            key={`${ship.shipName}-${index}`}
+                                            className="flex justify-between items-center p-3 border border-dark-border"
+                                        >
+                                            <div>
+                                                <div className="font-semibold">{ship.shipName}</div>
+                                                <div className="text-sm text-theme-text-secondary">
+                                                    {ship.shipType}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="font-bold">Rank #{ship.rank}</div>
+                                                <div className="text-xs text-theme-text-secondary">
+                                                    out of {ship.totalEntries}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="font-bold">Rank #{ship.rank}</div>
-                                            <div className="text-xs text-theme-text-secondary">
-                                                out of {ship.totalEntries}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-theme-text-secondary">
+                                    No ship rankings available
+                                </div>
+                            )
                         ) : (
-                            <div className="text-center py-8 text-theme-text-secondary">
-                                No ship rankings available
-                            </div>
+                            <AuthRequired
+                                label="top ship rankings"
+                                onSignIn={() => setShowAuthModal(true)}
+                            />
                         )}
                     </div>
                 </div>
             </PageLayout>
+            <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
         </>
     );
 };
