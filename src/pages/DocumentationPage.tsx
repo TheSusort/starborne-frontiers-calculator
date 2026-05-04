@@ -215,6 +215,16 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#profile"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Profile & Account
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#changelog"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -466,7 +476,7 @@ const DocumentationPage: React.FC = () => {
                                         How do I delete my account?
                                     </span>
                                     You can delete your account by clicking the delete account
-                                    button in the Home page.
+                                    button in the Profile page, inside the Backup & Restore section.
                                 </li>
                             </ul>
                         </div>
@@ -2320,6 +2330,80 @@ const DocumentationPage: React.FC = () => {
                                 Your theme preference is saved locally in your browser, so your
                                 choice will persist whenever you return to the calculator.
                             </p>
+                        </div>
+                    </section>
+
+                    {/* Profile & Account Section */}
+                    <section id="profile" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Profile & Account
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Overview</h3>
+                            <p className="text-theme-text">
+                                The Profile page is accessible to all users — no account required.
+                                Anonymous users can manage their local data, back up and restore,
+                                and configure data management settings without signing in. Signing
+                                in unlocks cloud sync and additional account features.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Data Management</h4>
+                                <p className="text-theme-text mb-2">
+                                    The Data Management section controls how your data is stored and
+                                    synced. It is available to signed-in users only.
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Sync toggle:</strong> Enable or disable cloud sync.
+                                        When enabled, all data is written to Supabase in addition to
+                                        localStorage. When disabled, data is stored in localStorage
+                                        only and the cloud copy is not updated. The sync flag itself
+                                        is saved in localStorage on this device — disabling sync on
+                                        one device does not affect other devices.
+                                    </li>
+                                    <li>
+                                        <strong>Clear &amp; re-sync:</strong> Wipes your cloud data
+                                        and re-uploads everything from your current localStorage.
+                                        Useful if your cloud data has become out of sync with your
+                                        local data. Sync remains enabled after the operation.
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Backup &amp; Restore
+                                </h4>
+                                <p className="text-theme-text">
+                                    Backup and restore controls are located on the Profile page,
+                                    available to all users including anonymous users. Use backup to
+                                    export a local copy of your data and restore to reload it on
+                                    this or another device.
+                                </p>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Connected Integrations
+                                </h4>
+                                <p className="text-theme-text mb-2">
+                                    The Connected Integrations section is a placeholder for future
+                                    third-party integrations.
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Cubedweb Hangar:</strong> The previous Cubedweb
+                                        hangar sharing integration is deprecated while a new sharing
+                                        system is in development.
+                                    </li>
+                                    <li>
+                                        <strong>Starborne Frontiers API:</strong> A direct
+                                        integration with the Starborne Frontiers API is coming soon,
+                                        which will simplify data import.
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </section>
 
