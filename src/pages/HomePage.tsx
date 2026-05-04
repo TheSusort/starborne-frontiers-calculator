@@ -13,9 +13,7 @@ import {
     Calculator,
     MessageCircle,
     Github,
-    Database,
 } from 'lucide-react';
-import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import { DemoDataSection } from '../components/home/DemoDataSection';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
@@ -265,31 +263,6 @@ const HomePage: React.FC = () => {
                 </section>
 
                 <DemoDataSection />
-
-                {/* Backup & Restore */}
-                <section className="card p-8">
-                    <div className="max-w-3xl mx-auto text-center">
-                        <div className="flex justify-center mb-4">
-                            <IconBadge
-                                icon={Database}
-                                size={32}
-                                gradientFrom="from-green-600"
-                                gradientTo="to-green-800"
-                                className="w-16 h-16"
-                            />
-                        </div>
-                        <h2 className="text-2xl font-bold text-theme-text mb-3">
-                            Backup & Restore Your Data
-                        </h2>
-                        <p className="text-theme-text mb-6">
-                            Protect your fleet data by creating backups. Useful for migrating to a
-                            new device or recovering from data loss.
-                        </p>
-                        <div className="flex justify-center">
-                            <BackupRestoreData />
-                        </div>
-                    </div>
-                </section>
             </div>
         </>
     );
