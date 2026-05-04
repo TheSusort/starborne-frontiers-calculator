@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { CloseIcon, PageLayout } from '../../components/ui';
+import { Ship } from '../../types/ship';
+import { ShipSelector } from '../../components/ship/ShipSelector';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
@@ -29,6 +31,7 @@ import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSim
 // Define the type for a ship configuration
 interface ShipConfig {
     id: string;
+    shipId?: string; // links config to a selected player ship
     name: string;
     attack: number;
     crit: number;
@@ -221,6 +224,35 @@ const DPSCalculatorPage: React.FC = () => {
     ) => {
         setConfigs((prev) =>
             prev.map((config) => (config.id === id ? { ...config, [field]: value } : config))
+        );
+    };
+
+    const selectShipForConfig = (configId: string, ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        const statsBreakdown = calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        );
+        const final = statsBreakdown.final;
+        setConfigs((prev) =>
+            prev.map((c) =>
+                c.id === configId
+                    ? {
+                          ...c,
+                          shipId: ship.id,
+                          name: ship.name,
+                          attack: Math.round(final.attack),
+                          crit: Math.round(final.crit),
+                          critDamage: Math.round(final.critDamage),
+                          defensePenetration: Math.round(final.defensePenetration || 0),
+                      }
+                    : c
+            )
         );
     };
 
@@ -442,6 +474,17 @@ const DPSCalculatorPage: React.FC = () => {
                                 ${bestConfig && bestConfig.id === config.id ? 'border-primary' : 'border-dark-border'}
                             `}
                             >
+                                <div className="mb-4">
+                                    <ShipSelector
+                                        selected={
+                                            config.shipId
+                                                ? (getShipById(config.shipId) ?? null)
+                                                : null
+                                        }
+                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
+                                        variant="compact"
+                                    />
+                                </div>
                                 <div className="flex justify-between items-center mb-4">
                                     <Input
                                         value={config.name}
