@@ -1017,24 +1017,6 @@ const DPSCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
-                        <h3 className="text-lg font-bold mb-2">Damage Over Time</h3>
-                        <p className="text-sm text-theme-text-secondary mb-4">
-                            Cumulative damage comparison across rounds. Burst ships climb fast then
-                            plateau; DoT ships ramp up over time.
-                        </p>
-                        <DPSRoundChart
-                            ships={configs
-                                .map((config) => ({
-                                    id: config.id,
-                                    name: config.name,
-                                    result: simResults.get(config.id)!,
-                                }))
-                                .filter((s) => s.result)}
-                            rounds={rounds}
-                        />
-                    </div>
-
-                    <div className="card">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">DPS Comparison</h3>
                             <Button variant="secondary" onClick={toggleViewMode}>
@@ -1061,6 +1043,24 @@ const DPSCalculatorPage: React.FC = () => {
                                 }))}
                             />
                         )}
+                    </div>
+
+                    <div className="card">
+                        <h3 className="text-lg font-bold mb-2">Damage Over Time</h3>
+                        <p className="text-sm text-theme-text-secondary mb-4">
+                            Cumulative damage comparison across rounds. Burst ships climb fast then
+                            plateau; DoT ships ramp up over time.
+                        </p>
+                        <DPSRoundChart
+                            ships={configs
+                                .map((config) => ({
+                                    id: config.id,
+                                    name: config.name,
+                                    result: simResults.get(config.id)!,
+                                }))
+                                .filter((s) => s.result)}
+                            rounds={rounds}
+                        />
                     </div>
 
                     {/* Defense Penetration Visualization */}
