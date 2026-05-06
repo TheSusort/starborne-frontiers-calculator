@@ -163,9 +163,22 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
             if (error) throw error;
         },
         // inventory_items must go before ships (calibration_ship_id FK)
+        // Batched: single-statement delete on large tables can time out
         async () => {
-            const { error } = await supabase.from('inventory_items').delete().eq('user_id', userId);
-            if (error) throw error;
+            const { data: items, error: selError } = await supabase
+                .from('inventory_items')
+                .select('id')
+                .eq('user_id', userId);
+            if (selError) throw selError;
+            if (!items?.length) return;
+            const ids = items.map((r) => r.id as string);
+            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+                const { error } = await supabase
+                    .from('inventory_items')
+                    .delete()
+                    .in('id', ids.slice(i, i + BATCH_SIZE));
+                if (error) throw error;
+            }
         },
         async () => {
             const { error } = await supabase.from('ships').delete().eq('user_id', userId);

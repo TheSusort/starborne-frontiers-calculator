@@ -94,7 +94,7 @@ export const ProfilePage: React.FC = () => {
 
     // Sync state
     const [syncEnabled, setSyncEnabled] = useState<boolean>(isSupabaseSyncEnabled());
-    const [syncLoading, setSyncLoading] = useState(false);
+    const [syncOperation, setSyncOperation] = useState<'toggle' | 'clearResync' | null>(null);
     const [showSyncOffConfirm, setShowSyncOffConfirm] = useState(false);
     const [showClearReSyncConfirm, setShowClearReSyncConfirm] = useState(false);
 
@@ -143,33 +143,20 @@ export const ProfilePage: React.FC = () => {
         void loadProfileData();
     }, [user?.id, activeProfileId, addNotification]);
 
-    // Load ship rankings asynchronously (separate from main page load)
-    useEffect(() => {
-        if (!activeProfileId) {
+    const loadShipRankings = async () => {
+        if (!activeProfileId) return;
+        try {
+            setShipsLoading(true);
             setTopShips([]);
-            return;
+            const shipsData = await getTopShipRankings(activeProfileId);
+            setTopShips(shipsData);
+        } catch (error) {
+            console.error('Error loading ship rankings:', error);
+            addNotification('error', 'Failed to load ship rankings');
+        } finally {
+            setShipsLoading(false);
         }
-
-        const loadShipRankings = async () => {
-            try {
-                setShipsLoading(true);
-                const shipsData = await getTopShipRankings(activeProfileId); // game data — scoped to active profile
-                setTopShips(shipsData);
-            } catch (error) {
-                console.error('Error loading ship rankings:', error);
-                addNotification('error', 'Failed to load ship rankings');
-            } finally {
-                setShipsLoading(false);
-            }
-        };
-
-        // Load ship rankings after a short delay to let the page render first
-        const timer = setTimeout(() => {
-            void loadShipRankings();
-        }, 100);
-
-        return () => clearTimeout(timer);
-    }, [activeProfileId, addNotification]);
+    };
 
     const validateUsername = (value: string): boolean => {
         const usernameRegex = /^[a-zA-Z0-9 _-]{3,20}$/;
@@ -265,35 +252,51 @@ export const ProfilePage: React.FC = () => {
     };
 
     const handleSyncToggleOff = async () => {
-        setSyncLoading(true);
+        setSyncOperation('toggle');
         try {
             await deleteUserSupabaseData(user!.id);
             setSupabaseSyncEnabled(false);
             setSyncEnabled(false);
+            addNotification('success', 'Cloud sync disabled and cloud data deleted.');
+        } catch (error) {
+            console.error('Error disabling cloud sync:', error);
+            addNotification(
+                'error',
+                'Failed to delete cloud data. Sync remains enabled — please try again.'
+            );
         } finally {
-            setSyncLoading(false);
+            setSyncOperation(null);
         }
     };
 
     const handleSyncToggleOn = async () => {
-        setSyncLoading(true);
+        setSyncOperation('toggle');
         try {
-            setSupabaseSyncEnabled(true);
-            setSyncEnabled(true);
             await deleteUserSupabaseData(user!.id);
             await reuploadLocalDataToSupabase(user!.id);
+            // Only update state after all operations succeed so the UI stays consistent.
+            setSupabaseSyncEnabled(true);
+            setSyncEnabled(true);
+            addNotification('success', 'Cloud sync enabled.');
+        } catch (error) {
+            console.error('Error enabling cloud sync:', error);
+            addNotification('error', 'Failed to enable cloud sync. Please try again.');
         } finally {
-            setSyncLoading(false);
+            setSyncOperation(null);
         }
     };
 
     const handleClearAndReSync = async () => {
-        setSyncLoading(true);
+        setSyncOperation('clearResync');
         try {
             await deleteUserSupabaseData(user!.id);
             await reuploadLocalDataToSupabase(user!.id);
+            addNotification('success', 'Cloud data cleared and re-synced from local.');
+        } catch (error) {
+            console.error('Error during clear & re-sync:', error);
+            addNotification('error', 'Failed to clear and re-sync cloud data. Please try again.');
         } finally {
-            setSyncLoading(false);
+            setSyncOperation(null);
         }
     };
 
@@ -470,34 +473,55 @@ export const ProfilePage: React.FC = () => {
                                                 <Loader size="sm" />
                                             </div>
                                         ) : topShips.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {topShips.map((ship, index) => (
-                                                    <div
-                                                        key={`${ship.shipName}-${index}`}
-                                                        className="flex justify-between items-center p-3 border border-dark-border"
+                                            <>
+                                                <div className="space-y-2">
+                                                    {topShips.map((ship, index) => (
+                                                        <div
+                                                            key={`${ship.shipName}-${index}`}
+                                                            className="flex justify-between items-center p-3 border border-dark-border"
+                                                        >
+                                                            <div>
+                                                                <div className="font-semibold">
+                                                                    {ship.shipName}
+                                                                </div>
+                                                                <div className="text-sm text-theme-text-secondary">
+                                                                    {ship.shipType}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="font-bold">
+                                                                    Rank #{ship.rank}
+                                                                </div>
+                                                                <div className="text-xs text-theme-text-secondary">
+                                                                    out of {ship.totalEntries}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="flex justify-center pt-2">
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="sm"
+                                                        onClick={() => void loadShipRankings()}
                                                     >
-                                                        <div>
-                                                            <div className="font-semibold">
-                                                                {ship.shipName}
-                                                            </div>
-                                                            <div className="text-sm text-theme-text-secondary">
-                                                                {ship.shipType}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="font-bold">
-                                                                Rank #{ship.rank}
-                                                            </div>
-                                                            <div className="text-xs text-theme-text-secondary">
-                                                                out of {ship.totalEntries}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                                        Refresh
+                                                    </Button>
+                                                </div>
+                                            </>
                                         ) : (
-                                            <div className="text-center py-8 text-theme-text-secondary">
-                                                No ship rankings available
+                                            <div className="flex flex-col items-center gap-3 py-8 text-theme-text-secondary">
+                                                <p className="text-sm">
+                                                    Rankings are computed on demand — this may take
+                                                    a moment.
+                                                </p>
+                                                <Button
+                                                    variant="secondary"
+                                                    size="sm"
+                                                    onClick={() => void loadShipRankings()}
+                                                >
+                                                    Load Rankings
+                                                </Button>
                                             </div>
                                         )}
                                     </div>
@@ -529,26 +553,35 @@ export const ProfilePage: React.FC = () => {
                                                 it accessible on any device.
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            role="switch"
-                                            aria-checked={syncEnabled}
-                                            disabled={syncLoading}
-                                            onClick={() =>
-                                                syncEnabled
-                                                    ? setShowSyncOffConfirm(true)
-                                                    : void handleSyncToggleOn()
-                                            }
-                                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
-                                                syncEnabled ? 'bg-primary' : 'bg-dark-border'
-                                            }`}
-                                        >
-                                            <span
-                                                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                                                    syncEnabled ? 'translate-x-5' : 'translate-x-0'
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {syncOperation === 'toggle' && (
+                                                <span className="text-xs text-theme-text-secondary">
+                                                    Working...
+                                                </span>
+                                            )}
+                                            <button
+                                                type="button"
+                                                role="switch"
+                                                aria-checked={syncEnabled}
+                                                disabled={syncOperation !== null}
+                                                onClick={() =>
+                                                    syncEnabled
+                                                        ? setShowSyncOffConfirm(true)
+                                                        : void handleSyncToggleOn()
+                                                }
+                                                className={`relative inline-flex h-6 w-11 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                                                    syncEnabled ? 'bg-primary' : 'bg-dark-border'
                                                 }`}
-                                            />
-                                        </button>
+                                            >
+                                                <span
+                                                    className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                                                        syncEnabled
+                                                            ? 'translate-x-5'
+                                                            : 'translate-x-0'
+                                                    }`}
+                                                />
+                                            </button>
+                                        </div>
                                     </div>
                                     {/* Clear & re-sync — only when sync is ON */}
                                     {syncEnabled && (
@@ -565,10 +598,12 @@ export const ProfilePage: React.FC = () => {
                                             <Button
                                                 variant="danger"
                                                 size="sm"
-                                                disabled={syncLoading}
+                                                disabled={syncOperation !== null}
                                                 onClick={() => setShowClearReSyncConfirm(true)}
                                             >
-                                                {syncLoading ? 'Working...' : 'Clear & re-sync'}
+                                                {syncOperation === 'clearResync'
+                                                    ? 'Working...'
+                                                    : 'Clear & re-sync'}
                                             </Button>
                                         </div>
                                     )}

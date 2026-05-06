@@ -303,12 +303,102 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         return [];
     }
 
-    const rankings: TopShipRanking[] = [];
+    // Type definitions used by the batch fetch and transform below
+    interface RawStat {
+        name: string;
+        value: number;
+        type: string;
+        id: string;
+        is_main?: boolean;
+    }
 
-    // Process each unique ship name
-    for (const shipName of uniqueShipNames) {
-        // Fetch ALL ships with this name (with full data)
-        const { data: allShipsData, error: allShipsError } = await supabase
+    const createStat = (stat: RawStat): Stat => {
+        const statType: StatType = stat.type === 'percentage' ? 'percentage' : 'flat';
+        if (statType === 'percentage') {
+            return {
+                name: stat.name as StatName,
+                value: stat.value,
+                type: 'percentage',
+                id: stat.id,
+            } as PercentageStat;
+        } else {
+            return {
+                name: stat.name as FlexibleStats,
+                value: stat.value,
+                type: 'flat',
+                id: stat.id,
+            } as FlatStat;
+        }
+    };
+
+    interface RawStatsJsonb {
+        mainStat: RawStat | null;
+        subStats: RawStat[];
+    }
+
+    interface RawShipData {
+        id: string;
+        name: string;
+        rarity: string;
+        faction: string;
+        type: string;
+        affinity: string;
+        rank: number;
+        level: number;
+        user_id: string;
+        ship_base_stats?: {
+            hp: number;
+            attack: number;
+            defence: number;
+            hacking: number;
+            security: number;
+            crit: number;
+            crit_damage: number;
+            speed: number;
+            heal_modifier: number;
+            hp_regen: number;
+            shield: number;
+            defense_penetration: number;
+        };
+        ship_equipment?: Array<{
+            slot: string;
+            gear_id: string;
+            inventory_items?: {
+                id: string;
+                slot: string;
+                level: number;
+                stars: number;
+                rarity: string;
+                set_bonus: string;
+                stats?: RawStatsJsonb | null;
+            };
+        }>;
+        ship_refits?: Array<{
+            id: string;
+            ship_refit_stats?: RawStat[];
+        }>;
+        ship_implants?: Array<{
+            slot: string;
+            description?: string;
+            inventory_items?: {
+                id: string;
+                level: number;
+                stars: number;
+                rarity: string;
+                set_bonus: string;
+                stats?: RawStatsJsonb | null;
+            };
+        }>;
+    }
+
+    // Fetch all ships for ranking in small batches to avoid query timeouts.
+    // Each name can match ships from all users, so even a handful of names
+    // can return thousands of rows with deep joins.
+    const RANKING_BATCH_SIZE = 5;
+    const allShipsData: RawShipData[] = [];
+    for (let i = 0; i < uniqueShipNames.length; i += RANKING_BATCH_SIZE) {
+        const nameBatch = uniqueShipNames.slice(i, i + RANKING_BATCH_SIZE);
+        const { data, error } = await supabase
             .from('ships')
             .select(
                 `
@@ -322,271 +412,210 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 ship_implants (*, inventory_items (*) )
             `
             )
-            .eq('name', shipName);
-
-        if (allShipsError) {
-            console.error(`Error fetching ships for ${shipName}:`, allShipsError);
-            continue;
+            .in('name', nameBatch);
+        if (error) {
+            console.error('Error fetching ships for ranking:', error);
+            return [];
         }
+        if (data) allShipsData.push(...(data as RawShipData[]));
+    }
 
-        if (!allShipsData || allShipsData.length === 0) {
-            continue;
-        }
+    if (allShipsData.length === 0) {
+        return [];
+    }
 
-        // Transform ships (same logic as LeaderboardPage)
-        interface RawStat {
+    // Internal gear piece type for maps (matches LeaderboardPage structure)
+    interface InternalGearPiece {
+        id: string;
+        slot: string;
+        level: number;
+        stars: number;
+        rarity: string;
+        setBonus: string;
+        mainStat?: {
             name: string;
             value: number;
-            type: string;
+            type: 'percentage' | 'flat';
             id: string;
-            is_main?: boolean;
-        }
-
-        const createStat = (stat: RawStat): Stat => {
-            const statType: StatType = stat.type === 'percentage' ? 'percentage' : 'flat';
-            if (statType === 'percentage') {
-                return {
-                    name: stat.name as StatName,
-                    value: stat.value,
-                    type: 'percentage',
-                    id: stat.id,
-                } as PercentageStat;
-            } else {
-                return {
-                    name: stat.name as FlexibleStats,
-                    value: stat.value,
-                    type: 'flat',
-                    id: stat.id,
-                } as FlatStat;
-            }
         };
+        subStats: Stat[];
+    }
 
-        interface RawStatsJsonb {
-            mainStat: RawStat | null;
-            subStats: RawStat[];
-        }
-
-        interface RawShipData {
-            id: string;
+    // Internal implant piece type for maps
+    interface InternalImplantPiece {
+        id: string;
+        slot: string;
+        description?: string;
+        level: number;
+        stars: number;
+        rarity: string;
+        setBonus: string;
+        mainStat?: {
             name: string;
-            rarity: string;
-            faction: string;
-            type: string;
-            affinity: string;
-            rank: number;
-            level: number;
-            user_id: string;
-            ship_base_stats?: {
-                hp: number;
-                attack: number;
-                defence: number;
-                hacking: number;
-                security: number;
-                crit: number;
-                crit_damage: number;
-                speed: number;
-                heal_modifier: number;
-                hp_regen: number;
-                shield: number;
-                defense_penetration: number;
-            };
-            ship_equipment?: Array<{
-                slot: string;
-                gear_id: string;
-                inventory_items?: {
-                    id: string;
-                    slot: string;
-                    level: number;
-                    stars: number;
-                    rarity: string;
-                    set_bonus: string;
-                    stats?: RawStatsJsonb | null;
-                };
-            }>;
-            ship_refits?: Array<{
-                id: string;
-                ship_refit_stats?: RawStat[];
-            }>;
-            ship_implants?: Array<{
-                slot: string;
-                description?: string;
-                inventory_items?: {
-                    id: string;
-                    level: number;
-                    stars: number;
-                    rarity: string;
-                    set_bonus: string;
-                    stats?: RawStatsJsonb | null;
-                };
-            }>;
-        }
-
-        // Internal gear piece type for maps (matches LeaderboardPage structure)
-        interface InternalGearPiece {
+            value: number;
+            type: 'percentage' | 'flat';
             id: string;
-            slot: string;
-            level: number;
-            stars: number;
-            rarity: string;
-            setBonus: string;
-            mainStat?: {
-                name: string;
-                value: number;
-                type: 'percentage' | 'flat';
-                id: string;
-            };
-            subStats: Stat[];
-        }
+        };
+        subStats: Stat[];
+    }
 
-        // Internal implant piece type for maps
-        interface InternalImplantPiece {
-            id: string;
-            slot: string;
-            description?: string;
-            level: number;
-            stars: number;
-            rarity: string;
-            setBonus: string;
-            mainStat?: {
-                name: string;
-                value: number;
-                type: 'percentage' | 'flat';
-                id: string;
-            };
-            subStats: Stat[];
-        }
+    // Transform all ships once, then group by name
+    type TransformedShip = Ship & {
+        _gearMap?: Map<string, InternalGearPiece>;
+        _implantMap?: Map<string, InternalImplantPiece>;
+        userId?: string;
+    };
 
-        const transformedShips: (Ship & {
-            _gearMap?: Map<string, InternalGearPiece>;
-            _implantMap?: Map<string, InternalImplantPiece>;
-            userId?: string;
-        })[] = allShipsData.map((data: RawShipData) => {
-            const shipGearMap = new Map<string, InternalGearPiece>();
-            data.ship_equipment?.forEach((eq) => {
-                if (eq.inventory_items) {
-                    const statsData = eq.inventory_items.stats || {
-                        mainStat: null,
-                        subStats: [],
-                    };
+    const allTransformedShips: TransformedShip[] = allShipsData.map((data: RawShipData) => {
+        const shipGearMap = new Map<string, InternalGearPiece>();
+        data.ship_equipment?.forEach((eq) => {
+            if (eq.inventory_items) {
+                const statsData = eq.inventory_items.stats || {
+                    mainStat: null,
+                    subStats: [],
+                };
 
-                    const gearPiece = {
-                        id: eq.inventory_items.id,
-                        slot: eq.inventory_items.slot,
-                        level: eq.inventory_items.level,
-                        stars: eq.inventory_items.stars,
-                        rarity: eq.inventory_items.rarity,
-                        setBonus: eq.inventory_items.set_bonus,
-                        mainStat: statsData.mainStat
-                            ? {
-                                  name: statsData.mainStat.name,
-                                  value: statsData.mainStat.value,
-                                  type: (statsData.mainStat.type === 'percentage'
-                                      ? 'percentage'
-                                      : 'flat') as StatType,
-                                  id: statsData.mainStat.id || '',
-                              }
-                            : undefined,
-                        subStats: (statsData.subStats || []).map(createStat),
-                    };
-                    shipGearMap.set(eq.gear_id, gearPiece);
-                }
-            });
-
-            const shipImplantMap = new Map<string, InternalImplantPiece>();
-            data.ship_implants?.forEach((implant) => {
-                if (implant.inventory_items) {
-                    const statsData = implant.inventory_items.stats || {
-                        mainStat: null,
-                        subStats: [],
-                    };
-
-                    const implantPiece = {
-                        id: implant.inventory_items.id,
-                        slot: implant.slot,
-                        description: implant.description,
-                        level: implant.inventory_items.level,
-                        stars: implant.inventory_items.stars,
-                        rarity: implant.inventory_items.rarity,
-                        setBonus: implant.inventory_items.set_bonus,
-                        mainStat: statsData.mainStat
-                            ? {
-                                  name: statsData.mainStat.name,
-                                  value: statsData.mainStat.value,
-                                  type: (statsData.mainStat.type === 'percentage'
-                                      ? 'percentage'
-                                      : 'flat') as StatType,
-                                  id: statsData.mainStat.id || '',
-                              }
-                            : undefined,
-                        subStats: (statsData.subStats || []).map(createStat),
-                    };
-                    shipImplantMap.set(implant.slot, implantPiece);
-                }
-            });
-
-            return {
-                id: data.id,
-                name: data.name,
-                rarity: data.rarity,
-                faction: data.faction,
-                type: data.type,
-                affinity: data.affinity as AffinityName,
-                rank: data.rank,
-                level: data.level,
-                baseStats: {
-                    hp: data.ship_base_stats?.hp || 0,
-                    attack: data.ship_base_stats?.attack || 0,
-                    defence: data.ship_base_stats?.defence || 0,
-                    hacking: data.ship_base_stats?.hacking || 0,
-                    security: data.ship_base_stats?.security || 0,
-                    crit: data.ship_base_stats?.crit || 0,
-                    critDamage: data.ship_base_stats?.crit_damage || 0,
-                    speed: data.ship_base_stats?.speed || 0,
-                    healModifier: data.ship_base_stats?.heal_modifier || 0,
-                    hpRegen: data.ship_base_stats?.hp_regen || 0,
-                    shield: data.ship_base_stats?.shield || 0,
-                    defensePenetration: data.ship_base_stats?.defense_penetration || 0,
-                },
-                equipment:
-                    data.ship_equipment?.reduce(
-                        (acc: Record<GearSlotName, string>, eq) => {
-                            acc[eq.slot] = eq.gear_id;
-                            return acc;
-                        },
-                        {} as Record<GearSlotName, string>
-                    ) || {},
-                refits:
-                    data.ship_refits?.map((refit) => ({
-                        id: refit.id,
-                        stats: refit.ship_refit_stats?.map(createStat) || [],
-                    })) || [],
-                implants:
-                    data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
-                        if (implant.inventory_items) {
-                            const statsData = implant.inventory_items.stats;
-                            if (
-                                statsData &&
-                                (statsData.mainStat || (statsData.subStats?.length ?? 0) > 0)
-                            ) {
-                                // Store implant ID as string (matches Ship type)
-                                acc[implant.slot] = implant.inventory_items.id;
-                            }
-                        }
-                        return acc;
-                    }, {}) || {},
-                _gearMap: shipGearMap,
-                _implantMap: shipImplantMap,
-                userId: data.user_id,
-            };
+                const gearPiece = {
+                    id: eq.inventory_items.id,
+                    slot: eq.inventory_items.slot,
+                    level: eq.inventory_items.level,
+                    stars: eq.inventory_items.stars,
+                    rarity: eq.inventory_items.rarity,
+                    setBonus: eq.inventory_items.set_bonus,
+                    mainStat: statsData.mainStat
+                        ? {
+                              name: statsData.mainStat.name,
+                              value: statsData.mainStat.value,
+                              type: (statsData.mainStat.type === 'percentage'
+                                  ? 'percentage'
+                                  : 'flat') as StatType,
+                              id: statsData.mainStat.id || '',
+                          }
+                        : undefined,
+                    subStats: (statsData.subStats || []).map(createStat),
+                };
+                shipGearMap.set(eq.gear_id, gearPiece);
+            }
         });
 
-        // Calculate scores for all ships
-        const entries = transformedShips.map((ship) => {
+        const shipImplantMap = new Map<string, InternalImplantPiece>();
+        data.ship_implants?.forEach((implant) => {
+            if (implant.inventory_items) {
+                const statsData = implant.inventory_items.stats || {
+                    mainStat: null,
+                    subStats: [],
+                };
+
+                const implantPiece = {
+                    id: implant.inventory_items.id,
+                    slot: implant.slot,
+                    description: implant.description,
+                    level: implant.inventory_items.level,
+                    stars: implant.inventory_items.stars,
+                    rarity: implant.inventory_items.rarity,
+                    setBonus: implant.inventory_items.set_bonus,
+                    mainStat: statsData.mainStat
+                        ? {
+                              name: statsData.mainStat.name,
+                              value: statsData.mainStat.value,
+                              type: (statsData.mainStat.type === 'percentage'
+                                  ? 'percentage'
+                                  : 'flat') as StatType,
+                              id: statsData.mainStat.id || '',
+                          }
+                        : undefined,
+                    subStats: (statsData.subStats || []).map(createStat),
+                };
+                shipImplantMap.set(implant.slot, implantPiece);
+            }
+        });
+
+        return {
+            id: data.id,
+            name: data.name,
+            rarity: data.rarity,
+            faction: data.faction,
+            type: data.type,
+            affinity: data.affinity as AffinityName,
+            rank: data.rank,
+            level: data.level,
+            baseStats: {
+                hp: data.ship_base_stats?.hp || 0,
+                attack: data.ship_base_stats?.attack || 0,
+                defence: data.ship_base_stats?.defence || 0,
+                hacking: data.ship_base_stats?.hacking || 0,
+                security: data.ship_base_stats?.security || 0,
+                crit: data.ship_base_stats?.crit || 0,
+                critDamage: data.ship_base_stats?.crit_damage || 0,
+                speed: data.ship_base_stats?.speed || 0,
+                healModifier: data.ship_base_stats?.heal_modifier || 0,
+                hpRegen: data.ship_base_stats?.hp_regen || 0,
+                shield: data.ship_base_stats?.shield || 0,
+                defensePenetration: data.ship_base_stats?.defense_penetration || 0,
+            },
+            equipment:
+                data.ship_equipment?.reduce(
+                    (acc: Record<GearSlotName, string>, eq) => {
+                        acc[eq.slot] = eq.gear_id;
+                        return acc;
+                    },
+                    {} as Record<GearSlotName, string>
+                ) || {},
+            refits:
+                data.ship_refits?.map((refit) => ({
+                    id: refit.id,
+                    stats: refit.ship_refit_stats?.map(createStat) || [],
+                })) || [],
+            implants:
+                data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
+                    if (implant.inventory_items) {
+                        const statsData = implant.inventory_items.stats;
+                        if (
+                            statsData &&
+                            (statsData.mainStat || (statsData.subStats?.length ?? 0) > 0)
+                        ) {
+                            // Store implant ID as string (matches Ship type)
+                            acc[implant.slot] = implant.inventory_items.id;
+                        }
+                    }
+                    return acc;
+                }, {}) || {},
+            _gearMap: shipGearMap,
+            _implantMap: shipImplantMap,
+            userId: data.user_id,
+        };
+    });
+
+    // Group transformed ships by name for O(1) lookup inside the loop
+    const shipsByName = new Map<string, TransformedShip[]>();
+    for (const ship of allTransformedShips) {
+        const group = shipsByName.get(ship.name);
+        if (group) {
+            group.push(ship);
+        } else {
+            shipsByName.set(ship.name, [ship]);
+        }
+    }
+
+    interface EntryWithRank {
+        ship: TransformedShip;
+        score: number;
+        userId: string;
+        rank: number;
+    }
+
+    const rankings: TopShipRanking[] = [];
+
+    for (const shipName of uniqueShipNames) {
+        const shipsForName = shipsByName.get(shipName);
+        if (!shipsForName || shipsForName.length === 0) continue;
+
+        // Calculate scores for all ships with this name
+        const entries = shipsForName.map((ship) => {
             const customGetGearPiece = (gearId: string): ActualGearPiece | undefined => {
                 if (ship._gearMap && ship._gearMap.has(gearId)) {
                     const internalGear = ship._gearMap.get(gearId);
                     if (!internalGear) return undefined;
-                    // Convert internal gear piece to actual GearPiece type
                     return {
                         id: internalGear.id,
                         slot: internalGear.slot,
@@ -624,25 +653,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 ship.type
             );
 
-            return {
-                ship,
-                score,
-                userId: ship.userId || '',
-            };
+            return { ship, score, userId: ship.userId || '' };
         });
 
-        // Sort by score (highest first) and assign ranks
-        interface EntryWithRank {
-            ship: Ship & {
-                _gearMap?: Map<string, InternalGearPiece>;
-                _implantMap?: Map<string, InternalImplantPiece>;
-                userId?: string;
-            };
-            score: number;
-            userId: string;
-            rank: number;
-        }
-
+        // Sort by score and assign ranks
         const entriesWithRank: EntryWithRank[] = entries.map((entry, index) => ({
             ...entry,
             rank: index + 1,
@@ -657,7 +671,6 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         const userEntries = entriesWithRank.filter((entry) => entry.userId === userId);
         if (userEntries.length === 0) continue;
 
-        // Get the best rank (lowest rank number = highest position)
         const bestRank = Math.min(...userEntries.map((e) => e.rank));
         const bestEntry = userEntries.find((e) => e.rank === bestRank);
 

@@ -7,7 +7,7 @@ import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
-import { useStorage, removeFromIndexedDB } from '../hooks/useStorage';
+import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
@@ -374,11 +374,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
-                // Remove the profile-keyed entry directly so it's gone even if an
-                // in-flight loadInventory call completes after this handler runs.
-                // Using removeFromIndexedDB instead of setStorageInventory([]) avoids
-                // a race where the async write arrives after the entry is "cleared".
-                void removeFromIndexedDB(inventoryCacheKey);
+                // Wipe the entire IndexedDB store so all profile-keyed inventory
+                // entries are gone regardless of which key is active at sign-out time.
+                // removeFromIndexedDB(inventoryCacheKey) could miss entries if the
+                // active profile changes before the event fires.
+                void clearIndexedDBStorage();
                 setLocalInventory([]);
             }
         };
@@ -387,7 +387,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return () => {
             window.removeEventListener('app:signout', handleSignOut);
         };
-    }, [isMigrating, inventoryCacheKey]);
+    }, [isMigrating]);
 
     // Reset in-memory inventory state when the active profile changes.
     // The activeProfileId-keyed loadInventory effect will refetch automatically.
