@@ -6,3 +6,6 @@ dist
 .worktrees/
 supabase/.temp/
 .superpowers/
+docs/
+.claude/
+video/
