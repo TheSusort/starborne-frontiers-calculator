@@ -198,6 +198,11 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
                 .eq('user_id', userId);
             if (error) throw error;
         },
+        // gear_wishlists → user_id (no child tables)
+        async () => {
+            const { error } = await supabase.from('gear_wishlists').delete().eq('user_id', userId);
+            if (error) throw error;
+        },
     ];
 
     for (const step of steps) {
