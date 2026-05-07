@@ -54,17 +54,13 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
 
     return (
         <div className="mt-4">
-            <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-                </div>
-                <Checkbox
-                    label="Hide max levelled (Lv.16)"
-                    checked={hideMaxLevel}
-                    onChange={setHideMaxLevel}
-                    className="shrink-0 pt-3"
-                />
-            </div>
+            <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            <Checkbox
+                label="Hide max levelled (Lv.16)"
+                checked={hideMaxLevel}
+                onChange={setHideMaxLevel}
+                className="mb-4"
+            />
             {matches.length === 0 ? (
                 <p className="text-theme-text-secondary text-sm mt-4">
                     No gear in your inventory matches this entry yet.
