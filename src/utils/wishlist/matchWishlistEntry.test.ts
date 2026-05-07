@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { GearPiece } from '../../types/gear';
+import { GearSetName } from '../../constants/gearSets';
 import { WishlistEntry } from '../../types/wishlist';
 import { matchesWishlistEntry } from './matchWishlistEntry';
 
@@ -8,7 +9,7 @@ const baseGear: GearPiece = {
     slot: 'weapon',
     stars: 5,
     rarity: 'legendary',
-    setBonus: 'Vanguard' as any,
+    setBonus: 'Fortitude' as GearSetName,
     mainStat: { name: 'attack', value: 100, type: 'flat' },
     subStats: [
         { name: 'crit', value: 10, type: 'percentage' },
@@ -58,7 +59,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: 'Vanguard' as any },
+            filters: { setBonus: 'Fortitude' as GearSetName },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
