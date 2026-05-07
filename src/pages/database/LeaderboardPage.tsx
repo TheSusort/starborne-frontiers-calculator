@@ -376,38 +376,36 @@ export const LeaderboardPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-dark-lighter p-6">
-                        <div className="space-y-4">
+                    <div className="bg-dark-lighter p-3 sm:p-6">
+                        <div className="space-y-3 sm:space-y-4">
                             {leaderboardData.map((entry) => (
                                 <div
                                     key={entry.ship.id}
-                                    className={`flex items-center justify-between p-4 border-2 gap-4 relative ${
+                                    className={`p-3 sm:p-4 border-2 gap-3 relative ${
                                         entry.isCurrentUser
                                             ? 'border-primary bg-dark sticky bottom-0'
                                             : 'border-dark-border bg-dark'
                                     }`}
                                 >
-                                    <div className="flex items-center space-x-4">
-                                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-dark-lighter text-white font-bold text-lg">
+                                    {/* Row 1: rank + name/stars + score */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-dark-lighter text-white font-bold text-lg shrink-0">
                                             {entry.rank === 1 && (
-                                                <TrophyIcon className="w-6 h-6 text-yellow-400" />
+                                                <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
                                             )}
                                             {entry.rank === 2 && (
-                                                <TrophyIcon className="w-6 h-6 text-theme-text" />
+                                                <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-theme-text" />
                                             )}
                                             {entry.rank === 3 && (
-                                                <TrophyIcon className="w-6 h-6 text-amber-600" />
+                                                <TrophyIcon className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
                                             )}
                                             {entry.rank > 3 && entry.rank}
                                         </div>
-                                        <div>
-                                            <div className="flex items-center space-x-2">
-                                                <h3 className="text-lg font-semibold text-white">
-                                                    {entry.ship.name}
-                                                </h3>
-                                            </div>
-
-                                            <div className="flex items-center gap-1">
+                                        <div className="min-w-0">
+                                            <h3 className="text-base sm:text-lg font-semibold text-white truncate">
+                                                {entry.ship.name}
+                                            </h3>
+                                            <div className="flex items-center gap-0.5">
                                                 {Array.from({ length: 6 }, (_, index) => (
                                                     <span
                                                         key={index}
@@ -418,48 +416,50 @@ export const LeaderboardPage: React.FC = () => {
                                                 ))}
                                             </div>
                                         </div>
-                                    </div>
-
-                                    {/* Set Bonus Icons */}
-                                    <div className="grid grid-cols-3 gap-1 mt-1 me-auto">
-                                        {GEAR_SLOT_ORDER.map((slot) => {
-                                            const gearId = entry.ship.equipment[slot];
-                                            const gear = entry.ship._gearMap?.get(gearId as string);
-                                            if (
-                                                !gear ||
-                                                !gear.setBonus ||
-                                                !GEAR_SETS[gear.setBonus]
-                                            )
-                                                return (
-                                                    <div
-                                                        key={`${slot}-empty`}
-                                                        className="w-6 bg-dark-lighter"
-                                                    />
-                                                );
-                                            const gearSet = GEAR_SETS[gear.setBonus];
-                                            return (
-                                                <img
-                                                    key={`${gearSet.name}-${slot}`}
-                                                    src={gearSet.iconUrl}
-                                                    alt={gearSet.name}
-                                                    className="w-6"
-                                                    title={`${gearSet.name} Set`}
-                                                />
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2 min-w-48">
-                                        <div className="text-right">
-                                            <div className="text-md lg:text-2xl font-bold text-white">
+                                        <div className="ml-auto text-right shrink-0">
+                                            <div className="text-lg sm:text-2xl font-bold text-white">
                                                 {topScore > 0
                                                     ? `${((entry.score / topScore) * 100).toFixed(1)}%`
                                                     : '0%'}
                                             </div>
-                                            <div className="text-sm text-theme-text-secondary">
+                                            <div className="text-xs sm:text-sm text-theme-text-secondary">
                                                 {entry.rank === 1 ? 'Top Score' : 'vs Top'}
                                             </div>
                                         </div>
-                                        <div className="w-full bg-dark-lighter h-2 relative overflow-hidden">
+                                    </div>
+
+                                    {/* Row 2: gear set icons + progress bar */}
+                                    <div className="flex items-center gap-3 mt-3">
+                                        <div className="grid grid-cols-3 gap-1 shrink-0">
+                                            {GEAR_SLOT_ORDER.map((slot) => {
+                                                const gearId = entry.ship.equipment[slot];
+                                                const gear = entry.ship._gearMap?.get(
+                                                    gearId as string
+                                                );
+                                                if (
+                                                    !gear ||
+                                                    !gear.setBonus ||
+                                                    !GEAR_SETS[gear.setBonus]
+                                                )
+                                                    return (
+                                                        <div
+                                                            key={`${slot}-empty`}
+                                                            className="w-5 h-5 sm:w-6 sm:h-6 bg-dark-lighter"
+                                                        />
+                                                    );
+                                                const gearSet = GEAR_SETS[gear.setBonus];
+                                                return (
+                                                    <img
+                                                        key={`${gearSet.name}-${slot}`}
+                                                        src={gearSet.iconUrl}
+                                                        alt={gearSet.name}
+                                                        className="w-5 sm:w-6"
+                                                        title={`${gearSet.name} Set`}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="flex-1 bg-dark-lighter h-2 relative overflow-hidden">
                                             <div
                                                 className={`h-full transition-all duration-300 ${
                                                     entry.rank === 1

@@ -9,6 +9,8 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
 import { useShips } from '../../contexts/ShipsContext';
 import { Loader } from '../../components/ui/Loader';
+import { Button } from '../../components/ui/Button';
+import { UserIcon } from '../../components/ui/icons';
 import { Loadout, TeamLoadout } from '../../types/loadout';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -127,6 +129,7 @@ export const LoadoutsPage: React.FC = () => {
                             onDelete={(...args) => void deleteLoadout(...args)}
                             getGearPiece={getGearPiece}
                             availableGear={inventory}
+                            onCreateClick={() => setShowForm(true)}
                         />
                     </>
                 ) : (
@@ -209,9 +212,20 @@ export const LoadoutsPage: React.FC = () => {
                             ))}
 
                             {teamLoadouts.length === 0 && (
-                                <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
-                                    No team loadouts created yet. Create one by clicking the
-                                    &quot;New Team&quot; button above.
+                                <div className="card text-center py-12 flex flex-col items-center gap-4">
+                                    <UserIcon className="w-12 h-12 text-theme-text-secondary" />
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-white mb-2">
+                                            Build Your Dream Team
+                                        </h3>
+                                        <p className="text-theme-text-secondary max-w-md mx-auto">
+                                            Group ships into a named team composition. Equip the
+                                            whole squad in one click before a raid or arena match.
+                                        </p>
+                                    </div>
+                                    <Button onClick={() => setShowForm(true)} variant="primary">
+                                        New Team
+                                    </Button>
                                 </div>
                             )}
                         </div>

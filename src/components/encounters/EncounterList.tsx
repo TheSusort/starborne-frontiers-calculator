@@ -3,7 +3,7 @@ import { EncounterNote, SharedEncounterNote } from '../../types/encounters';
 import { Button, CloseIcon, EditIcon, CopyIcon, ShareIcon } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
-import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons';
+import { ChevronUpIcon, ChevronDownIcon, TargetIcon } from '../ui/icons';
 import FormationGrid from './FormationGrid';
 
 const FONT_URL =
@@ -44,6 +44,7 @@ interface EncounterListProps {
     onVote?: (encounterId: string, vote: number) => void;
     showVotes?: boolean;
     isReadOnly?: boolean;
+    onCreateClick?: () => void;
 }
 
 export const EncounterList = ({
@@ -53,6 +54,7 @@ export const EncounterList = ({
     onShareToggle,
     onVote,
     showVotes = false,
+    onCreateClick,
 }: EncounterListProps) => {
     const { addNotification } = useNotification();
     const { user } = useAuth();
@@ -113,8 +115,22 @@ export const EncounterList = ({
 
     if (encounters.length === 0) {
         return (
-            <div className="text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
-                {encounters.length === 0 ? 'No encounters found' : 'No matching encounters found'}
+            <div className="card text-center py-12 flex flex-col items-center gap-4">
+                <TargetIcon className="w-12 h-12 text-theme-text-secondary" />
+                <div>
+                    <h3 className="text-lg font-semibold text-white mb-2">
+                        Never Forget a Winning Formation
+                    </h3>
+                    <p className="text-theme-text-secondary max-w-md mx-auto">
+                        Record fleet positions that cleared a tough encounter. Add notes, share with
+                        the community, or revisit when the same boss reappears.
+                    </p>
+                </div>
+                {onCreateClick && (
+                    <Button onClick={onCreateClick} variant="primary">
+                        Add Encounter
+                    </Button>
+                )}
             </div>
         );
     }

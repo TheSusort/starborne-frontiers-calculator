@@ -156,6 +156,7 @@ const EncounterNotesPage: React.FC = () => {
                     onEdit={handleEdit}
                     onDelete={handleDeleteClick}
                     onShareToggle={(...args) => void handleShareToggle(...args)}
+                    onCreateClick={() => setIsFormVisible(true)}
                 />
 
                 <ConfirmModal

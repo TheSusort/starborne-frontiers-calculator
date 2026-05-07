@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { WishlistEntry } from '../../types/wishlist';
 import { Input, Select, Button } from '../ui';
-import { GEAR_SLOT_ORDER } from '../../constants/gearTypes';
-import { RARITIES } from '../../constants/rarities';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { GEAR_SLOT_ORDER, GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
+import { RARITIES, type RarityName } from '../../constants/rarities';
+import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import IMPLANTS from '../../constants/implants';
 import { StatName } from '../../types/stats';
@@ -48,6 +48,14 @@ const MAIN_STAT_OPTIONS = [
 
 const ALL_STAT_NAMES = Object.keys(STATS) as StatName[];
 
+// Type guards for select field values
+const isGearSlotName = (value: string): value is GearSlotName =>
+    value === '' || Object.keys(GEAR_SLOTS).includes(value);
+const isRarityName = (value: string): value is RarityName =>
+    value === '' || Object.keys(RARITIES).includes(value);
+const isGearSetName = (value: string): value is GearSetName =>
+    value === '' || Object.keys(GEAR_SETS).includes(value);
+
 export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel }) => {
     const [name, setName] = useState(initial?.name ?? '');
     const [slot, setSlot] = useState(initial?.filters.slot ?? '');
@@ -71,10 +79,10 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
         e.preventDefault();
         if (!name.trim()) return;
         const filters: WishlistEntry['filters'] = {
-            ...(slot ? { slot } : {}),
+            ...(slot && isGearSlotName(slot) ? { slot } : {}),
             ...(stars ? { stars: Number(stars) } : {}),
-            ...(rarity ? { rarity } : {}),
-            ...(setBonus ? { setBonus } : {}),
+            ...(rarity && isRarityName(rarity) ? { rarity } : {}),
+            ...(setBonus && isGearSetName(setBonus) ? { setBonus } : {}),
             ...(mainStat ? { mainStat: { name: mainStat as StatName } } : {}),
             ...(subStats.length > 0 ? { subStats: subStats.map((n) => ({ name: n })) } : {}),
         };
