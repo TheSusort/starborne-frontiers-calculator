@@ -3,6 +3,8 @@ import { GearPiece } from '../../types/gear';
 import { EngineeringStats } from '../../types/stats';
 import { ImportDiff, LeveledShip, RefittedShip, RemovedShip } from '../../types/importDiff';
 import { GEAR_SLOTS, IMPLANT_SLOTS } from '../../constants/gearTypes';
+import { WishlistEntry } from '../../types/wishlist';
+import { matchesWishlistEntry } from '../wishlist/matchWishlistEntry';
 
 const STANDARD_SLOTS = new Set(Object.keys(GEAR_SLOTS));
 const IMPLANT_SLOT_SET = new Set(Object.keys(IMPLANT_SLOTS));
@@ -20,7 +22,8 @@ export function computeImportDiff(
     oldInventory: GearPiece[],
     newShips: Ship[],
     newInventory: GearPiece[],
-    newEngStats: EngineeringStats | null = null
+    newEngStats: EngineeringStats | null = null,
+    wishlistEntries?: WishlistEntry[]
 ): ImportDiff {
     const isFreshImport = oldShips.length === 0 && oldInventory.length === 0;
 
@@ -104,6 +107,21 @@ export function computeImportDiff(
     const engineeringStatsCount =
         newEngStats?.stats.reduce((sum, s) => sum + s.stats.length, 0) ?? 0;
 
+    // ── Wishlist hits ──────────────────────────────────────────────────────
+    let wishlistHits: ImportDiff['wishlistHits'];
+    if (wishlistEntries !== undefined) {
+        const oldGearIdSet = new Set(oldInventory.filter(isGear).map((g) => g.id));
+        const newlyAddedGear = newInventory.filter(isGear).filter((g) => !oldGearIdSet.has(g.id));
+        wishlistHits = [];
+        for (const entry of wishlistEntries) {
+            for (const gear of newlyAddedGear) {
+                if (matchesWishlistEntry(gear, entry)) {
+                    wishlistHits.push({ entryId: entry.id, entryName: entry.name, gear });
+                }
+            }
+        }
+    }
+
     return {
         isFreshImport,
         ships: {
@@ -133,6 +151,7 @@ export function computeImportDiff(
             newLegendary: newLegendaryImplants,
         },
         engineeringStatsCount,
+        wishlistHits,
     };
 }
 

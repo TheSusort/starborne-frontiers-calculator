@@ -48,4 +48,9 @@ export interface ImportDiff {
         newLegendary: GearPiece[];
     };
     engineeringStatsCount: number;
+    wishlistHits?: {
+        entryId: string;
+        entryName: string;
+        gear: GearPiece;
+    }[];
 }
