@@ -81,25 +81,42 @@ export const useGearWishlist = () => {
             const newEntry: WishlistEntry = { ...entry, id: uuidv4() };
             const updated = [...entries, newEntry];
             void setEntries(updated);
-            await upsertToSupabase(updated);
+            try {
+                await upsertToSupabase(updated);
+            } catch (error) {
+                void setEntries(entries); // rollback
+                throw error;
+            }
         },
         [entries, setEntries, upsertToSupabase]
     );
 
     const updateEntry = useCallback(
         async (updated: WishlistEntry) => {
+            const previous = entries;
             const updatedEntries = entries.map((e) => (e.id === updated.id ? updated : e));
             void setEntries(updatedEntries);
-            await upsertToSupabase(updatedEntries);
+            try {
+                await upsertToSupabase(updatedEntries);
+            } catch (error) {
+                void setEntries(previous); // rollback
+                throw error;
+            }
         },
         [entries, setEntries, upsertToSupabase]
     );
 
     const deleteEntry = useCallback(
         async (id: string) => {
+            const previous = entries;
             const updatedEntries = entries.filter((e) => e.id !== id);
             void setEntries(updatedEntries);
-            await upsertToSupabase(updatedEntries);
+            try {
+                await upsertToSupabase(updatedEntries);
+            } catch (error) {
+                void setEntries(previous); // rollback
+                throw error;
+            }
         },
         [entries, setEntries, upsertToSupabase]
     );
