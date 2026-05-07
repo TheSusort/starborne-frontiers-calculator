@@ -4,7 +4,7 @@ import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '..
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
-import { Pagination } from '../ui';
+import { Pagination, Checkbox } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearPieceDisplay } from './GearPieceDisplay';
@@ -326,20 +326,6 @@ export const GearInventory: React.FC<Props> = ({
                 { value: 'unequipped', label: 'Not equipped to a ship' },
             ],
         },
-        {
-            id: 'level',
-            label: 'Level',
-            values: state.filters.hideMaxLevel ? ['hideMaxLevel'] : [],
-            onChange: (values) =>
-                setState((prev: FilterState) => ({
-                    ...prev,
-                    filters: {
-                        ...prev.filters,
-                        hideMaxLevel: values.includes('hideMaxLevel'),
-                    },
-                })),
-            options: [{ value: 'hideMaxLevel', label: 'Hide max levelled (Lv.16)' }],
-        },
     ];
 
     const sortOptions = [
@@ -420,6 +406,16 @@ export const GearInventory: React.FC<Props> = ({
                     searchValue={searchQuery}
                     onSearchChange={setSearchQuery}
                     searchPlaceholder="Search gear..."
+                />
+                <Checkbox
+                    label="Hide max levelled (Lv.16)"
+                    checked={!!state.filters.hideMaxLevel}
+                    onChange={(checked) =>
+                        setState((prev: FilterState) => ({
+                            ...prev,
+                            filters: { ...prev.filters, hideMaxLevel: checked },
+                        }))
+                    }
                 />
             </div>
 
