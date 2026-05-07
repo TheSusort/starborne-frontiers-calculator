@@ -59,7 +59,6 @@ function ImplantLine({ implant }: { implant: GearPiece }) {
     const slotLabel = IMPLANT_SLOTS[implant.slot]?.label ?? implant.slot;
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
-            <Stars count={implant.stars} />
             <span className={`${RARITIES[implant.rarity]?.textColor}`}>{implantName}</span>
             <span className="text-theme-text-secondary text-xs">{slotLabel}</span>
         </div>
