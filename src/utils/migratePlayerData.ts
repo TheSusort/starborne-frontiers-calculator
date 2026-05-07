@@ -940,17 +940,34 @@ export const syncMigratedDataToSupabase = async (
             }
         }
 
-        // Step 8: Upload gear wishlist
-        if (wishlistEntries.length > 0) {
-            const { error: wishlistError } = await supabase.from('gear_wishlists').upsert(
-                {
-                    user_id: userId,
-                    entries: wishlistEntries,
-                    updated_at: new Date().toISOString(),
-                },
-                { onConflict: 'user_id' }
-            );
-            if (wishlistError) throw wishlistError;
+        // Step 8: Upload gear wishlist (merge local + remote to avoid overwriting cloud entries)
+        try {
+            if (wishlistEntries.length > 0) {
+                const { data: remoteData } = await supabase
+                    .from('gear_wishlists')
+                    .select('entries')
+                    .eq('user_id', userId)
+                    .single();
+
+                const remoteEntries: WishlistEntry[] = remoteData?.entries || [];
+                const remoteIds = new Set(remoteEntries.map((e: WishlistEntry) => e.id));
+                const merged = [
+                    ...remoteEntries,
+                    ...wishlistEntries.filter((e) => !remoteIds.has(e.id)),
+                ];
+
+                const { error: wishlistError } = await supabase.from('gear_wishlists').upsert(
+                    {
+                        user_id: userId,
+                        entries: merged,
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: 'user_id' }
+                );
+                if (wishlistError) throw wishlistError;
+            }
+        } catch (error) {
+            console.error('Error migrating gear wishlist:', error);
         }
 
         return { success: true };
