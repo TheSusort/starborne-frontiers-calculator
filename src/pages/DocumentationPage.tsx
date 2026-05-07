@@ -882,7 +882,7 @@ const DocumentationPage: React.FC = () => {
 
                             <h3 className="text-xl font-semibold mb-2">Gear Page Tabs</h3>
                             <p className="text-theme-text mb-4">
-                                The Gear page has four tabs for different management features:
+                                The Gear page has five tabs for different management features:
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
@@ -960,6 +960,45 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Enable &quot;Use upgraded stats&quot; in autogear to factor
                                         simulated upgrades into optimization
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Wishlist Tab</h4>
+                                <p className="text-theme-text mb-2">
+                                    The Wishlist tab lets you track gear you are actively farming.
+                                    Each entry describes the kind of gear you are looking for, so
+                                    you can quickly check whether any newly imported drops match
+                                    your goals.
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Adding an entry:</strong> Give it a name (required,
+                                        up to 64 characters) and optionally set any combination of
+                                        filters — slot, minimum stars, rarity, gear set, main stat,
+                                        and substats. All active filters use AND logic: a gear piece
+                                        must satisfy every filter to match. Leaving a filter unset
+                                        means it matches anything.
+                                    </li>
+                                    <li>
+                                        <strong>Editing and deleting:</strong> Each entry card has
+                                        inline edit and delete buttons.
+                                    </li>
+                                    <li>
+                                        <strong>Search Inventory button:</strong> Searches your
+                                        current inventory against all wishlist entries. Results are
+                                        shown in tabs, one per entry. If no gear in your inventory
+                                        matches an entry, that tab shows &quot;No gear in your
+                                        inventory matches this entry yet&quot;.
+                                    </li>
+                                    <li>
+                                        <strong>Import Summary integration:</strong> After importing
+                                        game data, newly imported gear that matches any wishlist
+                                        entry appears in a &quot;Wishlist Hits&quot; section inside
+                                        the Import Summary modal. This section is hidden on a
+                                        first-ever import, when there is no previous import to
+                                        compare against.
                                     </li>
                                 </ul>
                             </div>
