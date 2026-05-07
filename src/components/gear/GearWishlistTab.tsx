@@ -76,6 +76,7 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
                         {editingEntry ? 'Edit Entry' : 'Add Entry'}
                     </h2>
                     <WishlistEntryForm
+                        key={editingEntry?.id ?? 'new'}
                         initial={editingEntry ?? undefined}
                         onSubmit={(data) => void handleSubmit(data)}
                         onCancel={handleCancelForm}
