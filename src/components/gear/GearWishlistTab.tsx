@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { GearPiece } from '../../types/gear';
 import { WishlistEntry } from '../../types/wishlist';
-import { Button, CloseIcon, EditIcon } from '../ui';
-import { StarOutlineIcon } from '../ui/icons';
+import { Button, CloseIcon, EditIcon, StarOutlineIcon } from '../ui';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
+import { Loader } from '../ui/Loader';
 import { WishlistEntryForm } from './WishlistEntryForm';
 import { WishlistSearchResults } from './WishlistSearchResults';
 
@@ -15,10 +15,14 @@ interface Props {
 }
 
 export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
-    const { entries, addEntry, updateEntry, deleteEntry } = useGearWishlistContext();
+    const { entries, loading, addEntry, updateEntry, deleteEntry } = useGearWishlistContext();
     const [editingEntry, setEditingEntry] = useState<WishlistEntry | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
+
+    useEffect(() => {
+        if (entries.length === 0) setShowSearch(false);
+    }, [entries.length]);
 
     const handleSubmit = async (data: Omit<WishlistEntry, 'id'>) => {
         if (editingEntry) {
@@ -40,6 +44,10 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
         setEditingEntry(null);
         setShowForm(false);
     };
+
+    if (loading && entries.length === 0) {
+        return <Loader />;
+    }
 
     if (entries.length === 0 && !showForm) {
         return (
