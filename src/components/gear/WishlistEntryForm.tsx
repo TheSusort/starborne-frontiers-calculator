@@ -73,6 +73,9 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
     const [subStats, setSubStats] = useState<StatName[]>(
         initial?.filters.subStats?.map((s) => s.name) ?? []
     );
+    const [subStatsMin, setSubStatsMin] = useState<number>(
+        initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
+    );
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -83,7 +86,12 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
             ...(rarities.length > 0 ? { rarity: rarities } : {}),
             ...(setBonuses.length > 0 ? { setBonus: setBonuses } : {}),
             ...(mainStats.length > 0 ? { mainStat: mainStats.map((n) => ({ name: n })) } : {}),
-            ...(subStats.length > 0 ? { subStats: subStats.map((n) => ({ name: n })) } : {}),
+            ...(subStats.length > 0
+                ? {
+                      subStats: subStats.map((n) => ({ name: n })),
+                      ...(subStatsMin < subStats.length ? { subStatsMin } : {}),
+                  }
+                : {}),
         };
         onSubmit({ name: name.trim().slice(0, 64), filters });
     };
@@ -139,13 +147,41 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
                 onToggle={(s) => setMainStats((prev) => toggle(prev, s))}
             />
 
-            <ChipPicker
-                label="Required Substats (all of)"
-                allOptions={ALL_STAT_NAMES}
-                getLabel={(s) => STATS[s]?.shortLabel ?? s}
-                selected={subStats}
-                onToggle={(s) => setSubStats((prev) => toggle(prev, s))}
-            />
+            <div>
+                <ChipPicker
+                    label="Substats"
+                    allOptions={ALL_STAT_NAMES}
+                    getLabel={(s) => STATS[s]?.shortLabel ?? s}
+                    selected={subStats}
+                    onToggle={(s) =>
+                        setSubStats((prev) => {
+                            const next = toggle(prev, s);
+                            setSubStatsMin((m) => Math.min(m, next.length || 1));
+                            return next;
+                        })
+                    }
+                />
+                {subStats.length >= 2 && (
+                    <div className="flex items-center gap-2 mt-2">
+                        <span className="text-sm text-theme-text-secondary">At least</span>
+                        <input
+                            type="number"
+                            min={1}
+                            max={subStats.length}
+                            value={subStatsMin}
+                            onChange={(e) =>
+                                setSubStatsMin(
+                                    Math.max(1, Math.min(subStats.length, Number(e.target.value)))
+                                )
+                            }
+                            className="w-14 bg-dark border border-dark-border text-white text-sm px-2 py-1 text-center"
+                        />
+                        <span className="text-sm text-theme-text-secondary">
+                            of {subStats.length} must be present
+                        </span>
+                    </div>
+                )}
+            </div>
 
             <div className="flex gap-2">
                 <Button type="submit" variant="primary" disabled={!name.trim()}>

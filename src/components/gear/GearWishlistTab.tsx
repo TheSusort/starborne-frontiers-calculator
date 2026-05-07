@@ -150,7 +150,9 @@ function FilterChips({ entry }: { entry: WishlistEntry }) {
     if (filters.mainStat?.length)
         chips.push(...filters.mainStat.map((s) => STATS[s.name]?.shortLabel ?? s.name));
     if (filters.subStats?.length) {
-        chips.push(filters.subStats.map((s) => STATS[s.name]?.shortLabel ?? s.name).join(' + '));
+        const names = filters.subStats.map((s) => STATS[s.name]?.shortLabel ?? s.name).join(' + ');
+        const min = filters.subStatsMin ?? filters.subStats.length;
+        chips.push(min < filters.subStats.length ? `${min} of: ${names}` : names);
     }
 
     if (chips.length === 0) {

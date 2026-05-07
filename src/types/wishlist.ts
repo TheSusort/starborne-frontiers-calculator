@@ -12,6 +12,7 @@ export interface WishlistEntry {
         rarity?: RarityName[]; // OR: piece.rarity must be one of these
         setBonus?: GearSetName[]; // OR: piece.setBonus must be one of these
         mainStat?: { name: StatName }[]; // OR: piece.mainStat.name must be one of these
-        subStats?: { name: StatName }[]; // AND: all listed names must appear in piece.subStats
+        subStats?: { name: StatName }[]; // piece must have at least subStatsMin of these
+        subStatsMin?: number; // how many of subStats must match (default = all)
     };
 }

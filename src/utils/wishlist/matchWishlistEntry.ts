@@ -24,7 +24,9 @@ export function matchesWishlistEntry(gear: GearPiece, entry: WishlistEntry): boo
     if (filters.subStats !== undefined && filters.subStats.length > 0) {
         if (gear.subStats.length === 0) return false;
         const pieceSubStatNames = new Set(gear.subStats.map((s) => s.name));
-        if (!filters.subStats.every((f) => pieceSubStatNames.has(f.name))) return false;
+        const matched = filters.subStats.filter((f) => pieceSubStatNames.has(f.name)).length;
+        const required = filters.subStatsMin ?? filters.subStats.length;
+        if (matched < required) return false;
     }
 
     return true;

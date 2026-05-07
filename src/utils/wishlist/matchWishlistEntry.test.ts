@@ -206,6 +206,43 @@ describe('matchesWishlistEntry', () => {
         expect(matchesWishlistEntry(gear, entry)).toBe(true);
     });
 
+    // ── subStatsMin ──────────────────────────────────────────────────────────
+    it('passes when matched substat count >= subStatsMin', () => {
+        // piece has crit + speed; filter lists crit, speed, hp — require 2
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: {
+                subStats: [{ name: 'crit' }, { name: 'speed' }, { name: 'hp' }],
+                subStatsMin: 2,
+            },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects when matched substat count < subStatsMin', () => {
+        // piece has crit + speed; filter lists crit, speed, hp — require 3
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: {
+                subStats: [{ name: 'crit' }, { name: 'speed' }, { name: 'hp' }],
+                subStatsMin: 3,
+            },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('defaults to requiring all substats when subStatsMin is not set', () => {
+        // piece has crit + speed; filter lists all three — no subStatsMin means all required
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { subStats: [{ name: 'crit' }, { name: 'speed' }, { name: 'hp' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
     // ── AND logic across filter types ─────────────────────────────────────────
     it('fails when slot matches but rarity does not', () => {
         const entry: WishlistEntry = {
