@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { WishlistEntry } from '../../types/wishlist';
 import { GearPiece } from '../../types/gear';
 import { Tabs } from '../ui/layout/Tabs';
@@ -16,9 +16,16 @@ interface Props {
 export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) => {
     const [activeTab, setActiveTab] = useState(entries[0]?.id ?? '');
 
+    useEffect(() => {
+        if (entries.length === 0) return;
+        if (!entries.some((e) => e.id === activeTab)) {
+            setActiveTab(entries[0].id);
+        }
+    }, [entries, activeTab]);
+
     const gearOnly = useMemo(() => inventory.filter((p) => GEAR_SLOT_SET.has(p.slot)), [inventory]);
 
-    const tabs = entries.map((e) => ({ id: e.id, label: e.name }));
+    const tabs = useMemo(() => entries.map((e) => ({ id: e.id, label: e.name })), [entries]);
 
     const matches = useMemo(() => {
         const entry = entries.find((e) => e.id === activeTab);
