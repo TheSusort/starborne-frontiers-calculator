@@ -8,7 +8,7 @@ const baseGear: GearPiece = {
     id: 'g1',
     slot: 'weapon',
     stars: 5,
-    rarity: 'legendary',
+    rarity: 'epic',
     setBonus: 'Fortitude' as GearSetName,
     mainStat: { name: 'attack', value: 100, type: 'flat' },
     subStats: [
@@ -25,59 +25,133 @@ describe('matchesWishlistEntry', () => {
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
 
-    it('matches exact slot', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { slot: 'weapon' } };
+    // ── slot (OR array) ──────────────────────────────────────────────────────
+    it('matches when slot is in the filter array', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { slot: ['weapon'] } };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
 
-    it('rejects wrong slot', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { slot: 'hull' } };
-        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
-    });
-
-    it('matches when piece stars >= filter stars', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: 5 } };
-        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
-    });
-
-    it('rejects when piece stars < filter stars', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: 6 } };
-        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
-    });
-
-    it('matches exact rarity', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { rarity: 'legendary' } };
-        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
-    });
-
-    it('rejects wrong rarity', () => {
-        const entry: WishlistEntry = { id: '1', name: 'test', filters: { rarity: 'epic' } };
-        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
-    });
-
-    it('matches exact setBonus', () => {
+    it('matches when slot is one of multiple filter slots', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: 'Fortitude' as GearSetName },
+            filters: { slot: ['hull', 'weapon'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
 
-    it('matches mainStat by name ignoring flat/percentage distinction', () => {
+    it('rejects when slot is not in the filter array', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { slot: ['hull'] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('treats empty slot array as wildcard', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { slot: [] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    // ── stars (OR array) ─────────────────────────────────────────────────────
+    it('matches when piece stars is in the filter array', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: [5] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('matches when piece stars is one of multiple filter values', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: [4, 5, 6] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects when piece stars is not in the filter array', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: [6] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('treats empty stars array as wildcard', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { stars: [] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    // ── rarity (OR array) ────────────────────────────────────────────────────
+    it('matches when piece rarity is in the filter array', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { rarity: ['epic'] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('matches when piece rarity is one of multiple filter values', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { mainStat: { name: 'attack' } },
+            filters: { rarity: ['epic', 'legendary'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
 
-    it('rejects wrong mainStat name', () => {
+    it('rejects when piece rarity is not in the filter array', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { mainStat: { name: 'hp' } },
+            filters: { rarity: ['legendary'] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('treats empty rarity array as wildcard', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { rarity: [] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    // ── setBonus (OR array) ──────────────────────────────────────────────────
+    it('matches when setBonus is in the filter array', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { setBonus: ['Fortitude' as GearSetName] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('matches when setBonus is one of multiple filter sets', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { setBonus: ['Fortitude' as GearSetName, 'Oblivion' as GearSetName] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects when setBonus is not in the filter array', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { setBonus: ['Oblivion' as GearSetName] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    // ── mainStat (OR array) ──────────────────────────────────────────────────
+    it('matches when mainStat name is in the filter array', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'attack' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('matches when mainStat is one of multiple filter names', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'hp' }, { name: 'attack' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects when mainStat name is not in filter array', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'hp' }] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
     });
@@ -87,11 +161,17 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { mainStat: { name: 'attack' } },
+            filters: { mainStat: [{ name: 'attack' }] },
         };
         expect(matchesWishlistEntry(gear, entry)).toBe(false);
     });
 
+    it('treats empty mainStat array as wildcard', () => {
+        const entry: WishlistEntry = { id: '1', name: 'test', filters: { mainStat: [] } };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    // ── subStats (AND array, unchanged) ──────────────────────────────────────
     it('matches when all required subStats are present', () => {
         const entry: WishlistEntry = {
             id: '1',
@@ -126,11 +206,12 @@ describe('matchesWishlistEntry', () => {
         expect(matchesWishlistEntry(gear, entry)).toBe(true);
     });
 
-    it('fails when any one of multiple filters fails (AND logic)', () => {
+    // ── AND logic across filter types ─────────────────────────────────────────
+    it('fails when slot matches but rarity does not', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { slot: 'weapon', rarity: 'epic' }, // slot passes, rarity fails
+            filters: { slot: ['weapon'], rarity: ['legendary'] }, // slot passes, rarity fails (piece is epic)
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
     });

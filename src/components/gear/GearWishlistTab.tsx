@@ -142,11 +142,13 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
 function FilterChips({ entry }: { entry: WishlistEntry }) {
     const chips: string[] = [];
     const { filters } = entry;
-    if (filters.slot) chips.push(filters.slot);
-    if (filters.stars !== undefined) chips.push(`${filters.stars}★+`);
-    if (filters.rarity) chips.push(filters.rarity);
-    if (filters.setBonus) chips.push(GEAR_SETS[filters.setBonus]?.name ?? filters.setBonus);
-    if (filters.mainStat) chips.push(STATS[filters.mainStat.name]?.label ?? filters.mainStat.name);
+    if (filters.slot?.length) chips.push(...filters.slot);
+    if (filters.stars?.length) chips.push(...filters.stars.map((n) => `${n}★`));
+    if (filters.rarity?.length) chips.push(...filters.rarity);
+    if (filters.setBonus?.length)
+        chips.push(...filters.setBonus.map((s) => GEAR_SETS[s]?.name ?? s));
+    if (filters.mainStat?.length)
+        chips.push(...filters.mainStat.map((s) => STATS[s.name]?.shortLabel ?? s.name));
     if (filters.subStats?.length) {
         chips.push(filters.subStats.map((s) => STATS[s.name]?.shortLabel ?? s.name).join(' + '));
     }

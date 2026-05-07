@@ -20,7 +20,7 @@ const makeGear = (overrides: Partial<GearPiece> = {}): GearPiece =>
 const entry: WishlistEntry = {
     id: 'w1',
     name: 'Big Attack Weapon',
-    filters: { slot: 'weapon', stars: 6, rarity: 'legendary' },
+    filters: { slot: ['weapon'], stars: [6], rarity: ['legendary'] },
 };
 
 describe('computeImportDiff wishlist hits', () => {
@@ -52,7 +52,11 @@ describe('computeImportDiff wishlist hits', () => {
 
     it('matches one piece against multiple entries', () => {
         const gear = makeGear();
-        const entry2: WishlistEntry = { id: 'w2', name: 'Any Weapon', filters: { slot: 'weapon' } };
+        const entry2: WishlistEntry = {
+            id: 'w2',
+            name: 'Any Weapon',
+            filters: { slot: ['weapon'] },
+        };
         const diff = computeImportDiff([], [], [], [gear], null, [entry, entry2]);
         expect(diff.wishlistHits).toHaveLength(2);
     });
