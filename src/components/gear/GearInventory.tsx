@@ -62,7 +62,7 @@ export const GearInventory: React.FC<Props> = ({
     }, [gearToShipMap, getShipFromGearId]);
 
     const { state, setState, clearFilters } = usePersistedFilters('gear-inventory-filters', {
-        sort: { field: 'id', direction: 'asc' },
+        sort: { field: 'rarity', direction: 'desc' },
     });
 
     const hasActiveFilters =
@@ -182,7 +182,11 @@ export const GearInventory: React.FC<Props> = ({
                 case 'stars':
                     return (a.stars - b.stars) * dir;
                 case 'rarity':
-                    return (RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)) * dir;
+                    return (
+                        (RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)) * dir ||
+                        (b.stars - a.stars) * dir ||
+                        (b.level - a.level) * dir
+                    );
                 default:
                     return a.id.localeCompare(b.id) * dir;
             }
@@ -325,10 +329,9 @@ export const GearInventory: React.FC<Props> = ({
     ];
 
     const sortOptions = [
-        { value: 'id', label: 'Date Added' },
+        { value: 'rarity', label: 'Rarity' },
         { value: 'level', label: 'Level' },
         { value: 'stars', label: 'Stars' },
-        { value: 'rarity', label: 'Rarity' },
         { value: 'stat:hp:flat', label: 'HP (flat)', group: 'Stats' },
         { value: 'stat:hp:percentage', label: 'HP (%)', group: 'Stats' },
         { value: 'stat:attack:flat', label: 'ATK (flat)', group: 'Stats' },

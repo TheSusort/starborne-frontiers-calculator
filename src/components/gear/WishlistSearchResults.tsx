@@ -4,6 +4,7 @@ import { GearPiece } from '../../types/gear';
 import { Tabs } from '../ui/layout/Tabs';
 import { Pagination, Checkbox } from '../ui';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { RARITY_ORDER } from '../../constants/rarities';
 import { matchesWishlistEntry } from '../../utils/wishlist/matchWishlistEntry';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
@@ -39,9 +40,14 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
     const matches = useMemo(() => {
         const entry = entries.find((e) => e.id === activeTab);
         if (!entry) return [];
-        return gearOnly.filter(
-            (g) => matchesWishlistEntry(g, entry) && (!hideMaxLevel || g.level < 16)
-        );
+        return gearOnly
+            .filter((g) => matchesWishlistEntry(g, entry) && (!hideMaxLevel || g.level < 16))
+            .sort(
+                (a, b) =>
+                    RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) ||
+                    b.stars - a.stars ||
+                    b.level - a.level
+            );
     }, [entries, activeTab, gearOnly, hideMaxLevel]);
 
     const totalPages = Math.ceil(matches.length / ITEMS_PER_PAGE);
