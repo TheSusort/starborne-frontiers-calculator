@@ -1,8 +1,17 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.59.0';
+export const CURRENT_VERSION = '1.60.0';
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.60.0',
+        date: '2026-05-07',
+        changes: [
+            "Gear Wishlist — track gear you're farming with flexible filters: slot, stars, rarity, set bonus, main stat, and substats.",
+            'Import summary highlights wishlist hits in place of notable gear when matches are found',
+            'Fixed several cloud sync and IndexedDB reliability issues',
+        ],
+    },
     {
         version: '1.59.0',
         date: '2026-05-04',
