@@ -226,6 +226,7 @@ export const ImportButton: React.FC<{
                                 loadouts: [],
                                 teamLoadouts: [],
                                 engineeringStats: result.data.engineeringStats,
+                                wishlistEntries: [], // don't overwrite cloud wishlist during import sync
                             }
                         );
 

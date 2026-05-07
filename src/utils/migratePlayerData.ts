@@ -7,6 +7,7 @@ import { GearPiece } from '../types/gear';
 import { LocalEncounterNote } from '../types/encounters';
 import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
+import { WishlistEntry } from '../types/wishlist';
 
 interface MigrationResult {
     ships: Ship[];
@@ -15,6 +16,7 @@ interface MigrationResult {
     loadouts: Loadout[];
     teamLoadouts: TeamLoadout[];
     engineeringStats: EngineeringStats;
+    wishlistEntries: WishlistEntry[];
 }
 
 /**
@@ -67,6 +69,7 @@ export const migratePlayerData = (): MigrationResult => {
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
     const engineeringStats = loadLocalData<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
+    const wishlistEntries = loadLocalData<WishlistEntry[]>(StorageKey.GEAR_WISHLIST);
 
     // Step 1: Create ID mappings for ships and gear
     // Migrate ships IDs and build mapping
@@ -211,6 +214,7 @@ export const migratePlayerData = (): MigrationResult => {
         loadouts: updatedLoadouts,
         teamLoadouts: updatedTeamLoadouts,
         engineeringStats,
+        wishlistEntries,
     };
 };
 
@@ -228,8 +232,15 @@ export const syncMigratedDataToSupabase = async (
 ) => {
     // Use provided client or import default (avoids circular dependencies)
     const supabase = client ?? defaultSupabase;
-    const { ships, inventory, encounters, loadouts, teamLoadouts, engineeringStats } =
-        migrationResult;
+    const {
+        ships,
+        inventory,
+        encounters,
+        loadouts,
+        teamLoadouts,
+        engineeringStats,
+        wishlistEntries,
+    } = migrationResult;
 
     const BATCH_SIZE = 500;
 
@@ -927,6 +938,19 @@ export const syncMigratedDataToSupabase = async (
                 console.error('Error migrating engineering stats:', error);
                 // Continue instead of halting completely
             }
+        }
+
+        // Step 8: Upload gear wishlist
+        if (wishlistEntries.length > 0) {
+            const { error: wishlistError } = await supabase.from('gear_wishlists').upsert(
+                {
+                    user_id: userId,
+                    entries: wishlistEntries,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'user_id' }
+            );
+            if (wishlistError) throw wishlistError;
         }
 
         return { success: true };
