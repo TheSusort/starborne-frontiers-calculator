@@ -79,7 +79,7 @@ export const useGearWishlist = () => {
     const addEntry = useCallback(
         async (entry: Omit<WishlistEntry, 'id'>) => {
             const newEntry: WishlistEntry = { ...entry, id: uuidv4() };
-            const updated = [...entries, newEntry];
+            const updated = [newEntry, ...entries];
             void setEntries(updated);
             try {
                 await upsertToSupabase(updated);
