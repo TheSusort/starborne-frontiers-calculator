@@ -125,6 +125,25 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                 <p className="text-theme-text-secondary">No changes detected.</p>
             ) : (
                 <div className="space-y-4">
+                    {/* Wishlist Hits */}
+                    {diff.wishlistHits && diff.wishlistHits.length > 0 && (
+                        <div className="card">
+                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
+                                Wishlist Hits
+                            </h4>
+                            <div className="space-y-2">
+                                {diff.wishlistHits.map(({ entryId, entryName, gear }) => (
+                                    <div key={`${entryId}-${gear.id}`}>
+                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-0.5">
+                                            {entryName}
+                                        </div>
+                                        <GearLine gear={gear} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Ships */}
                     {hasShipChanges && (
                         <div className="card">
@@ -324,25 +343,6 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                             {implants.newLegendary.map((g) => (
                                 <ImplantLine key={g.id} implant={g} />
                             ))}
-                        </div>
-                    )}
-
-                    {/* Wishlist Hits */}
-                    {diff.wishlistHits && diff.wishlistHits.length > 0 && (
-                        <div className="card">
-                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
-                                Wishlist Hits
-                            </h4>
-                            <div className="space-y-2">
-                                {diff.wishlistHits.map(({ entryId, entryName, gear }) => (
-                                    <div key={`${entryId}-${gear.id}`}>
-                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-0.5">
-                                            {entryName}
-                                        </div>
-                                        <GearLine gear={gear} />
-                                    </div>
-                                ))}
-                            </div>
                         </div>
                     )}
                 </div>
