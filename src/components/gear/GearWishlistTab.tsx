@@ -5,6 +5,7 @@ import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { GearPiece } from '../../types/gear';
 import { WishlistEntry } from '../../types/wishlist';
 import { Button, CloseIcon, EditIcon } from '../ui';
+import { StarOutlineIcon } from '../ui/icons';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { WishlistEntryForm } from './WishlistEntryForm';
 import { WishlistSearchResults } from './WishlistSearchResults';
@@ -43,6 +44,7 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
     if (entries.length === 0 && !showForm) {
         return (
             <div className="card text-center py-12 flex flex-col items-center gap-4">
+                <StarOutlineIcon className="w-12 h-12 text-theme-text-secondary" />
                 <div>
                     <h3 className="text-lg font-semibold text-white mb-2">Start Tracking Gear</h3>
                     <p className="text-theme-text-secondary max-w-md mx-auto">
