@@ -54,12 +54,15 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
 
     return (
         <div className="mt-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-                <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                    <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                </div>
                 <Checkbox
                     label="Hide max levelled (Lv.16)"
                     checked={hideMaxLevel}
                     onChange={setHideMaxLevel}
+                    className="shrink-0 pt-3"
                 />
             </div>
             {matches.length === 0 ? (
