@@ -95,6 +95,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
         );
     }
 
+    const hasWishlistHits = (diff.wishlistHits?.length ?? 0) > 0;
+
     const hasLegendaryChanges =
         ships.legendary.added.length > 0 ||
         ships.legendary.leveled.length > 0 ||
@@ -109,7 +111,8 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
 
     const hasOtherChanges = ships.otherAdded > 0 || ships.otherRemoved > 0;
     const hasShipChanges = hasLegendaryChanges || hasEpicChanges || hasOtherChanges;
-    const hasGearChanges = gear.added > 0 || gear.removed > 0 || gear.newLegendary6Star.length > 0;
+    const hasGearChanges =
+        gear.added > 0 || gear.removed > 0 || gear.newLegendary6Star.length > 0 || hasWishlistHits;
     const hasImplantChanges =
         implants.added > 0 || implants.removed > 0 || implants.newLegendary.length > 0;
 
@@ -125,25 +128,6 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                 <p className="text-theme-text-secondary">No changes detected.</p>
             ) : (
                 <div className="space-y-4">
-                    {/* Wishlist Hits */}
-                    {diff.wishlistHits && diff.wishlistHits.length > 0 && (
-                        <div className="card">
-                            <h4 className="text-sm font-semibold text-theme-text uppercase tracking-wide mb-2 border-b border-dark-border pb-0.5">
-                                Wishlist Hits
-                            </h4>
-                            <div className="space-y-2">
-                                {diff.wishlistHits.map(({ entryId, entryName, gear }) => (
-                                    <div key={`${entryId}-${gear.id}`}>
-                                        <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-0.5">
-                                            {entryName}
-                                        </div>
-                                        <GearLine gear={gear} />
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
                     {/* Ships */}
                     {hasShipChanges && (
                         <div className="card">
@@ -299,16 +283,34 @@ export const ImportDiffModal: React.FC<Props> = ({ diff, fileTimestamp, onClose 
                                     )}
                                 </p>
                             )}
-                            {gear.newLegendary6Star.length > 0 && (
+                            {hasWishlistHits ? (
+                                <div>
+                                    <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
+                                        Wishlist Hits
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(diff.wishlistHits ?? []).map(
+                                            ({ entryId, entryName, gear: g }) => (
+                                                <div key={`${entryId}-${g.id}`}>
+                                                    <div className="text-xs text-theme-text-secondary mb-0.5">
+                                                        {entryName}
+                                                    </div>
+                                                    <GearLine gear={g} />
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            ) : gear.newLegendary6Star.length > 0 ? (
                                 <div>
                                     <div className="text-xs text-theme-text-secondary uppercase tracking-wider mb-1">
                                         Notable Gear
                                     </div>
+                                    {gear.newLegendary6Star.map((g) => (
+                                        <GearLine key={g.id} gear={g} />
+                                    ))}
                                 </div>
-                            )}
-                            {gear.newLegendary6Star.map((g) => (
-                                <GearLine key={g.id} gear={g} />
-                            ))}
+                            ) : null}
                         </div>
                     )}
 
