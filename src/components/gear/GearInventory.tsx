@@ -74,6 +74,7 @@ export const GearInventory: React.FC<Props> = ({
             (state.filters.levelRange.min > 0 || state.filters.levelRange.max > 0)) ||
         (state.filters.mainStatFilters && state.filters.mainStatFilters.length > 0) ||
         (state.filters.subStatFilters && state.filters.subStatFilters.length > 0) ||
+        !!state.filters.hideMaxLevel ||
         searchQuery.length > 0;
 
     const filteredInventory = useMemo(() => {
@@ -100,6 +101,8 @@ export const GearInventory: React.FC<Props> = ({
                 (state.filters.levelRange.min === 0 && state.filters.levelRange.max === 0) ||
                 (piece.level >= (state.filters.levelRange.min || 0) &&
                     piece.level <= (state.filters.levelRange.max || 999));
+
+            const matchesHideMaxLevel = !state.filters.hideMaxLevel || piece.level < 16;
 
             // Main stat filtering (OR logic - gear has ANY of the selected main stats)
             const matchesMainStatFilters =
@@ -157,6 +160,7 @@ export const GearInventory: React.FC<Props> = ({
                 matchesRarity &&
                 matchesEquipped &&
                 matchesLevelRange &&
+                matchesHideMaxLevel &&
                 matchesMainStatFilters &&
                 matchesSubStatFilters &&
                 matchesSearch
@@ -321,6 +325,20 @@ export const GearInventory: React.FC<Props> = ({
                 { value: 'equipped', label: 'Equipped to a ship' },
                 { value: 'unequipped', label: 'Not equipped to a ship' },
             ],
+        },
+        {
+            id: 'level',
+            label: 'Level',
+            values: state.filters.hideMaxLevel ? ['hideMaxLevel'] : [],
+            onChange: (values) =>
+                setState((prev: FilterState) => ({
+                    ...prev,
+                    filters: {
+                        ...prev.filters,
+                        hideMaxLevel: values.includes('hideMaxLevel'),
+                    },
+                })),
+            options: [{ value: 'hideMaxLevel', label: 'Hide max levelled (Lv.16)' }],
         },
     ];
 

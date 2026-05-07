@@ -28,6 +28,7 @@ export interface FilterState {
         statFilters?: StatFilter[];
         mainStatFilters?: StatFilter[];
         subStatFilters?: StatFilter[];
+        hideMaxLevel?: boolean;
     };
 }
 
