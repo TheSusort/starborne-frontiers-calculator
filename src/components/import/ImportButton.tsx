@@ -26,6 +26,7 @@ import { ShipTypeName } from '../../constants/shipTypes';
 import { StorageKey } from '../../constants/storage';
 import { ImportDiff } from '../../types/importDiff';
 import { computeImportDiff } from '../../utils/import/computeImportDiff';
+import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { HangarNameModal } from './HangarNameModal';
 import { ImportDiffModal } from './ImportDiffModal';
 
@@ -46,6 +47,7 @@ export const ImportButton: React.FC<{
     const { addNotification } = useNotification();
     const { user } = useAuth();
     const { activeProfileId } = useActiveProfile();
+    const { entries: wishlistEntries } = useGearWishlistContext();
     const [loading, setLoading] = useState(false);
     const [internalShareData, setInternalShareData] = useState(false);
     const [showHangarModal, setShowHangarModal] = useState(false);
@@ -208,7 +210,8 @@ export const ImportButton: React.FC<{
                         oldInventory,
                         result.data.ships,
                         result.data.inventory,
-                        result.data.engineeringStats
+                        result.data.engineeringStats,
+                        wishlistEntries
                     );
 
                     // sync to supabase if user is logged in
@@ -274,6 +277,7 @@ export const ImportButton: React.FC<{
             user,
             activeProfileId,
             inputDomId,
+            wishlistEntries,
         ]
     );
 
