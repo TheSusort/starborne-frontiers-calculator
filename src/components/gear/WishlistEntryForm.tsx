@@ -22,17 +22,19 @@ const GEAR_SET_ENTRIES = Object.entries(GEAR_SETS).filter(([key]) => !implantKey
 
 const STAT_TYPE_OPTIONS: { key: string; label: string; name: StatName; type: StatType }[] =
     Object.entries(STATS).flatMap(([statName, def]) =>
-        def.allowedTypes.map((type) => ({
-            key: `${statName}:${type}`,
-            label:
-                def.allowedTypes.length > 1
-                    ? type === 'percentage'
-                        ? `${def.shortLabel}%`
-                        : def.shortLabel
-                    : def.shortLabel,
-            name: statName as StatName,
-            type,
-        }))
+        def.allowedTypes
+            .filter((type) => def.maxValue[type] > 0)
+            .map((type) => ({
+                key: `${statName}:${type}`,
+                label:
+                    def.allowedTypes.length > 1
+                        ? type === 'percentage'
+                            ? `${def.shortLabel}%`
+                            : def.shortLabel
+                        : def.shortLabel,
+                name: statName as StatName,
+                type,
+            }))
     );
 const STAT_TYPE_KEYS = STAT_TYPE_OPTIONS.map(({ key }) => key);
 const STAT_TYPE_KEY_LABEL: Record<string, string> = Object.fromEntries(
