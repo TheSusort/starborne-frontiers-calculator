@@ -9,6 +9,7 @@ export const StorageKey = {
     CHANGELOG_STATE: 'changelog_state',
     GEAR_UPGRADES: 'gear_upgrades',
     AUTOGEAR_CONFIGS: 'autogear_configs',
+    GEAR_WISHLIST: 'gear_wishlist',
     DEMO_DATA_LOADED: 'demo_data_loaded',
     SHOW_IMPORT_SUMMARY: 'show_import_summary',
     SUPABASE_SYNC_ENABLED: 'supabase_sync_enabled',
