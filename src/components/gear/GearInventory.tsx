@@ -4,7 +4,7 @@ import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '..
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
-import { Pagination, Checkbox } from '../ui';
+import { Pagination } from '../ui';
 import { SortConfig } from '../filters/SortPanel';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearPieceDisplay } from './GearPieceDisplay';
@@ -74,7 +74,6 @@ export const GearInventory: React.FC<Props> = ({
             (state.filters.levelRange.min > 0 || state.filters.levelRange.max > 0)) ||
         (state.filters.mainStatFilters && state.filters.mainStatFilters.length > 0) ||
         (state.filters.subStatFilters && state.filters.subStatFilters.length > 0) ||
-        !!state.filters.hideMaxLevel ||
         searchQuery.length > 0;
 
     const filteredInventory = useMemo(() => {
@@ -101,8 +100,6 @@ export const GearInventory: React.FC<Props> = ({
                 (state.filters.levelRange.min === 0 && state.filters.levelRange.max === 0) ||
                 (piece.level >= (state.filters.levelRange.min || 0) &&
                     piece.level <= (state.filters.levelRange.max || 999));
-
-            const matchesHideMaxLevel = !state.filters.hideMaxLevel || piece.level < 16;
 
             // Main stat filtering (OR logic - gear has ANY of the selected main stats)
             const matchesMainStatFilters =
@@ -160,7 +157,6 @@ export const GearInventory: React.FC<Props> = ({
                 matchesRarity &&
                 matchesEquipped &&
                 matchesLevelRange &&
-                matchesHideMaxLevel &&
                 matchesMainStatFilters &&
                 matchesSubStatFilters &&
                 matchesSearch
@@ -406,16 +402,6 @@ export const GearInventory: React.FC<Props> = ({
                     searchValue={searchQuery}
                     onSearchChange={setSearchQuery}
                     searchPlaceholder="Search gear..."
-                />
-                <Checkbox
-                    label="Hide max levelled (Lv.16)"
-                    checked={!!state.filters.hideMaxLevel}
-                    onChange={(checked) =>
-                        setState((prev: FilterState) => ({
-                            ...prev,
-                            filters: { ...prev.filters, hideMaxLevel: checked },
-                        }))
-                    }
                 />
             </div>
 

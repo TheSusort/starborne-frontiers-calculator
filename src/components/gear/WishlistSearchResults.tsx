@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { WishlistEntry } from '../../types/wishlist';
 import { GearPiece } from '../../types/gear';
 import { Tabs } from '../ui/layout/Tabs';
-import { Pagination } from '../ui';
+import { Pagination, Checkbox } from '../ui';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { matchesWishlistEntry } from '../../utils/wishlist/matchWishlistEntry';
 import { GearPieceDisplay } from './GearPieceDisplay';
@@ -19,6 +19,7 @@ interface Props {
 export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) => {
     const [activeTab, setActiveTab] = useState(entries[0]?.id ?? '');
     const [currentPage, setCurrentPage] = useState(1);
+    const [hideMaxLevel, setHideMaxLevel] = useState(false);
 
     useEffect(() => {
         if (entries.length === 0) return;
@@ -38,8 +39,10 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
     const matches = useMemo(() => {
         const entry = entries.find((e) => e.id === activeTab);
         if (!entry) return [];
-        return gearOnly.filter((g) => matchesWishlistEntry(g, entry));
-    }, [entries, activeTab, gearOnly]);
+        return gearOnly.filter(
+            (g) => matchesWishlistEntry(g, entry) && (!hideMaxLevel || g.level < 16)
+        );
+    }, [entries, activeTab, gearOnly, hideMaxLevel]);
 
     const totalPages = Math.ceil(matches.length / ITEMS_PER_PAGE);
     const visibleMatches = useMemo(() => {
@@ -51,7 +54,14 @@ export const WishlistSearchResults: React.FC<Props> = ({ entries, inventory }) =
 
     return (
         <div className="mt-4">
-            <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+            <div className="flex items-center justify-between flex-wrap gap-2">
+                <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+                <Checkbox
+                    label="Hide max levelled (Lv.16)"
+                    checked={hideMaxLevel}
+                    onChange={setHideMaxLevel}
+                />
+            </div>
             {matches.length === 0 ? (
                 <p className="text-theme-text-secondary text-sm mt-4">
                     No gear in your inventory matches this entry yet.
