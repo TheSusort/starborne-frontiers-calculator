@@ -6,6 +6,7 @@ import { GearInventory } from '../../components/gear/GearInventory';
 import { GearUpgradeAnalysis } from '../../components/gear/GearUpgradeAnalysis';
 import { GearCalibrationAnalysis } from '../../components/gear/GearCalibrationAnalysis';
 import { CalibrationModal } from '../../components/gear/CalibrationModal';
+import { GearWishlistTab } from '../../components/gear/GearWishlistTab';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
@@ -42,6 +43,7 @@ export const GearPage: React.FC = () => {
         { id: 'analysis', label: 'Upgrade Analysis', dataTutorial: 'gear-tab-analysis' },
         { id: 'calibration', label: 'Calibration', dataTutorial: 'gear-tab-calibration' },
         { id: 'simulation', label: 'Simulate Upgrades', dataTutorial: 'gear-tab-simulation' },
+        { id: 'wishlist', label: 'Wishlist' },
     ];
 
     // Handle URL params for deep linking (e.g., from ShipCard "Calibrate gear" shortcut)
@@ -236,6 +238,7 @@ export const GearPage: React.FC = () => {
                         onEdit={handleEditPiece}
                     />
                 )}
+                {activeTab === 'wishlist' && <GearWishlistTab inventory={inventory} />}
 
                 <ConfirmModal
                     isOpen={showDeleteConfirm}
