@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
+import { StatName, StatType } from '../../types/stats';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
 import { GearPiece } from '../../types/gear';
 import { WishlistEntry } from '../../types/wishlist';
@@ -139,6 +140,15 @@ export const GearWishlistTab: React.FC<Props> = ({ inventory }) => {
     );
 };
 
+function statLabel({ name, type }: { name: StatName; type?: StatType }): string {
+    const def = STATS[name];
+    if (!def) return name;
+    if (type && def.allowedTypes.length > 1) {
+        return type === 'percentage' ? `${def.shortLabel}%` : def.shortLabel;
+    }
+    return def.shortLabel;
+}
+
 function FilterChips({ entry }: { entry: WishlistEntry }) {
     const chips: string[] = [];
     const { filters } = entry;
@@ -147,10 +157,9 @@ function FilterChips({ entry }: { entry: WishlistEntry }) {
     if (filters.rarity?.length) chips.push(...filters.rarity);
     if (filters.setBonus?.length)
         chips.push(...filters.setBonus.map((s) => GEAR_SETS[s]?.name ?? s));
-    if (filters.mainStat?.length)
-        chips.push(...filters.mainStat.map((s) => STATS[s.name]?.shortLabel ?? s.name));
+    if (filters.mainStat?.length) chips.push(...filters.mainStat.map((s) => statLabel(s)));
     if (filters.subStats?.length) {
-        const names = filters.subStats.map((s) => STATS[s.name]?.shortLabel ?? s.name).join(' + ');
+        const names = filters.subStats.map((s) => statLabel(s)).join(' + ');
         const min = filters.subStatsMin ?? filters.subStats.length;
         chips.push(min < filters.subStats.length ? `${min} of: ${names}` : names);
     }

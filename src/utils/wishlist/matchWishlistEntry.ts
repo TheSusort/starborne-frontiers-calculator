@@ -18,13 +18,23 @@ export function matchesWishlistEntry(gear: GearPiece, entry: WishlistEntry): boo
         if (!filters.setBonus.includes(gear.setBonus as GearSetName)) return false;
     }
     if (filters.mainStat !== undefined && filters.mainStat.length > 0) {
-        if (!gear.mainStat || !filters.mainStat.some((f) => f.name === gear.mainStat!.name))
+        if (!gear.mainStat) return false;
+        if (
+            !filters.mainStat.some(
+                (f) =>
+                    f.name === gear.mainStat!.name &&
+                    (f.type === undefined || f.type === gear.mainStat!.type)
+            )
+        )
             return false;
     }
     if (filters.subStats !== undefined && filters.subStats.length > 0) {
         if (gear.subStats.length === 0) return false;
-        const pieceSubStatNames = new Set(gear.subStats.map((s) => s.name));
-        const matched = filters.subStats.filter((f) => pieceSubStatNames.has(f.name)).length;
+        const matched = filters.subStats.filter((f) =>
+            gear.subStats.some(
+                (s) => s.name === f.name && (f.type === undefined || f.type === s.type)
+            )
+        ).length;
         const required = filters.subStatsMin ?? filters.subStats.length;
         if (matched < required) return false;
     }

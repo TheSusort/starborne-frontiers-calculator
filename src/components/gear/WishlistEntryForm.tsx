@@ -6,7 +6,7 @@ import { RARITIES, type RarityName } from '../../constants/rarities';
 import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import IMPLANTS from '../../constants/implants';
-import { StatName } from '../../types/stats';
+import { StatName, StatType } from '../../types/stats';
 
 interface Props {
     initial?: WishlistEntry;
@@ -19,7 +19,28 @@ const ALL_RARITIES = Object.keys(RARITIES);
 
 const implantKeys = new Set(Object.keys(IMPLANTS));
 const GEAR_SET_ENTRIES = Object.entries(GEAR_SETS).filter(([key]) => !implantKeys.has(key));
-const ALL_STAT_NAMES = Object.keys(STATS) as StatName[];
+
+const STAT_TYPE_OPTIONS: { key: string; label: string; name: StatName; type: StatType }[] =
+    Object.entries(STATS).flatMap(([statName, def]) =>
+        def.allowedTypes.map((type) => ({
+            key: `${statName}:${type}`,
+            label:
+                def.allowedTypes.length > 1
+                    ? type === 'percentage'
+                        ? `${def.shortLabel}%`
+                        : def.shortLabel
+                    : def.shortLabel,
+            name: statName as StatName,
+            type,
+        }))
+    );
+const STAT_TYPE_KEYS = STAT_TYPE_OPTIONS.map(({ key }) => key);
+const STAT_TYPE_KEY_LABEL: Record<string, string> = Object.fromEntries(
+    STAT_TYPE_OPTIONS.map(({ key, label }) => [key, label])
+);
+const STAT_TYPE_KEY_PARSE: Record<string, { name: StatName; type: StatType }> = Object.fromEntries(
+    STAT_TYPE_OPTIONS.map(({ key, name, type }) => [key, { name, type }])
+);
 
 function ChipPicker<T extends string>({
     label,
@@ -67,11 +88,15 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
     const [stars, setStars] = useState<string[]>(initial?.filters.stars?.map(String) ?? []);
     const [rarities, setRarities] = useState<RarityName[]>(initial?.filters.rarity ?? []);
     const [setBonuses, setSetBonuses] = useState<GearSetName[]>(initial?.filters.setBonus ?? []);
-    const [mainStats, setMainStats] = useState<StatName[]>(
-        initial?.filters.mainStat?.map((s) => s.name) ?? []
+    const [mainStats, setMainStats] = useState<string[]>(
+        initial?.filters.mainStat?.map(
+            ({ name, type }) => `${name}:${type ?? STATS[name].allowedTypes[0]}`
+        ) ?? []
     );
-    const [subStats, setSubStats] = useState<StatName[]>(
-        initial?.filters.subStats?.map((s) => s.name) ?? []
+    const [subStats, setSubStats] = useState<string[]>(
+        initial?.filters.subStats?.map(
+            ({ name, type }) => `${name}:${type ?? STATS[name].allowedTypes[0]}`
+        ) ?? []
     );
     const [subStatsMin, setSubStatsMin] = useState<number>(
         initial?.filters.subStatsMin ?? initial?.filters.subStats?.length ?? 1
@@ -85,10 +110,12 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
             ...(stars.length > 0 ? { stars: stars.map(Number) } : {}),
             ...(rarities.length > 0 ? { rarity: rarities } : {}),
             ...(setBonuses.length > 0 ? { setBonus: setBonuses } : {}),
-            ...(mainStats.length > 0 ? { mainStat: mainStats.map((n) => ({ name: n })) } : {}),
+            ...(mainStats.length > 0
+                ? { mainStat: mainStats.map((k) => STAT_TYPE_KEY_PARSE[k]) }
+                : {}),
             ...(subStats.length > 0
                 ? {
-                      subStats: subStats.map((n) => ({ name: n })),
+                      subStats: subStats.map((k) => STAT_TYPE_KEY_PARSE[k]),
                       ...(subStatsMin < subStats.length ? { subStatsMin } : {}),
                   }
                 : {}),
@@ -141,21 +168,21 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
 
             <ChipPicker
                 label="Main Stat (any of)"
-                allOptions={ALL_STAT_NAMES}
-                getLabel={(s) => STATS[s]?.shortLabel ?? s}
+                allOptions={STAT_TYPE_KEYS}
+                getLabel={(k) => STAT_TYPE_KEY_LABEL[k] ?? k}
                 selected={mainStats}
-                onToggle={(s) => setMainStats((prev) => toggle(prev, s))}
+                onToggle={(k) => setMainStats((prev) => toggle(prev, k))}
             />
 
             <div>
                 <ChipPicker
                     label="Substats"
-                    allOptions={ALL_STAT_NAMES}
-                    getLabel={(s) => STATS[s]?.shortLabel ?? s}
+                    allOptions={STAT_TYPE_KEYS}
+                    getLabel={(k) => STAT_TYPE_KEY_LABEL[k] ?? k}
                     selected={subStats}
-                    onToggle={(s) =>
+                    onToggle={(k) =>
                         setSubStats((prev) => {
-                            const next = toggle(prev, s);
+                            const next = toggle(prev, k);
                             setSubStatsMin((m) => Math.min(m, next.length || 1));
                             return next;
                         })

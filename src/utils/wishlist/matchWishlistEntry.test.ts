@@ -243,6 +243,81 @@ describe('matchesWishlistEntry', () => {
         expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
     });
 
+    // ── mainStat with type ───────────────────────────────────────────────────
+    it('matches mainStat when type also matches', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'attack', type: 'flat' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects mainStat when type does not match', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'attack', type: 'percentage' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('matches mainStat without type against any type (backward compat)', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { mainStat: [{ name: 'attack' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    // ── subStats with type ───────────────────────────────────────────────────
+    it('matches subStat when type also matches', () => {
+        // baseGear has crit:percentage and speed:flat
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { subStats: [{ name: 'crit', type: 'percentage' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('rejects subStat when type does not match', () => {
+        // baseGear has speed:flat — speed:percentage should not match
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { subStats: [{ name: 'speed', type: 'percentage' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
+    });
+
+    it('matches subStat without type against any type (backward compat)', () => {
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: { subStats: [{ name: 'speed' }] },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
+    it('correctly counts matches with subStatsMin when types differ', () => {
+        // piece has crit:percentage and speed:flat; filter has crit:percentage, speed:percentage, hp:flat — require 1
+        const entry: WishlistEntry = {
+            id: '1',
+            name: 'test',
+            filters: {
+                subStats: [
+                    { name: 'crit', type: 'percentage' },
+                    { name: 'speed', type: 'percentage' }, // type mismatch — won't match
+                    { name: 'hp', type: 'flat' }, // name mismatch
+                ],
+                subStatsMin: 1,
+            },
+        };
+        expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
+    });
+
     // ── AND logic across filter types ─────────────────────────────────────────
     it('fails when slot matches but rarity does not', () => {
         const entry: WishlistEntry = {
