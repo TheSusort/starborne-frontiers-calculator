@@ -120,7 +120,7 @@ export const EngineeringOptimizer: React.FC = () => {
                 <div className="flex flex-wrap gap-3 pt-2">
                     <StatCard
                         title="Tokens Used"
-                        value={result.tokensUsed.toLocaleString()}
+                        value={`${result.tokensUsed.toLocaleString()} / ${tokenBudget.toLocaleString()}`}
                         color="yellow"
                     />
                     {roleImprovementEntries.map(([role, improvement]) => (
@@ -145,7 +145,10 @@ export const EngineeringOptimizer: React.FC = () => {
                     type="number"
                     min={0}
                     value={tokenBudget}
-                    onChange={(e) => setTokenBudget(Math.max(0, Number(e.target.value) || 0))}
+                    onChange={(e) => {
+                        setTokenBudget(Math.max(0, Number(e.target.value) || 0));
+                        setResult(null);
+                    }}
                 />
 
                 <div className="card">
@@ -173,12 +176,6 @@ export const EngineeringOptimizer: React.FC = () => {
                 <Button variant="primary" disabled={isDisabled} onClick={handleCalculate}>
                     Calculate Optimal Spend
                 </Button>
-
-                {totalStarredShips === 0 && (
-                    <p className="text-xs text-theme-text-secondary">
-                        Star ships in your fleet to enable this feature.
-                    </p>
-                )}
             </div>
 
             {/* Right column */}
