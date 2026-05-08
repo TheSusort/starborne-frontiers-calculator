@@ -104,7 +104,7 @@ export const useLoadouts = () => {
         try {
             setLoading(true);
 
-            if (activeProfileId) {
+            if (activeProfileId && isSupabaseSyncEnabled()) {
                 const { data: loadoutData, error: loadoutError } = await supabase
                     .from('loadouts')
                     .select(

@@ -62,7 +62,7 @@ export const useEncounterNotes = () => {
     const loadEncounters = useCallback(async () => {
         try {
             setLoading(true);
-            if (activeProfileId) {
+            if (activeProfileId && isSupabaseSyncEnabled()) {
                 const { data, error } = await supabase
                     .from('encounter_notes')
                     .select(
