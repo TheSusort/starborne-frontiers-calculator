@@ -89,10 +89,10 @@ export function optimizeEngineering(
 ): OptimizationResult {
     const candidates: UpgradeRecommendation[] = [];
 
-    const baseRoles: BaseRoleName[] = ['ATTACKER', 'DEFENDER', 'DEBUFFER', 'SUPPORTER'];
-
-    for (const role of baseRoles) {
-        const statNames = ENGINEERING_STATS_BY_ROLE[role];
+    for (const [role, statNames] of Object.entries(ENGINEERING_STATS_BY_ROLE) as [
+        BaseRoleName,
+        StatName[],
+    ][]) {
         const starredShips = ships.filter((s) => s.starred && getBaseRole(s.type) === role);
 
         if (starredShips.length === 0) continue;
@@ -143,6 +143,10 @@ export function optimizeEngineering(
 
                 const baseScore = calculateRoleScore(ship.type, baseStats);
                 const newScore = calculateRoleScore(ship.type, modifiedStats);
+                // Note: DEFENDER_SECURITY and SUPPORTER_SHIELD multiply by `security`.
+                // If security is 0 (typical for gear-less ships), baseScore is 0 and pct
+                // falls through to 0 — the security track will appear valueless. In practice,
+                // real ships have gear that provides security, so this rarely matters.
                 const pct = baseScore > 0 ? ((newScore - baseScore) / baseScore) * 100 : 0;
                 pctValues.push(pct);
             }
