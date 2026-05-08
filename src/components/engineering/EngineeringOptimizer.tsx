@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { Button, Input, StatCard } from '../ui';
 import {
     optimizeEngineering,
@@ -57,6 +58,7 @@ export const EngineeringOptimizer: React.FC = () => {
     const { ships } = useShips();
     const { getGearPiece } = useInventory();
     const { engineeringStats } = useEngineeringStats();
+    const { getConfig } = useAutogearConfig();
 
     const [tokenBudget, setTokenBudget] = useState<number>(10000);
     const [result, setResult] = useState<OptimizationResult | null>(null);
@@ -78,9 +80,15 @@ export const EngineeringOptimizer: React.FC = () => {
     const isDisabled = totalStarredShips === 0 || tokenBudget <= 0;
 
     const handleCalculate = useCallback(() => {
-        const res = optimizeEngineering(tokenBudget, ships, engineeringStats, getGearPiece);
+        const res = optimizeEngineering(
+            tokenBudget,
+            ships,
+            engineeringStats,
+            getGearPiece,
+            (shipId) => getConfig(shipId)?.shipRole ?? null
+        );
         setResult(res);
-    }, [tokenBudget, ships, engineeringStats, getGearPiece]);
+    }, [tokenBudget, ships, engineeringStats, getGearPiece, getConfig]);
 
     const renderRightColumn = () => {
         if (!result) {

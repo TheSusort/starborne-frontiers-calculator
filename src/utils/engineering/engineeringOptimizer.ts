@@ -1,6 +1,7 @@
 import type { Ship } from '../../types/ship';
 import type { EngineeringStats, EngineeringStat, StatName, Stat } from '../../types/stats';
 import type { GearPiece } from '../../types/gear';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import {
     ENGINEERING_STATS_BY_ROLE,
     getUpgradeCost,
@@ -85,7 +86,8 @@ export function optimizeEngineering(
     budget: number,
     ships: Ship[],
     engineeringStats: EngineeringStats,
-    getGearPiece: (id: string) => GearPiece | undefined
+    getGearPiece: (id: string) => GearPiece | undefined,
+    getShipRole?: (shipId: string) => ShipTypeName | null
 ): OptimizationResult {
     const candidates: UpgradeRecommendation[] = [];
 
@@ -141,8 +143,9 @@ export function optimizeEngineering(
                 );
                 const modifiedStats = modifiedResult.final;
 
-                const baseScore = calculateRoleScore(ship.type, baseStats);
-                const newScore = calculateRoleScore(ship.type, modifiedStats);
+                const scoreRole = getShipRole?.(ship.id) ?? ship.type;
+                const baseScore = calculateRoleScore(scoreRole, baseStats);
+                const newScore = calculateRoleScore(scoreRole, modifiedStats);
                 // Note: DEFENDER_SECURITY and SUPPORTER_SHIELD multiply by `security`.
                 // If security is 0 (typical for gear-less ships), baseScore is 0 and pct
                 // falls through to 0 — the security track will appear valueless. In practice,
