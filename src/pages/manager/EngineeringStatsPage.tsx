@@ -6,6 +6,7 @@ import { PageLayout, CollapsibleForm, Tabs } from '../../components/ui';
 import { useNotification } from '../../hooks/useNotification';
 import { EngineeringStatsList } from '../../components/engineering/EngineeringStatsList';
 import { EngineeringPreviewTab } from '../../components/engineering/EngineeringPreviewTab';
+import { EngineeringOptimizer } from '../../components/engineering/EngineeringOptimizer';
 import { Loader } from '../../components/ui/Loader';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -15,6 +16,7 @@ import { ENGINEERING_TABS_TUTORIAL } from '../../constants/tutorialSteps';
 const TABS = [
     { id: 'stats', label: 'Engineering Stats', dataTutorial: 'engineering-tab-stats' },
     { id: 'preview', label: 'Preview Upgrade', dataTutorial: 'engineering-tab-preview' },
+    { id: 'optimizer', label: 'Optimizer' },
 ];
 
 export const EngineeringStatsPage: React.FC = () => {
@@ -120,6 +122,8 @@ export const EngineeringStatsPage: React.FC = () => {
                 )}
 
                 {activeTab === 'preview' && <EngineeringPreviewTab />}
+
+                {activeTab === 'optimizer' && <EngineeringOptimizer />}
             </PageLayout>
         </>
     );
