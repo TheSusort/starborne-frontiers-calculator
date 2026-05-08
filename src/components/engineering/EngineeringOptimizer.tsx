@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -77,10 +77,10 @@ export const EngineeringOptimizer: React.FC = () => {
     );
     const isDisabled = totalStarredShips === 0 || tokenBudget <= 0;
 
-    const handleCalculate = () => {
+    const handleCalculate = useCallback(() => {
         const res = optimizeEngineering(tokenBudget, ships, engineeringStats, getGearPiece);
         setResult(res);
-    };
+    }, [tokenBudget, ships, engineeringStats, getGearPiece]);
 
     const renderRightColumn = () => {
         if (!result) {
@@ -139,13 +139,13 @@ export const EngineeringOptimizer: React.FC = () => {
     return (
         <div className="flex flex-row flex-wrap gap-6">
             {/* Left column */}
-            <div className="flex flex-col gap-4" style={{ width: '220px', minWidth: '180px' }}>
+            <div className="flex flex-col gap-4 w-[220px] min-w-[180px]">
                 <Input
                     label="Token Budget"
                     type="number"
                     min={0}
                     value={tokenBudget}
-                    onChange={(e) => setTokenBudget(Number(e.target.value))}
+                    onChange={(e) => setTokenBudget(Math.max(0, Number(e.target.value) || 0))}
                 />
 
                 <div className="card">
