@@ -477,3 +477,43 @@ export function calculatePriorityScore(
     // Apply penalties as percentage reduction of base score
     return Math.max(0, baseScore * (1 - penalties / 100));
 }
+
+/**
+ * Score a ship by role given fully-calculated stats.
+ * Returns 0 for unrecognised roles.
+ *
+ * Note: set-bonus params (setCount) are omitted intentionally — engineering stats
+ * are global per role and gear-set composition is out of scope here. Sub-roles that
+ * reward full sets (SUPPORTER_BUFFER, DEBUFFER_CORROSION, etc.) will score slightly
+ * lower than reality, but the relative ranking between engineering tracks is still correct.
+ */
+export function calculateRoleScore(role: ShipTypeName, stats: BaseStats): number {
+    switch (role) {
+        case 'ATTACKER':
+            return calculateAttackerScore(stats);
+        case 'DEFENDER':
+            return calculateDefenderScore(stats);
+        case 'DEFENDER_SECURITY':
+            return calculateDefenderSecurityScore(stats);
+        case 'DEBUFFER':
+            return calculateDebufferScore(stats);
+        case 'DEBUFFER_DEFENSIVE':
+            return calculateDefensiveDebufferScore(stats);
+        case 'DEBUFFER_DEFENSIVE_SECURITY':
+            return calculateDefensiveSecurityDebufferScore(stats);
+        case 'DEBUFFER_BOMBER':
+            return calculateBomberDebufferScore(stats);
+        case 'DEBUFFER_CORROSION':
+            return calculateCorrosionDebufferScore(stats);
+        case 'SUPPORTER':
+            return calculateHealerScore(stats);
+        case 'SUPPORTER_BUFFER':
+            return calculateBufferScore(stats);
+        case 'SUPPORTER_OFFENSIVE':
+            return calculateOffensiveSupporterScore(stats);
+        case 'SUPPORTER_SHIELD':
+            return calculateShieldSupporterScore(stats);
+        default:
+            return 0;
+    }
+}
