@@ -1620,7 +1620,8 @@ const DocumentationPage: React.FC = () => {
                             <p className="text-theme-text">
                                 The Engineering Stats page allows you to manage per-ship-type
                                 engineering bonuses that apply to all ships of that type in your
-                                fleet. The page has two tabs: Engineering Stats and Preview Upgrade.
+                                fleet. The page has three tabs: Engineering Stats, Preview Upgrade,
+                                and Optimizer.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
@@ -1659,6 +1660,18 @@ const DocumentationPage: React.FC = () => {
                                         role
                                     </li>
                                 </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Optimizer Tab</h4>
+                                <p className="text-theme-text">
+                                    The <strong>Optimizer</strong> tab recommends the most impactful
+                                    engineering upgrades for your token budget. It scores each
+                                    possible next-level upgrade by the average % score improvement
+                                    it would give your starred ships of that role, divided by the
+                                    token cost. The ranked queue shows you exactly where to spend
+                                    for maximum fleet impact.
+                                </p>
                             </div>
 
                             <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
