@@ -482,10 +482,13 @@ export function calculatePriorityScore(
  * Score a ship by role given fully-calculated stats.
  * Returns 0 for unrecognised roles.
  *
- * Note: set-bonus params (setCount) are omitted intentionally — engineering stats
- * are global per role and gear-set composition is out of scope here. Sub-roles that
- * reward full sets (SUPPORTER_BUFFER, DEBUFFER_CORROSION, etc.) will score slightly
- * lower than reality, but the relative ranking between engineering tracks is still correct.
+ * Note: set-bonus params (setCount, arcaneSiegeMultiplier) are omitted intentionally —
+ * engineering stats are global per role and gear-set composition is out of scope here.
+ * Sub-roles that reward full sets (SUPPORTER_BUFFER, DEBUFFER_CORROSION, etc.) will score
+ * slightly lower than reality, but the relative ranking between engineering tracks is correct.
+ *
+ * @see calculatePriorityScore - The role switch in that function mirrors the one here.
+ * MAINTENANCE: When a new ShipTypeName is added, both switches must be updated.
  */
 export function calculateRoleScore(role: ShipTypeName, stats: BaseStats): number {
     switch (role) {

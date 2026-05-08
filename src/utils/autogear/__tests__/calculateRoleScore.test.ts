@@ -53,4 +53,36 @@ describe('calculateRoleScore', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
         expect(calculateRoleScore('UNKNOWN_ROLE' as any, baseStats)).toBe(0);
     });
+
+    it('returns a positive number for DEFENDER_SECURITY role', () => {
+        expect(calculateRoleScore('DEFENDER_SECURITY', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for DEBUFFER_DEFENSIVE role', () => {
+        expect(calculateRoleScore('DEBUFFER_DEFENSIVE', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for DEBUFFER_DEFENSIVE_SECURITY role', () => {
+        expect(calculateRoleScore('DEBUFFER_DEFENSIVE_SECURITY', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for DEBUFFER_BOMBER role', () => {
+        expect(calculateRoleScore('DEBUFFER_BOMBER', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for DEBUFFER_CORROSION role', () => {
+        expect(calculateRoleScore('DEBUFFER_CORROSION', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for SUPPORTER_BUFFER role', () => {
+        expect(calculateRoleScore('SUPPORTER_BUFFER', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for SUPPORTER_OFFENSIVE role', () => {
+        expect(calculateRoleScore('SUPPORTER_OFFENSIVE', baseStats)).toBeGreaterThan(0);
+    });
+
+    it('returns a positive number for SUPPORTER_SHIELD role', () => {
+        expect(calculateRoleScore('SUPPORTER_SHIELD', baseStats)).toBeGreaterThan(0);
+    });
 });
