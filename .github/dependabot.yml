@@ -8,6 +8,9 @@ updates:
       time: "09:00"
       timezone: Europe/Oslo
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: development
