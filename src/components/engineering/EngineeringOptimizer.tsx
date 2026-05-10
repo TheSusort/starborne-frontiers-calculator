@@ -3,7 +3,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
-import { Button, Input, StatCard } from '../ui';
+import { Button, Input, StatCard, Checkbox } from '../ui';
 import {
     optimizeEngineering,
     type OptimizationResult,
@@ -25,6 +25,7 @@ interface RecommendationRowProps {
 }
 
 const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, rank }) => {
+    const benefiting = rec.shipBreakdown.filter((s) => s.improvement > 0);
     return (
         <div className="card">
             <div className="flex items-start justify-between gap-4">
@@ -41,9 +42,18 @@ const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, rank }) => {
                             Level {rec.currentLevel} &rarr; {rec.nextLevel} &middot;{' '}
                             {rec.tokenCost.toLocaleString()} tokens
                         </div>
-                        <div className="text-xs text-theme-text-secondary mt-0.5">
-                            &ldquo;{ROLE_LABELS[rec.role].toLowerCase()} score&rdquo;
-                        </div>
+                        {benefiting.length > 0 && (
+                            <div className="text-xs text-theme-text-secondary mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                                {benefiting.map((s) => (
+                                    <span key={s.shipId}>
+                                        {s.shipName}{' '}
+                                        <span className="text-green-400">
+                                            +{s.improvement.toFixed(2)}%
+                                        </span>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <span className="text-green-400 font-semibold text-sm shrink-0">
@@ -61,6 +71,7 @@ export const EngineeringOptimizer: React.FC = () => {
     const { getConfig } = useAutogearConfig();
 
     const [tokenBudget, setTokenBudget] = useState<number>(10000);
+    const [onlyImprovingUpgrades, setOnlyImprovingUpgrades] = useState(true);
     const [result, setResult] = useState<OptimizationResult | null>(null);
 
     const starredCountByRole = useMemo(() => {
@@ -85,10 +96,11 @@ export const EngineeringOptimizer: React.FC = () => {
             ships,
             engineeringStats,
             getGearPiece,
-            (shipId) => getConfig(shipId)?.shipRole ?? null
+            (shipId) => getConfig(shipId)?.shipRole ?? null,
+            onlyImprovingUpgrades
         );
         setResult(res);
-    }, [tokenBudget, ships, engineeringStats, getGearPiece, getConfig]);
+    }, [tokenBudget, ships, engineeringStats, getGearPiece, getConfig, onlyImprovingUpgrades]);
 
     const renderRightColumn = () => {
         if (!result) {
@@ -147,19 +159,21 @@ export const EngineeringOptimizer: React.FC = () => {
     return (
         <div className="flex flex-row flex-wrap gap-6">
             {/* Left column */}
-            <div className="flex flex-col gap-4 w-[220px] min-w-[180px]">
-                <Input
-                    label="Token Budget"
-                    type="number"
-                    min={0}
-                    value={tokenBudget}
-                    onChange={(e) => {
-                        setTokenBudget(Math.max(0, Number(e.target.value) || 0));
-                        setResult(null);
-                    }}
-                />
+            <div className="flex flex-col gap-4 w-[220px] min-w-[180px] card">
+                <div>
+                    <Input
+                        label="Token Budget"
+                        type="number"
+                        min={0}
+                        value={tokenBudget}
+                        onChange={(e) => {
+                            setTokenBudget(Math.max(0, Number(e.target.value) || 0));
+                            setResult(null);
+                        }}
+                    />
+                </div>
 
-                <div className="card">
+                <div className="">
                     <div className="text-sm font-medium mb-2">Starred Fleet</div>
                     {totalStarredShips === 0 ? (
                         <p className="text-xs text-theme-text-secondary">
@@ -181,8 +195,17 @@ export const EngineeringOptimizer: React.FC = () => {
                     )}
                 </div>
 
+                <Checkbox
+                    label="Only show upgrades that improve score"
+                    checked={onlyImprovingUpgrades}
+                    onChange={(checked) => {
+                        setOnlyImprovingUpgrades(checked);
+                        setResult(null);
+                    }}
+                />
+
                 <Button variant="primary" disabled={isDisabled} onClick={handleCalculate}>
-                    Calculate Optimal Spend
+                    Calculate
                 </Button>
             </div>
 

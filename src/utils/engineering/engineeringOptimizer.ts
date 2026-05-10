@@ -13,6 +13,12 @@ import {
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { calculateRoleScore } from '../autogear/priorityScore';
 
+export interface ShipImprovement {
+    shipId: string;
+    shipName: string;
+    improvement: number;
+}
+
 export interface UpgradeRecommendation {
     role: BaseRoleName;
     statName: StatName;
@@ -23,6 +29,8 @@ export interface UpgradeRecommendation {
     percentImprovement: number;
     /** percentImprovement / tokenCost — used for ranking */
     valueRatio: number;
+    /** Per-ship improvement breakdown */
+    shipBreakdown: ShipImprovement[];
 }
 
 export interface OptimizationResult {
@@ -87,7 +95,8 @@ export function optimizeEngineering(
     ships: Ship[],
     engineeringStats: EngineeringStats,
     getGearPiece: (id: string) => GearPiece | undefined,
-    getShipRole?: (shipId: string) => ShipTypeName | null
+    getShipRole?: (shipId: string) => ShipTypeName | null,
+    onlyImprovingUpgrades?: boolean
 ): OptimizationResult {
     const candidates: UpgradeRecommendation[] = [];
 
@@ -117,7 +126,7 @@ export function optimizeEngineering(
             const modifiedEngStats = withStatIncrement(engineeringStats, role, statName, increment);
 
             // Calculate percent improvement for each starred ship
-            const pctValues: number[] = [];
+            const shipBreakdown: ShipImprovement[] = [];
             for (const ship of starredShips) {
                 const baseEngStat = getEngStatForShip(engineeringStats, ship);
                 const baseResult = calculateTotalStats(
@@ -151,13 +160,16 @@ export function optimizeEngineering(
                 // falls through to 0 — the security track will appear valueless. In practice,
                 // real ships have gear that provides security, so this rarely matters.
                 const pct = baseScore > 0 ? ((newScore - baseScore) / baseScore) * 100 : 0;
-                pctValues.push(pct);
+                shipBreakdown.push({ shipId: ship.id, shipName: ship.name, improvement: pct });
             }
 
             const percentImprovement =
-                pctValues.length > 0
-                    ? pctValues.reduce((sum, v) => sum + v, 0) / pctValues.length
+                shipBreakdown.length > 0
+                    ? shipBreakdown.reduce((sum, s) => sum + s.improvement, 0) /
+                      shipBreakdown.length
                     : 0;
+
+            if (onlyImprovingUpgrades && percentImprovement <= 0) continue;
 
             const valueRatio = percentImprovement / tokenCost;
 
@@ -169,6 +181,7 @@ export function optimizeEngineering(
                 tokenCost,
                 percentImprovement,
                 valueRatio,
+                shipBreakdown,
             });
         }
     }
