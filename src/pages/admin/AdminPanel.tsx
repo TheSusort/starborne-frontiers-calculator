@@ -561,12 +561,12 @@ export const AdminPanel: React.FC = () => {
                                         placeholder="Search templates by name (min 2 characters)..."
                                     />
                                     {filteredTemplates.length > 0 && !selectedTemplate && (
-                                        <div className="absolute z-10 w-full mt-1 card shadow-lg max-h-60 overflow-y-auto">
+                                        <div className="absolute z-10 w-full mt-1 bg-dark border border-dark-border shadow-lg max-h-60 overflow-y-auto">
                                             {filteredTemplates.map((template) => (
                                                 <button
                                                     key={template.id}
                                                     type="button"
-                                                    className="w-full text-left px-4 py-2 hover:bg-dark-700 text-sm transition-colors"
+                                                    className="w-full text-left px-4 py-2 hover:bg-dark-lighter text-sm transition-colors"
                                                     onClick={() => handleSelectTemplate(template)}
                                                 >
                                                     <span className="font-medium">
