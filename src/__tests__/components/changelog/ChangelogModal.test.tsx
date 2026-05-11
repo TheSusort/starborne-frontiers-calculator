@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ChangelogModal } from '../../../components/changelog/ChangelogModal';
 
-// Sidebar imports /favicon.ico?url which is not available in test environment
+// Modal → ui/index → Sidebar → /favicon.ico?url which Vitest cannot resolve
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 
 const baseProps = {
