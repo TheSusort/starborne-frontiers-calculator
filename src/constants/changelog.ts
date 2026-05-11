@@ -8,6 +8,9 @@ export const CURRENT_VERSION = '1.60.0';
 export const UNRELEASED_CHANGES: string[] = [
     // Add new feature descriptions here — they appear in the changelog
     // but do NOT trigger the auto-popup until promoted to a release.
+    'Added Engineering Optimizer — optimize your engineering spend to maximize the stats of your starred ships.',
+    'Added Autogear All button to the starred ship alerts panel — send all starred ships with missing gear to autogear in one click.',
+    'Added Select All button to the Suggested Next Autogear panel — load all suggestions into the autogear queue at once.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
