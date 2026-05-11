@@ -135,6 +135,10 @@ TailwindCSS utility-first, dark theme by default. Avoid inline styles unless dyn
 
 When building or changing user-facing features, update `src/pages/DocumentationPage.tsx` to keep in-app docs in sync with the codebase.
 
+### Changelog Entries
+
+The project uses a weekly release cycle. Features ship continuously but changelog entries are batched. When making a `feat:` or `fix:` commit for something user-facing, add a plain-English description to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
+
 ## Testing
 
 **Framework:** Vitest + React Testing Library. Focus on utility functions (autogear scoring, stat calculations) and data transformations (import pipeline).
