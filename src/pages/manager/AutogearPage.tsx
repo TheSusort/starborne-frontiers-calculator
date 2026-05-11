@@ -302,18 +302,40 @@ export const AutogearPage: React.FC = () => {
 
     // useEffect hooks
     useEffect(() => {
-        if (hasInitializedFromParams) return; // Don't run if already initialized
+        if (hasInitializedFromParams) return;
 
         const shipId = searchParams.get('shipId');
+        const shipIds = searchParams.get('shipIds');
 
-        // Clear search params
+        // Clear the browser URL bar (does not invalidate the captured searchParams snapshot)
         window.history.replaceState({}, '', window.location.pathname);
 
-        if (shipId) {
+        if (shipIds) {
+            const ids = shipIds.split(',').filter(Boolean);
+            const resolved = ids
+                .map((id) => getShipById(id))
+                .filter((s): s is Ship => s !== null && s !== undefined);
+            if (resolved.length > 0) {
+                setSelectedShips(resolved);
+                let anyConfig = false;
+                for (const ship of resolved) {
+                    const savedConfig = getConfig(ship.id);
+                    if (savedConfig) {
+                        anyConfig = true;
+                        updateShipConfig(ship.id, {
+                            ...savedConfig,
+                            fleetBuffs: savedConfig.fleetBuffs ?? [],
+                        });
+                    }
+                }
+                if (anyConfig) {
+                    addNotification('success', 'Loaded saved configuration');
+                }
+            }
+        } else if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
                 setSelectedShips([ship]);
-                // Load saved config for this ship
                 const savedConfig = getConfig(shipId);
                 if (savedConfig) {
                     updateShipConfig(shipId, {
