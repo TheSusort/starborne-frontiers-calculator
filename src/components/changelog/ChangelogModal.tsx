@@ -1,12 +1,14 @@
 import React from 'react';
 import { ChangelogEntry } from '../../types/changelog';
 import { Modal } from '../ui';
+import { UNRELEASED_CHANGES } from '../../constants/changelog';
 
 interface ChangelogModalProps {
     isOpen: boolean;
     onClose: () => void;
     entries: ChangelogEntry[];
     lastSeenVersion: string;
+    unreleasedChanges?: string[];
 }
 
 export const ChangelogModal: React.FC<ChangelogModalProps> = ({
@@ -14,6 +16,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
     onClose,
     entries,
     lastSeenVersion,
+    unreleasedChanges = UNRELEASED_CHANGES,
 }) => {
     // create a function to compare versions of the format x.y.z, all numbers, return true if version1 is greater than version2
     const compareVersions = (version1: string, version2: string) => {
@@ -31,6 +34,16 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="What's New">
             <div className="overflow-y-auto max-h-[60vh]">
+                {unreleasedChanges.length > 0 && (
+                    <div className="mb-6">
+                        <h3 className="font-bold mb-2">Unreleased</h3>
+                        <ul className="list-disc list-inside space-y-1">
+                            {unreleasedChanges.map((change, index) => (
+                                <li key={index}>{change}</li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
                 {entries.map((entry) => (
                     <div key={entry.version}>
                         {compareVersions(entry.version, lastSeenVersion) && (
