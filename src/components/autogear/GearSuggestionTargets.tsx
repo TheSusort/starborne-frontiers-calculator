@@ -13,12 +13,14 @@ interface GearSuggestionTargetsProps {
     targets: GearSuggestionTarget[];
     onSelectShip: (ship: Ship) => void;
     onDismiss: () => void;
+    onSelectAll?: (ships: Ship[]) => void;
 }
 
 export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
     targets,
     onSelectShip,
     onDismiss,
+    onSelectAll,
 }) => {
     if (targets.length === 0) return null;
 
@@ -26,13 +28,24 @@ export const GearSuggestionTargets: React.FC<GearSuggestionTargetsProps> = ({
         <div className="card space-y-3">
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-theme-text">Suggested Next Autogear</h4>
-                <button
-                    onClick={onDismiss}
-                    className="text-theme-text-secondary hover:text-theme-text p-1"
-                    title="Dismiss"
-                >
-                    <CloseIcon className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                    {targets.length >= 2 && onSelectAll && (
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => onSelectAll(targets.map((t) => t.ship))}
+                        >
+                            Select All
+                        </Button>
+                    )}
+                    <button
+                        onClick={onDismiss}
+                        className="text-theme-text-secondary hover:text-theme-text p-1"
+                        title="Dismiss"
+                    >
+                        <CloseIcon className="h-4 w-4" />
+                    </button>
+                </div>
             </div>
             <div className="space-y-2">
                 {targets.map(({ ship, emptySlotCount, isDonor }) => (
