@@ -609,6 +609,32 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
+                                    Starred Ship Alerts
+                                </h4>
+                                <p className="text-theme-text mb-2">
+                                    When starred ships have empty gear slots, a floating panel
+                                    appears in the bottom-right corner:
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click a ship name to go directly to Autogear with that ship
+                                        pre-selected
+                                    </li>
+                                    <li>
+                                        When there are 2 or more ships, an{' '}
+                                        <span className="text-primary">Autogear All</span> button
+                                        appears — it loads all of them into the Autogear queue at
+                                        once
+                                    </li>
+                                    <li>
+                                        The panel can be minimized to a small badge and restored by
+                                        clicking the badge
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
                                     Filtering and Sorting
                                 </h4>
                                 <p className="text-theme-text mb-2">
@@ -1505,6 +1531,21 @@ const DocumentationPage: React.FC = () => {
                                     bonuses, to easily locate them in game.
                                 </li>
                             </ul>
+
+                            <h4 className="text-lg font-semibold mt-6 mb-2">
+                                Suggested Next Autogear
+                            </h4>
+                            <p className="text-theme-text mb-4">
+                                After equipping suggestions, a{' '}
+                                <span className="text-primary">Suggested Next Autogear</span> panel
+                                appears showing ships that may need attention — starred ships with
+                                empty slots, and any ships whose gear was just reassigned (donor
+                                ships). Click <span className="text-primary">Select</span> on a ship
+                                to queue it as the next autogear target, or click{' '}
+                                <span className="text-primary">Select All</span> (visible when there
+                                are 2 or more suggestions) to load all of them into the queue at
+                                once.
+                            </p>
 
                             <h4 className="text-lg font-semibold mt-6 mb-2">Simulation Results</h4>
                             <p className="text-theme-text">
