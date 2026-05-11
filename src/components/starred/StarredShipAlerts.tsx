@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShips } from '../../contexts/ShipsContext';
 import { getEmptySlotCount } from '../../utils/ship/missingGear';
+import { Button } from '../ui';
 import { StarIcon } from '../ui/icons';
 import { ChevronDownIcon, ChevronUpIcon } from '../ui/icons/ChevronIcons';
 
@@ -41,6 +42,11 @@ export const StarredShipAlerts: React.FC = () => {
         void navigate(`/autogear?shipId=${shipId}`);
     };
 
+    const handleAutogearAll = () => {
+        const ids = alertShips.map((s) => s.id).join(',');
+        void navigate(`/autogear?shipIds=${ids}`);
+    };
+
     if (minimized) {
         return (
             <button
@@ -64,13 +70,20 @@ export const StarredShipAlerts: React.FC = () => {
                         Missing Gear ({alertShips.length})
                     </span>
                 </div>
-                <button
-                    onClick={handleToggleMinimized}
-                    className="text-theme-text-secondary hover:text-theme-text transition-colors"
-                    aria-label="Minimize panel"
-                >
-                    <ChevronDownIcon className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                    {alertShips.length >= 2 && (
+                        <Button variant="secondary" size="xs" onClick={handleAutogearAll}>
+                            Autogear All
+                        </Button>
+                    )}
+                    <button
+                        onClick={handleToggleMinimized}
+                        className="text-theme-text-secondary hover:text-theme-text transition-colors"
+                        aria-label="Minimize panel"
+                    >
+                        <ChevronDownIcon className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
             <ul className="overflow-y-auto flex-1 py-1">
                 {alertShips.map((ship) => (
