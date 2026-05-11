@@ -2,6 +2,14 @@ import { ChangelogEntry } from '../types/changelog';
 
 export const CURRENT_VERSION = '1.60.0';
 
+// RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
+// CHANGELOG (with the new version + today's date), clear this array back to [],
+// and bump CURRENT_VERSION. All three steps must happen together.
+export const UNRELEASED_CHANGES: string[] = [
+    // Add new feature descriptions here — they appear in the changelog
+    // but do NOT trigger the auto-popup until promoted to a release.
+];
+
 export const CHANGELOG: ChangelogEntry[] = [
     {
         version: '1.60.0',
