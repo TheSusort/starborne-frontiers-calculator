@@ -923,6 +923,24 @@ export const AutogearPage: React.FC = () => {
         handleShipSelect(ship, 0);
     };
 
+    const handleSelectAllSuggestionTargets = (ships: Ship[]) => {
+        setSelectedShips(ships);
+        let anyConfig = false;
+        for (const ship of ships) {
+            const savedConfig = getConfig(ship.id);
+            if (savedConfig) {
+                anyConfig = true;
+                updateShipConfig(ship.id, {
+                    ...savedConfig,
+                    fleetBuffs: savedConfig.fleetBuffs ?? [],
+                });
+            }
+        }
+        if (anyConfig) {
+            addNotification('success', 'Loaded saved configuration');
+        }
+    };
+
     const handleAddShip = () => {
         // Add a placeholder that will be replaced when user selects a ship
         setSelectedShips([...selectedShips, null]); // Will be replaced when user selects a ship
@@ -980,6 +998,7 @@ export const AutogearPage: React.FC = () => {
                                 <GearSuggestionTargets
                                     targets={suggestionTargets}
                                     onSelectShip={handleSelectSuggestionTarget}
+                                    onSelectAll={handleSelectAllSuggestionTargets}
                                     onDismiss={() => setSuggestionsDismissed(true)}
                                 />
                             )}
