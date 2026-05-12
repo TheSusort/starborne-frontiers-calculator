@@ -99,6 +99,11 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
+                const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
+                const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
+                const autoFilled = new Set<'activeMultiplier' | 'chargedMultiplier'>();
+                if (activeParsed > 0) autoFilled.add('activeMultiplier');
+                if (chargedParsed > 0) autoFilled.add('chargedMultiplier');
                 return {
                     configs: [
                         {
@@ -109,10 +114,17 @@ const DPSCalculatorPage: React.FC = () => {
                             crit: Math.round(final.crit),
                             critDamage: Math.round(final.critDamage),
                             defensePenetration: Math.round(final.defensePenetration || 0),
-                            activeMultiplier: 100,
-                            chargedMultiplier: 0,
+                            activeMultiplier: activeParsed > 0 ? activeParsed : 100,
+                            chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: 0,
-                            startCharged: false,
+                            startCharged: detectFullyCharged([
+                                ship.activeSkillText,
+                                ship.chargeSkillText,
+                                ship.firstPassiveSkillText,
+                                ship.secondPassiveSkillText,
+                                ship.thirdPassiveSkillText,
+                            ]),
+                            autoFilledFields: autoFilled,
                             activeDoTs: [...DEFAULT_DOT_CONFIG],
                             chargedDoTs: [...DEFAULT_DOT_CONFIG],
                         },
@@ -218,6 +230,11 @@ const DPSCalculatorPage: React.FC = () => {
     // Remove a ship configuration
     const removeConfig = (id: string) => {
         setConfigs((prev) => prev.filter((config) => config.id !== id));
+        setSkillRefOpen((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
     };
 
     // Update a ship configuration
@@ -263,6 +280,8 @@ const DPSCalculatorPage: React.FC = () => {
         const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
         const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
         const newAutoFilled = new Set<'activeMultiplier' | 'chargedMultiplier'>();
+        if (activeParsed > 0) newAutoFilled.add('activeMultiplier');
+        if (chargedParsed > 0) newAutoFilled.add('chargedMultiplier');
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
@@ -274,14 +293,8 @@ const DPSCalculatorPage: React.FC = () => {
                     crit: Math.round(final.crit),
                     critDamage: Math.round(final.critDamage),
                     defensePenetration: Math.round(final.defensePenetration || 0),
-                    activeMultiplier:
-                        activeParsed > 0
-                            ? (newAutoFilled.add('activeMultiplier'), activeParsed)
-                            : c.activeMultiplier,
-                    chargedMultiplier:
-                        chargedParsed > 0
-                            ? (newAutoFilled.add('chargedMultiplier'), chargedParsed)
-                            : c.chargedMultiplier,
+                    activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
+                    chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     startCharged: detectFullyCharged([
                         ship.activeSkillText,
                         ship.chargeSkillText,
@@ -697,35 +710,35 @@ const DPSCalculatorPage: React.FC = () => {
                                                 }
                                             />
                                         </div>
-                                        {config.shipId && (
-                                            <>
-                                                <Button
-                                                    variant="link"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setSkillRefOpen((prev) => {
-                                                            const next = new Set(prev);
-                                                            if (next.has(config.id)) {
-                                                                next.delete(config.id);
-                                                            } else {
-                                                                next.add(config.id);
+                                        {config.shipId &&
+                                            (() => {
+                                                const selectedShip = getShipById(config.shipId);
+                                                if (!selectedShip) return null;
+                                                return (
+                                                    <>
+                                                        <Button
+                                                            variant="link"
+                                                            size="sm"
+                                                            onClick={() =>
+                                                                setSkillRefOpen((prev) => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(config.id)) {
+                                                                        next.delete(config.id);
+                                                                    } else {
+                                                                        next.add(config.id);
+                                                                    }
+                                                                    return next;
+                                                                })
                                                             }
-                                                            return next;
-                                                        })
-                                                    }
-                                                >
-                                                    Skill Reference{' '}
-                                                    {skillRefOpen.has(config.id) ? '▴' : '▾'}
-                                                </Button>
-                                                <CollapsibleAccordion
-                                                    isOpen={skillRefOpen.has(config.id)}
-                                                >
-                                                    {(() => {
-                                                        const selectedShip = config.shipId
-                                                            ? getShipById(config.shipId)
-                                                            : undefined;
-                                                        if (!selectedShip) return null;
-                                                        return (
+                                                        >
+                                                            Skill Reference{' '}
+                                                            {skillRefOpen.has(config.id)
+                                                                ? '▴'
+                                                                : '▾'}
+                                                        </Button>
+                                                        <CollapsibleAccordion
+                                                            isOpen={skillRefOpen.has(config.id)}
+                                                        >
                                                             <div className="space-y-3">
                                                                 {selectedShip.activeSkillText && (
                                                                     <SkillTooltip
@@ -753,11 +766,10 @@ const DPSCalculatorPage: React.FC = () => {
                                                                     />
                                                                 )}
                                                             </div>
-                                                        );
-                                                    })()}
-                                                </CollapsibleAccordion>
-                                            </>
-                                        )}
+                                                        </CollapsibleAccordion>
+                                                    </>
+                                                );
+                                            })()}
 
                                         {/* DoTs — Active Skill */}
                                         <div className="flex justify-between items-center mb-2">
