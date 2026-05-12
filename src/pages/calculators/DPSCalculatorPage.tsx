@@ -523,6 +523,15 @@ const DPSCalculatorPage: React.FC = () => {
                         <p className="text-sm text-theme-text-secondary mt-2">
                             Shared combat settings applied to all ship configurations
                         </p>
+                        <div className="mt-4">
+                            <GameBuffPicker
+                                label="Enemy Buffs / Debuffs"
+                                relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
+                                excludeTypes={['effect']}
+                                value={enemyBuffs}
+                                onChange={setEnemyBuffs}
+                            />
+                        </div>
                     </div>
 
                     <div className="card">
@@ -536,17 +545,9 @@ const DPSCalculatorPage: React.FC = () => {
                                 'defensePenetration',
                                 'dotDamage',
                             ]}
+                            excludeTypes={['effect']}
                             value={attackerBuffs}
                             onChange={setAttackerBuffs}
-                        />
-                    </div>
-
-                    <div className="card">
-                        <GameBuffPicker
-                            label="Enemy Buffs / Debuffs"
-                            relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
-                            value={enemyBuffs}
-                            onChange={setEnemyBuffs}
                         />
                     </div>
 

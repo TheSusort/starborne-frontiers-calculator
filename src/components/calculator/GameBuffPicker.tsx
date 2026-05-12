@@ -55,6 +55,7 @@ interface GameBuffPickerProps {
     relevantStats: (keyof ParsedBuffEffects)[];
     value: SelectedGameBuff[];
     onChange: (buffs: SelectedGameBuff[]) => void;
+    excludeTypes?: ('buff' | 'debuff' | 'effect')[];
 }
 
 export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
@@ -62,6 +63,7 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     relevantStats,
     value,
     onChange,
+    excludeTypes,
 }) => {
     const [search, setSearch] = useState('');
 
@@ -69,9 +71,10 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
         const q = search.toLowerCase();
         return PARSED_BUFFS.filter(
             (buff) =>
-                buff.name.toLowerCase().includes(q) || buff.description.toLowerCase().includes(q)
+                (!excludeTypes || !excludeTypes.includes(buff.type)) &&
+                (buff.name.toLowerCase().includes(q) || buff.description.toLowerCase().includes(q))
         );
-    }, [search]);
+    }, [search, excludeTypes]);
 
     const selectedNames = useMemo(() => new Set(value.map((s) => s.buffName)), [value]);
 
