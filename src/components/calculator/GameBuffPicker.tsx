@@ -18,7 +18,7 @@ const PARSED_BUFFS = BUFFS.map((buff) => {
         isStackable: stackInfo.stackable,
         maxStacks: stackInfo.maxStacks,
     };
-});
+}).sort((a, b) => a.name.localeCompare(b.name));
 
 const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     attack: 'Atk',
