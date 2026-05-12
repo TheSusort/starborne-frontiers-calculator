@@ -13,6 +13,16 @@ interface SkillRow {
 }
 
 export const ShipSkills: React.FC<ShipSkillsProps> = ({ ship }) => {
+    const refitCount = ship.refits.length;
+    const activePassive: SkillRow | null =
+        refitCount >= 4 && ship.thirdPassiveSkillText
+            ? { label: 'Passive R4', text: ship.thirdPassiveSkillText }
+            : refitCount >= 2 && ship.secondPassiveSkillText
+              ? { label: 'Passive R2', text: ship.secondPassiveSkillText }
+              : refitCount >= 1 && ship.firstPassiveSkillText
+                ? { label: 'Passive R1', text: ship.firstPassiveSkillText }
+                : null;
+
     const rows: SkillRow[] = [
         { label: 'Active', text: ship.activeSkillText ?? '' },
         {
@@ -20,9 +30,7 @@ export const ShipSkills: React.FC<ShipSkillsProps> = ({ ship }) => {
             text: ship.chargeSkillText ?? '',
             charge: ship.chargeSkillCharge,
         },
-        { label: 'Passive R1', text: ship.firstPassiveSkillText ?? '' },
-        { label: 'Passive R2', text: ship.secondPassiveSkillText ?? '' },
-        { label: 'Passive R4', text: ship.thirdPassiveSkillText ?? '' },
+        ...(activePassive ? [activePassive] : []),
     ].filter((row) => row.text.length > 0);
 
     if (rows.length === 0) return null;
