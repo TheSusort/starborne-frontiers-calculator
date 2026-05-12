@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     // but do NOT trigger the auto-popup until promoted to a release.
     'Added Engineering Optimizer — optimize your engineering spend to maximize the stats of your starred ships.',
     'Added Autogear All and Select All buttons — queue multiple ships for autogear at once from the starred ship alerts panel and the Suggested Next Autogear panel.',
+    'Ship skills are now shown on the Ship Details page. The DPS Calculator auto-fills skill damage multipliers and detects "Start Charged" from your selected ship\'s skill data.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

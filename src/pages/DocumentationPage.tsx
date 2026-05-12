@@ -732,7 +732,42 @@ const DocumentationPage: React.FC = () => {
                                 <li>Implants</li>
                                 <li>Score breakdown by gear slots</li>
                                 <li>Upgrade analysis based on gear slots</li>
+                                <li>Ship skills</li>
                             </ul>
+
+                            <div className="p-4 bg-dark-lighter mt-4">
+                                <h4 className="font-semibold text-primary mb-2">Skills Card</h4>
+                                <p className="text-theme-text mb-2">
+                                    The Skills card displays your ship&apos;s skills with detailed
+                                    information:
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <span className="text-primary">
+                                            Skill Name & Damage Type:
+                                        </span>{' '}
+                                        Displayed with color-coded damage type indicator
+                                    </li>
+                                    <li>
+                                        <span className="text-primary">Base Damage:</span> The base
+                                        damage value of the skill
+                                    </li>
+                                    <li>
+                                        <span className="text-primary">Damage Formula:</span> How
+                                        the skill damage scales (e.g., &quot;Damage of ATTACK&quot;,
+                                        &quot;Damage of DEFENCE&quot;, etc.)
+                                    </li>
+                                    <li>
+                                        <span className="text-primary">Multiplier:</span> The
+                                        scaling factor for the skill (percentage of the base stat)
+                                    </li>
+                                    <li>
+                                        <span className="text-primary">Special Properties:</span>{' '}
+                                        Such as &quot;Start Charged&quot; which indicates the skill
+                                        begins combat already charged
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                     </section>
 
@@ -1975,9 +2010,33 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         DPS Calculator
                                     </h4>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         Calculate damage per second for ships, factoring in attack,
                                         crit rate, crit damage, and defense penetration.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        When you select a ship, the calculator automatically
+                                        populates skill damage multipliers from your ship&apos;s
+                                        skill data. The &quot;Start Charged&quot; checkbox is also
+                                        automatically enabled if your selected ship&apos;s skill has
+                                        the Start Charged property.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Skill Damage Multipliers:
+                                        </span>{' '}
+                                        If your ship has skills that deal damage based on specific
+                                        stats (e.g., ATTACK, DEFENCE, HACKING), those multipliers
+                                        are auto-filled. Skills with HP or DEFENCE-based damage may
+                                        need to be added as buffs manually in the appropriate
+                                        section.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">Start Charged:</span> Some
+                                        ships have skills that begin combat already charged. When
+                                        detected from your ship&apos;s skill data, this checkbox
+                                        will be pre-checked, and the damage from your charged skill
+                                        is included in round 1 of the simulation.
                                     </p>
                                 </div>
 
