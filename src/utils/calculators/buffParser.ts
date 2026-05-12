@@ -5,10 +5,10 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
 
     const extract = (pattern: RegExp): number | undefined => {
         const m = description.match(pattern);
-        return m ? parseInt(m[1], 10) : undefined;
+        return m ? parseFloat(m[1]) : undefined;
     };
 
-    const attack = extract(/([+-]\d+)%\s*(?:Outgoing\s*)?(?:Direct\s*)?Attack/);
+    const attack = extract(/([+-]\d+(?:\.\d+)?)%\s*(?:Outgoing\s*)?(?:Direct\s*)?Attack/);
     if (attack !== undefined) effects.attack = attack;
 
     const crit = extract(/([+-]\d+)%\s*(?:Outgoing\s*)?Crit\s*Rate/);

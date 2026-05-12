@@ -9,6 +9,14 @@ describe('parseBuffEffects', () => {
         it('parses negative attack', () => {
             expect(parseBuffEffects('Attack Down II', '-30% Attack')).toEqual({ attack: -30 });
         });
+        it('parses Outgoing Attack form', () => {
+            expect(parseBuffEffects('Attack Up II', '+30% Outgoing Attack')).toEqual({
+                attack: 30,
+            });
+        });
+        it('parses Direct Attack form', () => {
+            expect(parseBuffEffects('Attack Up II', '+30% Direct Attack')).toEqual({ attack: 30 });
+        });
     });
 
     describe('crit rate', () => {
@@ -138,6 +146,9 @@ describe('parseBuffEffects', () => {
         });
         it('returns empty object for hacking-only buff', () => {
             expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({});
+        });
+        it('silently drops DoT value when name has neither Out. nor Inc. prefix', () => {
+            expect(parseBuffEffects('DoT Damage Up I', '+20% DoT Damage')).toEqual({});
         });
     });
 });
