@@ -18,26 +18,32 @@ const PARSED_BUFFS = BUFFS.map((buff) => {
     };
 });
 
-function buildEffectSummary(effects: ParsedBuffEffects, stacks = 1): string {
-    const parts: string[] = [];
+const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
+    attack: 'Atk',
+    crit: 'CR',
+    critDamage: 'CP',
+    outgoingDamage: 'Dmg',
+    defensePenetration: 'Pen',
+    dotDamage: 'DoT',
+    defense: 'Def',
+    incomingDamage: 'Inc',
+    incomingDotDamage: 'Inc.DoT',
+};
 
+function buildEffectSummary(
+    effects: ParsedBuffEffects,
+    stacks = 1,
+    filter?: (keyof ParsedBuffEffects)[]
+): string {
     const fmt = (value: number, label: string) => {
         const scaled = value * stacks;
         const sign = scaled >= 0 ? '+' : '';
         return `${sign}${scaled}% ${label}`;
     };
 
-    if (effects.attack !== undefined) parts.push(fmt(effects.attack, 'Atk'));
-    if (effects.crit !== undefined) parts.push(fmt(effects.crit, 'CR'));
-    if (effects.critDamage !== undefined) parts.push(fmt(effects.critDamage, 'CP'));
-    if (effects.outgoingDamage !== undefined) parts.push(fmt(effects.outgoingDamage, 'Dmg'));
-    if (effects.defensePenetration !== undefined)
-        parts.push(fmt(effects.defensePenetration, 'Pen'));
-    if (effects.dotDamage !== undefined) parts.push(fmt(effects.dotDamage, 'DoT'));
-    if (effects.defense !== undefined) parts.push(fmt(effects.defense, 'Def'));
-    if (effects.incomingDamage !== undefined) parts.push(fmt(effects.incomingDamage, 'Inc'));
-    if (effects.incomingDotDamage !== undefined)
-        parts.push(fmt(effects.incomingDotDamage, 'Inc.DoT'));
+    const parts = (Object.keys(STAT_LABELS) as (keyof ParsedBuffEffects)[])
+        .filter((k) => effects[k] !== undefined && (!filter || filter.includes(k)))
+        .map((k) => fmt(effects[k] as number, STAT_LABELS[k]));
 
     return parts.length > 0 ? parts.join(', ') : 'No DPS effect';
 }
@@ -105,7 +111,11 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
             {value.length > 0 && (
                 <div className="space-y-1">
                     {value.map((selected) => {
-                        const summary = buildEffectSummary(selected.parsedEffects, selected.stacks);
+                        const summary = buildEffectSummary(
+                            selected.parsedEffects,
+                            selected.stacks,
+                            relevantStats
+                        );
                         return (
                             <div
                                 key={selected.id}

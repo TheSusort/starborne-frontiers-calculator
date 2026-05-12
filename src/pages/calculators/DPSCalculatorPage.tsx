@@ -235,6 +235,24 @@ const DPSCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
+    const attackerBuffTotals = useMemo(
+        () => ({
+            attackBuff: attackerBuffs.reduce(
+                (sum, s) => sum + (s.parsedEffects.attack ?? 0) * s.stacks,
+                0
+            ),
+            critBuff: attackerBuffs.reduce(
+                (sum, s) => sum + (s.parsedEffects.crit ?? 0) * s.stacks,
+                0
+            ),
+            critDamageBuff: attackerBuffs.reduce(
+                (sum, s) => sum + (s.parsedEffects.critDamage ?? 0) * s.stacks,
+                0
+            ),
+        }),
+        [attackerBuffs]
+    );
+
     // Simulate DPS for all configs
     const simResults = useMemo(() => {
         const simBuffs = toSimBuffs(attackerBuffs);
@@ -1101,9 +1119,19 @@ const DPSCalculatorPage: React.FC = () => {
                                                     </span>
                                                     <span>
                                                         {calculateCritMultiplier({
-                                                            attack: config.attack,
-                                                            crit: config.crit,
-                                                            critDamage: config.critDamage,
+                                                            attack:
+                                                                config.attack *
+                                                                (1 +
+                                                                    attackerBuffTotals.attackBuff /
+                                                                        100),
+                                                            crit: Math.min(
+                                                                100,
+                                                                config.crit +
+                                                                    attackerBuffTotals.critBuff
+                                                            ),
+                                                            critDamage:
+                                                                config.critDamage +
+                                                                attackerBuffTotals.critDamageBuff,
                                                             hp: 0,
                                                             defence: 0,
                                                             hacking: 0,
@@ -1282,13 +1310,14 @@ const DPSCalculatorPage: React.FC = () => {
                         </p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2 text-sm">
                             Direct = Attack × CritMultiplier × (1 - DamageReduction%) ×
-                            SkillMultiplier% × (1 + OutgoingDmg%)
+                            SkillMultiplier% × (1 + OutgoingDmg%) × (1 + IncomingDmg%)
                         </p>
                         <p className="mb-2">
                             DoT effects (corrosion, inferno, bombs) bypass enemy defense entirely.
                             Corrosion deals a percentage of the target&apos;s HP per stack. Inferno
                             and bombs deal a percentage of the attacker&apos;s attack stat. Bombs
-                            detonate after a countdown period.
+                            detonate after a countdown period. DoT damage is multiplied by the
+                            combined Out. DoT + Inc. DoT modifier from the buff pickers.
                         </p>
                         <p>All DoTs stack permanently and tick on the turn they are applied.</p>
                     </div>
