@@ -99,6 +99,12 @@ interface RawShipData {
     ship_implants: RawShipImplant[];
     ship_templates: {
         image_key: string;
+        active_skill_text: string | null;
+        charge_skill_text: string | null;
+        charge_skill_charge: number | null;
+        first_passive_skill_text: string | null;
+        second_passive_skill_text: string | null;
+        third_passive_skill_text: string | null;
     };
 }
 
@@ -241,6 +247,12 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 {} as Record<GearSlotName, string>
             ),
             imageKey: data.ship_templates.image_key,
+            activeSkillText: data.ship_templates.active_skill_text ?? undefined,
+            chargeSkillText: data.ship_templates.charge_skill_text ?? undefined,
+            chargeSkillCharge: data.ship_templates.charge_skill_charge ?? undefined,
+            firstPassiveSkillText: data.ship_templates.first_passive_skill_text ?? undefined,
+            secondPassiveSkillText: data.ship_templates.second_passive_skill_text ?? undefined,
+            thirdPassiveSkillText: data.ship_templates.third_passive_skill_text ?? undefined,
         };
         return isValidShip(ship) ? ship : null;
     } catch (error) {
@@ -306,7 +318,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     ),
                     ship_implants (*),
                     ship_templates!inner (
-                        image_key
+                        image_key,
+                        active_skill_text,
+                        charge_skill_text,
+                        charge_skill_charge,
+                        first_passive_skill_text,
+                        second_passive_skill_text,
+                        third_passive_skill_text
                     )
                 `
                     )
