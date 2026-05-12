@@ -30,7 +30,7 @@ export const ShipSkills: React.FC<ShipSkillsProps> = ({ ship }) => {
     return (
         // TODO: wire up tutorial data-tutorial attribute when tutorial system is extended
         <div className="card space-y-4">
-            <h3>Skills</h3>
+            <h3 className="mb-4">Skills</h3>
             {rows.map((row) => (
                 <div key={row.label}>
                     <SkillTooltip
