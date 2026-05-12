@@ -738,35 +738,12 @@ const DocumentationPage: React.FC = () => {
                             <div className="p-4 bg-dark-lighter mt-4">
                                 <h4 className="font-semibold text-primary mb-2">Skills Card</h4>
                                 <p className="text-theme-text mb-2">
-                                    The Skills card displays your ship&apos;s skills with detailed
-                                    information:
+                                    The Skills card shows each of your ship&apos;s skills — Active,
+                                    Charge (with turn count), and Passive R1/R2/R4 — with full
+                                    formatted skill text. Damage values are highlighted in orange,
+                                    buff and debuff names are underlined with tooltip descriptions,
+                                    and beneficial effects appear in green.
                                 </p>
-                                <ul className="text-theme-text list-disc pl-4 space-y-1">
-                                    <li>
-                                        <span className="text-primary">
-                                            Skill Name & Damage Type:
-                                        </span>{' '}
-                                        Displayed with color-coded damage type indicator
-                                    </li>
-                                    <li>
-                                        <span className="text-primary">Base Damage:</span> The base
-                                        damage value of the skill
-                                    </li>
-                                    <li>
-                                        <span className="text-primary">Damage Formula:</span> How
-                                        the skill damage scales (e.g., &quot;Damage of ATTACK&quot;,
-                                        &quot;Damage of DEFENCE&quot;, etc.)
-                                    </li>
-                                    <li>
-                                        <span className="text-primary">Multiplier:</span> The
-                                        scaling factor for the skill (percentage of the base stat)
-                                    </li>
-                                    <li>
-                                        <span className="text-primary">Special Properties:</span>{' '}
-                                        Such as &quot;Start Charged&quot; which indicates the skill
-                                        begins combat already charged
-                                    </li>
-                                </ul>
                             </div>
                         </div>
                     </section>

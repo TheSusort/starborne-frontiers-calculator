@@ -18,7 +18,7 @@ describe('parseSkillDamage', () => {
         expect(parseSkillDamage(text)).toBe(180);
     });
 
-    it('skips stat-based damage (contains "of its" before tag)', () => {
+    it('skips stat-based damage ("of its" follows closing tag)', () => {
         const text = 'Deals additional damage based on <unit-damage>30%</unit-damage> of its DEF';
         expect(parseSkillDamage(text)).toBe(0);
     });

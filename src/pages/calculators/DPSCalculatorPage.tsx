@@ -116,7 +116,7 @@ const DPSCalculatorPage: React.FC = () => {
                             defensePenetration: Math.round(final.defensePenetration || 0),
                             activeMultiplier: activeParsed > 0 ? activeParsed : 100,
                             chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
-                            chargeCount: 0,
+                            chargeCount: ship.chargeSkillCharge ?? 0,
                             startCharged: detectFullyCharged([
                                 ship.activeSkillText,
                                 ship.chargeSkillText,
@@ -295,6 +295,7 @@ const DPSCalculatorPage: React.FC = () => {
                     defensePenetration: Math.round(final.defensePenetration || 0),
                     activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
                     chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
+                    chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
                     startCharged: detectFullyCharged([
                         ship.activeSkillText,
                         ship.chargeSkillText,
