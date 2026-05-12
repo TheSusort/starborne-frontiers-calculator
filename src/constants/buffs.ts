@@ -44,7 +44,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Power Down III',
-        description: '-45% Outgoing Crit Power',
+        description: '-45% Crit Power',
         type: 'debuff',
     },
     {
@@ -85,7 +85,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Power Down II',
-        description: '-30% Outgoing Crit Power',
+        description: '-30% Crit Power',
         type: 'debuff',
     },
     {
@@ -349,7 +349,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Power Up II',
-        description: '+30% Outgoing Crit Power',
+        description: '+30% Crit Power',
         type: 'buff',
     },
     {
@@ -359,17 +359,17 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Power Up III',
-        description: '+45% Outgoing Crit Power',
+        description: '+45% Crit Power',
         type: 'buff',
     },
     {
         name: 'Crit Power Down I',
-        description: '-15% Outgoing Crit Power',
+        description: '-15% Crit Power',
         type: 'debuff',
     },
     {
         name: 'Crit Rate Down I',
-        description: '-10% Outgoing Crit Rate',
+        description: '-10% Crit Rate',
         type: 'debuff',
     },
     {
@@ -379,7 +379,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Rate Up I',
-        description: '+10% Outgoing Crit Rate',
+        description: '+10% Crit Rate',
         type: 'buff',
     },
     {
@@ -389,7 +389,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Rate Up II',
-        description: '+20% Outgoing Crit Rate',
+        description: '+20% Crit Rate',
         type: 'buff',
     },
     {
@@ -590,7 +590,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Power Up I',
-        description: '+15% Outgoing Crit Power',
+        description: '+15% Crit Power',
         type: 'buff',
     },
     {
@@ -615,7 +615,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Supercharged I',
-        description: '+15% Attack, +10% Crit Rate, + 10% Crit Power, -20% Defense',
+        description: '+15% Attack, +10% Crit Rate, +10% Crit Power, -20% Defense',
         type: 'buff',
     },
     {
@@ -680,7 +680,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Crit Rate Up III',
-        description: '+30% Outgoing Crit Rate',
+        description: '+30% Crit Rate',
         type: 'buff',
     },
     {
@@ -749,12 +749,12 @@ export const BUFFS: Buff[] = [
     {
         name: 'Core Charge I',
         description:
-            'Increase Out. direct damage by 4% and defense penetration by 1%. This effect is stackable up to 10 times.',
+            '+4% Outgoing Direct Damage, +1% Defense Penetration. Stackable up to 10 times.',
         type: 'buff',
     },
     {
         name: 'Hacking Module Overdrive',
-        description: 'Hacking +9999',
+        description: '+9999 Hacking',
         type: 'buff',
     },
     {
@@ -804,7 +804,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Defense Shred',
-        description: 'Decreases defense by 2%, stackable up to 20 times.',
+        description: '-2% Defense. Stackable up to 20 times.',
         type: 'debuff',
     },
 ];
