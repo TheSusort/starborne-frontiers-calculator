@@ -220,7 +220,7 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
 
                                 <Button
                                     variant="danger"
-                                    size="xs"
+                                    size="sm"
                                     onClick={() =>
                                         onChange(value.filter((b) => b.id !== selected.id))
                                     }
