@@ -391,6 +391,19 @@ describe('simulateDPS', () => {
                 noMod.summary.totalCorrosionDamage
             );
         });
+        it('dotDamageModifier multiplies inferno damage', () => {
+            const dotBase = {
+                ...base,
+                activeDoTs: [
+                    { id: '1', type: 'inferno' as const, stacks: 1, tier: 30, duration: 2 },
+                ],
+            };
+            const withMod = simulateDPS({ ...dotBase, dotDamageModifier: 50 });
+            const noMod = simulateDPS({ ...dotBase });
+            expect(withMod.summary.totalInfernoDamage).toBeGreaterThan(
+                noMod.summary.totalInfernoDamage
+            );
+        });
     });
 
     describe('startCharged', () => {

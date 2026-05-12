@@ -18,6 +18,7 @@ export interface DPSSimulationInput {
     startCharged?: boolean;
     defensePenetrationBuff?: number;
     dotDamageModifier?: number;
+    /** Percentage modifier on enemy base defense. Negative values reduce defense (e.g. -30 → ×0.70). */
     enemyDefenseModifier?: number;
     incomingDamageModifier?: number;
 }
@@ -110,6 +111,12 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         rounds: numRounds,
         buffs,
     } = input;
+    const {
+        defensePenetrationBuff = 0,
+        dotDamageModifier = 0,
+        enemyDefenseModifier = 0,
+        incomingDamageModifier = 0,
+    } = input;
 
     const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(buffs);
 
@@ -129,9 +136,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         healModifier: 0,
     });
 
-    const effectivePen = defensePenetration + (input.defensePenetrationBuff ?? 0);
+    const effectivePen = defensePenetration + defensePenetrationBuff;
     const effectiveDefense =
-        enemyDefense * (1 + (input.enemyDefenseModifier ?? 0) / 100) * (1 - effectivePen / 100);
+        enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
     const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 
     const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
@@ -174,7 +181,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             baseDamage *
             (multiplier / 100) *
             (1 + outgoingDamageBuff / 100) *
-            (1 + (input.incomingDamageModifier ?? 0) / 100);
+            (1 + incomingDamageModifier / 100);
 
         // Step 3: Apply new DoT stacks from this round's skill
         for (const dot of dotsConfig) {
@@ -201,7 +208,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         }
 
         // Step 4: Tick corrosion (scales with enemy HP)
-        const dotMult = 1 + (input.dotDamageModifier ?? 0) / 100;
+        const dotMult = 1 + dotDamageModifier / 100;
         const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp) * dotMult;
 
         // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
