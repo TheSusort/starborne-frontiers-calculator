@@ -120,3 +120,32 @@ export function extractSkillNames(skillText: string | null | undefined): string[
 
     return [...new Set(matches)]; // Remove duplicates
 }
+
+/**
+ * Sums all <unit-damage>X% ...</unit-damage> values in skill text.
+ * Skips values where the 20 characters after the tag start with " of its"
+ * (stat-based damage like "30% of its DEF" — must be added manually as a buff).
+ * Returns an integer percentage (e.g. 180 for "180% damage"), or 0 if none found.
+ */
+export function parseSkillDamage(text: string): number {
+    if (!text) return 0;
+    const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
+    let total = 0;
+    let match: RegExpExecArray | null;
+    while ((match = tagPattern.exec(text)) !== null) {
+        const tagEndIndex = match.index + match[0].length;
+        const following = text.slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20));
+        if (following.toLowerCase().startsWith(' of its')) continue;
+        const numeric = parseInt(match[1], 10);
+        if (!isNaN(numeric)) total += numeric;
+    }
+    return total;
+}
+
+/**
+ * Returns true if any of the provided skill texts contain "fully charged" (case-insensitive).
+ * Checks all five skill text fields to cover all in-game phrasings including typos.
+ */
+export function detectFullyCharged(texts: (string | undefined)[]): boolean {
+    return texts.some((t) => t?.toLowerCase().includes('fully charged') ?? false);
+}
