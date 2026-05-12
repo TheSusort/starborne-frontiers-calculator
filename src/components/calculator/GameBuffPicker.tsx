@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { parseBuffEffects, isStackable, hasDpsEffect } from '../../utils/calculators/buffParser';
 import { BUFFS } from '../../constants/buffs';
@@ -61,8 +61,20 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     value,
     onChange,
 }) => {
+    const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
     const nextIdRef = useRef(0);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const filteredBuffs = useMemo(() => {
         const q = search.toLowerCase();
@@ -93,21 +105,80 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
         onChange(
             value.map((b) => {
                 if (b.id !== id) return b;
-                const min = 1;
                 const max = b.maxStacks ?? Infinity;
-                const clamped = Math.max(min, Math.min(max, stacks));
+                const clamped = Math.max(1, Math.min(max, stacks));
                 return { ...b, stacks: isNaN(clamped) ? 1 : clamped };
             })
         );
     };
 
+    const triggerLabel =
+        value.length === 0
+            ? `Add ${label}...`
+            : `${value.length} buff${value.length !== 1 ? 's' : ''} selected`;
+
     return (
         <div className="space-y-2">
             <h3 className="text-sm font-medium">{label}</h3>
 
-            <SearchInput value={search} onChange={setSearch} placeholder="Search buffs..." />
+            {/* Dropdown trigger + panel */}
+            <div className="relative" ref={containerRef}>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsOpen((prev) => !prev)}
+                    className="w-full justify-between"
+                >
+                    <span>{triggerLabel}</span>
+                    <span className="ml-2 text-theme-text-secondary">{isOpen ? '▲' : '▼'}</span>
+                </Button>
 
-            {/* Selected buffs */}
+                {isOpen && (
+                    <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-dark border border-dark-border shadow-lg">
+                        <div className="p-2 border-b border-dark-border">
+                            <SearchInput
+                                value={search}
+                                onChange={setSearch}
+                                placeholder="Search buffs..."
+                            />
+                        </div>
+                        <div className="overflow-y-auto max-h-64">
+                            {filteredBuffs.map((buff) => {
+                                const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
+                                const summary = buildEffectSummary(buff.parsedEffects);
+                                return (
+                                    <button
+                                        key={buff.name}
+                                        className="w-full text-left px-3 py-2 hover:bg-dark-border flex items-center justify-between gap-2"
+                                        onClick={() => handleAdd(buff)}
+                                    >
+                                        <div className="min-w-0">
+                                            <div
+                                                className={`text-sm font-medium truncate ${!hasDps ? 'text-theme-text-secondary' : ''}`}
+                                            >
+                                                {buff.name}
+                                            </div>
+                                            <div className="text-xs text-theme-text-secondary truncate">
+                                                {hasDps ? summary : 'No DPS effect'}
+                                            </div>
+                                        </div>
+                                        <span className="text-theme-text-secondary text-xs shrink-0">
+                                            +
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                            {filteredBuffs.length === 0 && (
+                                <p className="text-sm text-theme-text-secondary px-3 py-2">
+                                    No buffs found.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Selected buff chips */}
             {value.length > 0 && (
                 <div className="space-y-1">
                     {value.map((selected) => {
@@ -161,49 +232,6 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                     })}
                 </div>
             )}
-
-            {/* Buff list */}
-            <div className="overflow-y-auto max-h-72 space-y-1 border border-dark-border">
-                {filteredBuffs.map((buff) => {
-                    const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
-                    const summary = buildEffectSummary(buff.parsedEffects);
-                    return (
-                        <div
-                            key={buff.name}
-                            className="flex items-center gap-2 px-2 py-1 hover:bg-dark-border"
-                        >
-                            <div className="flex-1 min-w-0">
-                                <span
-                                    className={`text-sm font-medium truncate block ${!hasDps ? 'text-theme-text-secondary' : ''}`}
-                                >
-                                    {buff.name}
-                                </span>
-                                {hasDps ? (
-                                    <span className="text-xs text-theme-text-secondary">
-                                        {summary}
-                                    </span>
-                                ) : (
-                                    <span className="text-xs text-theme-text-secondary">
-                                        No DPS effect
-                                    </span>
-                                )}
-                            </div>
-
-                            <Button
-                                variant="secondary"
-                                size="xs"
-                                onClick={() => handleAdd(buff)}
-                                aria-label={`Add ${buff.name}`}
-                            >
-                                +
-                            </Button>
-                        </div>
-                    );
-                })}
-                {filteredBuffs.length === 0 && (
-                    <p className="text-sm text-theme-text-secondary px-2 py-2">No buffs found.</p>
-                )}
-            </div>
         </div>
     );
 };
