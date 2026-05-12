@@ -13,6 +13,10 @@ import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
+import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
+import { SkillTooltip } from '../../components/ship/SkillTooltip';
+import { Checkbox } from '../../components/ui/Checkbox';
+import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
@@ -40,6 +44,8 @@ interface ShipConfig {
     activeMultiplier: number;
     chargedMultiplier: number;
     chargeCount: number;
+    startCharged: boolean;
+    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier'>;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
 }
@@ -106,6 +112,7 @@ const DPSCalculatorPage: React.FC = () => {
                             activeMultiplier: 100,
                             chargedMultiplier: 0,
                             chargeCount: 0,
+                            startCharged: false,
                             activeDoTs: [...DEFAULT_DOT_CONFIG],
                             chargedDoTs: [...DEFAULT_DOT_CONFIG],
                         },
@@ -126,6 +133,7 @@ const DPSCalculatorPage: React.FC = () => {
                     activeMultiplier: 100,
                     chargedMultiplier: 0,
                     chargeCount: 0,
+                    startCharged: false,
                     activeDoTs: [...DEFAULT_DOT_CONFIG],
                     chargedDoTs: [...DEFAULT_DOT_CONFIG],
                 },
@@ -138,6 +146,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [configs, setConfigs] = useState<ShipConfig[]>(initialState.configs);
     const [nextId, setNextId] = useState(initialState.nextId);
     const [openAdvanced, setOpenAdvanced] = useState<Set<string>>(new Set());
+    const [skillRefOpen, setSkillRefOpen] = useState<Set<string>>(new Set());
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
     const [rounds, setRounds] = useState(20);
@@ -176,6 +185,7 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyHp,
                     rounds,
                     buffs,
+                    startCharged: config.startCharged,
                 })
             );
         });
@@ -197,6 +207,7 @@ const DPSCalculatorPage: React.FC = () => {
                 activeMultiplier: 100,
                 chargedMultiplier: 0,
                 chargeCount: 0,
+                startCharged: false,
                 activeDoTs: [...DEFAULT_DOT_CONFIG],
                 chargedDoTs: [...DEFAULT_DOT_CONFIG],
             },
@@ -224,7 +235,16 @@ const DPSCalculatorPage: React.FC = () => {
         value: string | number
     ) => {
         setConfigs((prev) =>
-            prev.map((config) => (config.id === id ? { ...config, [field]: value } : config))
+            prev.map((config) => {
+                if (config.id !== id) return config;
+                const updated = { ...config, [field]: value };
+                if (field === 'activeMultiplier' || field === 'chargedMultiplier') {
+                    const next = new Set(config.autoFilledFields);
+                    next.delete(field);
+                    updated.autoFilledFields = next;
+                }
+                return updated;
+            })
         );
     };
 
@@ -240,20 +260,38 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
+        const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
+        const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
+        const newAutoFilled = new Set<'activeMultiplier' | 'chargedMultiplier'>();
         setConfigs((prev) =>
-            prev.map((c) =>
-                c.id === configId
-                    ? {
-                          ...c,
-                          shipId: ship.id,
-                          name: ship.name,
-                          attack: Math.round(final.attack),
-                          crit: Math.round(final.crit),
-                          critDamage: Math.round(final.critDamage),
-                          defensePenetration: Math.round(final.defensePenetration || 0),
-                      }
-                    : c
-            )
+            prev.map((c) => {
+                if (c.id !== configId) return c;
+                return {
+                    ...c,
+                    shipId: ship.id,
+                    name: ship.name,
+                    attack: Math.round(final.attack),
+                    crit: Math.round(final.crit),
+                    critDamage: Math.round(final.critDamage),
+                    defensePenetration: Math.round(final.defensePenetration || 0),
+                    activeMultiplier:
+                        activeParsed > 0
+                            ? (newAutoFilled.add('activeMultiplier'), activeParsed)
+                            : c.activeMultiplier,
+                    chargedMultiplier:
+                        chargedParsed > 0
+                            ? (newAutoFilled.add('chargedMultiplier'), chargedParsed)
+                            : c.chargedMultiplier,
+                    startCharged: detectFullyCharged([
+                        ship.activeSkillText,
+                        ship.chargeSkillText,
+                        ship.firstPassiveSkillText,
+                        ship.secondPassiveSkillText,
+                        ship.thirdPassiveSkillText,
+                    ]),
+                    autoFilledFields: newAutoFilled,
+                };
+            })
         );
     };
 
@@ -588,12 +626,17 @@ const DPSCalculatorPage: React.FC = () => {
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                                             Skills
                                         </div>
-                                        <div className="grid grid-cols-3 gap-4 mb-4">
+                                        <div className="grid grid-cols-3 gap-4 mb-2">
                                             <Input
                                                 label="Active (%)"
                                                 type="number"
                                                 min="0"
                                                 value={config.activeMultiplier}
+                                                helpLabel={
+                                                    config.autoFilledFields?.has('activeMultiplier')
+                                                        ? 'auto-filled'
+                                                        : undefined
+                                                }
                                                 onChange={(e) =>
                                                     updateConfig(
                                                         config.id,
@@ -607,6 +650,13 @@ const DPSCalculatorPage: React.FC = () => {
                                                 type="number"
                                                 min="0"
                                                 value={config.chargedMultiplier}
+                                                helpLabel={
+                                                    config.autoFilledFields?.has(
+                                                        'chargedMultiplier'
+                                                    )
+                                                        ? 'auto-filled'
+                                                        : undefined
+                                                }
                                                 onChange={(e) =>
                                                     updateConfig(
                                                         config.id,
@@ -629,6 +679,85 @@ const DPSCalculatorPage: React.FC = () => {
                                                 }
                                             />
                                         </div>
+                                        <div className="mb-4">
+                                            <Checkbox
+                                                label="Start Charged"
+                                                checked={config.startCharged}
+                                                onChange={(checked) =>
+                                                    setConfigs((prev) =>
+                                                        prev.map((c) =>
+                                                            c.id === config.id
+                                                                ? {
+                                                                      ...c,
+                                                                      startCharged: checked,
+                                                                  }
+                                                                : c
+                                                        )
+                                                    )
+                                                }
+                                            />
+                                        </div>
+                                        {config.shipId && (
+                                            <>
+                                                <Button
+                                                    variant="link"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setSkillRefOpen((prev) => {
+                                                            const next = new Set(prev);
+                                                            if (next.has(config.id)) {
+                                                                next.delete(config.id);
+                                                            } else {
+                                                                next.add(config.id);
+                                                            }
+                                                            return next;
+                                                        })
+                                                    }
+                                                >
+                                                    Skill Reference{' '}
+                                                    {skillRefOpen.has(config.id) ? '▴' : '▾'}
+                                                </Button>
+                                                <CollapsibleAccordion
+                                                    isOpen={skillRefOpen.has(config.id)}
+                                                >
+                                                    {(() => {
+                                                        const selectedShip = config.shipId
+                                                            ? getShipById(config.shipId)
+                                                            : undefined;
+                                                        if (!selectedShip) return null;
+                                                        return (
+                                                            <div className="space-y-3">
+                                                                {selectedShip.activeSkillText && (
+                                                                    <SkillTooltip
+                                                                        inline
+                                                                        skillText={
+                                                                            selectedShip.activeSkillText
+                                                                        }
+                                                                        skillType="Active"
+                                                                    />
+                                                                )}
+                                                                {selectedShip.chargeSkillText && (
+                                                                    <SkillTooltip
+                                                                        inline
+                                                                        skillText={
+                                                                            selectedShip.chargeSkillText
+                                                                        }
+                                                                        skillType={
+                                                                            selectedShip.chargeSkillCharge
+                                                                                ? `Charge (${selectedShip.chargeSkillCharge}T)`
+                                                                                : 'Charge'
+                                                                        }
+                                                                        charge={
+                                                                            selectedShip.chargeSkillCharge
+                                                                        }
+                                                                    />
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </CollapsibleAccordion>
+                                            </>
+                                        )}
 
                                         {/* DoTs — Active Skill */}
                                         <div className="flex justify-between items-center mb-2">
