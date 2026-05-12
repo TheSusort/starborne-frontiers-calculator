@@ -584,11 +584,6 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
-        name: 'Barrier Recharging',
-        description: 'Prevent the activation of Passive Ability for specified number of turns',
-        type: 'debuff',
-    },
-    {
         name: 'Crit Power Up I',
         description: '+15% Crit Power',
         type: 'buff',

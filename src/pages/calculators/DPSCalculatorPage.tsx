@@ -223,6 +223,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
+    const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
     const nextDoTIdRef = useRef(1);
 
     // Clear shipId from URL after initialization to avoid re-triggering
@@ -492,63 +493,85 @@ const DPSCalculatorPage: React.FC = () => {
                 }}
             >
                 <div className="space-y-6">
-                    <div className="card">
-                        <h3 className="text-lg font-bold mb-4">Combat Settings</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Input
-                                label="Enemy Defense"
-                                type="number"
-                                value={enemyDefense}
-                                onChange={(e) => setEnemyDefense(parseInt(e.target.value) || 0)}
-                            />
-                            <Input
-                                label="Enemy HP"
-                                type="number"
-                                value={enemyHp}
-                                onChange={(e) => setEnemyHp(parseInt(e.target.value) || 0)}
-                            />
-                            <Input
-                                label="Rounds"
-                                type="number"
-                                min="1"
-                                max="50"
-                                value={rounds}
-                                onChange={(e) =>
-                                    setRounds(
-                                        Math.max(1, Math.min(50, parseInt(e.target.value) || 1))
-                                    )
-                                }
-                            />
-                        </div>
-                        <p className="text-sm text-theme-text-secondary mt-2">
-                            Shared combat settings applied to all ship configurations
-                        </p>
-                        <div className="mt-4">
-                            <GameBuffPicker
-                                label="Enemy Buffs / Debuffs"
-                                relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
-                                excludeTypes={['effect']}
-                                value={enemyBuffs}
-                                onChange={setEnemyBuffs}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="card">
-                        <GameBuffPicker
-                            label="Attacker Buffs"
-                            relevantStats={[
-                                'attack',
-                                'crit',
-                                'critDamage',
-                                'outgoingDamage',
-                                'defensePenetration',
-                                'dotDamage',
-                            ]}
-                            excludeTypes={['effect']}
-                            value={attackerBuffs}
-                            onChange={setAttackerBuffs}
-                        />
+                    <div className="card space-y-2">
+                        <Button
+                            variant="link"
+                            onClick={() => setCombatSettingsOpen(!combatSettingsOpen)}
+                            className="w-[calc(100%+1.5rem)] flex justify-between items-center -m-3 !p-3"
+                        >
+                            <span className="flex items-center gap-2">
+                                <ChevronDownIcon
+                                    className={`h-4 w-4 transition-transform duration-300 ${combatSettingsOpen ? 'rotate-180' : ''}`}
+                                />
+                                <span className="text-lg font-bold">Combat Settings</span>
+                            </span>
+                        </Button>
+                        <CollapsibleForm isVisible={combatSettingsOpen}>
+                            <div className="space-y-4 pt-2">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <Input
+                                        label="Enemy Defense"
+                                        type="number"
+                                        value={enemyDefense}
+                                        onChange={(e) =>
+                                            setEnemyDefense(parseInt(e.target.value) || 0)
+                                        }
+                                    />
+                                    <Input
+                                        label="Enemy HP"
+                                        type="number"
+                                        value={enemyHp}
+                                        onChange={(e) => setEnemyHp(parseInt(e.target.value) || 0)}
+                                    />
+                                    <Input
+                                        label="Rounds"
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        value={rounds}
+                                        onChange={(e) =>
+                                            setRounds(
+                                                Math.max(
+                                                    1,
+                                                    Math.min(50, parseInt(e.target.value) || 1)
+                                                )
+                                            )
+                                        }
+                                    />
+                                </div>
+                                <p className="text-sm text-theme-text-secondary">
+                                    Shared enemy buffs applied to all ship configurations
+                                </p>
+                                <GameBuffPicker
+                                    label="Enemy Buffs / Debuffs"
+                                    relevantStats={[
+                                        'defense',
+                                        'incomingDamage',
+                                        'incomingDotDamage',
+                                    ]}
+                                    excludeTypes={['effect']}
+                                    value={enemyBuffs}
+                                    onChange={setEnemyBuffs}
+                                />
+                                <p className="text-sm text-theme-text-secondary">
+                                    Shared attacker buffs applied to all ship configurations
+                                </p>
+                                <GameBuffPicker
+                                    label="Attacker Buffs / Debuffs"
+                                    relevantStats={[
+                                        'attack',
+                                        'crit',
+                                        'critDamage',
+                                        'outgoingDamage',
+                                        'defensePenetration',
+                                        'dotDamage',
+                                    ]}
+                                    excludeTypes={['effect']}
+                                    value={attackerBuffs}
+                                    onChange={setAttackerBuffs}
+                                />
+                            </div>
+                        </CollapsibleForm>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -673,7 +696,7 @@ const DPSCalculatorPage: React.FC = () => {
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                                             Skills
                                         </div>
-                                        <div className="grid grid-cols-4 gap-4 mb-4 items-end">
+                                        <div className="grid grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-4 items-end">
                                             <Input
                                                 label="Active (%)"
                                                 type="number"
@@ -764,7 +787,7 @@ const DPSCalculatorPage: React.FC = () => {
                                                                     return next;
                                                                 })
                                                             }
-                                                            className="w-full flex justify-between items-center mt-4"
+                                                            className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
                                                         >
                                                             <span className="flex items-center gap-2">
                                                                 <ChevronDownIcon
