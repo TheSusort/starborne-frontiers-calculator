@@ -15,6 +15,7 @@ export interface DPSSimulationInput {
     enemyHp: number;
     rounds: number;
     buffs: Buff[];
+    startCharged?: boolean;
 }
 
 export interface RoundData {
@@ -129,7 +130,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
 
     const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
 
-    let charges = 0;
+    let charges = input.startCharged ? input.chargeCount : 0;
     let cumulativeDamage = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];

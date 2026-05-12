@@ -342,4 +342,65 @@ describe('simulateDPS', () => {
             expect(result.rounds[4].infernoDamage).toBe(4500);
         });
     });
+
+    describe('startCharged', () => {
+        it('fires charged skill on round 1 when startCharged is true', () => {
+            const result = simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 300,
+                chargeCount: 3,
+                activeDoTs: [],
+                chargedDoTs: [],
+                enemyDefense: 0,
+                enemyHp: 500000,
+                rounds: 5,
+                buffs: [],
+                startCharged: true,
+            });
+            expect(result.rounds[0].action).toBe('charged');
+        });
+
+        it('does not fire charged skill on round 1 when startCharged is false', () => {
+            const result = simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 300,
+                chargeCount: 3,
+                activeDoTs: [],
+                chargedDoTs: [],
+                enemyDefense: 0,
+                enemyHp: 500000,
+                rounds: 5,
+                buffs: [],
+                startCharged: false,
+            });
+            expect(result.rounds[0].action).toBe('active');
+        });
+
+        it('defaults to not start charged when field is absent', () => {
+            const result = simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 300,
+                chargeCount: 3,
+                activeDoTs: [],
+                chargedDoTs: [],
+                enemyDefense: 0,
+                enemyHp: 500000,
+                rounds: 5,
+                buffs: [],
+            });
+            expect(result.rounds[0].action).toBe('active');
+        });
+    });
 });
