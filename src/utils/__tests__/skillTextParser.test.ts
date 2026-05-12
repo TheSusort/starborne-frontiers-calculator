@@ -12,15 +12,21 @@ describe('parseSkillDamage', () => {
         );
     });
 
-    it('sums multiple damage values', () => {
+    it('returns the first damage value and ignores subsequent tags', () => {
         const text =
             'Deals <unit-damage>120% damage</unit-damage> then <unit-damage>60% damage</unit-damage>';
-        expect(parseSkillDamage(text)).toBe(180);
+        expect(parseSkillDamage(text)).toBe(120);
     });
 
     it('skips stat-based damage ("of its" follows closing tag)', () => {
         const text = 'Deals additional damage based on <unit-damage>30%</unit-damage> of its DEF';
         expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('skips stat-based damage ("of this" follows closing tag)', () => {
+        const text =
+            "This Unit deals <unit-damage>200% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP";
+        expect(parseSkillDamage(text)).toBe(200);
     });
 
     it('keeps a normal damage tag that happens to follow a long sentence without "of its"', () => {

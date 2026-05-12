@@ -122,24 +122,27 @@ export function extractSkillNames(skillText: string | null | undefined): string[
 }
 
 /**
- * Sums all <unit-damage>X% ...</unit-damage> values in skill text.
- * Skips values where the 20 characters after the tag start with " of its"
- * (stat-based damage like "30% of its DEF" — must be added manually as a buff).
- * Returns an integer percentage (e.g. 180 for "180% damage"), or 0 if none found.
+ * Returns the first <unit-damage>X% ...</unit-damage> value in skill text.
+ * Skips values where the 20 characters after the tag start with " of its" or " of this"
+ * (stat-based damage like "30% of its DEF" or "10% of this Unit's max HP" —
+ * must be added manually as a buff).
+ * Secondary damage tags (conditional/situational bonuses) are ignored.
+ * Returns an integer percentage (e.g. 190 for "190% damage"), or 0 if none found.
  */
 export function parseSkillDamage(text: string): number {
     if (!text) return 0;
     const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
-    let total = 0;
     let match: RegExpExecArray | null;
     while ((match = tagPattern.exec(text)) !== null) {
         const tagEndIndex = match.index + match[0].length;
-        const following = text.slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20));
-        if (following.toLowerCase().startsWith(' of its')) continue;
+        const following = text
+            .slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20))
+            .toLowerCase();
+        if (following.startsWith(' of its') || following.startsWith(' of this')) continue;
         const numeric = parseInt(match[1], 10);
-        if (!isNaN(numeric)) total += numeric;
+        if (!isNaN(numeric)) return numeric;
     }
-    return total;
+    return 0;
 }
 
 /**

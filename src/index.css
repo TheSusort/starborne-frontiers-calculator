@@ -306,7 +306,7 @@
     /* Buff tooltip on hover */
     .skill-tooltip {
         @apply absolute z-50 invisible group-hover:visible;
-        @apply bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border;
+        @apply bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border w-max;
         @apply transition-opacity duration-200 opacity-0 group-hover:opacity-100;
         bottom: 100%;
         left: 50%;

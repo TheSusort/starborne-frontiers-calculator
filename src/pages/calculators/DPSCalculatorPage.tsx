@@ -13,7 +13,6 @@ import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
-import { CollapsibleAccordion } from '../../components/ui/CollapsibleAccordion';
 import { SkillTooltip } from '../../components/ship/SkillTooltip';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
@@ -640,7 +639,7 @@ const DPSCalculatorPage: React.FC = () => {
                                         <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                                             Skills
                                         </div>
-                                        <div className="grid grid-cols-3 gap-4 mb-2">
+                                        <div className="grid grid-cols-4 gap-4 mb-4 items-end">
                                             <Input
                                                 label="Active (%)"
                                                 type="number"
@@ -692,24 +691,25 @@ const DPSCalculatorPage: React.FC = () => {
                                                     )
                                                 }
                                             />
-                                        </div>
-                                        <div className="mb-4">
-                                            <Checkbox
-                                                label="Start Charged"
-                                                checked={config.startCharged}
-                                                onChange={(checked) =>
-                                                    setConfigs((prev) =>
-                                                        prev.map((c) =>
-                                                            c.id === config.id
-                                                                ? {
-                                                                      ...c,
-                                                                      startCharged: checked,
-                                                                  }
-                                                                : c
+                                            <div className="">
+                                                <Checkbox
+                                                    id={`start-charged-${config.id}`}
+                                                    label="Start Charged"
+                                                    checked={config.startCharged}
+                                                    onChange={(checked) =>
+                                                        setConfigs((prev) =>
+                                                            prev.map((c) =>
+                                                                c.id === config.id
+                                                                    ? {
+                                                                          ...c,
+                                                                          startCharged: checked,
+                                                                      }
+                                                                    : c
+                                                            )
                                                         )
-                                                    )
-                                                }
-                                            />
+                                                    }
+                                                />
+                                            </div>
                                         </div>
                                         {config.shipId &&
                                             (() => {
@@ -719,7 +719,6 @@ const DPSCalculatorPage: React.FC = () => {
                                                     <>
                                                         <Button
                                                             variant="link"
-                                                            size="sm"
                                                             onClick={() =>
                                                                 setSkillRefOpen((prev) => {
                                                                     const next = new Set(prev);
@@ -731,16 +730,19 @@ const DPSCalculatorPage: React.FC = () => {
                                                                     return next;
                                                                 })
                                                             }
+                                                            className="w-full flex justify-between items-center mt-4"
                                                         >
-                                                            Skill Reference{' '}
-                                                            {skillRefOpen.has(config.id)
-                                                                ? '▴'
-                                                                : '▾'}
+                                                            <span className="flex items-center gap-2">
+                                                                <ChevronDownIcon
+                                                                    className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen.has(config.id) ? 'rotate-180' : ''}`}
+                                                                />
+                                                                Skill Reference
+                                                            </span>
                                                         </Button>
-                                                        <CollapsibleAccordion
-                                                            isOpen={skillRefOpen.has(config.id)}
+                                                        <CollapsibleForm
+                                                            isVisible={skillRefOpen.has(config.id)}
                                                         >
-                                                            <div className="space-y-3">
+                                                            <div className="space-y-3 pt-2 pb-4 border-b border-dark-border mb-4">
                                                                 {selectedShip.activeSkillText && (
                                                                     <SkillTooltip
                                                                         inline
@@ -756,18 +758,58 @@ const DPSCalculatorPage: React.FC = () => {
                                                                         skillText={
                                                                             selectedShip.chargeSkillText
                                                                         }
-                                                                        skillType={
-                                                                            selectedShip.chargeSkillCharge
-                                                                                ? `Charge (${selectedShip.chargeSkillCharge}T)`
-                                                                                : 'Charge'
-                                                                        }
+                                                                        skillType={'Charge'}
                                                                         charge={
                                                                             selectedShip.chargeSkillCharge
                                                                         }
                                                                     />
                                                                 )}
+                                                                {(() => {
+                                                                    const refitCount =
+                                                                        selectedShip.refits.length;
+                                                                    if (
+                                                                        refitCount >= 4 &&
+                                                                        selectedShip.thirdPassiveSkillText
+                                                                    )
+                                                                        return (
+                                                                            <SkillTooltip
+                                                                                inline
+                                                                                skillText={
+                                                                                    selectedShip.thirdPassiveSkillText
+                                                                                }
+                                                                                skillType="Passive R4"
+                                                                            />
+                                                                        );
+                                                                    if (
+                                                                        refitCount >= 2 &&
+                                                                        selectedShip.secondPassiveSkillText
+                                                                    )
+                                                                        return (
+                                                                            <SkillTooltip
+                                                                                inline
+                                                                                skillText={
+                                                                                    selectedShip.secondPassiveSkillText
+                                                                                }
+                                                                                skillType="Passive R2"
+                                                                            />
+                                                                        );
+                                                                    if (
+                                                                        refitCount >= 1 &&
+                                                                        selectedShip.firstPassiveSkillText
+                                                                    )
+                                                                        return (
+                                                                            <SkillTooltip
+                                                                                inline
+                                                                                skillText={
+                                                                                    selectedShip.firstPassiveSkillText
+                                                                                }
+                                                                                skillType="Passive R1"
+                                                                            />
+                                                                        );
+                                                                    return null;
+                                                                })()}
                                                             </div>
-                                                        </CollapsibleAccordion>
+                                                        </CollapsibleForm>
                                                     </>
                                                 );
                                             })()}
