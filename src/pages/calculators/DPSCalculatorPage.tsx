@@ -28,8 +28,10 @@ import {
     DoTApplicationEntry,
     DoTType,
     DEFAULT_DOT_CONFIG,
+    SelectedGameBuff,
 } from '../../types/calculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 
 // Define the type for a ship configuration
 interface ShipConfig {
@@ -72,6 +74,63 @@ const TIER_OPTIONS_BY_TYPE: Record<string, { value: string; label: string }[]> =
         { value: '300', label: 'III (300%)' },
     ],
 };
+
+function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
+    return selected.flatMap((s) => {
+        const entries: Buff[] = [];
+        const { parsedEffects, stacks } = s;
+        if (parsedEffects.attack !== undefined)
+            entries.push({
+                id: `${s.id}-atk`,
+                stat: 'attack',
+                value: parsedEffects.attack * stacks,
+            });
+        if (parsedEffects.crit !== undefined)
+            entries.push({ id: `${s.id}-crit`, stat: 'crit', value: parsedEffects.crit * stacks });
+        if (parsedEffects.critDamage !== undefined)
+            entries.push({
+                id: `${s.id}-cd`,
+                stat: 'critDamage',
+                value: parsedEffects.critDamage * stacks,
+            });
+        if (parsedEffects.outgoingDamage !== undefined)
+            entries.push({
+                id: `${s.id}-od`,
+                stat: 'outgoingDamage',
+                value: parsedEffects.outgoingDamage * stacks,
+            });
+        return entries;
+    });
+}
+
+function toEnemyModifiers(selected: SelectedGameBuff[]): {
+    enemyDefenseModifier: number;
+    incomingDamageModifier: number;
+} {
+    const enemyDefenseModifier = selected.reduce(
+        (sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks,
+        0
+    );
+    const incomingDamageModifier = selected.reduce(
+        (sum, s) => sum + (s.parsedEffects.incomingDamage ?? 0) * s.stacks,
+        0
+    );
+    return { enemyDefenseModifier, incomingDamageModifier };
+}
+
+function toDotAndPenModifiers(
+    attacker: SelectedGameBuff[],
+    enemy: SelectedGameBuff[]
+): { defensePenetrationBuff: number; dotDamageModifier: number } {
+    const defensePenetrationBuff = attacker.reduce(
+        (sum, s) => sum + (s.parsedEffects.defensePenetration ?? 0) * s.stacks,
+        0
+    );
+    const dotDamageModifier =
+        attacker.reduce((sum, s) => sum + (s.parsedEffects.dotDamage ?? 0) * s.stacks, 0) +
+        enemy.reduce((sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks, 0);
+    return { defensePenetrationBuff, dotDamageModifier };
+}
 
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -162,8 +221,8 @@ const DPSCalculatorPage: React.FC = () => {
     const [enemyHp, setEnemyHp] = useState(500000);
     const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
-    const [buffs, setBuffs] = useState<Buff[]>([]);
-    const [nextBuffId, setNextBuffId] = useState(1);
+    const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
+    const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
     const nextDoTIdRef = useRef(1);
 
     // Clear shipId from URL after initialization to avoid re-triggering
@@ -178,6 +237,12 @@ const DPSCalculatorPage: React.FC = () => {
 
     // Simulate DPS for all configs
     const simResults = useMemo(() => {
+        const simBuffs = toSimBuffs(attackerBuffs);
+        const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyBuffs);
+        const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
+            attackerBuffs,
+            enemyBuffs
+        );
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
             map.set(
@@ -195,13 +260,17 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyDefense,
                     enemyHp,
                     rounds,
-                    buffs,
+                    buffs: simBuffs,
                     startCharged: config.startCharged,
+                    defensePenetrationBuff,
+                    dotDamageModifier,
+                    enemyDefenseModifier,
+                    incomingDamageModifier,
                 })
             );
         });
         return map;
-    }, [configs, enemyDefense, enemyHp, rounds, buffs]);
+    }, [configs, enemyDefense, enemyHp, rounds, attackerBuffs, enemyBuffs]);
 
     // Add a new ship configuration
     const addConfig = () => {
@@ -366,25 +435,6 @@ const DPSCalculatorPage: React.FC = () => {
         );
     };
 
-    // Buff management functions
-    const addBuff = () => {
-        const newBuff: Buff = {
-            id: nextBuffId.toString(),
-            stat: 'attack',
-            value: 0,
-        };
-        setBuffs([...buffs, newBuff]);
-        setNextBuffId(nextBuffId + 1);
-    };
-
-    const removeBuff = (id: string) => {
-        setBuffs(buffs.filter((buff) => buff.id !== id));
-    };
-
-    const updateBuff = (id: string, field: 'stat' | 'value', value: string | number) => {
-        setBuffs(buffs.map((buff) => (buff.id === id ? { ...buff, [field]: value } : buff)));
-    };
-
     // Find the config with the highest total damage
     const bestConfig = configs.reduce<ShipConfig | null>((best, current) => {
         if (!best) return current;
@@ -458,63 +508,28 @@ const DPSCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold">Active Buffs</h3>
-                            <Button variant="secondary" onClick={addBuff}>
-                                Add Buff
-                            </Button>
-                        </div>
-                        {buffs.length === 0 ? (
-                            <p className="text-sm text-theme-text-secondary">No buffs active</p>
-                        ) : (
-                            <div className="space-y-2">
-                                {buffs.map((buff) => (
-                                    <div key={buff.id} className="flex items-center gap-2">
-                                        <Select
-                                            value={buff.stat}
-                                            onChange={(value) =>
-                                                updateBuff(buff.id, 'stat', value as Buff['stat'])
-                                            }
-                                            options={[
-                                                { value: 'attack', label: 'Attack' },
-                                                { value: 'crit', label: 'Crit Rate' },
-                                                { value: 'critDamage', label: 'Crit Power' },
-                                                {
-                                                    value: 'outgoingDamage',
-                                                    label: 'Outgoing Damage',
-                                                },
-                                            ]}
-                                            className="flex-1"
-                                        />
-                                        <Input
-                                            type="number"
-                                            value={buff.value}
-                                            onChange={(e) =>
-                                                updateBuff(
-                                                    buff.id,
-                                                    'value',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                            className="w-24"
-                                        />
-                                        <span className="text-theme-text-secondary">%</span>
-                                        <Button
-                                            variant="danger"
-                                            size="sm"
-                                            onClick={() => removeBuff(buff.id)}
-                                            aria-label="Remove buff"
-                                        >
-                                            <CloseIcon />
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <p className="text-sm text-theme-text-secondary mt-2">
-                            Buffs apply to all ships. Attack and Outgoing Damage are multiplicative,
-                            Crit Rate and Crit Damage are additive.
-                        </p>
+                        <GameBuffPicker
+                            label="Attacker Buffs"
+                            relevantStats={[
+                                'attack',
+                                'crit',
+                                'critDamage',
+                                'outgoingDamage',
+                                'defensePenetration',
+                                'dotDamage',
+                            ]}
+                            value={attackerBuffs}
+                            onChange={setAttackerBuffs}
+                        />
+                    </div>
+
+                    <div className="card">
+                        <GameBuffPicker
+                            label="Enemy Buffs / Debuffs"
+                            relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
+                            value={enemyBuffs}
+                            onChange={setEnemyBuffs}
+                        />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
