@@ -1,0 +1,185 @@
+import { describe, it, expect } from 'vitest';
+import { parseBuffEffects, isStackable, hasDpsEffect } from '../buffParser';
+
+describe('parseBuffEffects', () => {
+    describe('attack', () => {
+        it('parses bare Attack', () => {
+            expect(parseBuffEffects('Attack Up I', '+15% Attack')).toEqual({ attack: 15 });
+        });
+        it('parses negative attack', () => {
+            expect(parseBuffEffects('Attack Down II', '-30% Attack')).toEqual({ attack: -30 });
+        });
+    });
+
+    describe('crit rate', () => {
+        it('parses bare Crit Rate', () => {
+            expect(parseBuffEffects('Crit Rate Up I', '+10% Crit Rate')).toEqual({ crit: 10 });
+        });
+        it('parses negative Crit Rate', () => {
+            expect(parseBuffEffects('Crit Rate Down II', '-20% Crit Rate')).toEqual({ crit: -20 });
+        });
+    });
+
+    describe('crit power', () => {
+        it('parses bare Crit Power', () => {
+            expect(parseBuffEffects('Crit Power Up I', '+15% Crit Power')).toEqual({
+                critDamage: 15,
+            });
+        });
+        it('parses Outgoing Crit Power form', () => {
+            expect(
+                parseBuffEffects('Tianchao Precision II', '+30% Crit Power, +20 Hacking')
+            ).toEqual({ critDamage: 30 });
+        });
+        it('parses negative Crit Power', () => {
+            expect(parseBuffEffects('Crit Power Down I', '-15% Crit Power')).toEqual({
+                critDamage: -15,
+            });
+        });
+    });
+
+    describe('outgoing damage', () => {
+        it('parses Outgoing Direct Damage', () => {
+            expect(parseBuffEffects('Out. Damage Up II', '+30% Outgoing Direct Damage')).toEqual({
+                outgoingDamage: 30,
+            });
+        });
+        it('parses negative Outgoing Direct Damage', () => {
+            expect(parseBuffEffects('Out. Damage Down II', '-30% Outgoing Direct Damage')).toEqual({
+                outgoingDamage: -30,
+            });
+        });
+    });
+
+    describe('defense penetration', () => {
+        it('parses Defense Penetration', () => {
+            expect(parseBuffEffects('Charge Overdrive I', '+10% Defense Penetration')).toEqual({
+                defensePenetration: 10,
+            });
+        });
+        it('does NOT double-parse Defense Penetration as defense', () => {
+            const result = parseBuffEffects('Charge Overdrive I', '+10% Defense Penetration');
+            expect(result.defense).toBeUndefined();
+        });
+    });
+
+    describe('Out. vs Inc. DoT distinction', () => {
+        it('maps Out. DoT to dotDamage', () => {
+            expect(parseBuffEffects('Out. DoT Damage Up II', '+20% DoT Damage')).toEqual({
+                dotDamage: 20,
+            });
+        });
+        it('maps Out. DoT Down to negative dotDamage', () => {
+            expect(parseBuffEffects('Out. DoT Damage Down I', '-10% DoT Damage')).toEqual({
+                dotDamage: -10,
+            });
+        });
+        it('maps Inc. DoT to incomingDotDamage', () => {
+            expect(parseBuffEffects('Inc. DoT Damage Up II', '+20% DoT Damage')).toEqual({
+                incomingDotDamage: 20,
+            });
+        });
+        it('maps Inc. DoT Down to negative incomingDotDamage', () => {
+            expect(parseBuffEffects('Inc. DoT Damage Down I', '-10% DoT Damage')).toEqual({
+                incomingDotDamage: -10,
+            });
+        });
+    });
+
+    describe('enemy-side fields', () => {
+        it('parses Defense debuff', () => {
+            expect(parseBuffEffects('Defense Down II', '-30% Defense')).toEqual({ defense: -30 });
+        });
+        it('parses Defense buff', () => {
+            expect(parseBuffEffects('Defense Up II', '+30% Defense')).toEqual({ defense: 30 });
+        });
+        it('parses Incoming Direct Damage', () => {
+            expect(parseBuffEffects('Inc. Damage Up II', '+30% Incoming Direct Damage')).toEqual({
+                incomingDamage: 30,
+            });
+        });
+        it('parses negative Incoming Direct Damage', () => {
+            expect(parseBuffEffects('Inc. Damage Down I', '-15% Incoming Direct Damage')).toEqual({
+                incomingDamage: -15,
+            });
+        });
+    });
+
+    describe('multi-stat buffs', () => {
+        it('parses Marauder Rage III with attack + crit power', () => {
+            expect(parseBuffEffects('Marauder Rage III', '+30% Attack, +20% Crit Power')).toEqual({
+                attack: 30,
+                critDamage: 20,
+            });
+        });
+        it('parses Supercharged I (attack + crit rate + crit power + defense)', () => {
+            const result = parseBuffEffects(
+                'Supercharged I',
+                '+15% Attack, +10% Crit Rate, +10% Crit Power, -20% Defense'
+            );
+            expect(result.attack).toBe(15);
+            expect(result.crit).toBe(10);
+            expect(result.critDamage).toBe(10);
+            expect(result.defense).toBe(-20);
+        });
+        it('parses Core Charge I (after normalization)', () => {
+            const result = parseBuffEffects(
+                'Core Charge I',
+                '+4% Outgoing Direct Damage, +1% Defense Penetration. Stackable up to 10 times.'
+            );
+            expect(result.outgoingDamage).toBe(4);
+            expect(result.defensePenetration).toBe(1);
+        });
+    });
+
+    describe('no DPS effect', () => {
+        it('returns empty object for speed-only buff', () => {
+            expect(parseBuffEffects('Speed Up I', '+10% Speed')).toEqual({});
+        });
+        it('returns empty object for hacking-only buff', () => {
+            expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({});
+        });
+    });
+});
+
+describe('isStackable', () => {
+    it('detects Stackable keyword (capital S)', () => {
+        const result = isStackable(
+            '+10% Outgoing Direct Damage, -10% Defense, Stackable up to 10 times'
+        );
+        expect(result.stackable).toBe(true);
+        expect(result.maxStacks).toBe(10);
+    });
+    it('detects stackable keyword (lowercase s)', () => {
+        const result = isStackable('-2% Defense. Stackable up to 20 times.');
+        expect(result.stackable).toBe(true);
+        expect(result.maxStacks).toBe(20);
+    });
+    it('returns false for non-stackable description', () => {
+        const result = isStackable('+30% Attack');
+        expect(result.stackable).toBe(false);
+        expect(result.maxStacks).toBeUndefined();
+    });
+    it('handles "stackable" without a max count', () => {
+        const result = isStackable(
+            'Redirects 10% of incoming direct damage. This effect is stackable, unremovable.'
+        );
+        expect(result.stackable).toBe(true);
+        expect(result.maxStacks).toBeUndefined();
+    });
+});
+
+describe('hasDpsEffect', () => {
+    it('returns true when any relevant stat is present', () => {
+        expect(hasDpsEffect({ attack: 30 }, ['attack', 'crit'])).toBe(true);
+    });
+    it('returns false when no relevant stats are present', () => {
+        expect(hasDpsEffect({}, ['attack', 'crit'])).toBe(false);
+    });
+    it('returns false when only non-relevant stats are present', () => {
+        expect(hasDpsEffect({ defense: -30 }, ['attack', 'crit'])).toBe(false);
+    });
+    it('returns true for enemy picker with defense field', () => {
+        expect(hasDpsEffect({ defense: -30 }, ['defense', 'incomingDamage'])).toBe(true);
+    });
+});
