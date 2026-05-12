@@ -25,6 +25,7 @@ import Seo from '../../components/seo/Seo';
 import { useTutorial } from '../../contexts/TutorialContext';
 import { SHIP_DETAILS_TUTORIAL } from '../../constants/tutorialSteps';
 import { ShipShowcase } from '../../components/ship/ShipShowcase';
+import { ShipSkills } from '../../components/ship/ShipSkills';
 
 export const ShipDetailsPage: React.FC = () => {
     const [hoveredGear, setHoveredGear] = useState<GearPiece | null>(null);
@@ -227,6 +228,7 @@ export const ShipDetailsPage: React.FC = () => {
 
                     <div className="space-y-6">
                         <ShipShowcase ship={ship} />
+                        <ShipSkills ship={ship} />
                         <div data-tutorial="ship-details-stat-distribution">
                             <StatDistributionChart
                                 contributions={analyzeStatDistribution(
