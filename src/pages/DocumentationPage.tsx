@@ -2008,12 +2008,32 @@ const DocumentationPage: React.FC = () => {
                                         need to be added as buffs manually in the appropriate
                                         section.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Start Charged:</span> Some
                                         ships have skills that begin combat already charged. When
                                         detected from your ship&apos;s skill data, this checkbox
                                         will be pre-checked, and the damage from your charged skill
                                         is included in round 1 of the simulation.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Attacker Buffs:</span> Search
+                                        and select buffs from the game&apos;s full buff list to
+                                        apply to the attacking ship. Attack, Crit Rate, Crit Power,
+                                        and Outgoing Direct Damage buffs feed into the existing stat
+                                        multipliers. Defense Penetration buffs are added on top of
+                                        the ship&apos;s own penetration stat. Buffs with no DPS
+                                        effect (e.g. Speed, Hacking) are shown greyed out and have
+                                        no impact on the simulation. Stackable buffs include a stack
+                                        counter.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">Enemy Buffs / Debuffs:</span>{' '}
+                                        Select buffs or debuffs that affect the enemy — for example
+                                        Defense Down (reduces enemy defense before penetration is
+                                        applied) or Incoming Direct Damage Up (multiplies all direct
+                                        hits the enemy receives). Out. DoT and Inc. DoT modifiers
+                                        from both sections are combined and applied as a single
+                                        multiplier on corrosion and inferno damage.
                                     </p>
                                 </div>
 
