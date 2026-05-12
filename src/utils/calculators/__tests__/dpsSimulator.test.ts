@@ -343,6 +343,56 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('buff picker inputs', () => {
+        const base: typeof baseInput = {
+            attack: 1000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            activeMultiplier: 100,
+            chargedMultiplier: 0,
+            chargeCount: 0,
+            activeDoTs: [],
+            chargedDoTs: [],
+            enemyDefense: 0,
+            enemyHp: 10000,
+            rounds: 1,
+            buffs: [],
+        };
+
+        it('defensePenetrationBuff adds to defensePenetration', () => {
+            const withPen = simulateDPS({ ...base, enemyDefense: 500, defensePenetrationBuff: 20 });
+            const noPen = simulateDPS({ ...base, enemyDefense: 500 });
+            expect(withPen.summary.totalDamage).toBeGreaterThan(noPen.summary.totalDamage);
+        });
+
+        it('enemyDefenseModifier reduces enemy defense', () => {
+            const withMod = simulateDPS({ ...base, enemyDefense: 1000, enemyDefenseModifier: -30 });
+            const noMod = simulateDPS({ ...base, enemyDefense: 1000 });
+            expect(withMod.summary.totalDamage).toBeGreaterThan(noMod.summary.totalDamage);
+        });
+
+        it('incomingDamageModifier multiplies direct damage', () => {
+            const withMod = simulateDPS({ ...base, incomingDamageModifier: 30 });
+            const noMod = simulateDPS({ ...base });
+            expect(withMod.summary.totalDamage).toBeCloseTo(noMod.summary.totalDamage * 1.3, -1);
+        });
+
+        it('dotDamageModifier multiplies corrosion damage', () => {
+            const dotBase = {
+                ...base,
+                activeDoTs: [
+                    { id: '1', type: 'corrosion' as const, stacks: 1, tier: 10, duration: 2 },
+                ],
+            };
+            const withMod = simulateDPS({ ...dotBase, dotDamageModifier: 50 });
+            const noMod = simulateDPS({ ...dotBase });
+            expect(withMod.summary.totalCorrosionDamage).toBeGreaterThan(
+                noMod.summary.totalCorrosionDamage
+            );
+        });
+    });
+
     describe('startCharged', () => {
         it('fires charged skill on round 1 when startCharged is true', () => {
             const result = simulateDPS({

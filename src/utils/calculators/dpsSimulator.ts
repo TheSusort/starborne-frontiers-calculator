@@ -16,6 +16,10 @@ export interface DPSSimulationInput {
     rounds: number;
     buffs: Buff[];
     startCharged?: boolean;
+    defensePenetrationBuff?: number;
+    dotDamageModifier?: number;
+    enemyDefenseModifier?: number;
+    incomingDamageModifier?: number;
 }
 
 export interface RoundData {
@@ -125,7 +129,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         healModifier: 0,
     });
 
-    const effectiveDefense = enemyDefense * (1 - defensePenetration / 100);
+    const effectivePen = defensePenetration + (input.defensePenetrationBuff ?? 0);
+    const effectiveDefense =
+        enemyDefense * (1 + (input.enemyDefenseModifier ?? 0) / 100) * (1 - effectivePen / 100);
     const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 
     const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
@@ -164,7 +170,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
 
         // Step 1: Calculate direct damage
         const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
-        const directDamage = baseDamage * (multiplier / 100) * (1 + outgoingDamageBuff / 100);
+        const directDamage =
+            baseDamage *
+            (multiplier / 100) *
+            (1 + outgoingDamageBuff / 100) *
+            (1 + (input.incomingDamageModifier ?? 0) / 100);
 
         // Step 3: Apply new DoT stacks from this round's skill
         for (const dot of dotsConfig) {
@@ -191,10 +201,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         }
 
         // Step 4: Tick corrosion (scales with enemy HP)
-        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp);
+        const dotMult = 1 + (input.dotDamageModifier ?? 0) / 100;
+        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp) * dotMult;
 
         // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
-        const infernoDamage = tickDoTStacks(infernoEntries, effectiveAttack);
+        const infernoDamage = tickDoTStacks(infernoEntries, effectiveAttack) * dotMult;
 
         // Expire DoT stacks after ticking
         expireStacks(corrosionEntries);
