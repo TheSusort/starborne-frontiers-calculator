@@ -1,12 +1,14 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { parseBuffEffects, isStackable, hasDpsEffect } from '../../utils/calculators/buffParser';
 import { BUFFS } from '../../constants/buffs';
 import { SearchInput } from '../ui/SearchInput';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Dropdown } from '../ui/Dropdown';
+import { CheckIcon } from '../ui/icons/CheckIcon';
+import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 
-// Pre-parse all buffs at module load time
 const PARSED_BUFFS = BUFFS.map((buff) => {
     const parsedEffects = parseBuffEffects(buff.name, buff.description);
     const stackInfo = isStackable(buff.description);
@@ -61,20 +63,7 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     value,
     onChange,
 }) => {
-    const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState('');
-    const nextIdRef = useRef(0);
-    const containerRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     const filteredBuffs = useMemo(() => {
         const q = search.toLowerCase();
@@ -84,21 +73,24 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
         );
     }, [search]);
 
-    const handleAdd = (buff: (typeof PARSED_BUFFS)[number]) => {
-        const id = String(nextIdRef.current++);
-        const newEntry: SelectedGameBuff = {
-            id,
-            buffName: buff.name,
-            stacks: 1,
-            parsedEffects: buff.parsedEffects,
-            isStackable: buff.isStackable,
-            maxStacks: buff.maxStacks,
-        };
-        onChange([...value, newEntry]);
-    };
+    const selectedNames = useMemo(() => new Set(value.map((s) => s.buffName)), [value]);
 
-    const handleRemove = (id: string) => {
-        onChange(value.filter((b) => b.id !== id));
+    const toggleBuff = (buff: (typeof PARSED_BUFFS)[number]) => {
+        if (selectedNames.has(buff.name)) {
+            onChange(value.filter((s) => s.buffName !== buff.name));
+        } else {
+            onChange([
+                ...value,
+                {
+                    id: buff.name,
+                    buffName: buff.name,
+                    stacks: 1,
+                    parsedEffects: buff.parsedEffects,
+                    isStackable: buff.isStackable,
+                    maxStacks: buff.maxStacks,
+                },
+            ]);
+        }
     };
 
     const handleStacksChange = (id: string, stacks: number) => {
@@ -113,72 +105,72 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     };
 
     const triggerLabel =
-        value.length === 0
-            ? `Add ${label}...`
-            : `${value.length} buff${value.length !== 1 ? 's' : ''} selected`;
+        value.length > 0 ? `${label} (${value.length} selected)` : `Select ${label}…`;
 
     return (
         <div className="space-y-2">
-            <h3 className="text-sm font-medium">{label}</h3>
-
-            {/* Dropdown trigger + panel */}
-            <div className="relative" ref={containerRef}>
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsOpen((prev) => !prev)}
-                    className="w-full justify-between"
-                >
-                    <span>{triggerLabel}</span>
-                    <span className="ml-2 text-theme-text-secondary">{isOpen ? '▲' : '▼'}</span>
-                </Button>
-
-                {isOpen && (
-                    <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-dark border border-dark-border shadow-lg">
-                        <div className="p-2 border-b border-dark-border">
-                            <SearchInput
-                                value={search}
-                                onChange={setSearch}
-                                placeholder="Search buffs..."
-                            />
-                        </div>
-                        <div className="overflow-y-auto max-h-64">
-                            {filteredBuffs.map((buff) => {
-                                const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
-                                const summary = buildEffectSummary(buff.parsedEffects);
-                                return (
-                                    <button
-                                        key={buff.name}
-                                        className="w-full text-left px-3 py-2 hover:bg-dark-border flex items-center justify-between gap-2"
-                                        onClick={() => handleAdd(buff)}
-                                    >
-                                        <div className="min-w-0">
-                                            <div
-                                                className={`text-sm font-medium truncate ${!hasDps ? 'text-theme-text-secondary' : ''}`}
-                                            >
-                                                {buff.name}
-                                            </div>
-                                            <div className="text-xs text-theme-text-secondary truncate">
-                                                {hasDps ? summary : 'No DPS effect'}
-                                            </div>
-                                        </div>
-                                        <span className="text-theme-text-secondary text-xs shrink-0">
-                                            +
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                            {filteredBuffs.length === 0 && (
-                                <p className="text-sm text-theme-text-secondary px-3 py-2">
-                                    No buffs found.
-                                </p>
-                            )}
-                        </div>
+            <Dropdown
+                align="left"
+                trigger={(isOpen) => (
+                    <div className="flex cursor-pointer items-center justify-between border border-dark-border bg-dark px-3 py-2 hover:border-primary">
+                        <span className="text-sm">{triggerLabel}</span>
+                        <ChevronDownIcon
+                            className={`h-4 w-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                        />
                     </div>
                 )}
-            </div>
+            >
+                <div className="w-72 p-2">
+                    <SearchInput value={search} onChange={setSearch} placeholder="Search buffs…" />
+                    <div className="mt-2 max-h-64 overflow-y-auto">
+                        {filteredBuffs.map((buff) => {
+                            const isSelected = selectedNames.has(buff.name);
+                            const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
+                            const summary = buildEffectSummary(
+                                buff.parsedEffects,
+                                1,
+                                relevantStats
+                            );
+                            return (
+                                <button
+                                    key={buff.name}
+                                    type="button"
+                                    onClick={() => toggleBuff(buff)}
+                                    className={`flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-dark-border ${isSelected ? 'bg-dark-lighter' : ''}`}
+                                >
+                                    <div
+                                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border transition-colors ${
+                                            isSelected
+                                                ? 'border-primary bg-primary'
+                                                : 'border-dark-border bg-dark'
+                                        }`}
+                                    >
+                                        <CheckIcon
+                                            className={`!h-3 !w-3 text-dark transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+                                        />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span
+                                            className={`block truncate text-sm ${!hasDps ? 'text-theme-text-secondary' : ''}`}
+                                        >
+                                            {buff.name}
+                                        </span>
+                                        <span className="text-xs text-theme-text-secondary">
+                                            {hasDps ? summary : 'No DPS effect'}
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                        {filteredBuffs.length === 0 && (
+                            <p className="px-2 py-2 text-sm text-theme-text-secondary">
+                                No buffs found.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </Dropdown>
 
-            {/* Selected buff chips */}
             {value.length > 0 && (
                 <div className="space-y-1">
                     {value.map((selected) => {
@@ -190,10 +182,10 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                         return (
                             <div
                                 key={selected.id}
-                                className="card flex items-center gap-2 py-1 px-2"
+                                className="card flex items-center gap-2 px-2 py-1"
                             >
-                                <div className="flex-1 min-w-0">
-                                    <span className="text-sm font-medium truncate block">
+                                <div className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-medium">
                                         {selected.buffName}
                                     </span>
                                     <span className="text-xs text-theme-text-secondary">
@@ -222,7 +214,9 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                 <Button
                                     variant="danger"
                                     size="xs"
-                                    onClick={() => handleRemove(selected.id)}
+                                    onClick={() =>
+                                        onChange(value.filter((b) => b.id !== selected.id))
+                                    }
                                     aria-label={`Remove ${selected.buffName}`}
                                 >
                                     ×
