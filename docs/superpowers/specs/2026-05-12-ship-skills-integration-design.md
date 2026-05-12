@@ -207,6 +207,7 @@ Show a small `(auto-filled)` note in muted text next to `activeMultiplier` / `ch
 
 | File | Change |
 |---|---|
+| `src/types/ship.ts` | Add `chargeSkillCharge?: number` to the `ShipData` interface (already present on `Ship`; missing from `ShipData`) |
 | `src/contexts/ShipsContext.tsx` | Extend `RawShipData` interface, query string, and `transformShipData` mapping |
 | `src/utils/skillTextParser.ts` | Add `parseSkillDamage` and `detectFullyCharged` |
 | `src/components/ship/SkillTooltip.tsx` | Add `inline` prop |
