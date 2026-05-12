@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { parseBuffEffects, isStackable, hasDpsEffect } from '../../utils/calculators/buffParser';
 import { BUFFS } from '../../constants/buffs';
@@ -58,10 +58,13 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     const [search, setSearch] = useState('');
     const nextIdRef = useRef(0);
 
-    const filteredBuffs = PARSED_BUFFS.filter((buff) => {
+    const filteredBuffs = useMemo(() => {
         const q = search.toLowerCase();
-        return buff.name.toLowerCase().includes(q) || buff.description.toLowerCase().includes(q);
-    });
+        return PARSED_BUFFS.filter(
+            (buff) =>
+                buff.name.toLowerCase().includes(q) || buff.description.toLowerCase().includes(q)
+        );
+    }, [search]);
 
     const handleAdd = (buff: (typeof PARSED_BUFFS)[number]) => {
         const id = String(nextIdRef.current++);
@@ -151,12 +154,12 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
 
             {/* Buff list */}
             <div className="overflow-y-auto max-h-72 space-y-1 border border-dark-border">
-                {filteredBuffs.map((buff, idx) => {
+                {filteredBuffs.map((buff) => {
                     const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
                     const summary = buildEffectSummary(buff.parsedEffects);
                     return (
                         <div
-                            key={`${buff.name}-${idx}`}
+                            key={buff.name}
                             className="flex items-center gap-2 px-2 py-1 hover:bg-dark-border"
                         >
                             <div className="flex-1 min-w-0">
