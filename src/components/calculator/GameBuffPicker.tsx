@@ -82,8 +82,12 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
         if (selectedNames.has(buff.name)) {
             onChange(value.filter((s) => s.buffName !== buff.name));
         } else {
+            const family = buff.name.replace(/\s+[IVX]+$/, '');
+            const withoutFamily = value.filter(
+                (s) => s.buffName.replace(/\s+[IVX]+$/, '') !== family
+            );
             onChange([
-                ...value,
+                ...withoutFamily,
                 {
                     id: buff.name,
                     buffName: buff.name,
