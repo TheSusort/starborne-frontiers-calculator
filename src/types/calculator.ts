@@ -41,3 +41,30 @@ export interface SelectedGameBuff {
     isStackable: boolean;
     maxStacks?: number; // e.g. 10 for "up to 10 times"
 }
+
+export interface DPSShipConfig {
+    id: string;
+    shipId?: string;
+    name: string;
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    activeMultiplier: number;
+    chargedMultiplier: number;
+    chargeCount: number;
+    startCharged: boolean;
+    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier'>;
+    activeDoTs: DoTApplicationConfig;
+    chargedDoTs: DoTApplicationConfig;
+}
+
+export type DPSShipConfigUpdateableField =
+    | 'name'
+    | 'attack'
+    | 'crit'
+    | 'critDamage'
+    | 'defensePenetration'
+    | 'activeMultiplier'
+    | 'chargedMultiplier'
+    | 'chargeCount';

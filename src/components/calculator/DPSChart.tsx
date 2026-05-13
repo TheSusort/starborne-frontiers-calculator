@@ -5,7 +5,7 @@ import { BaseStats } from '../../types/stats';
 import { BaseChart, DefaultErrorFallback } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
-interface ShipConfig {
+interface DPSChartShipEntry {
     id: string;
     name: string;
     attack: number;
@@ -15,7 +15,7 @@ interface ShipConfig {
 }
 
 interface DPSChartProps {
-    ships: ShipConfig[];
+    ships: DPSChartShipEntry[];
     height?: number;
 }
 
