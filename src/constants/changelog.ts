@@ -1,6 +1,6 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.60.0';
+export const CURRENT_VERSION = '1.61.0';
 
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
@@ -8,13 +8,19 @@ export const CURRENT_VERSION = '1.60.0';
 export const UNRELEASED_CHANGES: string[] = [
     // Add new feature descriptions here — they appear in the changelog
     // but do NOT trigger the auto-popup until promoted to a release.
-    'Added Engineering Optimizer — optimize your engineering spend to maximize the stats of your starred ships.',
-    'Added Autogear All and Select All buttons — queue multiple ships for autogear at once from the starred ship alerts panel and the Suggested Next Autogear panel.',
-    'Ship skills are now shown on the Ship Details page. The DPS Calculator auto-fills skill damage multipliers and detects "Start Charged" from your selected ship\'s skill data.',
-    'DPS Calculator buff system upgraded — Attacker Buffs and Enemy Buffs / Debuffs are now picked from the full game buff list with automatic parsing, stack support, and defense penetration / DoT modifier calculations.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.61.0',
+        date: '2026-05-13',
+        changes: [
+            'Added Engineering Optimizer — optimize your engineering spend to maximize the stats of your starred ships.',
+            'Added Autogear All and Select All buttons — queue multiple ships for autogear at once from the starred ship alerts panel and the Suggested Next Autogear panel.',
+            'Ship skills are now shown on the Ship Details page. The DPS Calculator auto-fills skill damage multipliers and detects "Start Charged" from your selected ship\'s skill data.',
+            'DPS Calculator buff system upgraded — Attacker Buffs and Enemy Buffs / Debuffs are now picked from the full game buff list with automatic parsing, stack support, and defense penetration / DoT modifier calculations.',
+        ],
+    },
     {
         version: '1.60.0',
         date: '2026-05-07',
