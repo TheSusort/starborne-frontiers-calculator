@@ -4,6 +4,7 @@ import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
     DoTApplicationEntry,
+    AttackerBuffTotals,
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -17,12 +18,6 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
 import { DoTEditor } from './DoTEditor';
 import { ShipConfigSummary } from './ShipConfigSummary';
-
-interface AttackerBuffTotals {
-    attackBuff: number;
-    critBuff: number;
-    critDamageBuff: number;
-}
 
 interface ShipConfigCardProps {
     config: DPSShipConfig;

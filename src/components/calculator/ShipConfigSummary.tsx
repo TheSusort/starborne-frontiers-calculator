@@ -1,13 +1,7 @@
 import React from 'react';
-import { DPSShipConfig } from '../../types/calculator';
+import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
-
-interface AttackerBuffTotals {
-    attackBuff: number;
-    critBuff: number;
-    critDamageBuff: number;
-}
 
 interface ShipConfigSummaryProps {
     config: DPSShipConfig;

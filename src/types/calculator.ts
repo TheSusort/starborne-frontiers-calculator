@@ -68,3 +68,9 @@ export type DPSShipConfigUpdateableField =
     | 'activeMultiplier'
     | 'chargedMultiplier'
     | 'chargeCount';
+
+export interface AttackerBuffTotals {
+    attackBuff: number;
+    critBuff: number;
+    critDamageBuff: number;
+}
