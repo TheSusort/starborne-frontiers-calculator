@@ -30,6 +30,15 @@ import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
+function buildSkillAutoFill(ship: Ship) {
+    const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
+    const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
+    const autoFilledFields = new Set<'activeMultiplier' | 'chargedMultiplier'>();
+    if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
+    if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
+    return { activeParsed, chargedParsed, autoFilledFields };
+}
+
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { getShipById } = useShips();
@@ -56,11 +65,7 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
-                const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
-                const autoFilled = new Set<'activeMultiplier' | 'chargedMultiplier'>();
-                if (activeParsed > 0) autoFilled.add('activeMultiplier');
-                if (chargedParsed > 0) autoFilled.add('chargedMultiplier');
+                const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
                 return {
                     configs: [
                         {
@@ -81,7 +86,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 ship.secondPassiveSkillText,
                                 ship.thirdPassiveSkillText,
                             ]),
-                            autoFilledFields: autoFilled,
+                            autoFilledFields,
                             activeDoTs: [...DEFAULT_DOT_CONFIG],
                             chargedDoTs: [...DEFAULT_DOT_CONFIG],
                         },
@@ -242,11 +247,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
-        const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
-        const newAutoFilled = new Set<'activeMultiplier' | 'chargedMultiplier'>();
-        if (activeParsed > 0) newAutoFilled.add('activeMultiplier');
-        if (chargedParsed > 0) newAutoFilled.add('chargedMultiplier');
+        const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
@@ -268,7 +269,7 @@ const DPSCalculatorPage: React.FC = () => {
                         ship.secondPassiveSkillText,
                         ship.thirdPassiveSkillText,
                     ]),
-                    autoFilledFields: newAutoFilled,
+                    autoFilledFields,
                 };
             })
         );

@@ -8,7 +8,7 @@ import {
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
-import { SkillTooltip } from '../ship/SkillTooltip';
+import { ShipSkillList } from '../ship/ShipSkillList';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -200,50 +200,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 </span>
                             </Button>
                             <CollapsibleForm isVisible={skillRefOpen}>
-                                <div className="space-y-3 pt-2 pb-4 border-b border-dark-border mb-4">
-                                    {selectedShip.activeSkillText && (
-                                        <SkillTooltip
-                                            inline
-                                            skillText={selectedShip.activeSkillText}
-                                            skillType="Active"
-                                        />
-                                    )}
-                                    {selectedShip.chargeSkillText && (
-                                        <SkillTooltip
-                                            inline
-                                            skillText={selectedShip.chargeSkillText}
-                                            skillType="Charge"
-                                            charge={selectedShip.chargeSkillCharge}
-                                        />
-                                    )}
-                                    {(() => {
-                                        const refitCount = selectedShip.refits.length;
-                                        if (refitCount >= 4 && selectedShip.thirdPassiveSkillText)
-                                            return (
-                                                <SkillTooltip
-                                                    inline
-                                                    skillText={selectedShip.thirdPassiveSkillText}
-                                                    skillType="Passive R4"
-                                                />
-                                            );
-                                        if (refitCount >= 2 && selectedShip.secondPassiveSkillText)
-                                            return (
-                                                <SkillTooltip
-                                                    inline
-                                                    skillText={selectedShip.secondPassiveSkillText}
-                                                    skillType="Passive R2"
-                                                />
-                                            );
-                                        if (refitCount >= 1 && selectedShip.firstPassiveSkillText)
-                                            return (
-                                                <SkillTooltip
-                                                    inline
-                                                    skillText={selectedShip.firstPassiveSkillText}
-                                                    skillType="Passive R1"
-                                                />
-                                            );
-                                        return null;
-                                    })()}
+                                <div className="pt-2 pb-4 border-b border-dark-border mb-4">
+                                    <ShipSkillList ship={selectedShip} />
                                 </div>
                             </CollapsibleForm>
                         </>
