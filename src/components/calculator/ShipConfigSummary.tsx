@@ -48,8 +48,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     });
 
     const comparedToBestPercentage =
-        bestTotalDamage !== undefined && !isBest
-            ? ((simResult.summary.totalDamage - bestTotalDamage) / (bestTotalDamage || 1)) * 100
+        bestTotalDamage !== undefined && bestTotalDamage !== 0 && !isBest
+            ? ((simResult.summary.totalDamage - bestTotalDamage) / bestTotalDamage) * 100
             : null;
 
     return (
