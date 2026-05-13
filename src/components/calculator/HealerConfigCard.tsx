@@ -1,74 +1,68 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import {
-    DPSShipConfig,
-    DPSShipConfigUpdateableField,
-    DoTApplicationEntry,
-    AttackerBuffTotals,
+    HealerConfig,
+    HealerConfigUpdateableField,
+    HealingBuffTotals,
     SelectedGameBuff,
 } from '../../types/calculator';
-import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { calculateHealing } from '../../utils/calculators/healingCalculator';
 import { ShipSelector } from '../ship/ShipSelector';
 import { ShipSkillList } from '../ship/ShipSkillList';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
-import { DoTEditor } from './DoTEditor';
 import { GameBuffPicker } from './GameBuffPicker';
-import { ShipConfigSummary } from './ShipConfigSummary';
 
-interface ShipConfigCardProps {
-    config: DPSShipConfig;
+const HEAL_MODIFIER_OPTIONS = [
+    { value: '0', label: '0%' },
+    { value: '10', label: '10%' },
+    { value: '20', label: '20%' },
+    { value: '30', label: '30%' },
+    { value: '40', label: '40%' },
+    { value: '50', label: '50%' },
+    { value: '60', label: '60%' },
+];
+
+interface HealerConfigCardProps {
+    config: HealerConfig;
     isBest: boolean;
     isComparing: boolean;
-    simResult: DPSSimulationResult | undefined;
-    bestTotalDamage: number | undefined;
-    bestVsSecondPercentage: number | null;
-    rounds: number;
-    attackerBuffTotals: AttackerBuffTotals;
+    bestEffectiveHealing: number | undefined;
+    buffTotals?: HealingBuffTotals;
     onRemove: () => void;
-    onUpdate: (field: DPSShipConfigUpdateableField, value: string | number) => void;
+    onUpdate: (field: HealerConfigUpdateableField, value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
-    onAddDoT: (dotField: 'activeDoTs' | 'chargedDoTs') => void;
-    onRemoveDoT: (dotField: 'activeDoTs' | 'chargedDoTs', dotId: string) => void;
-    onUpdateDoT: (
-        dotField: 'activeDoTs' | 'chargedDoTs',
-        dotId: string,
-        updates: Partial<DoTApplicationEntry>
-    ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
 }
 
-export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
+export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
     config,
     isBest,
     isComparing,
-    simResult,
-    bestTotalDamage,
-    bestVsSecondPercentage,
-    rounds,
-    attackerBuffTotals,
+    bestEffectiveHealing,
+    buffTotals,
     onRemove,
     onUpdate,
     onSelectShip,
     onStartChargedChange,
-    onAddDoT,
-    onRemoveDoT,
-    onUpdateDoT,
     onBuffsChange,
 }) => {
-    const [openAdvanced, setOpenAdvanced] = useState(false);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+    const result = calculateHealing(config, buffTotals);
+    const hasCharged = config.chargedHealPercent > 0 && config.chargeCount > 0;
 
     return (
-        <div className={`p-4 bg-dark border ${isBest ? 'border-primary' : 'border-dark-border'}`}>
+        <div className={`card relative ${isBest ? 'border-primary' : ''}`}>
             <div className="mb-4">
                 <ShipSelector
                     selected={selectedShip ?? null}
@@ -82,23 +76,21 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     onChange={(e) => onUpdate('name', e.target.value)}
                     className="font-bold"
                 />
-                <Button variant="danger" onClick={onRemove} aria-label="Remove ship">
+                <Button variant="danger" onClick={onRemove} aria-label="Remove healer">
                     <CloseIcon />
                 </Button>
             </div>
 
             <div className="space-y-4">
-                <div className="flex gap-4">
+                <div className="grid grid-cols-2 gap-4">
                     <Input
-                        label="Attack"
+                        label="HP"
                         type="number"
-                        value={config.attack}
-                        onChange={(e) => onUpdate('attack', parseInt(e.target.value) || 0)}
+                        value={config.hp}
+                        onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
                     />
-                </div>
-                <div className="flex gap-4">
                     <Input
-                        label="Crit Rate (%)"
+                        label="Crit Chance (%)"
                         type="number"
                         min="0"
                         max="100"
@@ -106,40 +98,36 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         onChange={(e) => onUpdate('crit', parseInt(e.target.value) || 0)}
                     />
                     <Input
-                        label="Crit Damage (%)"
+                        label="Crit Power (%)"
                         type="number"
                         min="0"
+                        max="200"
                         value={config.critDamage}
                         onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
                     />
-                </div>
-                <div className="flex gap-4">
-                    <Input
-                        label="Defense Penetration (%)"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={config.defensePenetration}
-                        onChange={(e) =>
-                            onUpdate('defensePenetration', parseInt(e.target.value) || 0)
-                        }
+                    <Select
+                        label="Heal Modifier (%)"
+                        className="w-fit"
+                        value={config.healModifier.toString()}
+                        options={HEAL_MODIFIER_OPTIONS}
+                        onChange={(value) => onUpdate('healModifier', parseInt(value) || 0)}
                     />
                 </div>
 
                 <Button
                     variant="link"
-                    onClick={() => setOpenAdvanced((v) => !v)}
+                    onClick={() => setAdvancedOpen((v) => !v)}
                     className="w-full flex justify-between items-center mt-4"
                 >
                     <span className="flex items-center gap-2">
                         <ChevronDownIcon
-                            className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openAdvanced ? 'rotate-180' : ''}`}
+                            className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${advancedOpen ? 'rotate-180' : ''}`}
                         />
-                        {openAdvanced ? 'Hide' : 'Show'} Advanced
+                        {advancedOpen ? 'Hide' : 'Show'} Advanced
                     </span>
                 </Button>
 
-                <CollapsibleForm isVisible={openAdvanced}>
+                <CollapsibleForm isVisible={advancedOpen}>
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                         Skills
                     </div>
@@ -148,28 +136,26 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             label="Active (%)"
                             type="number"
                             min="0"
-                            value={config.activeMultiplier}
-                            helpLabel={
-                                config.autoFilledFields?.has('activeMultiplier')
-                                    ? 'auto-filled'
-                                    : undefined
-                            }
+                            max="100"
+                            step="0.1"
+                            value={config.healPercent}
+                            helpLabel={config.healPercentAutoFilled ? 'auto-filled' : undefined}
                             onChange={(e) =>
-                                onUpdate('activeMultiplier', parseInt(e.target.value) || 0)
+                                onUpdate('healPercent', parseFloat(e.target.value) || 0)
                             }
                         />
                         <Input
                             label="Charged (%)"
                             type="number"
                             min="0"
-                            value={config.chargedMultiplier}
+                            max="100"
+                            step="0.1"
+                            value={config.chargedHealPercent}
                             helpLabel={
-                                config.autoFilledFields?.has('chargedMultiplier')
-                                    ? 'auto-filled'
-                                    : undefined
+                                config.chargedHealPercentAutoFilled ? 'auto-filled' : undefined
                             }
                             onChange={(e) =>
-                                onUpdate('chargedMultiplier', parseInt(e.target.value) || 0)
+                                onUpdate('chargedHealPercent', parseFloat(e.target.value) || 0)
                             }
                         />
                         <Input
@@ -194,14 +180,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     </div>
                     <GameBuffPicker
                         label="Ship Buffs"
-                        relevantStats={[
-                            'attack',
-                            'crit',
-                            'critDamage',
-                            'outgoingDamage',
-                            'defensePenetration',
-                            'dotDamage',
-                        ]}
+                        relevantStats={['crit', 'critDamage']}
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}
@@ -228,36 +207,48 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             </CollapsibleForm>
                         </>
                     )}
-
-                    <DoTEditor
-                        dots={config.activeDoTs}
-                        label="DoTs — Active Skill"
-                        labelClassName="text-orange-400"
-                        onAdd={() => onAddDoT('activeDoTs')}
-                        onRemove={(dotId) => onRemoveDoT('activeDoTs', dotId)}
-                        onUpdate={(dotId, updates) => onUpdateDoT('activeDoTs', dotId, updates)}
-                    />
-                    <DoTEditor
-                        dots={config.chargedDoTs}
-                        label="DoTs — Charged Skill"
-                        labelClassName="text-purple-400"
-                        onAdd={() => onAddDoT('chargedDoTs')}
-                        onRemove={(dotId) => onRemoveDoT('chargedDoTs', dotId)}
-                        onUpdate={(dotId, updates) => onUpdateDoT('chargedDoTs', dotId, updates)}
-                    />
                 </CollapsibleForm>
 
-                {simResult && (
-                    <ShipConfigSummary
-                        config={config}
-                        simResult={simResult}
-                        isBest={isBest}
-                        isComparing={isComparing}
-                        rounds={rounds}
-                        attackerBuffTotals={attackerBuffTotals}
-                        bestTotalDamage={bestTotalDamage}
-                        bestVsSecondPercentage={bestVsSecondPercentage}
-                    />
+                <div className="mt-4 pt-4 border-t border-dark-border space-y-2">
+                    <div className="flex justify-between">
+                        <span className="text-theme-text-secondary">Active Heal:</span>
+                        <span>{Math.round(result.activeEffectiveHealing).toLocaleString()} HP</span>
+                    </div>
+                    {hasCharged && (
+                        <div className="flex justify-between">
+                            <span className="text-theme-text-secondary">Charged Heal:</span>
+                            <span>
+                                {Math.round(result.chargedEffectiveHealing).toLocaleString()} HP
+                            </span>
+                        </div>
+                    )}
+                    <div className="flex justify-between">
+                        <span className="text-theme-text-secondary">
+                            {hasCharged ? 'Avg per Round:' : 'Effective Healing:'}
+                        </span>
+                        <span className={isBest ? 'text-primary font-bold' : ''}>
+                            {Math.round(result.effectiveHealing).toLocaleString()} HP
+                        </span>
+                    </div>
+                    {isComparing && !isBest && bestEffectiveHealing && (
+                        <div className="flex justify-between">
+                            <span className="text-theme-text-secondary">Compared to best:</span>
+                            <span className="text-red-500">
+                                {(
+                                    ((result.effectiveHealing - bestEffectiveHealing) /
+                                        bestEffectiveHealing) *
+                                    100
+                                ).toFixed(2)}
+                                %
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                {isBest && (
+                    <div className="text-primary text-sm mt-2 text-center">
+                        Best healer configuration
+                    </div>
                 )}
             </div>
         </div>

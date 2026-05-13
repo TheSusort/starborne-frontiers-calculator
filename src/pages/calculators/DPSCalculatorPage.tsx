@@ -89,6 +89,7 @@ const DPSCalculatorPage: React.FC = () => {
                             autoFilledFields,
                             activeDoTs: [...DEFAULT_DOT_CONFIG],
                             chargedDoTs: [...DEFAULT_DOT_CONFIG],
+                            buffs: [],
                         },
                     ],
                     nextId: 2,
@@ -110,6 +111,7 @@ const DPSCalculatorPage: React.FC = () => {
                     startCharged: false,
                     activeDoTs: [...DEFAULT_DOT_CONFIG],
                     chargedDoTs: [...DEFAULT_DOT_CONFIG],
+                    buffs: [],
                 },
             ],
             nextId: 2,
@@ -136,7 +138,7 @@ const DPSCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    const attackerBuffTotals = useMemo(
+    const globalAttackerBuffTotals = useMemo(
         () => ({
             attackBuff: attackerBuffs.reduce(
                 (sum, s) => sum + (s.parsedEffects.attack ?? 0) * s.stacks,
@@ -154,15 +156,46 @@ const DPSCalculatorPage: React.FC = () => {
         [attackerBuffs]
     );
 
+    const mergedAttackerBuffTotals = useMemo(
+        () =>
+            new Map(
+                configs.map((c) => [
+                    c.id,
+                    {
+                        attackBuff:
+                            globalAttackerBuffTotals.attackBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.attack ?? 0) * b.stacks,
+                                0
+                            ),
+                        critBuff:
+                            globalAttackerBuffTotals.critBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.crit ?? 0) * b.stacks,
+                                0
+                            ),
+                        critDamageBuff:
+                            globalAttackerBuffTotals.critDamageBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
+                                0
+                            ),
+                    },
+                ])
+            ),
+        [configs, globalAttackerBuffTotals]
+    );
+
     const simResults = useMemo(() => {
-        const simBuffs = toSimBuffs(attackerBuffs);
         const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyBuffs);
-        const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
-            attackerBuffs,
-            enemyBuffs
-        );
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
+            const allAttackerBuffs = [...attackerBuffs, ...config.buffs];
+            const simBuffs = toSimBuffs(allAttackerBuffs);
+            const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
+                allAttackerBuffs,
+                enemyBuffs
+            );
             map.set(
                 config.id,
                 simulateDPS({
@@ -207,6 +240,7 @@ const DPSCalculatorPage: React.FC = () => {
                 startCharged: false,
                 activeDoTs: [...DEFAULT_DOT_CONFIG],
                 chargedDoTs: [...DEFAULT_DOT_CONFIG],
+                buffs: [],
             },
         ]);
         setNextId(nextId + 1);
@@ -333,6 +367,10 @@ const DPSCalculatorPage: React.FC = () => {
         );
     };
 
+    const updateConfigBuffs = (id: string, buffs: SelectedGameBuff[]) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
+    };
+
     const bestConfig = configs.reduce<DPSShipConfig | null>((best, current) => {
         if (!best) return current;
         const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
@@ -393,7 +431,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 bestTotalDamage={bestTotalDamage}
                                 bestVsSecondPercentage={bestVsSecondPercentage}
                                 rounds={rounds}
-                                attackerBuffTotals={attackerBuffTotals}
+                                attackerBuffTotals={mergedAttackerBuffTotals.get(config.id)!}
                                 onRemove={() => removeConfig(config.id)}
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
@@ -411,6 +449,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 onUpdateDoT={(dotField, dotId, updates) =>
                                     updateDoTEntry(config.id, dotField, dotId, updates)
                                 }
+                                onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
                             />
                         ))}
                     </div>

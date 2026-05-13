@@ -57,6 +57,7 @@ export interface DPSShipConfig {
     autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier'>;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
+    buffs: SelectedGameBuff[];
 }
 
 export type DPSShipConfigUpdateableField =
@@ -74,3 +75,35 @@ export interface AttackerBuffTotals {
     critBuff: number;
     critDamageBuff: number;
 }
+
+export interface HealingBuffTotals {
+    critBuff: number;
+    critDamageBuff: number;
+}
+
+export interface HealerConfig {
+    id: string;
+    shipId?: string;
+    name: string;
+    hp: number;
+    healPercent: number;
+    healPercentAutoFilled?: boolean;
+    chargedHealPercent: number;
+    chargedHealPercentAutoFilled?: boolean;
+    chargeCount: number;
+    startCharged: boolean;
+    crit: number;
+    critDamage: number;
+    healModifier: number;
+    buffs: SelectedGameBuff[];
+}
+
+export type HealerConfigUpdateableField =
+    | 'name'
+    | 'hp'
+    | 'healPercent'
+    | 'chargedHealPercent'
+    | 'chargeCount'
+    | 'crit'
+    | 'critDamage'
+    | 'healModifier';

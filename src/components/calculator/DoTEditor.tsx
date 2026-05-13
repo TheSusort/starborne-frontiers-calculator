@@ -2,7 +2,6 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
-import { CloseIcon } from '../ui';
 import { DoTApplicationConfig, DoTApplicationEntry, DoTType } from '../../types/calculator';
 
 const DOT_TYPE_OPTIONS = [
