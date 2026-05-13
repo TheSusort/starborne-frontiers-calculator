@@ -1,136 +1,34 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CloseIcon, PageLayout } from '../../components/ui';
+import { PageLayout } from '../../components/ui';
 import { Ship } from '../../types/ship';
-import { ShipSelector } from '../../components/ship/ShipSelector';
-import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
-import { calculateCritMultiplier } from '../../utils/autogear/scoring';
+import {
+    DPSShipConfig,
+    DPSShipConfigUpdateableField,
+    DoTApplicationEntry,
+    DEFAULT_DOT_CONFIG,
+    SelectedGameBuff,
+} from '../../types/calculator';
+import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import {
+    toSimBuffs,
+    toEnemyModifiers,
+    toDotAndPenModifiers,
+} from '../../utils/calculators/dpsBuffHelpers';
+import { useShips } from '../../contexts/ShipsContext';
+import { useInventory } from '../../contexts/InventoryProvider';
+import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Select } from '../../components/ui/Select';
 import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTable';
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
-import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
-import { SkillTooltip } from '../../components/ship/SkillTooltip';
-import { Checkbox } from '../../components/ui/Checkbox';
-import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
+import { CombatSettingsPanel } from '../../components/calculator/CombatSettingsPanel';
+import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
-import { useShips } from '../../contexts/ShipsContext';
-import { useInventory } from '../../contexts/InventoryProvider';
-import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
-import {
-    Buff,
-    DoTApplicationConfig,
-    DoTApplicationEntry,
-    DoTType,
-    DEFAULT_DOT_CONFIG,
-    SelectedGameBuff,
-} from '../../types/calculator';
-import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
-
-// Define the type for a ship configuration
-interface ShipConfig {
-    id: string;
-    shipId?: string; // links config to a selected player ship
-    name: string;
-    attack: number;
-    crit: number;
-    critDamage: number;
-    defensePenetration: number;
-    activeMultiplier: number;
-    chargedMultiplier: number;
-    chargeCount: number;
-    startCharged: boolean;
-    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier'>;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
-}
-
-const DOT_TYPE_OPTIONS = [
-    { value: 'corrosion', label: 'Corrosion' },
-    { value: 'inferno', label: 'Inferno' },
-    { value: 'bomb', label: 'Bomb' },
-];
-
-const TIER_OPTIONS_BY_TYPE: Record<string, { value: string; label: string }[]> = {
-    corrosion: [
-        { value: '3', label: 'I (3%)' },
-        { value: '6', label: 'II (6%)' },
-        { value: '9', label: 'III (9%)' },
-    ],
-    inferno: [
-        { value: '15', label: 'I (15%)' },
-        { value: '30', label: 'II (30%)' },
-        { value: '45', label: 'III (45%)' },
-    ],
-    bomb: [
-        { value: '100', label: 'I (100%)' },
-        { value: '200', label: 'II (200%)' },
-        { value: '300', label: 'III (300%)' },
-    ],
-};
-
-function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
-    return selected.flatMap((s) => {
-        const entries: Buff[] = [];
-        const { parsedEffects, stacks } = s;
-        if (parsedEffects.attack !== undefined)
-            entries.push({
-                id: `${s.id}-atk`,
-                stat: 'attack',
-                value: parsedEffects.attack * stacks,
-            });
-        if (parsedEffects.crit !== undefined)
-            entries.push({ id: `${s.id}-crit`, stat: 'crit', value: parsedEffects.crit * stacks });
-        if (parsedEffects.critDamage !== undefined)
-            entries.push({
-                id: `${s.id}-cd`,
-                stat: 'critDamage',
-                value: parsedEffects.critDamage * stacks,
-            });
-        if (parsedEffects.outgoingDamage !== undefined)
-            entries.push({
-                id: `${s.id}-od`,
-                stat: 'outgoingDamage',
-                value: parsedEffects.outgoingDamage * stacks,
-            });
-        return entries;
-    });
-}
-
-function toEnemyModifiers(selected: SelectedGameBuff[]): {
-    enemyDefenseModifier: number;
-    incomingDamageModifier: number;
-} {
-    const enemyDefenseModifier = selected.reduce(
-        (sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks,
-        0
-    );
-    const incomingDamageModifier = selected.reduce(
-        (sum, s) => sum + (s.parsedEffects.incomingDamage ?? 0) * s.stacks,
-        0
-    );
-    return { enemyDefenseModifier, incomingDamageModifier };
-}
-
-function toDotAndPenModifiers(
-    attacker: SelectedGameBuff[],
-    enemy: SelectedGameBuff[]
-): { defensePenetrationBuff: number; dotDamageModifier: number } {
-    const defensePenetrationBuff = attacker.reduce(
-        (sum, s) => sum + (s.parsedEffects.defensePenetration ?? 0) * s.stacks,
-        0
-    );
-    const dotDamageModifier =
-        attacker.reduce((sum, s) => sum + (s.parsedEffects.dotDamage ?? 0) * s.stacks, 0) +
-        enemy.reduce((sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks, 0);
-    return { defensePenetrationBuff, dotDamageModifier };
-}
 
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -138,8 +36,9 @@ const DPSCalculatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
+    const nextDoTIdRef = useRef(1);
 
-    const getInitialConfig = (): { configs: ShipConfig[]; nextId: number } => {
+    const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
@@ -213,10 +112,8 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const [initialState] = useState(getInitialConfig);
-    const [configs, setConfigs] = useState<ShipConfig[]>(initialState.configs);
+    const [configs, setConfigs] = useState<DPSShipConfig[]>(initialState.configs);
     const [nextId, setNextId] = useState(initialState.nextId);
-    const [openAdvanced, setOpenAdvanced] = useState<Set<string>>(new Set());
-    const [skillRefOpen, setSkillRefOpen] = useState<Set<string>>(new Set());
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
     const [rounds, setRounds] = useState(20);
@@ -224,9 +121,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
     const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
-    const nextDoTIdRef = useRef(1);
 
-    // Clear shipId from URL after initialization to avoid re-triggering
     useEffect(() => {
         if (shipInitialized.current) return;
         shipInitialized.current = true;
@@ -254,7 +149,6 @@ const DPSCalculatorPage: React.FC = () => {
         [attackerBuffs]
     );
 
-    // Simulate DPS for all configs
     const simResults = useMemo(() => {
         const simBuffs = toSimBuffs(attackerBuffs);
         const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyBuffs);
@@ -291,7 +185,6 @@ const DPSCalculatorPage: React.FC = () => {
         return map;
     }, [configs, enemyDefense, enemyHp, rounds, attackerBuffs, enemyBuffs]);
 
-    // Add a new ship configuration
     const addConfig = () => {
         const id = nextId.toString();
         setConfigs((prev) => [
@@ -314,28 +207,13 @@ const DPSCalculatorPage: React.FC = () => {
         setNextId(nextId + 1);
     };
 
-    // Remove a ship configuration
     const removeConfig = (id: string) => {
         setConfigs((prev) => prev.filter((config) => config.id !== id));
-        setSkillRefOpen((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-        });
     };
 
-    // Update a ship configuration
     const updateConfig = (
         id: string,
-        field:
-            | 'name'
-            | 'attack'
-            | 'crit'
-            | 'critDamage'
-            | 'defensePenetration'
-            | 'activeMultiplier'
-            | 'chargedMultiplier'
-            | 'chargeCount',
+        field: DPSShipConfigUpdateableField,
         value: string | number
     ) => {
         setConfigs((prev) =>
@@ -399,8 +277,8 @@ const DPSCalculatorPage: React.FC = () => {
     const addDoTEntry = (configId: string, dotField: 'activeDoTs' | 'chargedDoTs') => {
         const id = nextDoTIdRef.current;
         nextDoTIdRef.current += 1;
-        setConfigs((prevConfigs) =>
-            prevConfigs.map((c) =>
+        setConfigs((prev) =>
+            prev.map((c) =>
                 c.id === configId
                     ? {
                           ...c,
@@ -454,8 +332,7 @@ const DPSCalculatorPage: React.FC = () => {
         );
     };
 
-    // Find the config with the highest total damage
-    const bestConfig = configs.reduce<ShipConfig | null>((best, current) => {
+    const bestConfig = configs.reduce<DPSShipConfig | null>((best, current) => {
         if (!best) return current;
         const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
         const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
@@ -463,22 +340,20 @@ const DPSCalculatorPage: React.FC = () => {
     }, null);
 
     const secondBestConfig = configs
-        .filter((config) => config.id !== bestConfig?.id)
-        .reduce<ShipConfig | null>((best, current) => {
+        .filter((c) => c.id !== bestConfig?.id)
+        .reduce<DPSShipConfig | null>((best, current) => {
             if (!best) return current;
             const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
             const currentDmg = simResults.get(current.id)?.summary.totalDamage ?? 0;
             return currentDmg > bestDmg ? current : best;
         }, null);
 
-    const bestDmg = simResults.get(bestConfig?.id ?? '')?.summary.totalDamage;
+    const bestTotalDamage = simResults.get(bestConfig?.id ?? '')?.summary.totalDamage;
     const secondBestDmg = simResults.get(secondBestConfig?.id ?? '')?.summary.totalDamage;
     const bestVsSecondPercentage =
-        bestDmg && secondBestDmg ? ((bestDmg - secondBestDmg) / secondBestDmg) * 100 : null;
-
-    const toggleViewMode = () => {
-        setViewMode(viewMode === 'table' ? 'heatmap' : 'table');
-    };
+        bestTotalDamage && secondBestDmg
+            ? ((bestTotalDamage - secondBestDmg) / secondBestDmg) * 100
+            : null;
 
     return (
         <>
@@ -486,791 +361,68 @@ const DPSCalculatorPage: React.FC = () => {
             <PageLayout
                 title="DPS Calculator"
                 description="Compare damage output across different ship configurations and combat scenarios."
-                action={{
-                    label: 'Add Ship',
-                    onClick: addConfig,
-                    variant: 'primary',
-                }}
+                action={{ label: 'Add Ship', onClick: addConfig, variant: 'primary' }}
             >
                 <div className="space-y-6">
-                    <div className="card space-y-2">
-                        <Button
-                            variant="link"
-                            onClick={() => setCombatSettingsOpen(!combatSettingsOpen)}
-                            className="w-[calc(100%+1.5rem)] flex justify-between items-center -m-3 !p-3"
-                        >
-                            <span className="flex items-center gap-2">
-                                <ChevronDownIcon
-                                    className={`h-4 w-4 transition-transform duration-300 ${combatSettingsOpen ? 'rotate-180' : ''}`}
-                                />
-                                <span className="text-lg font-bold">Combat Settings</span>
-                            </span>
-                        </Button>
-                        <CollapsibleForm isVisible={combatSettingsOpen}>
-                            <div className="space-y-4 pt-2">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <Input
-                                        label="Enemy Defense"
-                                        type="number"
-                                        value={enemyDefense}
-                                        onChange={(e) =>
-                                            setEnemyDefense(parseInt(e.target.value) || 0)
-                                        }
-                                    />
-                                    <Input
-                                        label="Enemy HP"
-                                        type="number"
-                                        value={enemyHp}
-                                        onChange={(e) => setEnemyHp(parseInt(e.target.value) || 0)}
-                                    />
-                                    <Input
-                                        label="Rounds"
-                                        type="number"
-                                        min="1"
-                                        max="50"
-                                        value={rounds}
-                                        onChange={(e) =>
-                                            setRounds(
-                                                Math.max(
-                                                    1,
-                                                    Math.min(50, parseInt(e.target.value) || 1)
-                                                )
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <p className="text-sm text-theme-text-secondary">
-                                    Shared enemy buffs applied to all ship configurations
-                                </p>
-                                <GameBuffPicker
-                                    label="Enemy Buffs / Debuffs"
-                                    relevantStats={[
-                                        'defense',
-                                        'incomingDamage',
-                                        'incomingDotDamage',
-                                    ]}
-                                    excludeTypes={['effect']}
-                                    value={enemyBuffs}
-                                    onChange={setEnemyBuffs}
-                                />
-                                <p className="text-sm text-theme-text-secondary">
-                                    Shared attacker buffs applied to all ship configurations
-                                </p>
-                                <GameBuffPicker
-                                    label="Attacker Buffs / Debuffs"
-                                    relevantStats={[
-                                        'attack',
-                                        'crit',
-                                        'critDamage',
-                                        'outgoingDamage',
-                                        'defensePenetration',
-                                        'dotDamage',
-                                    ]}
-                                    excludeTypes={['effect']}
-                                    value={attackerBuffs}
-                                    onChange={setAttackerBuffs}
-                                />
-                            </div>
-                        </CollapsibleForm>
-                    </div>
+                    <CombatSettingsPanel
+                        isOpen={combatSettingsOpen}
+                        onToggle={() => setCombatSettingsOpen((v) => !v)}
+                        enemyDefense={enemyDefense}
+                        onEnemyDefenseChange={setEnemyDefense}
+                        enemyHp={enemyHp}
+                        onEnemyHpChange={setEnemyHp}
+                        rounds={rounds}
+                        onRoundsChange={setRounds}
+                        attackerBuffs={attackerBuffs}
+                        onAttackerBuffsChange={setAttackerBuffs}
+                        enemyBuffs={enemyBuffs}
+                        onEnemyBuffsChange={setEnemyBuffs}
+                    />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                        className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${configs.length >= 4 ? '2xl:w-[calc(100vw-256px-2rem)] 2xl:ml-[calc((-100vw/2)+768px+1rem)] 2xl:[grid-template-columns:repeat(auto-fit,minmax(370px,500px))] 2xl:justify-center' : ''}`}
+                    >
                         {configs.map((config) => (
-                            <div
+                            <ShipConfigCard
                                 key={config.id}
-                                className={`
-                                p-4 bg-dark border
-                                ${bestConfig && bestConfig.id === config.id ? 'border-primary' : 'border-dark-border'}
-                            `}
-                            >
-                                <div className="mb-4">
-                                    <ShipSelector
-                                        selected={
-                                            config.shipId
-                                                ? (getShipById(config.shipId) ?? null)
-                                                : null
-                                        }
-                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
-                                        variant="compact"
-                                    />
-                                </div>
-                                <div className="flex justify-between items-center mb-4">
-                                    <Input
-                                        value={config.name}
-                                        onChange={(e) =>
-                                            updateConfig(config.id, 'name', e.target.value)
-                                        }
-                                        className="font-bold"
-                                    />
-                                    <Button
-                                        variant="danger"
-                                        onClick={() => removeConfig(config.id)}
-                                        aria-label="Remove ship"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex gap-4">
-                                        <Input
-                                            label="Attack"
-                                            type="number"
-                                            value={config.attack}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'attack',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <Input
-                                            label="Crit Rate (%)"
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            value={config.crit}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'crit',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                        <Input
-                                            label="Crit Damage (%)"
-                                            type="number"
-                                            min="0"
-                                            value={config.critDamage}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'critDamage',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                    </div>
-                                    <div className="flex gap-4">
-                                        <Input
-                                            label="Defense Penetration (%)"
-                                            type="number"
-                                            min="0"
-                                            max="100"
-                                            value={config.defensePenetration}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'defensePenetration',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                    </div>
-
-                                    <Button
-                                        variant="link"
-                                        onClick={() =>
-                                            setOpenAdvanced((prev) => {
-                                                const next = new Set(prev);
-                                                if (next.has(config.id)) next.delete(config.id);
-                                                else next.add(config.id);
-                                                return next;
-                                            })
-                                        }
-                                        className="w-full flex justify-between items-center mt-4"
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <ChevronDownIcon
-                                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openAdvanced.has(config.id) ? 'rotate-180' : ''}`}
-                                            />
-                                            {openAdvanced.has(config.id) ? 'Hide' : 'Show'} Advanced
-                                        </span>
-                                    </Button>
-                                    <CollapsibleForm isVisible={openAdvanced.has(config.id)}>
-                                        {/* Skills section */}
-                                        <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
-                                            Skills
-                                        </div>
-                                        <div className="grid grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-4 mb-4 items-end">
-                                            <Input
-                                                label="Active (%)"
-                                                type="number"
-                                                min="0"
-                                                value={config.activeMultiplier}
-                                                helpLabel={
-                                                    config.autoFilledFields?.has('activeMultiplier')
-                                                        ? 'auto-filled'
-                                                        : undefined
-                                                }
-                                                onChange={(e) =>
-                                                    updateConfig(
-                                                        config.id,
-                                                        'activeMultiplier',
-                                                        parseInt(e.target.value) || 0
-                                                    )
-                                                }
-                                            />
-                                            <Input
-                                                label="Charged (%)"
-                                                type="number"
-                                                min="0"
-                                                value={config.chargedMultiplier}
-                                                helpLabel={
-                                                    config.autoFilledFields?.has(
-                                                        'chargedMultiplier'
-                                                    )
-                                                        ? 'auto-filled'
-                                                        : undefined
-                                                }
-                                                onChange={(e) =>
-                                                    updateConfig(
-                                                        config.id,
-                                                        'chargedMultiplier',
-                                                        parseInt(e.target.value) || 0
-                                                    )
-                                                }
-                                            />
-                                            <Input
-                                                label="Charge Count"
-                                                type="number"
-                                                min="0"
-                                                value={config.chargeCount}
-                                                onChange={(e) =>
-                                                    updateConfig(
-                                                        config.id,
-                                                        'chargeCount',
-                                                        parseInt(e.target.value) || 0
-                                                    )
-                                                }
-                                            />
-                                            <div className="">
-                                                <Checkbox
-                                                    id={`start-charged-${config.id}`}
-                                                    label="Start Charged"
-                                                    checked={config.startCharged}
-                                                    onChange={(checked) =>
-                                                        setConfigs((prev) =>
-                                                            prev.map((c) =>
-                                                                c.id === config.id
-                                                                    ? {
-                                                                          ...c,
-                                                                          startCharged: checked,
-                                                                      }
-                                                                    : c
-                                                            )
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
-                                        {config.shipId &&
-                                            (() => {
-                                                const selectedShip = getShipById(config.shipId);
-                                                if (!selectedShip) return null;
-                                                return (
-                                                    <>
-                                                        <Button
-                                                            variant="link"
-                                                            onClick={() =>
-                                                                setSkillRefOpen((prev) => {
-                                                                    const next = new Set(prev);
-                                                                    if (next.has(config.id)) {
-                                                                        next.delete(config.id);
-                                                                    } else {
-                                                                        next.add(config.id);
-                                                                    }
-                                                                    return next;
-                                                                })
-                                                            }
-                                                            className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
-                                                        >
-                                                            <span className="flex items-center gap-2">
-                                                                <ChevronDownIcon
-                                                                    className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen.has(config.id) ? 'rotate-180' : ''}`}
-                                                                />
-                                                                Skill Reference
-                                                            </span>
-                                                        </Button>
-                                                        <CollapsibleForm
-                                                            isVisible={skillRefOpen.has(config.id)}
-                                                        >
-                                                            <div className="space-y-3 pt-2 pb-4 border-b border-dark-border mb-4">
-                                                                {selectedShip.activeSkillText && (
-                                                                    <SkillTooltip
-                                                                        inline
-                                                                        skillText={
-                                                                            selectedShip.activeSkillText
-                                                                        }
-                                                                        skillType="Active"
-                                                                    />
-                                                                )}
-                                                                {selectedShip.chargeSkillText && (
-                                                                    <SkillTooltip
-                                                                        inline
-                                                                        skillText={
-                                                                            selectedShip.chargeSkillText
-                                                                        }
-                                                                        skillType={'Charge'}
-                                                                        charge={
-                                                                            selectedShip.chargeSkillCharge
-                                                                        }
-                                                                    />
-                                                                )}
-                                                                {(() => {
-                                                                    const refitCount =
-                                                                        selectedShip.refits.length;
-                                                                    if (
-                                                                        refitCount >= 4 &&
-                                                                        selectedShip.thirdPassiveSkillText
-                                                                    )
-                                                                        return (
-                                                                            <SkillTooltip
-                                                                                inline
-                                                                                skillText={
-                                                                                    selectedShip.thirdPassiveSkillText
-                                                                                }
-                                                                                skillType="Passive R4"
-                                                                            />
-                                                                        );
-                                                                    if (
-                                                                        refitCount >= 2 &&
-                                                                        selectedShip.secondPassiveSkillText
-                                                                    )
-                                                                        return (
-                                                                            <SkillTooltip
-                                                                                inline
-                                                                                skillText={
-                                                                                    selectedShip.secondPassiveSkillText
-                                                                                }
-                                                                                skillType="Passive R2"
-                                                                            />
-                                                                        );
-                                                                    if (
-                                                                        refitCount >= 1 &&
-                                                                        selectedShip.firstPassiveSkillText
-                                                                    )
-                                                                        return (
-                                                                            <SkillTooltip
-                                                                                inline
-                                                                                skillText={
-                                                                                    selectedShip.firstPassiveSkillText
-                                                                                }
-                                                                                skillType="Passive R1"
-                                                                            />
-                                                                        );
-                                                                    return null;
-                                                                })()}
-                                                            </div>
-                                                        </CollapsibleForm>
-                                                    </>
-                                                );
-                                            })()}
-
-                                        {/* DoTs — Active Skill */}
-                                        <div className="flex justify-between items-center mb-2">
-                                            <div className="text-xs font-semibold text-orange-400 uppercase tracking-wide">
-                                                DoTs — Active Skill
-                                            </div>
-                                            <Button
-                                                variant="secondary"
-                                                size="xs"
-                                                onClick={() => addDoTEntry(config.id, 'activeDoTs')}
-                                            >
-                                                Add DoT
-                                            </Button>
-                                        </div>
-                                        {config.activeDoTs.length === 0 ? (
-                                            <p className="text-sm text-theme-text-secondary mb-4">
-                                                No DoTs configured
-                                            </p>
-                                        ) : (
-                                            <div className="space-y-2 mb-4">
-                                                {config.activeDoTs.map((dot) => (
-                                                    <div
-                                                        key={dot.id}
-                                                        className="flex items-end gap-2"
-                                                    >
-                                                        <Select
-                                                            label="Type"
-                                                            options={DOT_TYPE_OPTIONS}
-                                                            value={dot.type}
-                                                            onChange={(v) => {
-                                                                const newType = v as DoTType;
-                                                                const firstTier = parseInt(
-                                                                    TIER_OPTIONS_BY_TYPE[newType][0]
-                                                                        .value
-                                                                );
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'activeDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        type: newType,
-                                                                        tier: firstTier,
-                                                                        duration: 2,
-                                                                    }
-                                                                );
-                                                            }}
-                                                        />
-                                                        <Select
-                                                            label="Tier"
-                                                            options={
-                                                                TIER_OPTIONS_BY_TYPE[dot.type] || []
-                                                            }
-                                                            value={String(dot.tier)}
-                                                            onChange={(v) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'activeDoTs',
-                                                                    dot.id,
-                                                                    { tier: parseInt(v) }
-                                                                )
-                                                            }
-                                                        />
-                                                        <Input
-                                                            label="Stacks"
-                                                            type="number"
-                                                            min="0"
-                                                            value={dot.stacks}
-                                                            onChange={(e) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'activeDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        stacks:
-                                                                            parseInt(
-                                                                                e.target.value
-                                                                            ) || 0,
-                                                                    }
-                                                                )
-                                                            }
-                                                            className="w-20"
-                                                        />
-                                                        <Input
-                                                            label={
-                                                                dot.type === 'bomb'
-                                                                    ? 'Countdown'
-                                                                    : 'Duration'
-                                                            }
-                                                            type="number"
-                                                            min="1"
-                                                            value={dot.duration}
-                                                            onChange={(e) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'activeDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        duration: Math.max(
-                                                                            1,
-                                                                            parseInt(
-                                                                                e.target.value
-                                                                            ) || 1
-                                                                        ),
-                                                                    }
-                                                                )
-                                                            }
-                                                            className="w-20"
-                                                        />
-                                                        <Button
-                                                            variant="danger"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                removeDoTEntry(
-                                                                    config.id,
-                                                                    'activeDoTs',
-                                                                    dot.id
-                                                                )
-                                                            }
-                                                            aria-label="Remove DoT"
-                                                        >
-                                                            <CloseIcon />
-                                                        </Button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-
-                                        {/* DoTs — Charged Skill */}
-                                        <div className="flex justify-between items-center mb-2">
-                                            <div className="text-xs font-semibold text-purple-400 uppercase tracking-wide">
-                                                DoTs — Charged Skill
-                                            </div>
-                                            <Button
-                                                variant="secondary"
-                                                size="xs"
-                                                onClick={() =>
-                                                    addDoTEntry(config.id, 'chargedDoTs')
-                                                }
-                                            >
-                                                Add DoT
-                                            </Button>
-                                        </div>
-                                        {config.chargedDoTs.length === 0 ? (
-                                            <p className="text-sm text-theme-text-secondary">
-                                                No DoTs configured
-                                            </p>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                {config.chargedDoTs.map((dot) => (
-                                                    <div
-                                                        key={dot.id}
-                                                        className="flex items-end gap-2"
-                                                    >
-                                                        <Select
-                                                            label="Type"
-                                                            options={DOT_TYPE_OPTIONS}
-                                                            value={dot.type}
-                                                            onChange={(v) => {
-                                                                const newType = v as DoTType;
-                                                                const firstTier = parseInt(
-                                                                    TIER_OPTIONS_BY_TYPE[newType][0]
-                                                                        .value
-                                                                );
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'chargedDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        type: newType,
-                                                                        tier: firstTier,
-                                                                        duration: 2,
-                                                                    }
-                                                                );
-                                                            }}
-                                                        />
-                                                        <Select
-                                                            label="Tier"
-                                                            options={
-                                                                TIER_OPTIONS_BY_TYPE[dot.type] || []
-                                                            }
-                                                            value={String(dot.tier)}
-                                                            onChange={(v) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'chargedDoTs',
-                                                                    dot.id,
-                                                                    { tier: parseInt(v) }
-                                                                )
-                                                            }
-                                                        />
-                                                        <Input
-                                                            label="Stacks"
-                                                            type="number"
-                                                            min="0"
-                                                            value={dot.stacks}
-                                                            onChange={(e) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'chargedDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        stacks:
-                                                                            parseInt(
-                                                                                e.target.value
-                                                                            ) || 0,
-                                                                    }
-                                                                )
-                                                            }
-                                                            className="w-20"
-                                                        />
-                                                        <Input
-                                                            label={
-                                                                dot.type === 'bomb'
-                                                                    ? 'Countdown'
-                                                                    : 'Duration'
-                                                            }
-                                                            type="number"
-                                                            min="1"
-                                                            value={dot.duration}
-                                                            onChange={(e) =>
-                                                                updateDoTEntry(
-                                                                    config.id,
-                                                                    'chargedDoTs',
-                                                                    dot.id,
-                                                                    {
-                                                                        duration: Math.max(
-                                                                            1,
-                                                                            parseInt(
-                                                                                e.target.value
-                                                                            ) || 1
-                                                                        ),
-                                                                    }
-                                                                )
-                                                            }
-                                                            className="w-20"
-                                                        />
-                                                        <Button
-                                                            variant="danger"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                removeDoTEntry(
-                                                                    config.id,
-                                                                    'chargedDoTs',
-                                                                    dot.id
-                                                                )
-                                                            }
-                                                            aria-label="Remove DoT"
-                                                        >
-                                                            <CloseIcon />
-                                                        </Button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </CollapsibleForm>
-
-                                    {(() => {
-                                        const sim = simResults.get(config.id);
-                                        if (!sim) return null;
-                                        const isBest = bestConfig?.id === config.id;
-                                        const hasDoTs =
-                                            sim.summary.totalCorrosionDamage > 0 ||
-                                            sim.summary.totalInfernoDamage > 0 ||
-                                            sim.summary.totalBombDamage > 0;
-
-                                        return (
-                                            <div className="mt-4 pt-4 border-t border-dark-border">
-                                                <div className="flex justify-between mb-2">
-                                                    <span className="text-theme-text-secondary">
-                                                        Crit Multiplier:
-                                                    </span>
-                                                    <span>
-                                                        {calculateCritMultiplier({
-                                                            attack:
-                                                                config.attack *
-                                                                (1 +
-                                                                    attackerBuffTotals.attackBuff /
-                                                                        100),
-                                                            crit: Math.min(
-                                                                100,
-                                                                config.crit +
-                                                                    attackerBuffTotals.critBuff
-                                                            ),
-                                                            critDamage:
-                                                                config.critDamage +
-                                                                attackerBuffTotals.critDamageBuff,
-                                                            hp: 0,
-                                                            defence: 0,
-                                                            hacking: 0,
-                                                            security: 0,
-                                                            speed: 0,
-                                                            healModifier: 0,
-                                                        }).toFixed(2)}
-                                                        x
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between mb-2">
-                                                    <span className="text-theme-text-secondary">
-                                                        Avg Damage / Round:
-                                                    </span>
-                                                    <span
-                                                        className={
-                                                            isBest ? 'text-primary font-bold' : ''
-                                                        }
-                                                    >
-                                                        {sim.summary.avgDamagePerRound.toLocaleString()}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between mb-2">
-                                                    <span className="text-theme-text-secondary">
-                                                        Total Damage ({rounds} rounds):
-                                                    </span>
-                                                    <span
-                                                        className={
-                                                            isBest ? 'text-primary font-bold' : ''
-                                                        }
-                                                    >
-                                                        {sim.summary.totalDamage.toLocaleString()}
-                                                    </span>
-                                                </div>
-                                                {hasDoTs && (
-                                                    <div className="grid grid-cols-4 gap-1 mt-2">
-                                                        <div className="text-center p-1 bg-dark-lighter rounded">
-                                                            <div className="text-xs text-theme-text-secondary">
-                                                                Direct
-                                                            </div>
-                                                            <div className="text-xs">
-                                                                {sim.summary.totalDirectDamage.toLocaleString()}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-center p-1 bg-dark-lighter rounded">
-                                                            <div className="text-xs text-green-400">
-                                                                Corrosion
-                                                            </div>
-                                                            <div className="text-xs text-green-400">
-                                                                {sim.summary.totalCorrosionDamage.toLocaleString()}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-center p-1 bg-dark-lighter rounded">
-                                                            <div className="text-xs text-orange-400">
-                                                                Inferno
-                                                            </div>
-                                                            <div className="text-xs text-orange-400">
-                                                                {sim.summary.totalInfernoDamage.toLocaleString()}
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-center p-1 bg-dark-lighter rounded">
-                                                            <div className="text-xs text-red-400">
-                                                                Bomb
-                                                            </div>
-                                                            <div className="text-xs text-red-400">
-                                                                {sim.summary.totalBombDamage.toLocaleString()}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {isBest && configs.length > 1 && (
-                                                    <div className="text-sm mt-2 text-center">
-                                                        <span className="text-primary">
-                                                            Best ship configuration
-                                                        </span>
-                                                        {bestVsSecondPercentage !== null && (
-                                                            <span className="text-green-500 ml-2">
-                                                                +{bestVsSecondPercentage.toFixed(2)}
-                                                                % vs #2
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {!isBest && bestConfig && (
-                                                    <div className="flex justify-between mt-2">
-                                                        <span className="text-theme-text-secondary">
-                                                            Compared to best:
-                                                        </span>
-                                                        <span className="text-red-500">
-                                                            {(
-                                                                ((sim.summary.totalDamage -
-                                                                    (simResults.get(bestConfig.id)
-                                                                        ?.summary.totalDamage ??
-                                                                        0)) /
-                                                                    (simResults.get(bestConfig.id)
-                                                                        ?.summary.totalDamage ??
-                                                                        1)) *
-                                                                100
-                                                            ).toFixed(2)}
-                                                            %
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
+                                config={config}
+                                isBest={bestConfig?.id === config.id}
+                                isComparing={configs.length > 1}
+                                simResult={simResults.get(config.id)}
+                                bestTotalDamage={bestTotalDamage}
+                                bestVsSecondPercentage={bestVsSecondPercentage}
+                                rounds={rounds}
+                                attackerBuffTotals={attackerBuffTotals}
+                                onRemove={() => removeConfig(config.id)}
+                                onUpdate={(field, value) => updateConfig(config.id, field, value)}
+                                onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
+                                onStartChargedChange={(checked) =>
+                                    setConfigs((prev) =>
+                                        prev.map((c) =>
+                                            c.id === config.id ? { ...c, startCharged: checked } : c
+                                        )
+                                    )
+                                }
+                                onAddDoT={(dotField) => addDoTEntry(config.id, dotField)}
+                                onRemoveDoT={(dotField, dotId) =>
+                                    removeDoTEntry(config.id, dotField, dotId)
+                                }
+                                onUpdateDoT={(dotField, dotId, updates) =>
+                                    updateDoTEntry(config.id, dotField, dotId, updates)
+                                }
+                            />
                         ))}
                     </div>
 
                     <div className="card">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">DPS Comparison</h3>
-                            <Button variant="secondary" onClick={toggleViewMode}>
+                            <Button
+                                variant="secondary"
+                                onClick={() =>
+                                    setViewMode((v) => (v === 'table' ? 'heatmap' : 'table'))
+                                }
+                            >
                                 Switch to {viewMode === 'table' ? 'Contour Map' : 'Table'} View
                             </Button>
                         </div>
@@ -1282,7 +434,6 @@ const DPSCalculatorPage: React.FC = () => {
                                 ? ' Each row shows how your DPS would scale with different attack values, and each column shows how it scales with different crit damage values.'
                                 : ' The contour lines show combinations of attack and crit damage that produce equal DPS values. Follow these lines to find stat combinations that result in the same damage output.'}
                         </p>
-
                         {viewMode === 'table' ? (
                             <DPSCalculatorTable />
                         ) : (
@@ -1314,14 +465,12 @@ const DPSCalculatorPage: React.FC = () => {
                         />
                     </div>
 
-                    {/* Defense Penetration Visualization */}
                     <div className="card">
                         <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
                         <p className="text-sm text-theme-text-secondary mb-4">
                             Shows how defense penetration affects damage increase for different
                             enemy defense values. Hover over the lines to see exact values.
                         </p>
-
                         <DefensePenetrationChart height={400} />
                     </div>
 
