@@ -12,7 +12,7 @@ export interface HealingResult {
 }
 
 export function calculateHealing(config: HealerConfig, buffs?: HealingBuffTotals): HealingResult {
-    const effectiveCrit = Math.min(100, config.crit + (buffs?.critBuff ?? 0));
+    const effectiveCrit = Math.max(0, Math.min(100, config.crit + (buffs?.critBuff ?? 0)));
     const effectiveCritDamage = config.critDamage + (buffs?.critDamageBuff ?? 0);
     const critRate = effectiveCrit >= 100 ? 1 : effectiveCrit / 100;
     const critMultiplier = 1 + (critRate * effectiveCritDamage) / 100;

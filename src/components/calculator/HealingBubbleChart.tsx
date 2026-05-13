@@ -9,7 +9,7 @@ import {
     Tooltip,
     LabelList,
 } from 'recharts';
-import { HealerConfig } from '../../types/calculator';
+import { HealerConfig, HealingBuffTotals } from '../../types/calculator';
 import { calculateHealing } from '../../utils/calculators/healingCalculator';
 import {
     BaseChart,
@@ -22,9 +22,10 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface HealingBubbleChartProps {
     configs: HealerConfig[];
+    buffTotals?: Map<string, HealingBuffTotals>;
 }
 
-export const HealingBubbleChart: React.FC<HealingBubbleChartProps> = ({ configs }) => {
+export const HealingBubbleChart: React.FC<HealingBubbleChartProps> = ({ configs, buffTotals }) => {
     const themeColors = useThemeColors();
 
     const series = configs.map((config, i) => ({
@@ -33,7 +34,7 @@ export const HealingBubbleChart: React.FC<HealingBubbleChartProps> = ({ configs 
             name: config.name,
             hp: config.hp,
             crit: config.crit,
-            healing: calculateHealing(config).effectiveHealing,
+            healing: calculateHealing(config, buffTotals?.get(config.id)).effectiveHealing,
         },
         color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
     }));

@@ -70,6 +70,10 @@ describe('parseSkillHeal', () => {
         expect(parseSkillHeal('<unit-damage>180% damage</unit-damage>')).toBe(0);
     });
 
+    it('returns 0 for flat heal text without percent', () => {
+        expect(parseSkillHeal('<unit-damage>repairs 1500 HP</unit-damage>')).toBe(0);
+    });
+
     it('ignores damage tags and finds the repairs tag', () => {
         const text =
             'Deals <unit-damage>100% damage</unit-damage> and <unit-damage>repairs 15%</unit-damage>';

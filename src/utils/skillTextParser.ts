@@ -154,7 +154,7 @@ export function parseSkillHeal(text: string): number {
     const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
     let match: RegExpExecArray | null;
     while ((match = tagPattern.exec(text)) !== null) {
-        const healMatch = /^repairs\s+(\d+(?:\.\d+)?)/i.exec(match[1]);
+        const healMatch = /^\s*repairs\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
         if (healMatch) return parseFloat(healMatch[1]);
     }
     return 0;

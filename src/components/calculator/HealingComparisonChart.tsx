@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { HealerConfig } from '../../types/calculator';
+import { HealerConfig, HealingBuffTotals } from '../../types/calculator';
 import { calculateHealing } from '../../utils/calculators/healingCalculator';
 import {
     BaseChart,
@@ -38,13 +38,17 @@ const AXIS_VALUES: Record<ComparisonAxis, number[]> = {
 
 function generateComparisonData(
     configs: HealerConfig[],
-    axis: ComparisonAxis
+    axis: ComparisonAxis,
+    buffTotals?: Map<string, HealingBuffTotals>
 ): Record<string, number>[] {
     return AXIS_VALUES[axis].map((axisValue) => {
         const row: Record<string, number> = { [axis]: axisValue };
         configs.forEach((config) => {
             const tempConfig = { ...config, [axis]: axisValue };
-            row[config.name] = calculateHealing(tempConfig).effectiveHealing;
+            row[config.id] = calculateHealing(
+                tempConfig,
+                buffTotals?.get(config.id)
+            ).effectiveHealing;
         });
         return row;
     });
@@ -52,12 +56,16 @@ function generateComparisonData(
 
 interface HealingComparisonChartProps {
     configs: HealerConfig[];
+    buffTotals?: Map<string, HealingBuffTotals>;
 }
 
-export const HealingComparisonChart: React.FC<HealingComparisonChartProps> = ({ configs }) => {
+export const HealingComparisonChart: React.FC<HealingComparisonChartProps> = ({
+    configs,
+    buffTotals,
+}) => {
     const [activeAxis, setActiveAxis] = useState<ComparisonAxis>('hp');
     const themeColors = useThemeColors();
-    const data = generateComparisonData(configs, activeAxis);
+    const data = generateComparisonData(configs, activeAxis, buffTotals);
     const axisLabel = AXIS_LABELS[activeAxis];
 
     return (
@@ -118,7 +126,8 @@ export const HealingComparisonChart: React.FC<HealingComparisonChartProps> = ({ 
                             <Line
                                 key={config.id}
                                 type="monotone"
-                                dataKey={config.name}
+                                dataKey={config.id}
+                                name={config.name}
                                 stroke={color}
                                 {...chartLineDefaults(color)}
                             />

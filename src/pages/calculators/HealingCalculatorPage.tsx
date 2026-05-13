@@ -288,9 +288,9 @@ const HealingCalculatorPage: React.FC = () => {
                         ))}
                     </div>
 
-                    <HealingBubbleChart configs={configs} />
+                    <HealingBubbleChart configs={configs} buffTotals={mergedBuffTotals} />
 
-                    <HealingComparisonChart configs={configs} />
+                    <HealingComparisonChart configs={configs} buffTotals={mergedBuffTotals} />
 
                     <div className="card">
                         <div className="flex justify-between items-center mb-2">
