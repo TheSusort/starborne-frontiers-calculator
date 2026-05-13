@@ -1,19 +1,14 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, Legend } from 'recharts';
-import { BaseChart } from '../ui/charts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+    BaseChart,
+    ChartLegend,
+    CHART_LINE_COLORS,
+    LINE_CHART_MARGIN,
+    chartLineDefaults,
+} from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-
-const LINE_COLORS = [
-    '#ec8c37',
-    '#3b82f6',
-    '#10b981',
-    '#f59e0b',
-    '#8b5cf6',
-    '#ef4444',
-    '#06b6d4',
-    '#f97316',
-];
 
 interface ShipSimResult {
     id: string;
@@ -103,49 +98,59 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
     const shipMap = new Map(ships.map((s) => [s.id, s]));
 
     return (
-        <BaseChart height={height}>
-            <LineChart data={chartData}>
-                <XAxis
-                    dataKey="round"
-                    label={{
-                        value: 'Round',
-                        position: 'insideBottom',
-                        offset: -5,
-                        fill: colors.text,
-                    }}
-                    tick={{ fill: colors.text }}
-                />
-                <YAxis
-                    tickFormatter={(v) =>
-                        v >= 1000000
-                            ? `${(v / 1000000).toFixed(1)}M`
-                            : v >= 1000
-                              ? `${(v / 1000).toFixed(0)}k`
-                              : v.toString()
-                    }
-                    label={{
-                        value: 'Cumulative Damage',
-                        angle: -90,
-                        position: 'insideLeft',
-                        offset: 10,
-                        fill: colors.text,
-                    }}
-                    tick={{ fill: colors.text }}
-                />
-                <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
-                <Legend />
-                {ships.map((ship, i) => (
-                    <Line
-                        key={ship.id}
-                        type="monotone"
-                        dataKey={ship.id}
-                        name={ship.name}
-                        stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                        strokeWidth={2}
-                        dot={false}
+        <>
+            <BaseChart height={height}>
+                <LineChart data={chartData} margin={LINE_CHART_MARGIN}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                    <XAxis
+                        dataKey="round"
+                        label={{
+                            value: 'Round',
+                            position: 'insideBottom',
+                            offset: -10,
+                            fill: colors.text,
+                        }}
+                        tick={{ fill: colors.text }}
                     />
-                ))}
-            </LineChart>
-        </BaseChart>
+                    <YAxis
+                        tickFormatter={(v) =>
+                            v >= 1000000
+                                ? `${(v / 1000000).toFixed(1)}M`
+                                : v >= 1000
+                                  ? `${(v / 1000).toFixed(0)}k`
+                                  : v.toString()
+                        }
+                        label={{
+                            value: 'Cumulative Damage',
+                            angle: -90,
+                            position: 'insideLeft',
+                            offset: 10,
+                            fill: colors.text,
+                        }}
+                        tick={{ fill: colors.text }}
+                    />
+                    <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
+                    {ships.map((ship, i) => {
+                        const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                        return (
+                            <Line
+                                key={ship.id}
+                                type="monotone"
+                                dataKey={ship.id}
+                                name={ship.name}
+                                stroke={color}
+                                {...chartLineDefaults(color)}
+                            />
+                        );
+                    })}
+                </LineChart>
+            </BaseChart>
+            <ChartLegend
+                items={ships.map((ship, i) => ({
+                    label: ship.name,
+                    color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                }))}
+            />
+        </>
     );
 };

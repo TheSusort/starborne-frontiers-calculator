@@ -7,7 +7,6 @@ import {
     YAxis,
     CartesianGrid,
     Tooltip,
-    Legend,
     ScatterChart,
     Scatter,
     ZAxis,
@@ -16,7 +15,14 @@ import { CloseIcon, PageLayout } from '../../components/ui';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
-import { BaseChart, ChartTooltip } from '../../components/ui/charts';
+import {
+    BaseChart,
+    ChartLegend,
+    ChartTooltip,
+    LINE_CHART_MARGIN,
+    chartLineDefaults,
+} from '../../components/ui/charts';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
@@ -85,6 +91,7 @@ const HealingCalculatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
+    const themeColors = useThemeColors();
 
     const getInitialConfig = (): HealerConfig[] => {
         const shipId = searchParams.get('shipId');
@@ -148,7 +155,6 @@ const HealingCalculatorPage: React.FC = () => {
     const [activeComparisonChart, setActiveComparisonChart] = useState<
         'hp' | 'crit' | 'critDamage' | 'healModifier'
     >('hp');
-    const [showBubbleChart, setShowBubbleChart] = useState(false);
 
     // Calculate healing values for all configs
     useEffect(() => {
@@ -583,6 +589,75 @@ const HealingCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
+                        <h2 className="text-xl font-bold mb-2">3D Relationship Visualization</h2>
+                        <p className="mb-4">
+                            This chart visualizes the relationship between HP (x-axis), Crit Chance
+                            (y-axis), and healing amount (bubble size). Each bubble represents a
+                            healer configuration.
+                        </p>
+                        <BaseChart height={384}>
+                            <ScatterChart margin={LINE_CHART_MARGIN}>
+                                <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    stroke={themeColors.gridStroke}
+                                />
+                                <XAxis
+                                    type="number"
+                                    dataKey="hp"
+                                    name="HP"
+                                    tick={{ fill: themeColors.text }}
+                                    tickFormatter={(v: number) =>
+                                        v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                                    }
+                                    label={{
+                                        value: 'HP',
+                                        position: 'insideBottom',
+                                        offset: -10,
+                                        fill: themeColors.text,
+                                    }}
+                                />
+                                <YAxis
+                                    type="number"
+                                    dataKey="crit"
+                                    name="Crit Chance"
+                                    tick={{ fill: themeColors.text }}
+                                    label={{
+                                        value: 'Crit Chance (%)',
+                                        angle: -90,
+                                        position: 'insideLeft',
+                                        fill: themeColors.text,
+                                    }}
+                                />
+                                <ZAxis
+                                    type="number"
+                                    dataKey="healing"
+                                    range={[100, 1000]}
+                                    name="Healing"
+                                />
+                                <Tooltip
+                                    content={
+                                        <ChartTooltip
+                                            formatter={(value: number | string, name: string) => {
+                                                if (name === 'Healing') {
+                                                    return `${Math.round(Number(value)).toLocaleString()} HP`;
+                                                }
+                                                return String(value);
+                                            }}
+                                        />
+                                    }
+                                    cursor={{ strokeDasharray: '3 3' }}
+                                />
+                                <Scatter
+                                    name="Healers"
+                                    data={generateBubbleChartData()}
+                                    fill="#8884d8"
+                                />
+                            </ScatterChart>
+                        </BaseChart>
+                        <ChartLegend items={[{ label: 'Healers', color: '#8884d8' }]} />
+                    </div>
+
+                    <div className="card">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold w-full">Healing Comparison Chart</h2>
                             <Select
@@ -600,26 +675,35 @@ const HealingCalculatorPage: React.FC = () => {
                             This chart shows how changing {getActiveComparisonLabel()} affects
                             healing output, while keeping other values constant.
                         </p>
-
                         <BaseChart height={384}>
-                            <LineChart
-                                data={getActiveComparisonData()}
-                                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" />
+                            <LineChart data={getActiveComparisonData()} margin={LINE_CHART_MARGIN}>
+                                <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    stroke={themeColors.gridStroke}
+                                />
                                 <XAxis
                                     dataKey={activeComparisonChart}
+                                    tick={{ fill: themeColors.text }}
+                                    tickFormatter={(v: number) =>
+                                        v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                                    }
                                     label={{
                                         value: getActiveComparisonLabel(),
-                                        position: 'insideBottomRight',
+                                        position: 'insideBottom',
                                         offset: -10,
+                                        fill: themeColors.text,
                                     }}
                                 />
                                 <YAxis
+                                    tick={{ fill: themeColors.text }}
+                                    tickFormatter={(v: number) =>
+                                        v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
+                                    }
                                     label={{
                                         value: 'Healing (HP)',
                                         angle: -90,
                                         position: 'insideLeft',
+                                        fill: themeColors.text,
                                     }}
                                 />
                                 <Tooltip
@@ -631,98 +715,28 @@ const HealingCalculatorPage: React.FC = () => {
                                         />
                                     }
                                 />
-                                <Legend />
-                                {configs.map((config) => (
-                                    <Line
-                                        key={config.id}
-                                        type="monotone"
-                                        dataKey={config.name}
-                                        stroke={
-                                            config.id === bestHealer?.id ? '#8884d8' : '#82ca9d'
-                                        }
-                                        strokeWidth={config.id === bestHealer?.id ? 2 : 1}
-                                        activeDot={{ r: 8 }}
-                                    />
-                                ))}
+                                {configs.map((config) => {
+                                    const color =
+                                        config.id === bestHealer?.id ? '#8884d8' : '#82ca9d';
+                                    return (
+                                        <Line
+                                            key={config.id}
+                                            type="monotone"
+                                            dataKey={config.name}
+                                            stroke={color}
+                                            {...chartLineDefaults(color)}
+                                            strokeWidth={config.id === bestHealer?.id ? 2 : 1}
+                                        />
+                                    );
+                                })}
                             </LineChart>
                         </BaseChart>
-
-                        <div className="mt-6 flex justify-center">
-                            <Button
-                                variant="secondary"
-                                onClick={() => setShowBubbleChart(!showBubbleChart)}
-                            >
-                                {showBubbleChart ? 'Hide 3D Chart' : 'Show 3D Chart'}
-                            </Button>
-                        </div>
-
-                        {showBubbleChart && (
-                            <div className="mt-4">
-                                <h3 className="text-lg font-bold mb-2">
-                                    3D Relationship Visualization
-                                </h3>
-                                <p className="mb-4">
-                                    This chart visualizes the relationship between HP (x-axis), Crit
-                                    Chance (y-axis), and healing amount (bubble size). Each bubble
-                                    represents a healer configuration.
-                                </p>
-                                <BaseChart height={384}>
-                                    <ScatterChart
-                                        margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                                    >
-                                        <CartesianGrid />
-                                        <XAxis
-                                            type="number"
-                                            dataKey="hp"
-                                            name="HP"
-                                            label={{
-                                                value: 'HP',
-                                                position: 'insideBottomRight',
-                                                offset: -10,
-                                            }}
-                                        />
-                                        <YAxis
-                                            type="number"
-                                            dataKey="crit"
-                                            name="Crit Chance"
-                                            label={{
-                                                value: 'Crit Chance (%)',
-                                                angle: -90,
-                                                position: 'insideLeft',
-                                            }}
-                                        />
-                                        <ZAxis
-                                            type="number"
-                                            dataKey="healing"
-                                            range={[100, 1000]}
-                                            name="Healing"
-                                        />
-                                        <Tooltip
-                                            content={
-                                                <ChartTooltip
-                                                    formatter={(
-                                                        value: number | string,
-                                                        name: string
-                                                    ) => {
-                                                        if (name === 'Healing') {
-                                                            return `${Math.round(Number(value)).toLocaleString()} HP`;
-                                                        }
-                                                        return String(value);
-                                                    }}
-                                                />
-                                            }
-                                            cursor={{ strokeDasharray: '3 3' }}
-                                        />
-                                        <Legend />
-                                        <Scatter
-                                            name="Healers"
-                                            data={generateBubbleChartData()}
-                                            fill="#8884d8"
-                                        />
-                                    </ScatterChart>
-                                </BaseChart>
-                            </div>
-                        )}
+                        <ChartLegend
+                            items={configs.map((config) => ({
+                                label: config.name,
+                                color: config.id === bestHealer?.id ? '#8884d8' : '#82ca9d',
+                            }))}
+                        />
                     </div>
 
                     <div className="card">

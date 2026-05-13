@@ -1,7 +1,14 @@
 import React, { useMemo } from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart } from 'recharts';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
-import { BaseChart, DefaultErrorFallback } from '../ui/charts';
+import {
+    BaseChart,
+    ChartLegend,
+    DefaultErrorFallback,
+    CHART_LINE_COLORS,
+    LINE_CHART_MARGIN,
+    chartLineDefaults,
+} from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface DefensePenetrationChartProps {
@@ -124,9 +131,6 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
         return null;
     };
 
-    // Colors for different defense values
-    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#F472B6'];
-
     return (
         <div className="defense-penetration-chart">
             <h2 className="text-xl font-bold mb-4">Damage Increase by Defense Penetration</h2>
@@ -140,10 +144,7 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                     />
                 }
             >
-                <ComposedChart
-                    data={chartData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 12 }}
-                >
+                <ComposedChart data={chartData} margin={LINE_CHART_MARGIN}>
                     <CartesianGrid strokeDasharray="3 3" stroke={themeColors.gridStroke} />
                     <XAxis
                         dataKey="penetration"
@@ -170,41 +171,27 @@ export const DefensePenetrationChart: React.FC<DefensePenetrationChartProps> = (
                         type="number"
                     />
                     <Tooltip content={<CustomTooltip />} />
-
-                    {/* Lines for each defense value */}
-                    {defenseValues.map((defense, index) => (
-                        <Line
-                            key={defense}
-                            type="monotone"
-                            dataKey={`defense_${defense}`}
-                            stroke={colors[index % colors.length]}
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={{
-                                r: 6,
-                                stroke: colors[index % colors.length],
-                                strokeWidth: 2,
-                            }}
-                            name={`${(defense / 1000).toFixed(0)}k Defense`}
-                        />
-                    ))}
+                    {defenseValues.map((defense, index) => {
+                        const color = CHART_LINE_COLORS[index % CHART_LINE_COLORS.length];
+                        return (
+                            <Line
+                                key={defense}
+                                type="monotone"
+                                dataKey={`defense_${defense}`}
+                                stroke={color}
+                                {...chartLineDefaults(color)}
+                                name={`${(defense / 1000).toFixed(0)}k Defense`}
+                            />
+                        );
+                    })}
                 </ComposedChart>
             </BaseChart>
-
-            {/* Legend */}
-            <div className="flex flex-wrap justify-center gap-4 mt-6">
-                {defenseValues.map((defense, index) => (
-                    <div key={defense} className="flex items-center gap-2">
-                        <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: colors[index % colors.length] }}
-                        />
-                        <span className="text-sm text-white">
-                            {(defense / 1000).toFixed(0)}k Defense
-                        </span>
-                    </div>
-                ))}
-            </div>
+            <ChartLegend
+                items={defenseValues.map((defense, index) => ({
+                    label: `${(defense / 1000).toFixed(0)}k Defense`,
+                    color: CHART_LINE_COLORS[index % CHART_LINE_COLORS.length],
+                }))}
+            />
         </div>
     );
 };

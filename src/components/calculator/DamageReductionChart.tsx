@@ -10,7 +10,13 @@ import {
     LabelList,
 } from 'recharts';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
-import { BaseChart, DefaultErrorFallback, ChartTooltip } from '../ui/charts';
+import {
+    BaseChart,
+    DefaultErrorFallback,
+    ChartTooltip,
+    LINE_CHART_MARGIN,
+    chartLineDefaults,
+} from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface Ship {
@@ -127,7 +133,7 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
                     />
                 }
             >
-                <ComposedChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <ComposedChart margin={LINE_CHART_MARGIN}>
                     <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
                     <XAxis
                         dataKey="defense"
@@ -136,7 +142,7 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
                         tick={{ fill: colors.text }}
                         label={{
                             value: 'Defense',
-                            position: 'insideBottomRight',
+                            position: 'insideBottom',
                             offset: -10,
                             fill: colors.text,
                         }}
@@ -165,9 +171,7 @@ export const DamageReductionChart: React.FC<DamageReductionChartProps> = ({
                         type="monotone"
                         dataKey="reduction"
                         stroke="#f97316"
-                        strokeWidth={2}
-                        dot={false}
-                        activeDot={{ r: 6 }}
+                        {...chartLineDefaults('#f97316')}
                     />
 
                     {/* Regular ship points */}

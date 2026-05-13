@@ -1,8 +1,14 @@
 import React, { useMemo, useRef } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, Legend, LabelList } from 'recharts';
+import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, LabelList } from 'recharts';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
-import { BaseChart, DefaultErrorFallback } from '../ui/charts';
+import {
+    BaseChart,
+    ChartLegend,
+    ChartLegendItem,
+    DefaultErrorFallback,
+    LINE_CHART_MARGIN,
+} from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface DPSChartShipEntry {
@@ -150,33 +156,16 @@ const CustomShipShape = (props: CustomShapeProps) => {
     return <path d={`M ${points}`} fill={starColor} stroke="#fff" strokeWidth={1} />;
 };
 
-// Generate legend items for DPS values
-const getLegendData = () => {
-    return [
-        { value: '< 20% max DPS', color: '#00008B', type: 'rect' as const, id: 'legend-1' },
-        { value: '20-40% max DPS', color: '#0000CD', type: 'rect' as const, id: 'legend-2' },
-        { value: '40-60% max DPS', color: '#1E90FF', type: 'rect' as const, id: 'legend-3' },
-        { value: '60-80% max DPS', color: '#00BFFF', type: 'rect' as const, id: 'legend-4' },
-        { value: '80-100% max DPS', color: '#87CEEB', type: 'rect' as const, id: 'legend-5' },
-        { value: '100-125% max DPS', color: '#FFD700', type: 'rect' as const, id: 'legend-6' },
-        { value: '125-150% max DPS', color: '#FFA500', type: 'rect' as const, id: 'legend-7' },
-        { value: '> 150% max DPS', color: '#FF4500', type: 'rect' as const, id: 'legend-8' },
-    ];
-};
-
-// Custom legend to show DPS value ranges
-const CustomLegend = () => {
-    return (
-        <div className="custom-legend flex flex-wrap justify-center mt-4 gap-2 bg-dark-lighter p-2">
-            {getLegendData().map((item) => (
-                <div key={item.id} className="flex items-center mr-4">
-                    <div className="w-3 h-3 mr-1" style={{ backgroundColor: item.color }} />
-                    <span className="text-xs text-white">{item.value}</span>
-                </div>
-            ))}
-        </div>
-    );
-};
+const HEATMAP_LEGEND_ITEMS: ChartLegendItem[] = [
+    { label: '< 20% max DPS', color: '#00008B' },
+    { label: '20-40% max DPS', color: '#0000CD' },
+    { label: '40-60% max DPS', color: '#1E90FF' },
+    { label: '60-80% max DPS', color: '#00BFFF' },
+    { label: '80-100% max DPS', color: '#87CEEB' },
+    { label: '100-125% max DPS', color: '#FFD700' },
+    { label: '125-150% max DPS', color: '#FFA500' },
+    { label: '> 150% max DPS', color: '#FF4500' },
+];
 
 // Define a type for the shape callback props
 interface ShapeCallbackProps {
@@ -322,7 +311,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                         />
                     }
                 >
-                    <ScatterChart>
+                    <ScatterChart margin={LINE_CHART_MARGIN}>
                         <XAxis
                             type="number"
                             dataKey="x"
@@ -354,7 +343,6 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                             tick={{ fill: colors.text }}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={false} />
-                        <Legend content={<CustomLegend />} />
 
                         {/* Render the heatmap */}
                         <Scatter
@@ -394,6 +382,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                     </ScatterChart>
                 </BaseChart>
             </div>
+            <ChartLegend items={HEATMAP_LEGEND_ITEMS} shape="square" />
         </div>
     );
 };
