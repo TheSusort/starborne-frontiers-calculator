@@ -60,7 +60,7 @@ export const DoTEditor: React.FC<DoTEditorProps> = ({
         ) : (
             <div className="space-y-2 mb-4">
                 {dots.map((dot) => (
-                    <div key={dot.id} className="flex items-end gap-2">
+                    <div key={dot.id} className="flex items-end gap-4 flex-wrap">
                         <Select
                             label="Type"
                             options={DOT_TYPE_OPTIONS}
@@ -77,36 +77,38 @@ export const DoTEditor: React.FC<DoTEditorProps> = ({
                             value={String(dot.tier)}
                             onChange={(v) => onUpdate(dot.id, { tier: parseInt(v) })}
                         />
-                        <Input
-                            label="Stacks"
-                            type="number"
-                            min="0"
-                            value={dot.stacks}
-                            onChange={(e) =>
-                                onUpdate(dot.id, { stacks: parseInt(e.target.value) || 0 })
-                            }
-                            className="w-20"
-                        />
-                        <Input
-                            label={dot.type === 'bomb' ? 'Countdown' : 'Duration'}
-                            type="number"
-                            min="1"
-                            value={dot.duration}
-                            onChange={(e) =>
-                                onUpdate(dot.id, {
-                                    duration: Math.max(1, parseInt(e.target.value) || 1),
-                                })
-                            }
-                            className="w-20"
-                        />
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => onRemove(dot.id)}
-                            aria-label="Remove DoT"
-                        >
-                            <CloseIcon />
-                        </Button>
+                        <div className="flex items-end gap-4">
+                            <Input
+                                label="Stacks"
+                                type="number"
+                                min="0"
+                                value={dot.stacks}
+                                onChange={(e) =>
+                                    onUpdate(dot.id, { stacks: parseInt(e.target.value) || 0 })
+                                }
+                            />
+                            <Input
+                                label={dot.type === 'bomb' ? 'Countdown' : 'Duration'}
+                                type="number"
+                                min="1"
+                                value={dot.duration}
+                                onChange={(e) =>
+                                    onUpdate(dot.id, {
+                                        duration: Math.max(1, parseInt(e.target.value) || 1),
+                                    })
+                                }
+                                className=""
+                            />
+                            <Button
+                                variant="danger"
+                                size="md"
+                                onClick={() => onRemove(dot.id)}
+                                aria-label="Remove DoT"
+                                className="!pe-4 !ps-2"
+                            >
+                                ×
+                            </Button>
+                        </div>
                     </div>
                 ))}
             </div>

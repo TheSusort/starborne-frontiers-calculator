@@ -50,10 +50,11 @@ export const Input = forwardRef<HTMLInputElement, Props>(
                 <input
                     ref={ref}
                     className={`
-                    w-full px-1 md:px-4 py-2 bg-dark-lighter border border-dark-border
+                    w-full px-1 py-2 bg-dark-lighter border border-dark-border
                      focus:outline-none focus:ring-2 focus:ring-primary
                      placeholder-gray-500 h-10
                     ${error ? 'border-red-500' : 'focus:border-primary'}
+                    ${props.type === 'number' ? 'md:pe-2 md:ps-4' : 'md:px-4'}
                     ${className}
                 `}
                     id={id}

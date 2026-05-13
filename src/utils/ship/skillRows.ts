@@ -14,7 +14,7 @@ export function getShipSkillRows(ship: Ship): SkillRow[] {
             : refitCount >= 2 && ship.secondPassiveSkillText
               ? { label: 'Passive R2', text: ship.secondPassiveSkillText }
               : refitCount >= 1 && ship.firstPassiveSkillText
-                ? { label: 'Passive R1', text: ship.firstPassiveSkillText }
+                ? { label: 'Passive R0', text: ship.firstPassiveSkillText }
                 : null;
 
     return [
