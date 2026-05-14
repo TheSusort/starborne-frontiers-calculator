@@ -33,7 +33,7 @@ const AXIS_VALUES: Record<ComparisonAxis, number[]> = {
     hp: [10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000, 110000, 120000],
     crit: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
     critDamage: [0, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200],
-    healModifier: [0, 20, 40, 60],
+    healModifier: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
 };
 
 function generateComparisonData(
