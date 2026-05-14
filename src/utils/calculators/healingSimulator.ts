@@ -25,10 +25,16 @@ export function simulateHealing(
     const critRate = effectiveCrit >= 100 ? 1 : effectiveCrit / 100;
     const critMultiplier = 1 + (critRate * effectiveCritDamage) / 100;
     const healModMult = 1 + (config.healModifier || 0) / 100;
+    const outgoingHealMult = 1 + (buffs?.outgoingHealBuff ?? 0) / 100;
 
-    const activeHealing = config.hp * (config.healPercent / 100) * critMultiplier * healModMult;
+    const activeHealing =
+        config.hp * (config.healPercent / 100) * critMultiplier * healModMult * outgoingHealMult;
     const chargedHealing =
-        config.hp * ((config.chargedHealPercent || 0) / 100) * critMultiplier * healModMult;
+        config.hp *
+        ((config.chargedHealPercent || 0) / 100) *
+        critMultiplier *
+        healModMult *
+        outgoingHealMult;
 
     const hasChargedSkill = config.chargedHealPercent > 0 && config.chargeCount >= 1;
     let charges = config.startCharged ? config.chargeCount : 0;

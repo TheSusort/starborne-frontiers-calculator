@@ -12,22 +12,11 @@ import { ShipSkillList } from '../ship/ShipSkillList';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Select } from '../ui/Select';
 import { Checkbox } from '../ui/Checkbox';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
 import { GameBuffPicker } from './GameBuffPicker';
-
-const HEAL_MODIFIER_OPTIONS = [
-    { value: '0', label: '0%' },
-    { value: '10', label: '10%' },
-    { value: '20', label: '20%' },
-    { value: '30', label: '30%' },
-    { value: '40', label: '40%' },
-    { value: '50', label: '50%' },
-    { value: '60', label: '60%' },
-];
 
 interface HealerConfigCardProps {
     config: HealerConfig;
@@ -105,12 +94,13 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                         value={config.critDamage}
                         onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
                     />
-                    <Select
+                    <Input
                         label="Heal Modifier (%)"
-                        className="w-fit"
-                        value={config.healModifier.toString()}
-                        options={HEAL_MODIFIER_OPTIONS}
-                        onChange={(value) => onUpdate('healModifier', parseInt(value) || 0)}
+                        type="number"
+                        min="0"
+                        value={config.healModifier}
+                        helpLabel={config.healModifierAutoFilled ? 'auto-filled' : undefined}
+                        onChange={(e) => onUpdate('healModifier', parseInt(e.target.value) || 0)}
                     />
                 </div>
 
@@ -180,7 +170,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                     </div>
                     <GameBuffPicker
                         label="Ship Buffs"
-                        relevantStats={['crit', 'critDamage']}
+                        relevantStats={['crit', 'critDamage', 'outgoingHeal']}
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}

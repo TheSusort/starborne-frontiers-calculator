@@ -2052,8 +2052,10 @@ const DocumentationPage: React.FC = () => {
                                         Healing Calculator
                                     </h4>
                                     <p className="text-theme-text">
-                                        Calculate healing output for supporter ships, including
-                                        critical heal multipliers and heal modifiers.
+                                        Calculate healing output for supporter ships. Heal modifier
+                                        is auto-filled from ship gear when a ship is selected.
+                                        Supports Outgoing Repair buffs as a separate multiplier
+                                        alongside crit and heal modifier.
                                     </p>
                                 </div>
 

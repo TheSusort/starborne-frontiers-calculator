@@ -81,7 +81,8 @@ const HealingCalculatorPage: React.FC = () => {
                         startCharged: false,
                         crit: Math.round(final.crit),
                         critDamage: Math.round(final.critDamage),
-                        healModifier: 0,
+                        healModifier: Math.round(final.healModifier ?? 0),
+                        healModifierAutoFilled: (final.healModifier ?? 0) > 0,
                         buffs: [],
                     },
                 ];
@@ -128,6 +129,7 @@ const HealingCalculatorPage: React.FC = () => {
                 const updated = { ...c, [field]: value };
                 if (field === 'healPercent') updated.healPercentAutoFilled = false;
                 if (field === 'chargedHealPercent') updated.chargedHealPercentAutoFilled = false;
+                if (field === 'healModifier') updated.healModifierAutoFilled = false;
                 return updated;
             })
         );
@@ -163,6 +165,8 @@ const HealingCalculatorPage: React.FC = () => {
                     hp: Math.round(final.hp),
                     crit: Math.round(final.crit),
                     critDamage: Math.round(final.critDamage),
+                    healModifier: Math.round(final.healModifier ?? 0),
+                    healModifierAutoFilled: (final.healModifier ?? 0) > 0,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
                     ...(parsedActive || parsedFallback
                         ? {
@@ -195,6 +199,10 @@ const HealingCalculatorPage: React.FC = () => {
                 (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
                 0
             ),
+            outgoingHealBuff: healerBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
+                0
+            ),
         }),
         [healerBuffs]
     );
@@ -215,6 +223,12 @@ const HealingCalculatorPage: React.FC = () => {
                             globalBuffTotals.critDamageBuff +
                             c.buffs.reduce(
                                 (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
+                                0
+                            ),
+                        outgoingHealBuff:
+                            globalBuffTotals.outgoingHealBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
                                 0
                             ),
                     },
@@ -247,7 +261,7 @@ const HealingCalculatorPage: React.FC = () => {
             <Seo {...SEO_CONFIG.healing} />
             <PageLayout
                 title="Healing Calculator"
-                description="Calculate effective healing based on HP, base heal percentage, crit chance, crit power, and heal modifier"
+                description="Calculate effective healing based on HP, heal percentage, crit, heal modifier, and outgoing repair buffs"
                 action={{
                     label: 'Add Healer',
                     onClick: addConfig,
@@ -320,7 +334,8 @@ const HealingCalculatorPage: React.FC = () => {
                             power, and healing modifier.
                         </p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            Effective Heal = HP × Heal% × CritMultiplier × (1 + HealMod%)
+                            Effective Heal = HP × Heal% × CritMultiplier × (1 + HealMod%) × (1 +
+                            OutgoingRepairBuff%)
                             <br />
                             Crit Multiplier = 1 + (Crit Chance% × Crit Power%) / 10000
                             <br />

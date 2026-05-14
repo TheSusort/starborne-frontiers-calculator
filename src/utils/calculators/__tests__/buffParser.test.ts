@@ -59,6 +59,23 @@ describe('parseBuffEffects', () => {
         });
     });
 
+    describe('outgoing heal', () => {
+        it('parses negative Outgoing Repair (debuff)', () => {
+            expect(parseBuffEffects('Out. Repair Down II', '-50% Outgoing Repair')).toEqual({
+                outgoingHeal: -50,
+            });
+        });
+        it('parses positive Outgoing Repair (buff)', () => {
+            expect(parseBuffEffects('Out. Repair Up II', '+30% Outgoing Repair')).toEqual({
+                outgoingHeal: 30,
+            });
+        });
+        it('does NOT parse Incoming Repair as outgoingHeal', () => {
+            const result = parseBuffEffects('Everliving Regeneration I', '+10% Incoming Repair');
+            expect(result.outgoingHeal).toBeUndefined();
+        });
+    });
+
     describe('defense penetration', () => {
         it('parses Defense Penetration', () => {
             expect(parseBuffEffects('Charge Overdrive I', '+10% Defense Penetration')).toEqual({

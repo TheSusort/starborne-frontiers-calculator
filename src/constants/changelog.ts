@@ -8,6 +8,8 @@ export const CURRENT_VERSION = '1.61.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Healing Calculator overhaul: added charged heal support, healing-over-time simulation, bubble/comparison/round charts, and buff pickers (global and per-ship).',
     "DPS Calculator: added per-ship buff picker in the Advanced section so ship-granted buffs are factored into that ship's damage calculation independently of global combat buffs.",
+    'Healing calculator: heal modifier is now auto-filled from ship gear and sets when a ship is selected.',
+    'Healing calculator: Outgoing Repair buffs are now factored in as a separate healing multiplier.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

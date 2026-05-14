@@ -55,7 +55,7 @@ export const HealingSettingsPanel: React.FC<HealingSettingsPanelProps> = ({
                 </p>
                 <GameBuffPicker
                     label="Healer Buffs / Debuffs"
-                    relevantStats={['crit', 'critDamage']}
+                    relevantStats={['crit', 'critDamage', 'outgoingHeal']}
                     excludeTypes={['effect']}
                     value={healerBuffs}
                     onChange={onHealerBuffsChange}
