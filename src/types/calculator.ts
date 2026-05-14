@@ -87,6 +87,22 @@ export interface HealingBuffTotals {
     incomingHealBuff: number;
 }
 
+export interface DefenseBuffTotals {
+    defenseBuff: number;
+    incomingDamageBuff: number;
+}
+
+export interface DefenseShipConfig {
+    id: string;
+    shipId?: string;
+    name: string;
+    hp: number;
+    defense: number;
+    effectiveHP?: number;
+    damageReduction?: number;
+    buffs: SelectedGameBuff[];
+}
+
 export interface HealerConfig {
     id: string;
     shipId?: string;

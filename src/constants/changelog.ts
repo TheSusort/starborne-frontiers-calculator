@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.61.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Defense Calculator: added global and per-ship buff pickers. Defense Up/Down buffs scale the base defense stat before calculating damage reduction; Incoming Direct Damage buffs (positive or negative) further adjust effective HP.',
     'Healing Calculator overhaul: added charged heal support, healing-over-time simulation, bubble/comparison/round charts, and buff pickers (global and per-ship).',
     "DPS Calculator: added per-ship buff picker in the Advanced section so ship-granted buffs are factored into that ship's damage calculation independently of global combat buffs.",
     'Healing calculator: heal modifier is now auto-filled from ship gear and sets when a ship is selected.',

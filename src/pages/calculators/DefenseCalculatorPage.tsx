@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CloseIcon, PageLayout } from '../../components/ui';
+import { PageLayout } from '../../components/ui';
 import { calculateDamageReduction, calculateEffectiveHP } from '../../utils/autogear/scoring';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { DamageReductionChart } from '../../components/calculator/DamageReductionChart';
 import { DamageReductionTable } from '../../components/calculator/DamageReductionTable';
+import { DefenseSettingsPanel } from '../../components/calculator/DefenseSettingsPanel';
+import { DefenseShipCard } from '../../components/calculator/DefenseShipCard';
+import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
@@ -13,18 +15,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Ship } from '../../types/ship';
-import { ShipSelector } from '../../components/ship/ShipSelector';
-
-// Define the type for a ship configuration
-interface ShipConfig {
-    id: string;
-    shipId?: string; // links config to a selected player ship
-    name: string;
-    hp: number;
-    defense: number;
-    effectiveHP?: number;
-    damageReduction?: number;
-}
+import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 
 const DefenseCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -33,7 +24,7 @@ const DefenseCalculatorPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
 
-    const getInitialConfig = (): ShipConfig[] => {
+    const getInitialConfig = (): DefenseShipConfig[] => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
@@ -62,20 +53,21 @@ const DefenseCalculatorPage: React.FC = () => {
                         defense,
                         damageReduction: calculateDamageReduction(defense),
                         effectiveHP: calculateEffectiveHP(hp, defense),
+                        buffs: [],
                     },
                 ];
             }
         }
-        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000 }];
+        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000, buffs: [] }];
     };
 
-    const [initialConfigs] = useState(getInitialConfig);
-    const [configs, setConfigs] = useState<ShipConfig[]>(initialConfigs);
+    const [configs, setConfigs] = useState<DefenseShipConfig[]>(getInitialConfig);
     const [nextId, setNextId] = useState(2);
     const initialRender = useRef(true);
     const [showTable, setShowTable] = useState(false);
+    const [globalBuffs, setGlobalBuffs] = useState<SelectedGameBuff[]>([]);
+    const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
 
-    // Clear shipId from URL after initialization
     useEffect(() => {
         if (shipInitialized.current) return;
         shipInitialized.current = true;
@@ -85,83 +77,49 @@ const DefenseCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    // Calculate effective HP and damage reduction for all configs
     useEffect(() => {
-        // Skip the first render to avoid infinite loop
         if (initialRender.current) {
             initialRender.current = false;
-
-            // Calculate initial values
-            const initialConfigs = configs.map((config) => {
-                const damageReduction = calculateDamageReduction(config.defense);
-                const effectiveHP = calculateEffectiveHP(config.hp, config.defense);
-                return {
+            setConfigs((prev) =>
+                prev.map((config) => ({
                     ...config,
-                    damageReduction,
-                    effectiveHP,
-                };
-            });
-            setConfigs(initialConfigs);
-            return;
+                    damageReduction: calculateDamageReduction(config.defense),
+                    effectiveHP: calculateEffectiveHP(config.hp, config.defense),
+                }))
+            );
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Empty dependency array to run only once
+    }, []);
 
-    // Add a new ship configuration
     const addConfig = () => {
-        const newConfig: ShipConfig = {
+        const newConfig: DefenseShipConfig = {
             id: nextId.toString(),
             name: `Ship ${nextId}`,
             hp: 10000,
             defense: 5000,
+            damageReduction: calculateDamageReduction(5000),
+            effectiveHP: calculateEffectiveHP(10000, 5000),
+            buffs: [],
         };
-
-        // Calculate values for the new config
-        const damageReduction = calculateDamageReduction(newConfig.defense);
-        const effectiveHP = calculateEffectiveHP(newConfig.hp, newConfig.defense);
-
-        setConfigs([
-            ...configs,
-            {
-                ...newConfig,
-                damageReduction,
-                effectiveHP,
-            },
-        ]);
-        setNextId(nextId + 1);
+        setConfigs((prev) => [...prev, newConfig]);
+        setNextId((n) => n + 1);
     };
 
-    // Remove a ship configuration
     const removeConfig = (id: string) => {
-        setConfigs(configs.filter((config) => config.id !== id));
+        setConfigs((prev) => prev.filter((c) => c.id !== id));
     };
 
-    // Update a ship configuration
     const updateConfig = (id: string, field: 'name' | 'hp' | 'defense', value: string | number) => {
-        const updatedConfigs = configs.map((config) => {
-            if (config.id === id) {
-                const updatedConfig = { ...config, [field]: value };
-
-                // Recalculate if hp or defense changed
+        setConfigs((prev) =>
+            prev.map((config) => {
+                if (config.id !== id) return config;
+                const updated = { ...config, [field]: value };
                 if (field === 'hp' || field === 'defense') {
-                    const damageReduction = calculateDamageReduction(updatedConfig.defense);
-                    const effectiveHP = calculateEffectiveHP(
-                        updatedConfig.hp,
-                        updatedConfig.defense
-                    );
-                    return {
-                        ...updatedConfig,
-                        damageReduction,
-                        effectiveHP,
-                    };
+                    updated.damageReduction = calculateDamageReduction(updated.defense);
+                    updated.effectiveHP = calculateEffectiveHP(updated.hp, updated.defense);
                 }
-
-                return updatedConfig;
-            }
-            return config;
-        });
-
-        setConfigs(updatedConfigs);
+                return updated;
+            })
+        );
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
@@ -177,7 +135,7 @@ const DefenseCalculatorPage: React.FC = () => {
         );
         const final = statsBreakdown.final;
         const hp = Math.round(final.hp);
-        const defense = Math.round(final.defence); // note: stats field is 'defence', form field is 'defense'
+        const defense = Math.round(final.defence);
         setConfigs((prev) =>
             prev.map((c) =>
                 c.id === configId
@@ -195,19 +153,64 @@ const DefenseCalculatorPage: React.FC = () => {
         );
     };
 
-    // Find the ship with the highest effective HP
-    const bestShip = configs.reduce(
-        (best, current) => {
-            if (
-                !best ||
-                (current.effectiveHP && best.effectiveHP && current.effectiveHP > best.effectiveHP)
-            ) {
-                return current;
-            }
-            return best;
-        },
-        null as ShipConfig | null
+    const updateConfigBuffs = (id: string, buffs: SelectedGameBuff[]) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
+    };
+
+    const globalBuffTotals = useMemo(
+        () => ({
+            defenseBuff: globalBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                0
+            ),
+            incomingDamageBuff: globalBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
+                0
+            ),
+        }),
+        [globalBuffs]
     );
+
+    const mergedBuffTotals = useMemo(
+        () =>
+            new Map<string, DefenseBuffTotals>(
+                configs.map((c) => [
+                    c.id,
+                    {
+                        defenseBuff:
+                            globalBuffTotals.defenseBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                                0
+                            ),
+                        incomingDamageBuff:
+                            globalBuffTotals.incomingDamageBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
+                                0
+                            ),
+                    },
+                ])
+            ),
+        [configs, globalBuffTotals]
+    );
+
+    const bestShip = configs.reduce<DefenseShipConfig | null>((best, current) => {
+        const currentEHP = computeBuffedStats(
+            current.hp,
+            current.defense,
+            mergedBuffTotals.get(current.id)
+        ).effectiveHP;
+        const bestEHP = best
+            ? computeBuffedStats(best.hp, best.defense, mergedBuffTotals.get(best.id)).effectiveHP
+            : 0;
+        return currentEHP > bestEHP ? current : best;
+    }, null);
+
+    const bestEffectiveHP = bestShip
+        ? computeBuffedStats(bestShip.hp, bestShip.defense, mergedBuffTotals.get(bestShip.id))
+              .effectiveHP
+        : undefined;
 
     return (
         <>
@@ -222,111 +225,29 @@ const DefenseCalculatorPage: React.FC = () => {
                 }}
             >
                 <div className="space-y-6">
+                    <DefenseSettingsPanel
+                        isOpen={settingsPanelOpen}
+                        onToggle={() => setSettingsPanelOpen((v) => !v)}
+                        defenseBuffs={globalBuffs}
+                        onDefenseBuffsChange={setGlobalBuffs}
+                    />
+
                     <div
                         className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${configs.length >= 4 ? '2xl:w-[calc(100vw-256px-2rem)] 2xl:ml-[calc((-100vw/2)+768px+1rem)] 2xl:[grid-template-columns:repeat(auto-fit,minmax(370px,500px))] 2xl:justify-center' : ''}`}
                     >
                         {configs.map((config) => (
-                            <div
+                            <DefenseShipCard
                                 key={config.id}
-                                className={`card relative ${
-                                    bestShip && bestShip.id === config.id ? 'border-primary' : ''
-                                }`}
-                            >
-                                <div className="mb-4">
-                                    <ShipSelector
-                                        selected={
-                                            config.shipId
-                                                ? (getShipById(config.shipId) ?? null)
-                                                : null
-                                        }
-                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
-                                        variant="compact"
-                                    />
-                                </div>
-                                <div className="flex justify-between items-center mb-4">
-                                    <Input
-                                        value={config.name}
-                                        onChange={(e) =>
-                                            updateConfig(config.id, 'name', e.target.value)
-                                        }
-                                        className="font-bold"
-                                    />
-                                    <Button
-                                        variant="danger"
-                                        onClick={() => removeConfig(config.id)}
-                                        aria-label="Remove ship"
-                                    >
-                                        <CloseIcon />
-                                    </Button>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex gap-4">
-                                        <Input
-                                            label="HP"
-                                            type="number"
-                                            value={config.hp}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'hp',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                        <Input
-                                            label="Defense"
-                                            type="number"
-                                            value={config.defense}
-                                            onChange={(e) =>
-                                                updateConfig(
-                                                    config.id,
-                                                    'defense',
-                                                    parseInt(e.target.value) || 0
-                                                )
-                                            }
-                                        />
-                                    </div>
-
-                                    <div className="mt-4 pt-4 border-t border-dark-border">
-                                        <div className="flex justify-between mb-2">
-                                            <span className="text-theme-text-secondary">
-                                                Damage Reduction:
-                                            </span>
-                                            <span>{config.damageReduction?.toFixed(2)}%</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-theme-text-secondary">
-                                                Effective HP:
-                                            </span>
-                                            <span
-                                                className={
-                                                    bestShip && bestShip.id === config.id
-                                                        ? 'text-primary font-bold'
-                                                        : ''
-                                                }
-                                            >
-                                                {config.effectiveHP?.toLocaleString()}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between mt-2">
-                                            <span className="text-theme-text-secondary">
-                                                HP Multiplier:
-                                            </span>
-                                            <span>
-                                                {((config.effectiveHP || 0) / config.hp).toFixed(2)}
-                                                x
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {bestShip && bestShip.id === config.id && (
-                                        <div className="text-primary text-sm mt-2 text-center">
-                                            Best ship configuration
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                                config={config}
+                                isBest={bestShip?.id === config.id}
+                                isComparing={configs.length > 1}
+                                bestEffectiveHP={bestEffectiveHP}
+                                buffTotals={mergedBuffTotals.get(config.id)}
+                                onRemove={() => removeConfig(config.id)}
+                                onUpdate={(field, value) => updateConfig(config.id, field, value)}
+                                onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
+                                onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
+                            />
                         ))}
                     </div>
 
@@ -339,6 +260,11 @@ const DefenseCalculatorPage: React.FC = () => {
                         <p className="mb-2">The formula for calculating Effective HP is:</p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
                             Effective HP = HP / (1 - (Damage Reduction / 100))
+                        </p>
+                        <p className="mb-2">
+                            Defense buffs multiply the base defense stat before calculating damage
+                            reduction. Incoming damage buffs (e.g.{' '}
+                            <em>-30% Incoming Direct Damage</em>) further adjust effective HP.
                         </p>
                         <p>
                             For example, a ship with 10,000 HP and 70% damage reduction has an
@@ -359,13 +285,21 @@ const DefenseCalculatorPage: React.FC = () => {
                         <DamageReductionChart
                             height={400}
                             maxDefense={26000}
-                            ships={configs.map((config) => ({
-                                id: config.id,
-                                name: config.name,
-                                defense: config.defense,
-                                damageReduction: config.damageReduction || 0,
-                                isHighlighted: bestShip ? config.id === bestShip.id : false,
-                            }))}
+                            ships={configs.map((config) => {
+                                const totals = mergedBuffTotals.get(config.id);
+                                const { buffedDefense, damageReduction } = computeBuffedStats(
+                                    config.hp,
+                                    config.defense,
+                                    totals
+                                );
+                                return {
+                                    id: config.id,
+                                    name: config.name,
+                                    defense: buffedDefense,
+                                    damageReduction,
+                                    isHighlighted: bestShip ? config.id === bestShip.id : false,
+                                };
+                            })}
                         />
 
                         <div className="mt-6 flex justify-center">
