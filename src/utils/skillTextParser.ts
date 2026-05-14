@@ -146,6 +146,21 @@ export function parseSkillDamage(text: string): number {
 }
 
 /**
+ * Returns the heal percentage from the first <unit-damage>repairs X%</unit-damage> tag found.
+ * Returns a float percentage (e.g. 15 for "repairs 15%"), or 0 if none found.
+ */
+export function parseSkillHeal(text: string): number {
+    if (!text) return 0;
+    const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
+    let match: RegExpExecArray | null;
+    while ((match = tagPattern.exec(text)) !== null) {
+        const healMatch = /^\s*repairs\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
+        if (healMatch) return parseFloat(healMatch[1]);
+    }
+    return 0;
+}
+
+/**
  * Returns true if any of the provided skill texts contain "fully charged" (case-insensitive).
  * Checks all five skill text fields to cover all in-game phrasings including typos.
  */
