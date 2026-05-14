@@ -261,7 +261,7 @@ const HealingCalculatorPage: React.FC = () => {
             <Seo {...SEO_CONFIG.healing} />
             <PageLayout
                 title="Healing Calculator"
-                description="Calculate effective healing based on HP, base heal percentage, crit chance, crit power, and heal modifier"
+                description="Calculate effective healing based on HP, heal percentage, crit, heal modifier, and outgoing repair buffs"
                 action={{
                     label: 'Add Healer',
                     onClick: addConfig,
