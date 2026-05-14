@@ -46,6 +46,10 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const incomingDamage = extract(/([+-]\d+)%\s*Incoming\s*Direct\s*Damage/);
     if (incomingDamage !== undefined) effects.incomingDamage = incomingDamage;
 
+    // Security is a flat stat (e.g. "+20 Security", "+40Security")
+    const security = extract(/([+-]\d+)\s*Security/);
+    if (security !== undefined) effects.security = security;
+
     return effects;
 }
 

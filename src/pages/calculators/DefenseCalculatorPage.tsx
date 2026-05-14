@@ -7,6 +7,7 @@ import { DamageReductionChart } from '../../components/calculator/DamageReductio
 import { DamageReductionTable } from '../../components/calculator/DamageReductionTable';
 import { DefenseSettingsPanel } from '../../components/calculator/DefenseSettingsPanel';
 import { DefenseShipCard } from '../../components/calculator/DefenseShipCard';
+import { SecurityEHPChart } from '../../components/calculator/SecurityEHPChart';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -44,6 +45,7 @@ const DefenseCalculatorPage: React.FC = () => {
                 const final = statsBreakdown.final;
                 const hp = Math.round(final.hp);
                 const defense = Math.round(final.defence);
+                const security = Math.round(final.security ?? 0);
                 return [
                     {
                         id: '1',
@@ -51,6 +53,7 @@ const DefenseCalculatorPage: React.FC = () => {
                         name: ship.name,
                         hp,
                         defense,
+                        security,
                         damageReduction: calculateDamageReduction(defense),
                         effectiveHP: calculateEffectiveHP(hp, defense),
                         buffs: [],
@@ -58,7 +61,7 @@ const DefenseCalculatorPage: React.FC = () => {
                 ];
             }
         }
-        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000, buffs: [] }];
+        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000, security: 70, buffs: [] }];
     };
 
     const [configs, setConfigs] = useState<DefenseShipConfig[]>(getInitialConfig);
@@ -96,6 +99,7 @@ const DefenseCalculatorPage: React.FC = () => {
             name: `Ship ${nextId}`,
             hp: 10000,
             defense: 5000,
+            security: 70,
             damageReduction: calculateDamageReduction(5000),
             effectiveHP: calculateEffectiveHP(10000, 5000),
             buffs: [],
@@ -108,7 +112,11 @@ const DefenseCalculatorPage: React.FC = () => {
         setConfigs((prev) => prev.filter((c) => c.id !== id));
     };
 
-    const updateConfig = (id: string, field: 'name' | 'hp' | 'defense', value: string | number) => {
+    const updateConfig = (
+        id: string,
+        field: 'name' | 'hp' | 'defense' | 'security',
+        value: string | number
+    ) => {
         setConfigs((prev) =>
             prev.map((config) => {
                 if (config.id !== id) return config;
@@ -136,6 +144,7 @@ const DefenseCalculatorPage: React.FC = () => {
         const final = statsBreakdown.final;
         const hp = Math.round(final.hp);
         const defense = Math.round(final.defence);
+        const security = Math.round(final.security ?? 0);
         setConfigs((prev) =>
             prev.map((c) =>
                 c.id === configId
@@ -145,6 +154,7 @@ const DefenseCalculatorPage: React.FC = () => {
                           name: ship.name,
                           hp,
                           defense,
+                          security,
                           damageReduction: calculateDamageReduction(defense),
                           effectiveHP: calculateEffectiveHP(hp, defense),
                       }
@@ -165,6 +175,10 @@ const DefenseCalculatorPage: React.FC = () => {
             ),
             incomingDamageBuff: globalBuffs.reduce(
                 (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
+                0
+            ),
+            securityBuff: globalBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
                 0
             ),
         }),
@@ -189,6 +203,12 @@ const DefenseCalculatorPage: React.FC = () => {
                                 (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
                                 0
                             ),
+                        securityBuff:
+                            globalBuffTotals.securityBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
+                                0
+                            ),
                     },
                 ])
             ),
@@ -199,17 +219,27 @@ const DefenseCalculatorPage: React.FC = () => {
         const currentEHP = computeBuffedStats(
             current.hp,
             current.defense,
+            current.security,
             mergedBuffTotals.get(current.id)
         ).effectiveHP;
         const bestEHP = best
-            ? computeBuffedStats(best.hp, best.defense, mergedBuffTotals.get(best.id)).effectiveHP
+            ? computeBuffedStats(
+                  best.hp,
+                  best.defense,
+                  best.security,
+                  mergedBuffTotals.get(best.id)
+              ).effectiveHP
             : 0;
         return currentEHP > bestEHP ? current : best;
     }, null);
 
     const bestEffectiveHP = bestShip
-        ? computeBuffedStats(bestShip.hp, bestShip.defense, mergedBuffTotals.get(bestShip.id))
-              .effectiveHP
+        ? computeBuffedStats(
+              bestShip.hp,
+              bestShip.defense,
+              bestShip.security,
+              mergedBuffTotals.get(bestShip.id)
+          ).effectiveHP
         : undefined;
 
     return (
@@ -267,9 +297,9 @@ const DefenseCalculatorPage: React.FC = () => {
                             <em>-30% Incoming Direct Damage</em>) further adjust effective HP.
                         </p>
                         <p>
-                            For example, a ship with 10,000 HP and 70% damage reduction has an
-                            effective HP of 33,333, meaning it can take more than three times as
-                            much damage as its raw HP value.
+                            Security does not affect Effective HP directly — it determines how well
+                            your ship resists debuffs from hackers. Higher security reduces the
+                            chance that hacking attempts succeed.
                         </p>
                     </div>
 
@@ -290,6 +320,7 @@ const DefenseCalculatorPage: React.FC = () => {
                                 const { buffedDefense, damageReduction } = computeBuffedStats(
                                     config.hp,
                                     config.defense,
+                                    config.security,
                                     totals
                                 );
                                 return {
@@ -315,6 +346,8 @@ const DefenseCalculatorPage: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    <SecurityEHPChart configs={configs} buffTotals={mergedBuffTotals} />
                 </div>
             </PageLayout>
         </>

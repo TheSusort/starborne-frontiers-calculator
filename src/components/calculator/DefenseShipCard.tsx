@@ -18,7 +18,7 @@ interface DefenseShipCardProps {
     bestEffectiveHP?: number;
     buffTotals?: DefenseBuffTotals;
     onRemove: () => void;
-    onUpdate: (field: 'name' | 'hp' | 'defense', value: string | number) => void;
+    onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
 }
@@ -39,10 +39,13 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
     const hasBuffs =
-        (buffTotals?.defenseBuff ?? 0) !== 0 || (buffTotals?.incomingDamageBuff ?? 0) !== 0;
-    const { buffedDefense, damageReduction, effectiveHP } = computeBuffedStats(
+        (buffTotals?.defenseBuff ?? 0) !== 0 ||
+        (buffTotals?.incomingDamageBuff ?? 0) !== 0 ||
+        (buffTotals?.securityBuff ?? 0) !== 0;
+    const { buffedDefense, damageReduction, effectiveHP, buffedSecurity } = computeBuffedStats(
         config.hp,
         config.defense,
+        config.security,
         buffTotals
     );
 
@@ -67,7 +70,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
             </div>
 
             <div className="space-y-4">
-                <div className="flex gap-4">
+                <div className="grid grid-cols-3 gap-4">
                     <Input
                         label="HP"
                         type="number"
@@ -79,6 +82,12 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         type="number"
                         value={config.defense}
                         onChange={(e) => onUpdate('defense', parseInt(e.target.value) || 0)}
+                    />
+                    <Input
+                        label="Security"
+                        type="number"
+                        value={config.security}
+                        onChange={(e) => onUpdate('security', parseInt(e.target.value) || 0)}
                     />
                 </div>
 
@@ -101,7 +110,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     </div>
                     <GameBuffPicker
                         label="Ship Buffs"
-                        relevantStats={['defense', 'incomingDamage']}
+                        relevantStats={['defense', 'incomingDamage', 'security']}
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}
@@ -128,6 +137,18 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     <div className="flex justify-between mt-2">
                         <span className="text-theme-text-secondary">HP Multiplier:</span>
                         <span>{(effectiveHP / config.hp).toFixed(2)}x</span>
+                    </div>
+                    <div className="flex justify-between mt-2">
+                        <span className="text-theme-text-secondary">Security:</span>
+                        <span
+                            className={
+                                hasBuffs && (buffTotals?.securityBuff ?? 0) !== 0
+                                    ? 'text-yellow-400'
+                                    : ''
+                            }
+                        >
+                            {Math.round(buffedSecurity).toLocaleString()}
+                        </span>
                     </div>
                     {isComparing && !isBest && bestEffectiveHP && (
                         <div className="flex justify-between mt-2">

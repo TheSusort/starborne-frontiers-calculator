@@ -32,22 +32,27 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     defense: 'Def',
     incomingDamage: 'Inc',
     incomingDotDamage: 'Inc.DoT',
+    security: 'Sec',
 };
+
+// Stats stored as flat values, not percentages
+const FLAT_STATS = new Set<keyof ParsedBuffEffects>(['security']);
 
 function buildEffectSummary(
     effects: ParsedBuffEffects,
     stacks = 1,
     filter?: (keyof ParsedBuffEffects)[]
 ): string {
-    const fmt = (value: number, label: string) => {
+    const fmt = (key: keyof ParsedBuffEffects, value: number, label: string) => {
         const scaled = value * stacks;
         const sign = scaled >= 0 ? '+' : '';
-        return `${sign}${scaled}% ${label}`;
+        const suffix = FLAT_STATS.has(key) ? '' : '%';
+        return `${sign}${scaled}${suffix} ${label}`;
     };
 
     const parts = (Object.keys(STAT_LABELS) as (keyof ParsedBuffEffects)[])
         .filter((k) => effects[k] !== undefined && (!filter || filter.includes(k)))
-        .map((k) => fmt(effects[k] as number, STAT_LABELS[k]));
+        .map((k) => fmt(k, effects[k] as number, STAT_LABELS[k]));
 
     return parts.length > 0 ? parts.join(', ') : 'No DPS effect';
 }

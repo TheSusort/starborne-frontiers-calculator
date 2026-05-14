@@ -1,5 +1,5 @@
-import React, { useMemo, useRef } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, LabelList } from 'recharts';
+import React, { useMemo } from 'react';
+import { ScatterChart, Scatter, XAxis, YAxis, Tooltip, LabelList, Customized } from 'recharts';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { BaseStats } from '../../types/stats';
 import {
@@ -105,7 +105,15 @@ const getDPSColor = (dps: number, maxDps: number): string => {
     }
 };
 
-// Define interfaces for the custom shape props
+interface RechartsAxisEntry {
+    scale?: (v: number) => number;
+}
+
+interface RechartsInternalProps {
+    xAxisMap?: Record<string, RechartsAxisEntry>;
+    yAxisMap?: Record<string, RechartsAxisEntry>;
+}
+
 interface CustomShapeProps {
     cx: number;
     cy: number;
@@ -119,15 +127,6 @@ interface CustomShapeProps {
         name?: string;
     };
 }
-
-// Custom shape for scatter points (rectangles for heatmap)
-const CustomHeatmapRect = (props: CustomShapeProps) => {
-    const { cx, cy, fill } = props;
-    // Use a slightly larger rectangle to ensure no gaps between cells
-    const size = 10;
-
-    return <rect x={cx} y={cy - size} width={26} height={size} fill={fill} stroke="none" />;
-};
 
 // Custom shape for ship points (stars)
 const CustomShipShape = (props: CustomShapeProps) => {
@@ -187,7 +186,6 @@ interface ShapeCallbackProps {
 }
 
 export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) => {
-    const chartContainerRef = useRef<HTMLDivElement>(null);
     const colors = useThemeColors();
 
     // Calculate DPS for ships and find max DPS
@@ -238,23 +236,17 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
     }, [shipPoints]);
 
     // Generate heatmap data
-    const heatmapData = useMemo(() => {
-        if (maxDps === 0 || shipPoints.length === 0) return [];
+    const { heatmapData, critDamageStep, attackStep } = useMemo(() => {
+        if (maxDps === 0 || shipPoints.length === 0)
+            return { heatmapData: [], critDamageStep: 6.25, attackStep: 250 };
 
-        const critDamageRange = { min: 0, max: 325 };
-        const attackRange = { min: 0, max: attackMax };
-
-        const critDamageStep = 6.25;
-        const attackStep = Math.ceil(attackMax / 40 / 250) * 250;
+        const cdStep = 6.25;
+        const aStep = Math.ceil(attackMax / 40 / 250) * 250;
 
         const heatmapPoints: HeatmapPoint[] = [];
 
-        for (
-            let critDamage = critDamageRange.min;
-            critDamage <= critDamageRange.max;
-            critDamage += critDamageStep
-        ) {
-            for (let attack = attackRange.min; attack <= attackRange.max; attack += attackStep) {
+        for (let critDamage = 0; critDamage <= 325; critDamage += cdStep) {
+            for (let attack = 0; attack <= attackMax; attack += aStep) {
                 const stats: BaseStats = {
                     attack: attack || 1,
                     crit: 100,
@@ -279,7 +271,7 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
             }
         }
 
-        return heatmapPoints;
+        return { heatmapData: heatmapPoints, critDamageStep: cdStep, attackStep: aStep };
     }, [maxDps, shipPoints, attackMax]);
 
     // If no data or error, show fallback
@@ -296,12 +288,11 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
         <div className="dps-chart">
             <h2 className="text-xl font-bold mb-4">DPS Analysis Heatmap</h2>
             <div
-                ref={chartContainerRef}
                 style={{
                     width: '100%',
                     height,
                     position: 'relative',
-                    backgroundColor: colors.bg, // Dark background to match cells
+                    backgroundColor: colors.bg,
                 }}
             >
                 {/* The chart container */}
@@ -353,18 +344,32 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                         />
                         <Tooltip content={<CustomTooltip />} cursor={false} />
 
-                        {/* Render the heatmap */}
-                        <Scatter
-                            name="DPS Heatmap"
-                            data={heatmapData}
-                            shape={(props: ShapeCallbackProps) => (
-                                <CustomHeatmapRect
-                                    cx={props.cx || 0}
-                                    cy={props.cy || 0}
-                                    fill={props.fill}
-                                />
-                            )}
-                            isAnimationActive={false}
+                        {/* Pixel-perfect heatmap using axis scale functions */}
+                        <Customized
+                            component={(rProps: RechartsInternalProps) => {
+                                const xAxis = Object.values(rProps.xAxisMap ?? {})[0];
+                                const yAxis = Object.values(rProps.yAxisMap ?? {})[0];
+                                if (!xAxis?.scale || !yAxis?.scale) return null;
+                                const xs = xAxis.scale;
+                                const ys = yAxis.scale;
+                                const cellW = Math.abs(xs(critDamageStep) - xs(0));
+                                const cellH = Math.abs(ys(0) - ys(attackStep));
+                                return (
+                                    <g pointerEvents="none">
+                                        {heatmapData.map((d, i) => (
+                                            <rect
+                                                key={i}
+                                                x={xs(d.x)}
+                                                y={ys(d.y) - cellH}
+                                                width={cellW}
+                                                height={cellH}
+                                                fill={d.fill}
+                                                stroke="none"
+                                            />
+                                        ))}
+                                    </g>
+                                );
+                            }}
                         />
 
                         {/* Render ship points */}

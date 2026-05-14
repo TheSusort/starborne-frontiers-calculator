@@ -35,6 +35,9 @@ export interface ParsedBuffEffects {
     defense?: number; // modifier on enemyDefense: -30 means enemy defense × 0.70
     incomingDamage?: number; // positive = enemy takes more direct damage
     incomingDotDamage?: number; // from Inc. DoT buffs; positive = enemy takes more DoT
+
+    // Flat stats (not percentages)
+    security?: number; // flat additive on security stat
 }
 
 export interface SelectedGameBuff {
@@ -90,6 +93,7 @@ export interface HealingBuffTotals {
 export interface DefenseBuffTotals {
     defenseBuff: number;
     incomingDamageBuff: number;
+    securityBuff: number;
 }
 
 export interface DefenseShipConfig {
@@ -98,6 +102,7 @@ export interface DefenseShipConfig {
     name: string;
     hp: number;
     defense: number;
+    security: number;
     effectiveHP?: number;
     damageReduction?: number;
     buffs: SelectedGameBuff[];

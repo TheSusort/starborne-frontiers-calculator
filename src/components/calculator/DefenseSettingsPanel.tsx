@@ -38,7 +38,7 @@ export const DefenseSettingsPanel: React.FC<DefenseSettingsPanelProps> = ({
                 </p>
                 <GameBuffPicker
                     label="Defense Buffs / Debuffs"
-                    relevantStats={['defense', 'incomingDamage']}
+                    relevantStats={['defense', 'incomingDamage', 'security']}
                     excludeTypes={['effect']}
                     value={defenseBuffs}
                     onChange={onDefenseBuffsChange}
