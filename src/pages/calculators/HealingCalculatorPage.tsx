@@ -330,7 +330,8 @@ const HealingCalculatorPage: React.FC = () => {
                             power, and healing modifier.
                         </p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            Effective Heal = HP × Heal% × CritMultiplier × (1 + HealMod%)
+                            Effective Heal = HP × Heal% × CritMultiplier × (1 + HealMod%) × (1 +
+                            OutgoingRepairBuff%)
                             <br />
                             Crit Multiplier = 1 + (Crit Chance% × Crit Power%) / 10000
                             <br />
