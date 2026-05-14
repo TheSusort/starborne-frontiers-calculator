@@ -81,7 +81,8 @@ const HealingCalculatorPage: React.FC = () => {
                         startCharged: false,
                         crit: Math.round(final.crit),
                         critDamage: Math.round(final.critDamage),
-                        healModifier: 0,
+                        healModifier: Math.round(final.healModifier ?? 0),
+                        healModifierAutoFilled: (final.healModifier ?? 0) > 0,
                         buffs: [],
                     },
                 ];
@@ -128,6 +129,7 @@ const HealingCalculatorPage: React.FC = () => {
                 const updated = { ...c, [field]: value };
                 if (field === 'healPercent') updated.healPercentAutoFilled = false;
                 if (field === 'chargedHealPercent') updated.chargedHealPercentAutoFilled = false;
+                if (field === 'healModifier') updated.healModifierAutoFilled = false;
                 return updated;
             })
         );
@@ -163,6 +165,8 @@ const HealingCalculatorPage: React.FC = () => {
                     hp: Math.round(final.hp),
                     crit: Math.round(final.crit),
                     critDamage: Math.round(final.critDamage),
+                    healModifier: Math.round(final.healModifier ?? 0),
+                    healModifierAutoFilled: (final.healModifier ?? 0) > 0,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
                     ...(parsedActive || parsedFallback
                         ? {
