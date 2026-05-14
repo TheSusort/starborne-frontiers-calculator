@@ -26,6 +26,7 @@ export interface ParsedBuffEffects {
     outgoingDamage?: number; // multiplicative on direct damage
     defensePenetration?: number; // additive with per-ship defPen value
     dotDamage?: number; // from Out. DoT buffs; multiplicative on corrosion+inferno
+    outgoingHeal?: number; // multiplicative on outgoing healing (like outgoingDamage for DPS)
 
     // Enemy-side
     defense?: number; // modifier on enemyDefense: -30 means enemy defense × 0.70
@@ -79,6 +80,7 @@ export interface AttackerBuffTotals {
 export interface HealingBuffTotals {
     critBuff: number;
     critDamageBuff: number;
+    outgoingHealBuff: number;
 }
 
 export interface HealerConfig {
@@ -95,6 +97,7 @@ export interface HealerConfig {
     crit: number;
     critDamage: number;
     healModifier: number;
+    healModifierAutoFilled?: boolean;
     buffs: SelectedGameBuff[];
 }
 
