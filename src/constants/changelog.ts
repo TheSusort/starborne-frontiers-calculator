@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS Calculator: added per-ship buff picker in the Advanced section so ship-granted buffs are factored into that ship's damage calculation independently of global combat buffs.",
     'Healing calculator: heal modifier is now auto-filled from ship gear and sets when a ship is selected.',
     'Healing calculator: Outgoing Repair buffs are now factored in as a separate healing multiplier.',
+    'Healing calculator: Incoming Repair buffs (e.g. Everliving Regeneration) are now recognised as relevant and factored into healing output.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

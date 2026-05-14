@@ -18,12 +18,15 @@ export function calculateHealing(config: HealerConfig, buffs?: HealingBuffTotals
     const critMultiplier = 1 + (critRate * effectiveCritDamage) / 100;
     const healModMult = 1 + (config.healModifier || 0) / 100;
     const outgoingHealMult = 1 + (buffs?.outgoingHealBuff ?? 0) / 100;
+    const incomingHealMult = 1 + (buffs?.incomingHealBuff ?? 0) / 100;
 
     const activeBase = config.hp * (config.healPercent / 100);
-    const activeEffective = activeBase * critMultiplier * healModMult * outgoingHealMult;
+    const activeEffective =
+        activeBase * critMultiplier * healModMult * outgoingHealMult * incomingHealMult;
 
     const chargedBase = config.hp * ((config.chargedHealPercent || 0) / 100);
-    const chargedEffective = chargedBase * critMultiplier * healModMult * outgoingHealMult;
+    const chargedEffective =
+        chargedBase * critMultiplier * healModMult * outgoingHealMult * incomingHealMult;
 
     let effectiveHealing: number;
     if (config.chargeCount > 0 && config.chargedHealPercent > 0) {

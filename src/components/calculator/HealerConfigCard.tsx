@@ -170,7 +170,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                     </div>
                     <GameBuffPicker
                         label="Ship Buffs"
-                        relevantStats={['crit', 'critDamage', 'outgoingHeal']}
+                        relevantStats={['crit', 'critDamage', 'outgoingHeal', 'incomingHeal']}
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}

@@ -203,6 +203,10 @@ const HealingCalculatorPage: React.FC = () => {
                 (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
                 0
             ),
+            incomingHealBuff: healerBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.incomingHeal ?? 0) * b.stacks,
+                0
+            ),
         }),
         [healerBuffs]
     );
@@ -229,6 +233,12 @@ const HealingCalculatorPage: React.FC = () => {
                             globalBuffTotals.outgoingHealBuff +
                             c.buffs.reduce(
                                 (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
+                                0
+                            ),
+                        incomingHealBuff:
+                            globalBuffTotals.incomingHealBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.incomingHeal ?? 0) * b.stacks,
                                 0
                             ),
                     },
@@ -304,8 +314,6 @@ const HealingCalculatorPage: React.FC = () => {
 
                     <HealingBubbleChart configs={configs} buffTotals={mergedBuffTotals} />
 
-                    <HealingComparisonChart configs={configs} buffTotals={mergedBuffTotals} />
-
                     <div className="card">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="text-lg font-bold">Healing Over Time</h3>
@@ -325,6 +333,8 @@ const HealingCalculatorPage: React.FC = () => {
                             rounds={rounds}
                         />
                     </div>
+
+                    <HealingComparisonChart configs={configs} buffTotals={mergedBuffTotals} />
 
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">Healing Formula Explanation</h2>

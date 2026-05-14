@@ -40,6 +40,9 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const defense = extract(/([+-]\d+)%\s*Defense(?!\s*Penetration)/);
     if (defense !== undefined) effects.defense = defense;
 
+    const incomingHeal = extract(/([+-]\d+(?:\.\d+)?)%\s*Incoming\s*Repair/);
+    if (incomingHeal !== undefined) effects.incomingHeal = incomingHeal;
+
     const incomingDamage = extract(/([+-]\d+)%\s*Incoming\s*Direct\s*Damage/);
     if (incomingDamage !== undefined) effects.incomingDamage = incomingDamage;
 

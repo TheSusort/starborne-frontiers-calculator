@@ -32,6 +32,7 @@ describe('calculateHealing', () => {
             critBuff: 0,
             critDamageBuff: 0,
             outgoingHealBuff: -50,
+            incomingHealBuff: 0,
         });
         // 100000 × 0.20 × (1 + 0/100) × (1 + -50/100) = 20000 × 0.5 = 10000
         expect(result.activeEffectiveHealing).toBe(10000);
@@ -40,7 +41,7 @@ describe('calculateHealing', () => {
     it('outgoingHealBuff compounds with healModifier', () => {
         const result = calculateHealing(
             { ...BASE_CONFIG, healModifier: 20 },
-            { critBuff: 0, critDamageBuff: 0, outgoingHealBuff: 50 }
+            { critBuff: 0, critDamageBuff: 0, outgoingHealBuff: 50, incomingHealBuff: 0 }
         );
         // 100000 × 0.20 × 1.20 × 1.50 = 36000
         expect(result.activeEffectiveHealing).toBe(36000);
@@ -51,6 +52,7 @@ describe('calculateHealing', () => {
             critBuff: 0,
             critDamageBuff: 0,
             outgoingHealBuff: 0,
+            incomingHealBuff: 0,
         });
         const withoutBuff = calculateHealing(BASE_CONFIG, undefined);
         expect(withBuff.activeEffectiveHealing).toBe(withoutBuff.activeEffectiveHealing);

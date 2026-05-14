@@ -28,6 +28,9 @@ export interface ParsedBuffEffects {
     dotDamage?: number; // from Out. DoT buffs; multiplicative on corrosion+inferno
     outgoingHeal?: number; // multiplicative on outgoing healing (like outgoingDamage for DPS)
 
+    // Receiver-side (healer targets)
+    incomingHeal?: number; // additive on incoming repair received
+
     // Enemy-side
     defense?: number; // modifier on enemyDefense: -30 means enemy defense × 0.70
     incomingDamage?: number; // positive = enemy takes more direct damage
@@ -81,6 +84,7 @@ export interface HealingBuffTotals {
     critBuff: number;
     critDamageBuff: number;
     outgoingHealBuff: number;
+    incomingHealBuff: number;
 }
 
 export interface HealerConfig {
