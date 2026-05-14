@@ -27,6 +27,7 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     outgoingDamage: 'Dmg',
     defensePenetration: 'Pen',
     dotDamage: 'DoT',
+    outgoingHeal: 'Heal',
     defense: 'Def',
     incomingDamage: 'Inc',
     incomingDotDamage: 'Inc.DoT',
@@ -67,14 +68,18 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
 }) => {
     const [search, setSearch] = useState('');
 
-    const filteredBuffs = useMemo(() => {
+    const { relevantBuffs, otherBuffs } = useMemo(() => {
         const q = search.toLowerCase();
-        return PARSED_BUFFS.filter(
+        const all = PARSED_BUFFS.filter(
             (buff) =>
                 (!excludeTypes || !excludeTypes.includes(buff.type)) &&
                 (buff.name.toLowerCase().includes(q) || buff.description.toLowerCase().includes(q))
         );
-    }, [search, excludeTypes]);
+        return {
+            relevantBuffs: all.filter((b) => hasDpsEffect(b.parsedEffects, relevantStats)),
+            otherBuffs: all.filter((b) => !hasDpsEffect(b.parsedEffects, relevantStats)),
+        };
+    }, [search, excludeTypes, relevantStats]);
 
     const selectedNames = useMemo(() => new Set(value.map((s) => s.buffName)), [value]);
 
@@ -130,49 +135,94 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                 <div className="w-72 p-2">
                     <SearchInput value={search} onChange={setSearch} placeholder="Search buffs…" />
                     <div className="mt-2 max-h-64 overflow-y-auto">
-                        {filteredBuffs.map((buff) => {
-                            const isSelected = selectedNames.has(buff.name);
-                            const hasDps = hasDpsEffect(buff.parsedEffects, relevantStats);
-                            const summary = buildEffectSummary(
-                                buff.parsedEffects,
-                                1,
-                                relevantStats
-                            );
-                            return (
-                                <button
-                                    key={buff.name}
-                                    type="button"
-                                    onClick={() => toggleBuff(buff)}
-                                    className={`flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-dark-border ${isSelected ? 'bg-dark-lighter' : ''}`}
-                                >
-                                    <div
-                                        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border transition-colors ${
-                                            isSelected
-                                                ? 'border-primary bg-primary'
-                                                : 'border-dark-border bg-dark'
-                                        }`}
-                                    >
-                                        <CheckIcon
-                                            className={`!h-3 !w-3 text-dark transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}
-                                        />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <span
-                                            className={`block truncate text-sm ${!hasDps ? 'text-theme-text-secondary' : ''}`}
-                                        >
-                                            {buff.name}
-                                        </span>
-                                        <span className="text-xs text-theme-text-secondary">
-                                            {hasDps ? summary : 'No DPS effect'}
-                                        </span>
-                                    </div>
-                                </button>
-                            );
-                        })}
-                        {filteredBuffs.length === 0 && (
+                        {relevantBuffs.length === 0 && otherBuffs.length === 0 && (
                             <p className="px-2 py-2 text-sm text-theme-text-secondary">
                                 No buffs found.
                             </p>
+                        )}
+                        {relevantBuffs.length > 0 && (
+                            <>
+                                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-theme-text-secondary">
+                                    Relevant
+                                </p>
+                                {relevantBuffs.map((buff) => {
+                                    const isSelected = selectedNames.has(buff.name);
+                                    const summary = buildEffectSummary(
+                                        buff.parsedEffects,
+                                        1,
+                                        relevantStats
+                                    );
+                                    return (
+                                        <button
+                                            key={buff.name}
+                                            type="button"
+                                            onClick={() => toggleBuff(buff)}
+                                            className={`flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-dark-border ${isSelected ? 'bg-dark-lighter' : ''}`}
+                                        >
+                                            <div
+                                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border transition-colors ${
+                                                    isSelected
+                                                        ? 'border-primary bg-primary'
+                                                        : 'border-dark-border bg-dark'
+                                                }`}
+                                            >
+                                                <CheckIcon
+                                                    className={`!h-3 !w-3 text-dark transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+                                                />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <span className="block truncate text-sm">
+                                                    {buff.name}
+                                                </span>
+                                                <span className="text-xs text-theme-text-secondary">
+                                                    {summary}
+                                                </span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </>
+                        )}
+                        {otherBuffs.length > 0 && (
+                            <>
+                                {relevantBuffs.length > 0 && (
+                                    <div className="my-1 border-t border-dark-border" />
+                                )}
+                                <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-theme-text-secondary">
+                                    Other
+                                </p>
+                                {otherBuffs.map((buff) => {
+                                    const isSelected = selectedNames.has(buff.name);
+                                    return (
+                                        <button
+                                            key={buff.name}
+                                            type="button"
+                                            onClick={() => toggleBuff(buff)}
+                                            className={`flex w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-dark-border ${isSelected ? 'bg-dark-lighter' : ''}`}
+                                        >
+                                            <div
+                                                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center border transition-colors ${
+                                                    isSelected
+                                                        ? 'border-primary bg-primary'
+                                                        : 'border-dark-border bg-dark'
+                                                }`}
+                                            >
+                                                <CheckIcon
+                                                    className={`!h-3 !w-3 text-dark transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0'}`}
+                                                />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <span className="block truncate text-sm text-theme-text-secondary">
+                                                    {buff.name}
+                                                </span>
+                                                <span className="text-xs text-theme-text-secondary">
+                                                    No effect
+                                                </span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </>
                         )}
                     </div>
                 </div>

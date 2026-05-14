@@ -195,6 +195,10 @@ const HealingCalculatorPage: React.FC = () => {
                 (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
                 0
             ),
+            outgoingHealBuff: healerBuffs.reduce(
+                (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
+                0
+            ),
         }),
         [healerBuffs]
     );
@@ -215,6 +219,12 @@ const HealingCalculatorPage: React.FC = () => {
                             globalBuffTotals.critDamageBuff +
                             c.buffs.reduce(
                                 (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
+                                0
+                            ),
+                        outgoingHealBuff:
+                            globalBuffTotals.outgoingHealBuff +
+                            c.buffs.reduce(
+                                (sum, b) => sum + (b.parsedEffects.outgoingHeal ?? 0) * b.stacks,
                                 0
                             ),
                     },
