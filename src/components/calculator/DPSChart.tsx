@@ -231,20 +231,24 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
         }
     }, [ships]);
 
+    // Dynamic attack range — always covers the ship's actual attack value
+    const attackMax = useMemo(() => {
+        const maxShipAttack = Math.max(...(shipPoints.map((p) => p.y) || [30000]));
+        return Math.ceil(Math.max(30000, maxShipAttack * 1.5) / 5000) * 5000;
+    }, [shipPoints]);
+
     // Generate heatmap data
     const heatmapData = useMemo(() => {
         if (maxDps === 0 || shipPoints.length === 0) return [];
 
-        const critDamageRange = { min: 0, max: 275 };
-        const attackRange = { min: 0, max: 30000 };
+        const critDamageRange = { min: 0, max: 325 };
+        const attackRange = { min: 0, max: attackMax };
 
-        // Even finer resolution for complete coverage
-        const critDamageStep = 6.25; // Smaller steps for complete coverage
-        const attackStep = 750; // Smaller steps for complete coverage
+        const critDamageStep = 6.25;
+        const attackStep = Math.ceil(attackMax / 40 / 250) * 250;
 
         const heatmapPoints: HeatmapPoint[] = [];
 
-        // For each grid point in our heatmap
         for (
             let critDamage = critDamageRange.min;
             critDamage <= critDamageRange.max;
@@ -252,8 +256,8 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
         ) {
             for (let attack = attackRange.min; attack <= attackRange.max; attack += attackStep) {
                 const stats: BaseStats = {
-                    attack: attack || 1, // Avoid division by zero
-                    crit: 100, // Assuming 100% crit rate for the heatmap
+                    attack: attack || 1,
+                    crit: 100,
                     critDamage,
                     hp: 0,
                     defence: 0,
@@ -270,13 +274,13 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                     x: critDamage,
                     y: attack,
                     z: dps,
-                    fill: getDPSColor(dps, maxDps * 1.5), // Using 1.5x maxDps for color scaling
+                    fill: getDPSColor(dps, maxDps * 1.5),
                 });
             }
         }
 
         return heatmapPoints;
-    }, [maxDps, shipPoints]);
+    }, [maxDps, shipPoints, attackMax]);
 
     // If no data or error, show fallback
     if (shipPoints.length === 0) {
@@ -316,8 +320,10 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                             type="number"
                             dataKey="x"
                             name="Crit Damage"
-                            domain={[0, 275]}
-                            ticks={[0, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275]}
+                            domain={[0, 325]}
+                            ticks={[
+                                0, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325,
+                            ]}
                             label={{
                                 value: 'Crit Damage (%)',
                                 position: 'insideBottom',
@@ -330,8 +336,11 @@ export const DPSChart: React.FC<DPSChartProps> = ({ ships = [], height = 500 }) 
                             type="number"
                             dataKey="y"
                             name="Attack"
-                            domain={[0, 30000]}
-                            ticks={[0, 5000, 10000, 15000, 20000, 25000, 30000]}
+                            domain={[0, attackMax]}
+                            ticks={Array.from(
+                                { length: Math.floor(attackMax / 5000) + 1 },
+                                (_, i) => i * 5000
+                            )}
                             tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
                             label={{
                                 value: 'Attack',
