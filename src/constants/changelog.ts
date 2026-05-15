@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.61.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Chrono Reaver Calculator: added ship selector with skill parsing and auto-fill — selecting a ship pre-fills charges required, active skill %, and charged skill % from the ship's data. URL deep-linking (?shipId=) and a collapsible skill reference panel are also supported.",
     'Defense Calculator: added Security input and an Effective HP vs Security scatter chart to visualise the two-dimensional tankiness tradeoff. Security buffs/debuffs (e.g. Security Up, Security Down) are now recognised in the buff pickers.',
     'Defense Calculator: added global and per-ship buff pickers. Defense Up/Down buffs scale the base defense stat before calculating damage reduction; Incoming Direct Damage buffs (positive or negative) further adjust effective HP.',
     'Healing Calculator overhaul: added charged heal support, healing-over-time simulation, bubble/comparison/round charts, and buff pickers (global and per-ship).',

@@ -1,9 +1,17 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Ship } from '../../types/ship';
 import { CloseIcon, PageLayout } from '../../components/ui';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { StatCard } from '../../components/ui/StatCard';
+import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
+import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
+import { ShipSelector } from '../../components/ship/ShipSelector';
+import { ShipSkillList } from '../../components/ship/ShipSkillList';
+import { useShips } from '../../contexts/ShipsContext';
+import { parseSkillDamage } from '../../utils/skillTextParser';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import {
@@ -15,14 +23,16 @@ import {
 interface ShipConfig {
     id: string;
     name: string;
+    shipId?: string;
     chargesRequired: number;
     crRarity: CRRarity;
     activeSkillPercent: number;
     chargedSkillPercent: number;
     rounds: number;
+    autoFilledFields?: Set<'activeSkillPercent' | 'chargedSkillPercent'>;
 }
 
-const DEFAULT_CONFIG: Omit<ShipConfig, 'id' | 'name'> = {
+const DEFAULT_CONFIG: Omit<ShipConfig, 'id' | 'name' | 'shipId' | 'autoFilledFields'> = {
     chargesRequired: 4,
     crRarity: 'legendary',
     activeSkillPercent: 150,
@@ -36,11 +46,68 @@ const CR_RARITY_OPTIONS = [
     { value: 'legendary', label: 'Legendary' },
 ];
 
+function buildSkillAutoFill(ship: Ship) {
+    const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
+    const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
+    const autoFilledFields = new Set<'activeSkillPercent' | 'chargedSkillPercent'>();
+    if (activeParsed > 0) autoFilledFields.add('activeSkillPercent');
+    if (chargedParsed > 0) autoFilledFields.add('chargedSkillPercent');
+    return { activeParsed, chargedParsed, autoFilledFields };
+}
+
 const ChronoReaverCalculatorPage: React.FC = () => {
-    const [configs, setConfigs] = useState<ShipConfig[]>([
-        { id: '1', name: 'Ship 1', ...DEFAULT_CONFIG },
-    ]);
-    const [nextId, setNextId] = useState(2);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { getShipById } = useShips();
+    const shipInitialized = useRef(false);
+
+    const getInitialConfig = (): { configs: ShipConfig[]; nextId: number } => {
+        const shipId = searchParams.get('shipId');
+        if (shipId) {
+            const ship = getShipById(shipId);
+            if (ship) {
+                const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+                return {
+                    configs: [
+                        {
+                            id: '1',
+                            name: ship.name,
+                            shipId: ship.id,
+                            chargesRequired:
+                                ship.chargeSkillCharge ?? DEFAULT_CONFIG.chargesRequired,
+                            crRarity: DEFAULT_CONFIG.crRarity,
+                            activeSkillPercent:
+                                activeParsed > 0 ? activeParsed : DEFAULT_CONFIG.activeSkillPercent,
+                            chargedSkillPercent:
+                                chargedParsed > 0
+                                    ? chargedParsed
+                                    : DEFAULT_CONFIG.chargedSkillPercent,
+                            rounds: DEFAULT_CONFIG.rounds,
+                            autoFilledFields,
+                        },
+                    ],
+                    nextId: 2,
+                };
+            }
+        }
+        return {
+            configs: [{ id: '1', name: 'Ship 1', ...DEFAULT_CONFIG }],
+            nextId: 2,
+        };
+    };
+
+    const [initialState] = useState(getInitialConfig);
+    const [configs, setConfigs] = useState<ShipConfig[]>(initialState.configs);
+    const [nextId, setNextId] = useState(initialState.nextId);
+    const [skillRefOpenIds, setSkillRefOpenIds] = useState<Set<string>>(new Set());
+
+    useEffect(() => {
+        if (shipInitialized.current) return;
+        shipInitialized.current = true;
+        if (searchParams.has('shipId')) {
+            searchParams.delete('shipId');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     const results = useMemo(() => {
         const map = new Map<string, CRSimulationResult>();
@@ -73,10 +140,51 @@ const ChronoReaverCalculatorPage: React.FC = () => {
 
     const updateConfig = (
         id: string,
-        field: keyof Omit<ShipConfig, 'id'>,
+        field: keyof Omit<ShipConfig, 'id' | 'shipId' | 'autoFilledFields'>,
         value: string | number
     ) => {
-        setConfigs(configs.map((c) => (c.id === id ? { ...c, [field]: value } : c)));
+        setConfigs(
+            configs.map((c) => {
+                if (c.id !== id) return c;
+                const updated = { ...c, [field]: value };
+                if (field === 'activeSkillPercent' || field === 'chargedSkillPercent') {
+                    const next = new Set(c.autoFilledFields);
+                    next.delete(field);
+                    updated.autoFilledFields = next;
+                }
+                return updated;
+            })
+        );
+    };
+
+    const selectShipForConfig = (id: string, ship: Ship) => {
+        const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+        setConfigs(
+            configs.map((c) => {
+                if (c.id !== id) return c;
+                return {
+                    ...c,
+                    shipId: ship.id,
+                    name: ship.name,
+                    chargesRequired: ship.chargeSkillCharge ?? c.chargesRequired,
+                    activeSkillPercent: activeParsed > 0 ? activeParsed : c.activeSkillPercent,
+                    chargedSkillPercent: chargedParsed > 0 ? chargedParsed : c.chargedSkillPercent,
+                    autoFilledFields,
+                };
+            })
+        );
+    };
+
+    const toggleSkillRef = (id: string) => {
+        setSkillRefOpenIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
     };
 
     // Find config with highest avg damage per round
@@ -107,12 +215,23 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                         const result = results.get(config.id);
                         if (!result) return null;
                         const isBest = bestConfig?.id === config.id && configs.length > 1;
+                        const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+                        const skillRefOpen = skillRefOpenIds.has(config.id);
 
                         return (
                             <div
                                 key={config.id}
                                 className={`card ${isBest ? 'border-primary' : ''}`}
                             >
+                                {/* Ship Selector */}
+                                <div className="mb-4">
+                                    <ShipSelector
+                                        selected={selectedShip ?? null}
+                                        onSelect={(ship) => selectShipForConfig(config.id, ship)}
+                                        variant="compact"
+                                    />
+                                </div>
+
                                 {/* Header */}
                                 <div className="flex justify-between items-center mb-4">
                                     <Input
@@ -132,7 +251,7 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                 </div>
 
                                 {/* Inputs */}
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 items-end">
                                     <Input
                                         label="Charges Required"
                                         type="number"
@@ -189,8 +308,31 @@ const ChronoReaverCalculatorPage: React.FC = () => {
                                     />
                                 </div>
 
+                                {/* Skill Reference */}
+                                {selectedShip && (
+                                    <>
+                                        <Button
+                                            variant="link"
+                                            onClick={() => toggleSkillRef(config.id)}
+                                            className="w-full flex justify-between items-center mt-4"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <ChevronDownIcon
+                                                    className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen ? 'rotate-180' : ''}`}
+                                                />
+                                                Skill Reference
+                                            </span>
+                                        </Button>
+                                        <CollapsibleForm isVisible={skillRefOpen}>
+                                            <div className="pt-2">
+                                                <ShipSkillList ship={selectedShip} />
+                                            </div>
+                                        </CollapsibleForm>
+                                    </>
+                                )}
+
                                 {/* Summary Metrics */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 my-4">
                                     <StatCard
                                         title="Avg Damage % / Round"
                                         value={`${result.summary.avgDamagePerRound.toFixed(1)}%`}
@@ -303,18 +445,18 @@ const ChronoReaverCalculatorPage: React.FC = () => {
 
                     {/* Explanation */}
                     <div className="card">
-                        <h2 className="text-xl font-bold mb-4">How Chrono Reaver Works</h2>
-                        <p className="mb-2">
+                        <h2 className="text-lg font-bold mb-4">How Chrono Reaver Works</h2>
+                        <p className="mb-2 text-theme-text-secondary">
                             The Chrono Reaver is an ultimate implant that grants +1 charge to your
                             ship&apos;s charged skill on proc turns. Legendary procs every other
                             turn, Epic procs every third turn.
                         </p>
-                        <p className="mb-2">
+                        <p className="mb-2 text-theme-text-secondary">
                             <strong>Wasted procs</strong> occur when the CR procs on the same turn
                             your active attack naturally fills the last charge. Since charges
                             can&apos;t exceed the maximum, the extra charge is lost.
                         </p>
-                        <p>
+                        <p className="text-theme-text-secondary">
                             Ships with different charge requirements have different CR efficiency.
                             Add multiple configurations to compare.
                         </p>
