@@ -38,6 +38,7 @@ export interface ParsedBuffEffects {
 
     // Flat stats (not percentages)
     security?: number; // flat additive on security stat
+    speed?: number; // additive percentage modifier on speed (+30 = +30%)
 }
 
 export interface SelectedGameBuff {
