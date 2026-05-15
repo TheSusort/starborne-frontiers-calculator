@@ -74,9 +74,9 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     const affinityMatchup = getAffinityMatchup(config.affinity, enemyAffinity);
     const affinityBadge =
         affinityMatchup === 'advantage' ? (
-            <span className="text-xs font-semibold text-green-400 ml-2">Advantage</span>
+            <span className="text-sm text-green-400 ml-2">Advantage</span>
         ) : affinityMatchup === 'disadvantage' ? (
-            <span className="text-xs font-semibold text-red-400 ml-2">Disadvantage</span>
+            <span className="text-sm text-red-400 ml-2">Disadvantage</span>
         ) : null;
 
     return (
@@ -99,12 +99,10 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 </Button>
             </div>
 
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-4 relative">
                 <Select
                     label="Affinity"
-                    value={config.affinity ?? ''}
-                    noDefaultSelection
-                    defaultOption="None"
+                    value={config.affinity ?? 'antimatter'}
                     onChange={(v) =>
                         onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
                     }
@@ -116,7 +114,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     ]}
                     className="flex-1"
                 />
-                {affinityBadge}
+                <div className="absolute left-[43px] top-[-2px]">{affinityBadge}</div>
             </div>
 
             <div className="space-y-4">

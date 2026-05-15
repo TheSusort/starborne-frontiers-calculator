@@ -81,7 +81,7 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                     />
                     <Select
                         label="Enemy Affinity"
-                        value={enemyAffinity}
+                        value={enemyAffinity ?? 'antimatter'}
                         onChange={(v) => onEnemyAffinityChange(v as AffinityName)}
                         options={[
                             { value: 'antimatter', label: 'Antimatter' },
