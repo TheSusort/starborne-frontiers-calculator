@@ -21,6 +21,12 @@ export interface DPSSimulationInput {
     /** Percentage modifier on enemy base defense. Negative values reduce defense (e.g. -30 → ×0.70). */
     enemyDefenseModifier?: number;
     incomingDamageModifier?: number;
+    /** Percentage additive modifier from affinity (e.g. 25, -25, 0). Applied to all damage types. */
+    affinityDamageModifier?: number;
+    /** Hard ceiling on effective crit rate from affinity matchup (75 for disadvantage, 100 otherwise). */
+    affinityCritCap?: number;
+    /** Additive pp reduction on effective crit rate (25 for disadvantage, 0 otherwise). */
+    affinityCritPenalty?: number;
 }
 
 export interface RoundData {
@@ -116,12 +122,18 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         dotDamageModifier = 0,
         enemyDefenseModifier = 0,
         incomingDamageModifier = 0,
+        affinityDamageModifier = 0,
+        affinityCritCap = 100,
+        affinityCritPenalty = 0,
     } = input;
 
     const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(buffs);
 
     const effectiveAttack = attack * (1 + attackBuff / 100);
-    const effectiveCrit = Math.min(100, crit + critBuff);
+    const effectiveCrit = Math.min(
+        affinityCritCap,
+        Math.max(0, crit + critBuff - affinityCritPenalty)
+    );
     const effectiveCritDamage = critDamage + critDamageBuff;
 
     const critMultiplier = calculateCritMultiplier({
@@ -176,12 +188,15 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         }
 
         // Step 1: Calculate direct damage
+        const dotMult = 1 + dotDamageModifier / 100;
+        const affinityMult = 1 + affinityDamageModifier / 100;
         const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
         const directDamage =
             baseDamage *
             (multiplier / 100) *
             (1 + outgoingDamageBuff / 100) *
-            (1 + incomingDamageModifier / 100);
+            (1 + incomingDamageModifier / 100) *
+            affinityMult;
 
         // Step 3: Apply new DoT stacks from this round's skill
         for (const dot of dotsConfig) {
@@ -208,11 +223,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         }
 
         // Step 4: Tick corrosion (scales with enemy HP)
-        const dotMult = 1 + dotDamageModifier / 100;
-        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp) * dotMult;
+        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp) * dotMult * affinityMult;
 
         // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
-        const infernoDamage = tickDoTStacks(infernoEntries, effectiveAttack) * dotMult;
+        const infernoDamage =
+            tickDoTStacks(infernoEntries, effectiveAttack) * dotMult * affinityMult;
 
         // Expire DoT stacks after ticking
         expireStacks(corrosionEntries);
@@ -227,6 +242,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                 pendingBombs.splice(i, 1);
             }
         }
+        bombDamage *= affinityMult;
 
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
         cumulativeDamage += totalRoundDamage;

@@ -406,6 +406,50 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('affinity modifiers', () => {
+        const baseNoDefense = {
+            attack: 15000,
+            crit: 100,
+            critDamage: 150,
+            defensePenetration: 0,
+            activeMultiplier: 100,
+            chargedMultiplier: 0,
+            chargeCount: 0,
+            activeDoTs: [],
+            chargedDoTs: [],
+            enemyDefense: 0,
+            enemyHp: 500000,
+            rounds: 3,
+            buffs: [],
+        };
+
+        it('advantage multiplies all damage by 1.25', () => {
+            const baseline = simulateDPS(baseNoDefense);
+            const result = simulateDPS({ ...baseNoDefense, affinityDamageModifier: 25 });
+            expect(result.summary.totalDamage).toBe(
+                Math.round(baseline.summary.totalDamage * 1.25)
+            );
+        });
+
+        it('disadvantage reduces damage and applies crit penalty', () => {
+            const result = simulateDPS({
+                ...baseNoDefense,
+                affinityDamageModifier: -25,
+                affinityCritCap: 75,
+                affinityCritPenalty: 25,
+            });
+            // effectiveCrit = min(75, 100-25) = 75; critMult = 1 + 0.75*150/100 = 2.125
+            // directDamage = 15000 * 2.125 * 0.75 = 23906.25; total = round(23906.25*3) = 71719
+            expect(result.summary.totalDamage).toBe(71719);
+        });
+
+        it('zero modifier (default) leaves damage unchanged', () => {
+            const baseline = simulateDPS(baseNoDefense);
+            const result = simulateDPS({ ...baseNoDefense, affinityDamageModifier: 0 });
+            expect(result.summary.totalDamage).toBe(baseline.summary.totalDamage);
+        });
+    });
+
     describe('startCharged', () => {
         it('fires charged skill on round 1 when startCharged is true', () => {
             const result = simulateDPS({
