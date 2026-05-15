@@ -82,10 +82,11 @@ export const useGearUpgrades = () => {
 
             // eslint-disable-next-line no-console
             console.log(`Total upgrades saved: ${Object.keys(newUpgrades).length}`);
-            await setStorageUpgrades(newUpgrades);
-            return newUpgrades;
+            const merged = { ...(storageUpgrades ?? {}), ...newUpgrades };
+            await setStorageUpgrades(merged);
+            return merged;
         },
-        [setStorageUpgrades]
+        [setStorageUpgrades, storageUpgrades]
     );
 
     const clearUpgrades = useCallback(async () => {

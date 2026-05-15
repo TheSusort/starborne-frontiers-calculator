@@ -429,18 +429,36 @@ export const AutogearPage: React.FC = () => {
         setActiveTab(null);
         setDonorContext(null);
 
-        // If any selected ship is configured to use upgraded stats but no
-        // upgrade simulation has been run yet, run it now so the optimizer has
-        // data to work with. The returned upgrades feed a local getter because
-        // React state from setStorageUpgrades won't propagate into this async
-        // closure until the next render.
+        // If any selected ship is configured to use upgraded stats, simulate
+        // upgrades for any eligible gear that hasn't been simulated yet (e.g.
+        // newly imported pieces). The returned upgrades feed a local getter
+        // because React state from setStorageUpgrades won't propagate into
+        // this async closure until the next render.
         let upgradedGearGetter = getUpgradedGearPiece;
         const anyUsesUpgradedStats = validShips.some(
             (ship) => getShipConfig(ship.id).useUpgradedStats
         );
-        if (anyUsesUpgradedStats && Object.keys(upgrades).length === 0) {
-            addNotification('info', 'Simulating gear upgrades first — this may take a moment...');
-            const freshUpgrades = await simulateUpgrades(inventory);
+        const hasUnsimulatedGear =
+            anyUsesUpgradedStats &&
+            inventory.some(
+                (piece) =>
+                    piece.level < 16 &&
+                    ['rare', 'epic', 'legendary'].includes(piece.rarity) &&
+                    !piece.slot.includes('implant') &&
+                    piece.mainStat &&
+                    !upgrades[piece.id]
+            );
+        if (hasUnsimulatedGear) {
+            addNotification('info', 'Simulating upgrades for new gear pieces...');
+            const unsimulatedPieces = inventory.filter(
+                (piece) =>
+                    piece.level < 16 &&
+                    ['rare', 'epic', 'legendary'].includes(piece.rarity) &&
+                    !piece.slot.includes('implant') &&
+                    piece.mainStat &&
+                    !upgrades[piece.id]
+            );
+            const freshUpgrades = await simulateUpgrades(unsimulatedPieces);
             upgradedGearGetter = (id: string): GearPiece | undefined => {
                 const piece = getGearPiece(id);
                 if (!piece) return undefined;
