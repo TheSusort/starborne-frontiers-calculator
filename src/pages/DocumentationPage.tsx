@@ -2099,8 +2099,8 @@ const DocumentationPage: React.FC = () => {
                                         </li>
                                     </ul>
                                     <p className="text-theme-text mt-2">
-                                        Add multiple speed modifiers (buffs/debuffs) and label them
-                                        for easy reference.
+                                        Pick speed buffs and debuffs from the game&apos;s named buff
+                                        list — relevant speed buffs are surfaced at the top.
                                     </p>
                                 </div>
                             </div>

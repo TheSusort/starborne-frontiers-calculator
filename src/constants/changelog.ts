@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Healing calculator: heal modifier is now auto-filled from ship gear and sets when a ship is selected.',
     'Healing calculator: Outgoing Repair buffs are now factored in as a separate healing multiplier.',
     'Healing calculator: Incoming Repair buffs (e.g. Everliving Regeneration) are now recognised as relevant and factored into healing output.',
+    'Speed Calculator now uses the game buff picker instead of manual modifier inputs — pick Speed Up/Down buffs by name.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
