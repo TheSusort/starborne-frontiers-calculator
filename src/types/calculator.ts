@@ -1,3 +1,5 @@
+import { AffinityName } from './ship';
+
 export interface Buff {
     id: string;
     stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
@@ -59,6 +61,7 @@ export interface DPSShipConfig {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    affinity?: AffinityName;
     activeMultiplier: number;
     chargedMultiplier: number;
     chargeCount: number;
@@ -75,6 +78,7 @@ export type DPSShipConfigUpdateableField =
     | 'crit'
     | 'critDamage'
     | 'defensePenetration'
+    | 'affinity'
     | 'activeMultiplier'
     | 'chargedMultiplier'
     | 'chargeCount';
