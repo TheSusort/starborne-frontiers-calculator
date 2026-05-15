@@ -93,35 +93,12 @@ const SpeedCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    const [finalSpeed, setFinalSpeed] = useState<number>(0);
     const [forwardBuffs, setForwardBuffs] = useState<SelectedGameBuff[]>([]);
 
     // Mode 2 (Reverse) state
     const [targetMinSpeed, setTargetMinSpeed] = useState<number>(100);
     const [targetMaxSpeed, setTargetMaxSpeed] = useState<number>(150);
-    const [baseSpeedRange, setBaseSpeedRange] = useState<{
-        min: number | null;
-        max: number | null;
-    } | null>(null);
     const [reverseBuffs, setReverseBuffs] = useState<SelectedGameBuff[]>([]);
-
-    // Calculate final speed when base speed or buffs change (Mode 1)
-    useEffect(() => {
-        const totalModifier = forwardBuffs.reduce(
-            (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
-            0
-        );
-        setFinalSpeed(calculateFinalSpeed(baseSpeed, totalModifier));
-    }, [baseSpeed, forwardBuffs]);
-
-    // Calculate base speed range when target speeds or buffs change (Mode 2)
-    useEffect(() => {
-        const totalModifier = reverseBuffs.reduce(
-            (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
-            0
-        );
-        setBaseSpeedRange(calculateBaseSpeedRange(targetMinSpeed, targetMaxSpeed, totalModifier));
-    }, [targetMinSpeed, targetMaxSpeed, reverseBuffs]);
 
     const handleShipSelect = (ship: Ship) => {
         const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
@@ -151,9 +128,16 @@ const SpeedCalculatorPage: React.FC = () => {
         (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
         0
     );
+    const finalSpeed = calculateFinalSpeed(baseSpeed, forwardTotalModifier);
+
     const reverseTotalModifier = reverseBuffs.reduce(
         (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
         0
+    );
+    const baseSpeedRange = calculateBaseSpeedRange(
+        targetMinSpeed,
+        targetMaxSpeed,
+        reverseTotalModifier
     );
 
     return (

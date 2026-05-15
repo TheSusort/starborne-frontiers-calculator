@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Healing calculator: Outgoing Repair buffs are now factored in as a separate healing multiplier.',
     'Healing calculator: Incoming Repair buffs (e.g. Everliving Regeneration) are now recognised as relevant and factored into healing output.',
     'Speed Calculator now uses the game buff picker instead of manual modifier inputs — pick Speed Up/Down buffs by name.',
+    'Ship Lore page now supports direct links — use the copy-link button on any bio or article to share a URL that opens directly to that entry.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
