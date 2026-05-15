@@ -147,6 +147,15 @@ const SpeedCalculatorPage: React.FC = () => {
         setActiveMode(tabId as 'forward' | 'reverse');
     };
 
+    const forwardTotalModifier = forwardBuffs.reduce(
+        (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
+        0
+    );
+    const reverseTotalModifier = reverseBuffs.reduce(
+        (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
+        0
+    );
+
     return (
         <>
             <Seo {...SEO_CONFIG.speed} />
@@ -179,7 +188,6 @@ const SpeedCalculatorPage: React.FC = () => {
                             </div>
 
                             <div className="card">
-                                <h3 className="text-lg font-bold mb-4">Speed Buffs</h3>
                                 <GameBuffPicker
                                     label="Speed Buffs"
                                     relevantStats={['speed']}
@@ -205,32 +213,13 @@ const SpeedCalculatorPage: React.FC = () => {
                                         </span>
                                         <span
                                             className={`font-mono ${
-                                                forwardBuffs.reduce(
-                                                    (sum, b) =>
-                                                        sum +
-                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                    0
-                                                ) >= 0
+                                                forwardTotalModifier >= 0
                                                     ? 'text-green-400'
                                                     : 'text-red-400'
                                             }`}
                                         >
-                                            {forwardBuffs.reduce(
-                                                (sum, b) =>
-                                                    sum + (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                0
-                                            ) >= 0
-                                                ? '+'
-                                                : ''}
-                                            {forwardBuffs
-                                                .reduce(
-                                                    (sum, b) =>
-                                                        sum +
-                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                    0
-                                                )
-                                                .toFixed(2)}
-                                            %
+                                            {forwardTotalModifier >= 0 ? '+' : ''}
+                                            {forwardTotalModifier.toFixed(2)}%
                                         </span>
                                     </div>
                                     <div className="pt-4 border-t border-dark-border">
@@ -297,7 +286,6 @@ const SpeedCalculatorPage: React.FC = () => {
                             </div>
 
                             <div className="card">
-                                <h3 className="text-lg font-bold mb-4">Speed Buffs</h3>
                                 <GameBuffPicker
                                     label="Speed Buffs"
                                     relevantStats={['speed']}
@@ -330,33 +318,13 @@ const SpeedCalculatorPage: React.FC = () => {
                                             </span>
                                             <span
                                                 className={`font-mono ${
-                                                    reverseBuffs.reduce(
-                                                        (sum, b) =>
-                                                            sum +
-                                                            (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                        0
-                                                    ) >= 0
+                                                    reverseTotalModifier >= 0
                                                         ? 'text-green-400'
                                                         : 'text-red-400'
                                                 }`}
                                             >
-                                                {reverseBuffs.reduce(
-                                                    (sum, b) =>
-                                                        sum +
-                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                    0
-                                                ) >= 0
-                                                    ? '+'
-                                                    : ''}
-                                                {reverseBuffs
-                                                    .reduce(
-                                                        (sum, b) =>
-                                                            sum +
-                                                            (b.parsedEffects.speed ?? 0) * b.stacks,
-                                                        0
-                                                    )
-                                                    .toFixed(2)}
-                                                %
+                                                {reverseTotalModifier >= 0 ? '+' : ''}
+                                                {reverseTotalModifier.toFixed(2)}%
                                             </span>
                                         </div>
                                         <div className="pt-4 border-t border-dark-border">
