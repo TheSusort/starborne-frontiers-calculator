@@ -105,7 +105,9 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     value={config.affinity ?? ''}
                     noDefaultSelection
                     defaultOption="None"
-                    onChange={(v) => onUpdate('affinity', v as AffinityName)}
+                    onChange={(v) =>
+                        onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
+                    }
                     options={[
                         { value: 'antimatter', label: 'Antimatter' },
                         { value: 'thermal', label: 'Thermal' },
