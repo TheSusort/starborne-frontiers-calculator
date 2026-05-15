@@ -3,7 +3,9 @@ import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
 import { SelectedGameBuff } from '../../types/calculator';
+import { AffinityName } from '../../types/ship';
 import { GameBuffPicker } from './GameBuffPicker';
 
 interface CombatSettingsPanelProps {
@@ -19,6 +21,8 @@ interface CombatSettingsPanelProps {
     onAttackerBuffsChange: (v: SelectedGameBuff[]) => void;
     enemyBuffs: SelectedGameBuff[];
     onEnemyBuffsChange: (v: SelectedGameBuff[]) => void;
+    enemyAffinity: AffinityName;
+    onEnemyAffinityChange: (v: AffinityName) => void;
 }
 
 export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
@@ -34,6 +38,8 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onAttackerBuffsChange,
     enemyBuffs,
     onEnemyBuffsChange,
+    enemyAffinity,
+    onEnemyAffinityChange,
 }) => (
     <div className="card space-y-2">
         <Button
@@ -50,7 +56,7 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <Input
                         label="Enemy Defense"
                         type="number"
@@ -72,6 +78,17 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                         onChange={(e) =>
                             onRoundsChange(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))
                         }
+                    />
+                    <Select
+                        label="Enemy Affinity"
+                        value={enemyAffinity}
+                        onChange={(v) => onEnemyAffinityChange(v as AffinityName)}
+                        options={[
+                            { value: 'antimatter', label: 'Antimatter' },
+                            { value: 'thermal', label: 'Thermal' },
+                            { value: 'chemical', label: 'Chemical' },
+                            { value: 'electric', label: 'Electric' },
+                        ]}
                     />
                 </div>
                 <p className="text-sm text-theme-text-secondary">

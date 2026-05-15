@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
+import { Select } from '../ui/Select';
+import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
@@ -31,7 +33,7 @@ interface ShipConfigCardProps {
     rounds: number;
     attackerBuffTotals: AttackerBuffTotals;
     onRemove: () => void;
-    onUpdate: (field: DPSShipConfigUpdateableField, value: string | number) => void;
+    onUpdate: (field: DPSShipConfigUpdateableField, value: string | number | undefined) => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
     onAddDoT: (dotField: 'activeDoTs' | 'chargedDoTs') => void;
@@ -42,6 +44,7 @@ interface ShipConfigCardProps {
         updates: Partial<DoTApplicationEntry>
     ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
+    enemyAffinity: AffinityName;
 }
 
 export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
@@ -61,11 +64,20 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onRemoveDoT,
     onUpdateDoT,
     onBuffsChange,
+    enemyAffinity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+
+    const affinityMatchup = getAffinityMatchup(config.affinity, enemyAffinity);
+    const affinityBadge =
+        affinityMatchup === 'advantage' ? (
+            <span className="text-xs font-semibold text-green-400 ml-2">Advantage</span>
+        ) : affinityMatchup === 'disadvantage' ? (
+            <span className="text-xs font-semibold text-red-400 ml-2">Disadvantage</span>
+        ) : null;
 
     return (
         <div className={`p-4 bg-dark border ${isBest ? 'border-primary' : 'border-dark-border'}`}>
@@ -85,6 +97,24 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 <Button variant="danger" onClick={onRemove} aria-label="Remove ship">
                     <CloseIcon />
                 </Button>
+            </div>
+
+            <div className="flex items-center gap-2 mb-4">
+                <Select
+                    label="Affinity"
+                    value={config.affinity ?? ''}
+                    noDefaultSelection
+                    defaultOption="None"
+                    onChange={(v) => onUpdate('affinity', v as AffinityName)}
+                    options={[
+                        { value: 'antimatter', label: 'Antimatter' },
+                        { value: 'thermal', label: 'Thermal' },
+                        { value: 'chemical', label: 'Chemical' },
+                        { value: 'electric', label: 'Electric' },
+                    ]}
+                    className="flex-1"
+                />
+                {affinityBadge}
             </div>
 
             <div className="space-y-4">

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
+import { computeAffinityModifiers } from '../../utils/calculators/affinityUtils';
 import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
@@ -127,6 +128,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
+    const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
     const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
 
     useEffect(() => {
@@ -196,6 +198,10 @@ const DPSCalculatorPage: React.FC = () => {
                 allAttackerBuffs,
                 enemyBuffs
             );
+            const { damageModifier, critCap, critPenalty } = computeAffinityModifiers(
+                config.affinity,
+                enemyAffinity
+            );
             map.set(
                 config.id,
                 simulateDPS({
@@ -217,11 +223,14 @@ const DPSCalculatorPage: React.FC = () => {
                     dotDamageModifier,
                     enemyDefenseModifier,
                     incomingDamageModifier,
+                    affinityDamageModifier: damageModifier,
+                    affinityCritCap: critCap,
+                    affinityCritPenalty: critPenalty,
                 })
             );
         });
         return map;
-    }, [configs, enemyDefense, enemyHp, rounds, attackerBuffs, enemyBuffs]);
+    }, [configs, enemyDefense, enemyHp, rounds, attackerBuffs, enemyBuffs, enemyAffinity]);
 
     const addConfig = () => {
         const id = nextId.toString();
@@ -253,12 +262,13 @@ const DPSCalculatorPage: React.FC = () => {
     const updateConfig = (
         id: string,
         field: DPSShipConfigUpdateableField,
-        value: string | number
+        value: string | number | undefined
     ) => {
         setConfigs((prev) =>
             prev.map((config) => {
                 if (config.id !== id) return config;
-                const updated = { ...config, [field]: value };
+                const normalizedValue = field === 'affinity' && value === '' ? undefined : value;
+                const updated = { ...config, [field]: normalizedValue };
                 if (field === 'activeMultiplier' || field === 'chargedMultiplier') {
                     const next = new Set(config.autoFilledFields);
                     next.delete(field);
@@ -304,6 +314,7 @@ const DPSCalculatorPage: React.FC = () => {
                         ship.thirdPassiveSkillText,
                     ]),
                     autoFilledFields,
+                    affinity: ship.affinity,
                 };
             })
         );
@@ -416,6 +427,8 @@ const DPSCalculatorPage: React.FC = () => {
                         onAttackerBuffsChange={setAttackerBuffs}
                         enemyBuffs={enemyBuffs}
                         onEnemyBuffsChange={setEnemyBuffs}
+                        enemyAffinity={enemyAffinity}
+                        onEnemyAffinityChange={setEnemyAffinity}
                     />
 
                     <div
@@ -426,6 +439,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 key={config.id}
                                 config={config}
                                 isBest={bestConfig?.id === config.id}
+                                enemyAffinity={enemyAffinity}
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestTotalDamage={bestTotalDamage}
