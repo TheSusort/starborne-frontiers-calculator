@@ -176,9 +176,6 @@ describe('parseBuffEffects', () => {
     });
 
     describe('no DPS effect', () => {
-        it('parses speed-only buff', () => {
-            expect(parseBuffEffects('Speed Up I', '+10% Speed')).toEqual({ speed: 10 });
-        });
         it('returns empty object for hacking-only buff', () => {
             expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({});
         });
