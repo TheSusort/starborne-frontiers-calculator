@@ -36,9 +36,10 @@ export interface ParsedBuffEffects {
     incomingDamage?: number; // positive = enemy takes more direct damage
     incomingDotDamage?: number; // from Inc. DoT buffs; positive = enemy takes more DoT
 
+    speed?: number; // additive percentage modifier on speed (+30 = +30%)
+
     // Flat stats (not percentages)
     security?: number; // flat additive on security stat
-    speed?: number; // additive percentage modifier on speed (+30 = +30%)
 }
 
 export interface SelectedGameBuff {
