@@ -130,6 +130,24 @@ describe('parseBuffEffects', () => {
         });
     });
 
+    describe('speed', () => {
+        it('parses positive Speed', () => {
+            expect(parseBuffEffects('Speed Up II', '+30% Speed')).toEqual({ speed: 30 });
+        });
+        it('parses negative Speed', () => {
+            expect(parseBuffEffects('Speed Down II', '-30% Speed')).toEqual({ speed: -30 });
+        });
+        it('parses Speed in a combined buff', () => {
+            const result = parseBuffEffects('Combined Buff', '+20% Speed, +10% Attack');
+            expect(result.speed).toBe(20);
+            expect(result.attack).toBe(10);
+        });
+        it('parses Speed when it appears after another stat', () => {
+            const result = parseBuffEffects('Combined Buff', '+30 Hacking, +5% Speed');
+            expect(result.speed).toBe(5);
+        });
+    });
+
     describe('multi-stat buffs', () => {
         it('parses Marauder Rage III with attack + crit power', () => {
             expect(parseBuffEffects('Marauder Rage III', '+30% Attack, +20% Crit Power')).toEqual({
@@ -158,8 +176,8 @@ describe('parseBuffEffects', () => {
     });
 
     describe('no DPS effect', () => {
-        it('returns empty object for speed-only buff', () => {
-            expect(parseBuffEffects('Speed Up I', '+10% Speed')).toEqual({});
+        it('parses speed-only buff', () => {
+            expect(parseBuffEffects('Speed Up I', '+10% Speed')).toEqual({ speed: 10 });
         });
         it('returns empty object for hacking-only buff', () => {
             expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({});

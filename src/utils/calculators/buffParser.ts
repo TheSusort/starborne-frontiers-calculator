@@ -50,6 +50,9 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const security = extract(/([+-]\d+)\s*Security/);
     if (security !== undefined) effects.security = security;
 
+    const speed = extract(/([+-]\d+(?:\.\d+)?)%\s*Speed/);
+    if (speed !== undefined) effects.speed = speed;
+
     return effects;
 }
 
