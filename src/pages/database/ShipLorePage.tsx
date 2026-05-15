@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useShipsData } from '../../hooks/useShipsData';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { PageLayout } from '../../components/ui';
@@ -20,6 +21,23 @@ import {
     HighlightedText,
 } from '../../components/ship/BioContent';
 import Seo from '../../components/seo/Seo';
+
+const CopyLinkButton: React.FC<{ url: string }> = ({ url }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+        void navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    return (
+        <Button variant="secondary" size="xs" onClick={handleCopy}>
+            {copied ? 'Copied!' : 'Copy link'}
+        </Button>
+    );
+};
 
 type Selection = { type: 'ship'; id: string } | { type: 'article'; slug: string } | null;
 
@@ -87,6 +105,8 @@ const ExpandableCard: React.FC<{
     content: React.ReactNode;
     onClickOverride?: () => void;
     isActive?: boolean;
+    shareUrl?: string;
+    initialExpanded?: boolean;
 }> = ({
     title,
     snippet,
@@ -99,8 +119,21 @@ const ExpandableCard: React.FC<{
     content,
     onClickOverride,
     isActive = false,
+    shareUrl,
+    initialExpanded = false,
 }) => {
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(initialExpanded);
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (initialExpanded && cardRef.current) {
+            const timer = setTimeout(
+                () => cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+                150
+            );
+            return () => clearTimeout(timer);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleClick = () => {
         if (onClickOverride) {
@@ -113,7 +146,7 @@ const ExpandableCard: React.FC<{
     const showExpanded = !onClickOverride && expanded;
 
     return (
-        <div className={`card transition-colors duration-150 relative ${className}`}>
+        <div ref={cardRef} className={`card transition-colors duration-150 relative ${className}`}>
             {isActive && (
                 <div
                     className={`absolute inset-0 ${activeBgColor} opacity-20 pointer-events-none rounded-[inherit]`}
@@ -164,6 +197,11 @@ const ExpandableCard: React.FC<{
                     }}
                 >
                     <div className="mt-3 pt-3 border-t border-dark-border">
+                        {shareUrl && (
+                            <div className="flex justify-end mb-3">
+                                <CopyLinkButton url={shareUrl} />
+                            </div>
+                        )}
                         {quote && (
                             <blockquote className="border-l-2 border-primary pl-4 mb-4 italic text-theme-text-secondary font-primary">
                                 <p>
@@ -189,7 +227,9 @@ const ShipBioCard: React.FC<{
     searchQuery: string;
     onClickOverride?: () => void;
     isActive?: boolean;
-}> = ({ ship, searchQuery, onClickOverride, isActive }) => {
+    shareUrl?: string;
+    initialExpanded?: boolean;
+}> = ({ ship, searchQuery, onClickOverride, isActive, shareUrl, initialExpanded }) => {
     const snippet = useMemo(() => {
         if (!searchQuery || searchQuery.length < 2) return null;
         const query = searchQuery.toLowerCase();
@@ -230,6 +270,8 @@ const ShipBioCard: React.FC<{
             quote={ship.quote}
             quoteAuthor={ship.quoteAuthor}
             onClickOverride={onClickOverride}
+            shareUrl={shareUrl}
+            initialExpanded={initialExpanded}
             content={
                 <BioContent
                     bio={ship.bio ?? ''}
@@ -258,7 +300,9 @@ const LoreArticleCard: React.FC<{
     searchQuery: string;
     onClickOverride?: () => void;
     isActive?: boolean;
-}> = ({ article, searchQuery, onClickOverride, isActive }) => {
+    shareUrl?: string;
+    initialExpanded?: boolean;
+}> = ({ article, searchQuery, onClickOverride, isActive, shareUrl, initialExpanded }) => {
     const snippet = useMemo(
         () => getMatchSnippet(article.body, searchQuery),
         [article.body, searchQuery]
@@ -272,6 +316,8 @@ const LoreArticleCard: React.FC<{
             onClickOverride={onClickOverride}
             isActive={isActive}
             activeBgColor="bg-primary"
+            shareUrl={shareUrl}
+            initialExpanded={initialExpanded}
             content={
                 <PlainTextContent
                     text={article.body}
@@ -385,10 +431,24 @@ const TABS = [
 
 export const ShipLorePage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [searchQuery, setSearchQuery] = useState('');
-    const [activeTab, setActiveTab] = useState('bios');
-    const [selection, setSelection] = useState<Selection>(null);
+
+    const initialBioId = searchParams.get('bio');
+    const initialArticleSlug = searchParams.get('article');
+
+    const [activeTab, setActiveTab] = useState(() => (initialArticleSlug ? 'articles' : 'bios'));
+    const [selection, setSelection] = useState<Selection>(() => {
+        if (initialBioId) return { type: 'ship', id: initialBioId };
+        if (initialArticleSlug) return { type: 'article', slug: initialArticleSlug };
+        return null;
+    });
     const isDesktop = useMediaQuery('(min-width: 1280px)');
+
+    const buildBioUrl = (id: string) =>
+        `${window.location.origin}/ships/lore?bio=${encodeURIComponent(id)}`;
+    const buildArticleUrl = (slug: string) =>
+        `${window.location.origin}/ships/lore?article=${encodeURIComponent(slug)}`;
 
     const readerOpen = isDesktop && selection !== null;
     const { ref: readerRef, stickyTop } = useStickyScroll(16);
@@ -435,22 +495,35 @@ export const ShipLorePage: React.FC = () => {
     }, [selection]);
 
     const handleSelectShip = useCallback(
-        (id: string) =>
-            setSelection((prev) =>
-                prev?.type === 'ship' && prev.id === id ? null : { type: 'ship', id }
-            ),
-        []
+        (id: string) => {
+            setSelection((prev) => {
+                const next =
+                    prev?.type === 'ship' && prev.id === id ? null : { type: 'ship' as const, id };
+                setSearchParams(next ? { bio: id } : {}, { replace: true });
+                return next;
+            });
+        },
+        [setSearchParams]
     );
 
     const handleSelectArticle = useCallback(
-        (slug: string) =>
-            setSelection((prev) =>
-                prev?.type === 'article' && prev.slug === slug ? null : { type: 'article', slug }
-            ),
-        []
+        (slug: string) => {
+            setSelection((prev) => {
+                const next =
+                    prev?.type === 'article' && prev.slug === slug
+                        ? null
+                        : { type: 'article' as const, slug };
+                setSearchParams(next ? { article: slug } : {}, { replace: true });
+                return next;
+            });
+        },
+        [setSearchParams]
     );
 
-    const handleCloseReader = useCallback(() => setSelection(null), []);
+    const handleCloseReader = useCallback(() => {
+        setSelection(null);
+        setSearchParams({}, { replace: true });
+    }, [setSearchParams]);
 
     const visibleCount = isSearching
         ? filteredShips.length + filteredArticles.length
@@ -491,6 +564,8 @@ export const ShipLorePage: React.FC = () => {
                     searchQuery={searchQuery}
                     onClickOverride={shipClickHandler(ship.id)}
                     isActive={selection?.type === 'ship' && selection.id === ship.id}
+                    shareUrl={!isDesktop ? buildBioUrl(ship.id) : undefined}
+                    initialExpanded={!isDesktop && initialBioId === ship.id}
                 />
             ))}
         </>
@@ -505,6 +580,8 @@ export const ShipLorePage: React.FC = () => {
                     searchQuery={searchQuery}
                     onClickOverride={articleClickHandler(article.slug)}
                     isActive={selection?.type === 'article' && selection.slug === article.slug}
+                    shareUrl={!isDesktop ? buildArticleUrl(article.slug) : undefined}
+                    initialExpanded={!isDesktop && initialArticleSlug === article.slug}
                 />
             ))}
         </>
@@ -607,13 +684,23 @@ export const ShipLorePage: React.FC = () => {
                                     <span className="text-xs text-theme-text-secondary uppercase tracking-wide">
                                         Reading
                                     </span>
-                                    <Button
-                                        variant="secondary"
-                                        size="xs"
-                                        onClick={handleCloseReader}
-                                    >
-                                        Close
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        {selectedShip && (
+                                            <CopyLinkButton url={buildBioUrl(selectedShip.id)} />
+                                        )}
+                                        {selectedArticle && (
+                                            <CopyLinkButton
+                                                url={buildArticleUrl(selectedArticle.slug)}
+                                            />
+                                        )}
+                                        <Button
+                                            variant="secondary"
+                                            size="xs"
+                                            onClick={handleCloseReader}
+                                        >
+                                            Close
+                                        </Button>
+                                    </div>
                                 </div>
                                 {selectedShip && (
                                     <ShipReaderPane ship={selectedShip} searchQuery={searchQuery} />

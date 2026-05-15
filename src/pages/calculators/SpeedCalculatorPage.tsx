@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CloseIcon, PageLayout, Tabs } from '../../components/ui';
-import { Button } from '../../components/ui/Button';
+import { PageLayout, Tabs } from '../../components/ui';
 import { Input } from '../../components/ui/Input';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -11,28 +10,21 @@ import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Ship } from '../../types/ship';
 import { ShipSelector } from '../../components/ship/ShipSelector';
+import { SelectedGameBuff } from '../../types/calculator';
+import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 
-// Interface for a speed modifier
-interface SpeedModifier {
-    id: string;
-    value: number; // Percentage value (e.g., 30 for +30%, -15 for -15%)
-    label?: string; // Optional label for the modifier
-}
-
-// Mode 1: Calculate final speed from base speed and modifiers
-const calculateFinalSpeed = (baseSpeed: number, modifiers: SpeedModifier[]): number => {
-    const totalModifier = modifiers.reduce((sum, mod) => sum + mod.value, 0);
+// Mode 1: Calculate final speed from base speed and total modifier
+const calculateFinalSpeed = (baseSpeed: number, totalModifier: number): number => {
     return baseSpeed * (1 + totalModifier / 100);
 };
 
-// Mode 2: Calculate base speed range from target speed range and modifiers
+// Mode 2: Calculate base speed range from target speed range and total modifier
 // Returns null for min/max if the corresponding target is 0 (no limit)
 const calculateBaseSpeedRange = (
     targetMinSpeed: number,
     targetMaxSpeed: number,
-    modifiers: SpeedModifier[]
+    totalModifier: number
 ): { min: number | null; max: number | null } | null => {
-    const totalModifier = modifiers.reduce((sum, mod) => sum + mod.value, 0);
     const modifierMultiplier = 1 + totalModifier / 100;
 
     // Avoid division by zero or negative multipliers
@@ -100,59 +92,36 @@ const SpeedCalculatorPage: React.FC = () => {
             setSearchParams(searchParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
-    const [modifiers, setModifiers] = useState<SpeedModifier[]>([{ id: '1', value: 30 }]);
-    const [nextModifierId, setNextModifierId] = useState(2);
+
     const [finalSpeed, setFinalSpeed] = useState<number>(0);
+    const [forwardBuffs, setForwardBuffs] = useState<SelectedGameBuff[]>([]);
 
     // Mode 2 (Reverse) state
     const [targetMinSpeed, setTargetMinSpeed] = useState<number>(100);
     const [targetMaxSpeed, setTargetMaxSpeed] = useState<number>(150);
-    const [reverseModifiers, setReverseModifiers] = useState<SpeedModifier[]>([
-        { id: 'r1', value: 30 },
-    ]);
-    const [nextReverseModifierId, setNextReverseModifierId] = useState(2);
     const [baseSpeedRange, setBaseSpeedRange] = useState<{
         min: number | null;
         max: number | null;
     } | null>(null);
+    const [reverseBuffs, setReverseBuffs] = useState<SelectedGameBuff[]>([]);
 
-    // Calculate final speed when base speed or modifiers change (Mode 1)
+    // Calculate final speed when base speed or buffs change (Mode 1)
     useEffect(() => {
-        const calculated = calculateFinalSpeed(baseSpeed, modifiers);
-        setFinalSpeed(calculated);
-    }, [baseSpeed, modifiers]);
-
-    // Calculate base speed range when target speeds or modifiers change (Mode 2)
-    useEffect(() => {
-        const calculated = calculateBaseSpeedRange(
-            targetMinSpeed,
-            targetMaxSpeed,
-            reverseModifiers
+        const totalModifier = forwardBuffs.reduce(
+            (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
+            0
         );
-        setBaseSpeedRange(calculated);
-    }, [targetMinSpeed, targetMaxSpeed, reverseModifiers]);
+        setFinalSpeed(calculateFinalSpeed(baseSpeed, totalModifier));
+    }, [baseSpeed, forwardBuffs]);
 
-    // Mode 1 functions
-    const addModifier = () => {
-        const newModifier: SpeedModifier = {
-            id: nextModifierId.toString(),
-            value: 0,
-        };
-        setModifiers([...modifiers, newModifier]);
-        setNextModifierId(nextModifierId + 1);
-    };
-
-    const removeModifier = (id: string) => {
-        setModifiers(modifiers.filter((mod) => mod.id !== id));
-    };
-
-    const updateModifier = (id: string, value: number) => {
-        setModifiers(modifiers.map((mod) => (mod.id === id ? { ...mod, value } : mod)));
-    };
-
-    const updateModifierLabel = (id: string, label: string) => {
-        setModifiers(modifiers.map((mod) => (mod.id === id ? { ...mod, label } : mod)));
-    };
+    // Calculate base speed range when target speeds or buffs change (Mode 2)
+    useEffect(() => {
+        const totalModifier = reverseBuffs.reduce(
+            (sum, b) => sum + (b.parsedEffects.speed ?? 0) * b.stacks,
+            0
+        );
+        setBaseSpeedRange(calculateBaseSpeedRange(targetMinSpeed, targetMaxSpeed, totalModifier));
+    }, [targetMinSpeed, targetMaxSpeed, reverseBuffs]);
 
     const handleShipSelect = (ship: Ship) => {
         const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
@@ -167,37 +136,6 @@ const SpeedCalculatorPage: React.FC = () => {
         );
         setSelectedShip(ship);
         setBaseSpeed(Math.round(statsBreakdown.final.speed));
-    };
-
-    // Mode 2 functions
-    const addReverseModifier = () => {
-        const newModifier: SpeedModifier = {
-            id: `r${nextReverseModifierId}`,
-            value: 0,
-        };
-        setReverseModifiers([...reverseModifiers, newModifier]);
-        setNextReverseModifierId(nextReverseModifierId + 1);
-    };
-
-    const removeReverseModifier = (id: string) => {
-        setReverseModifiers(reverseModifiers.filter((mod) => mod.id !== id));
-    };
-
-    const updateReverseModifier = (id: string, value: number) => {
-        setReverseModifiers(
-            reverseModifiers.map((mod) => (mod.id === id ? { ...mod, value } : mod))
-        );
-    };
-
-    const updateReverseModifierLabel = (id: string, label: string) => {
-        setReverseModifiers(
-            reverseModifiers.map((mod) => (mod.id === id ? { ...mod, label } : mod))
-        );
-    };
-
-    // Calculate total modifier percentage for display
-    const getTotalModifier = (mods: SpeedModifier[]): number => {
-        return mods.reduce((sum, mod) => sum + mod.value, 0);
     };
 
     const tabs = [
@@ -241,80 +179,13 @@ const SpeedCalculatorPage: React.FC = () => {
                             </div>
 
                             <div className="card">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-lg font-bold">Speed Modifiers</h3>
-                                    <Button variant="primary" onClick={addModifier}>
-                                        Add Modifier
-                                    </Button>
-                                </div>
-                                <p className="text-sm text-theme-text-secondary mb-4">
-                                    Add speed buffs (+) and debuffs (-) as percentages. All
-                                    modifiers are summed together and applied to the base speed.
-                                </p>
-
-                                <div className="space-y-3">
-                                    {modifiers.map((modifier) => (
-                                        <div
-                                            key={modifier.id}
-                                            className="flex gap-3 items-end p-3 bg-dark-lighter rounded"
-                                        >
-                                            <div className="flex-1">
-                                                <Input
-                                                    label="Label (optional)"
-                                                    value={modifier.label || ''}
-                                                    onChange={(e) =>
-                                                        updateModifierLabel(
-                                                            modifier.id,
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    placeholder="e.g., Engine Boost"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <Input
-                                                    label="Modifier (%)"
-                                                    type="number"
-                                                    value={modifier.value}
-                                                    onChange={(e) =>
-                                                        updateModifier(
-                                                            modifier.id,
-                                                            parseFloat(e.target.value) || 0
-                                                        )
-                                                    }
-                                                    placeholder="+30 or -15"
-                                                />
-                                            </div>
-                                            <Button
-                                                variant="danger"
-                                                onClick={() => removeModifier(modifier.id)}
-                                                aria-label="Remove modifier"
-                                            >
-                                                <CloseIcon />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {modifiers.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-dark-border">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-theme-text-secondary">
-                                                Total Modifier:
-                                            </span>
-                                            <span
-                                                className={`font-bold ${
-                                                    getTotalModifier(modifiers) >= 0
-                                                        ? 'text-green-400'
-                                                        : 'text-red-400'
-                                                }`}
-                                            >
-                                                {getTotalModifier(modifiers) >= 0 ? '+' : ''}
-                                                {getTotalModifier(modifiers).toFixed(2)}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
+                                <h3 className="text-lg font-bold mb-4">Speed Buffs</h3>
+                                <GameBuffPicker
+                                    label="Speed Buffs"
+                                    relevantStats={['speed']}
+                                    value={forwardBuffs}
+                                    onChange={setForwardBuffs}
+                                />
                             </div>
 
                             <div className="card">
@@ -334,13 +205,32 @@ const SpeedCalculatorPage: React.FC = () => {
                                         </span>
                                         <span
                                             className={`font-mono ${
-                                                getTotalModifier(modifiers) >= 0
+                                                forwardBuffs.reduce(
+                                                    (sum, b) =>
+                                                        sum +
+                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                    0
+                                                ) >= 0
                                                     ? 'text-green-400'
                                                     : 'text-red-400'
                                             }`}
                                         >
-                                            {getTotalModifier(modifiers) >= 0 ? '+' : ''}
-                                            {getTotalModifier(modifiers).toFixed(2)}%
+                                            {forwardBuffs.reduce(
+                                                (sum, b) =>
+                                                    sum + (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                0
+                                            ) >= 0
+                                                ? '+'
+                                                : ''}
+                                            {forwardBuffs
+                                                .reduce(
+                                                    (sum, b) =>
+                                                        sum +
+                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                    0
+                                                )
+                                                .toFixed(2)}
+                                            %
                                         </span>
                                     </div>
                                     <div className="pt-4 border-t border-dark-border">
@@ -407,81 +297,13 @@ const SpeedCalculatorPage: React.FC = () => {
                             </div>
 
                             <div className="card">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h3 className="text-lg font-bold">Speed Modifiers</h3>
-                                    <Button variant="primary" onClick={addReverseModifier}>
-                                        Add Modifier
-                                    </Button>
-                                </div>
-                                <p className="text-sm text-theme-text-secondary mb-4">
-                                    Add speed buffs (+) and debuffs (-) as percentages. The
-                                    calculator will determine what base speed range is needed to
-                                    achieve your target speed range after applying these modifiers.
-                                </p>
-
-                                <div className="space-y-3">
-                                    {reverseModifiers.map((modifier) => (
-                                        <div
-                                            key={modifier.id}
-                                            className="flex gap-3 items-end p-3 bg-dark-lighter rounded"
-                                        >
-                                            <div className="flex-1">
-                                                <Input
-                                                    label="Label (optional)"
-                                                    value={modifier.label || ''}
-                                                    onChange={(e) =>
-                                                        updateReverseModifierLabel(
-                                                            modifier.id,
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    placeholder="e.g., Engine Boost"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <Input
-                                                    label="Modifier (%)"
-                                                    type="number"
-                                                    value={modifier.value}
-                                                    onChange={(e) =>
-                                                        updateReverseModifier(
-                                                            modifier.id,
-                                                            parseFloat(e.target.value) || 0
-                                                        )
-                                                    }
-                                                    placeholder="+30 or -15"
-                                                />
-                                            </div>
-                                            <Button
-                                                variant="danger"
-                                                onClick={() => removeReverseModifier(modifier.id)}
-                                                aria-label="Remove modifier"
-                                            >
-                                                <CloseIcon />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {reverseModifiers.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-dark-border">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-theme-text-secondary">
-                                                Total Modifier:
-                                            </span>
-                                            <span
-                                                className={`font-bold ${
-                                                    getTotalModifier(reverseModifiers) >= 0
-                                                        ? 'text-green-400'
-                                                        : 'text-red-400'
-                                                }`}
-                                            >
-                                                {getTotalModifier(reverseModifiers) >= 0 ? '+' : ''}
-                                                {getTotalModifier(reverseModifiers).toFixed(2)}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
+                                <h3 className="text-lg font-bold mb-4">Speed Buffs</h3>
+                                <GameBuffPicker
+                                    label="Speed Buffs"
+                                    relevantStats={['speed']}
+                                    value={reverseBuffs}
+                                    onChange={setReverseBuffs}
+                                />
                             </div>
 
                             <div className="card">
@@ -508,13 +330,33 @@ const SpeedCalculatorPage: React.FC = () => {
                                             </span>
                                             <span
                                                 className={`font-mono ${
-                                                    getTotalModifier(reverseModifiers) >= 0
+                                                    reverseBuffs.reduce(
+                                                        (sum, b) =>
+                                                            sum +
+                                                            (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                        0
+                                                    ) >= 0
                                                         ? 'text-green-400'
                                                         : 'text-red-400'
                                                 }`}
                                             >
-                                                {getTotalModifier(reverseModifiers) >= 0 ? '+' : ''}
-                                                {getTotalModifier(reverseModifiers).toFixed(2)}%
+                                                {reverseBuffs.reduce(
+                                                    (sum, b) =>
+                                                        sum +
+                                                        (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                    0
+                                                ) >= 0
+                                                    ? '+'
+                                                    : ''}
+                                                {reverseBuffs
+                                                    .reduce(
+                                                        (sum, b) =>
+                                                            sum +
+                                                            (b.parsedEffects.speed ?? 0) * b.stacks,
+                                                        0
+                                                    )
+                                                    .toFixed(2)}
+                                                %
                                             </span>
                                         </div>
                                         <div className="pt-4 border-t border-dark-border">
