@@ -99,24 +99,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 </Button>
             </div>
 
-            <div className="flex items-center gap-2 mb-4 relative">
-                <Select
-                    label="Affinity"
-                    value={config.affinity ?? 'antimatter'}
-                    onChange={(v) =>
-                        onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
-                    }
-                    options={[
-                        { value: 'antimatter', label: 'Antimatter' },
-                        { value: 'thermal', label: 'Thermal' },
-                        { value: 'chemical', label: 'Chemical' },
-                        { value: 'electric', label: 'Electric' },
-                    ]}
-                    className="flex-1"
-                />
-                <div className="absolute left-[43px] top-[-2px]">{affinityBadge}</div>
-            </div>
-
             <div className="space-y-4">
                 <div className="flex gap-4">
                     <Input
@@ -170,6 +152,24 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 </Button>
 
                 <CollapsibleForm isVisible={openAdvanced}>
+                    <div className="flex items-center gap-2 mb-4 relative">
+                        <Select
+                            label="Affinity"
+                            value={config.affinity ?? 'antimatter'}
+                            onChange={(v) =>
+                                onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
+                            }
+                            options={[
+                                { value: 'antimatter', label: 'Antimatter' },
+                                { value: 'thermal', label: 'Thermal' },
+                                { value: 'chemical', label: 'Chemical' },
+                                { value: 'electric', label: 'Electric' },
+                            ]}
+                            className="flex-1"
+                        />
+                        <div className="absolute left-[43px] top-[-2px]">{affinityBadge}</div>
+                    </div>
+
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                         Skills
                     </div>
