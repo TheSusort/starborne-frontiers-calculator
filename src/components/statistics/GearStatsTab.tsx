@@ -290,7 +290,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                 options.add(piece.setBonus);
             }
         });
-        return Array.from(options).sort();
+        return Array.from(options).sort((a, b) => getSetLabel(a).localeCompare(getSetLabel(b)));
     }, [gearOnly]);
 
     return (

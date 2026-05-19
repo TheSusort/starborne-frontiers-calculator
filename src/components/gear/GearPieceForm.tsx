@@ -181,10 +181,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         setSetBonus('FORTITUDE');
     };
 
-    const setOptions = Object.entries(GEAR_SETS).map(([key, set]) => ({
-        value: key,
-        label: set.name,
-    }));
+    const setOptions = Object.entries(GEAR_SETS)
+        .map(([key, set]) => ({ value: key, label: set.name }))
+        .sort((a, b) => a.label.localeCompare(b.label));
 
     const rarityOptions = Object.entries(RARITIES).map(([key, rarity]) => ({
         value: key,

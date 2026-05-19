@@ -18,7 +18,9 @@ const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
 const ALL_RARITIES = Object.keys(RARITIES);
 
 const implantKeys = new Set(Object.keys(IMPLANTS));
-const GEAR_SET_ENTRIES = Object.entries(GEAR_SETS).filter(([key]) => !implantKeys.has(key));
+const GEAR_SET_ENTRIES = Object.entries(GEAR_SETS)
+    .filter(([key]) => !implantKeys.has(key))
+    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
 
 const STAT_TYPE_OPTIONS: { key: string; label: string; name: StatName; type: StatType }[] =
     Object.entries(STATS).flatMap(([statName, def]) =>

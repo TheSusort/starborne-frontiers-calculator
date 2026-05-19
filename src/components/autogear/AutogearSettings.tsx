@@ -141,10 +141,9 @@ const SetPriorityForm: React.FC<{
                 <Select
                     label="Gear set"
                     className="flex-1 min-w-[8rem]"
-                    options={Object.entries(GEAR_SETS).map(([key, set]) => ({
-                        value: key,
-                        label: set.name,
-                    }))}
+                    options={Object.entries(GEAR_SETS)
+                        .map(([key, set]) => ({ value: key, label: set.name }))
+                        .sort((a, b) => a.label.localeCompare(b.label))}
                     value={selectedSet}
                     onChange={(value) => setSelectedSet(value)}
                     noDefaultSelection
