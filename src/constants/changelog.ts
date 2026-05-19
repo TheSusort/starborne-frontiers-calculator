@@ -1,25 +1,21 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.61.0';
+export const CURRENT_VERSION = '1.62.0';
 
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [
-    'Affinity matchup support in DPS Calculator — set attacker and enemy affinity to apply advantage (+25% damage) or disadvantage (−25% damage, crit rate penalised and capped at 75%) modifiers to the simulation.',
-    "Chrono Reaver Calculator: added ship selector with skill parsing and auto-fill — selecting a ship pre-fills charges required, active skill %, and charged skill % from the ship's data. URL deep-linking (?shipId=) and a collapsible skill reference panel are also supported.",
-    'Defense Calculator: added Security input and an Effective HP vs Security scatter chart to visualise the two-dimensional tankiness tradeoff. Security buffs/debuffs (e.g. Security Up, Security Down) are now recognised in the buff pickers.',
-    'Defense Calculator: added global and per-ship buff pickers. Defense Up/Down buffs scale the base defense stat before calculating damage reduction; Incoming Direct Damage buffs (positive or negative) further adjust effective HP.',
-    'Healing Calculator overhaul: added charged heal support, healing-over-time simulation, bubble/comparison/round charts, and buff pickers (global and per-ship).',
-    "DPS Calculator: added per-ship buff picker in the Advanced section so ship-granted buffs are factored into that ship's damage calculation independently of global combat buffs.",
-    'Healing calculator: heal modifier is now auto-filled from ship gear and sets when a ship is selected.',
-    'Healing calculator: Outgoing Repair buffs are now factored in as a separate healing multiplier.',
-    'Healing calculator: Incoming Repair buffs (e.g. Everliving Regeneration) are now recognised as relevant and factored into healing output.',
-    'Speed Calculator now uses the game buff picker instead of manual modifier inputs — pick Speed Up/Down buffs by name.',
-    'Ship Lore page now supports direct links — use the copy-link button on any bio or article to share a URL that opens directly to that entry.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.62.0',
+        date: '2026-05-19',
+        changes: [
+            'Calculator upgrades: buff pickers across DPS, Defense, Healing, and Speed; affinity modifiers and per-ship buffs (DPS); Security stat and Effective HP chart (Defense); charged heals and HoT simulation (Healing); Chrono Reaver ship selector with skill auto-fill.',
+            'Ship Lore direct links; gear set dropdowns sorted alphabetically.',
+        ],
+    },
     {
         version: '1.61.0',
         date: '2026-05-13',
