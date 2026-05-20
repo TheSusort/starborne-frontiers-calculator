@@ -2,7 +2,7 @@ import { Ship } from '../types/ship';
 import { LoreArticle } from '../constants/websiteLore';
 
 export function extractShipText(ship: Ship): string {
-    const parts: string[] = [];
+    const parts: string[] = [ship.name];
 
     if (ship.quote) {
         const attribution = ship.quoteAuthor ? ` — ${ship.quoteAuthor}` : '';
@@ -11,7 +11,8 @@ export function extractShipText(ship: Ship): string {
 
     if (ship.bio) {
         const stripped = ship.bio
-            .replace(/<[^>]*>/g, ' ') // strip all HTML tags including bare <br>
+            .replace(/<\/h[1-6]>/gi, '. ') // period after heading for TTS pause
+            .replace(/<[^>]*>/g, ' ') // strip remaining tags including bare <br>
             .replace(/[ \t]+/g, ' ') // collapse consecutive spaces/tabs
             .trim();
         parts.push(stripped);
@@ -21,5 +22,5 @@ export function extractShipText(ship: Ship): string {
 }
 
 export function extractArticleText(article: LoreArticle): string {
-    return article.body;
+    return `${article.title}\n\n${article.body}`;
 }

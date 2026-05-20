@@ -36,7 +36,7 @@ const CopyLinkButton: React.FC<{ url: string }> = ({ url }) => {
     };
 
     return (
-        <Button variant="secondary" size="xs" onClick={handleCopy}>
+        <Button variant="secondary" size="sm" onClick={handleCopy}>
             {copied ? 'Copied!' : 'Copy link'}
         </Button>
     );
@@ -593,6 +593,24 @@ export const ShipLorePage: React.FC = () => {
         ? (slug: string) => () => handleSelectArticle(slug)
         : () => undefined;
 
+    const makeCardPlayButton = (id: string, getText: () => string) => {
+        if (!supported) return undefined;
+        const isThisPlaying = playingId === id && isPlaying;
+        return (
+            <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    play(id, getText());
+                }}
+                aria-label={isThisPlaying && !isPaused ? 'Pause audio' : 'Play audio'}
+            >
+                {isThisPlaying && !isPaused ? <PauseIcon /> : <PlayIcon />}
+            </Button>
+        );
+    };
+
     const shipList = (
         <>
             {filteredShips.map((ship) => (
@@ -604,6 +622,7 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'ship' && selection.id === ship.id}
                     shareUrl={!isDesktop ? buildBioUrl(ship.id) : undefined}
                     initialExpanded={!isDesktop && initialBioId === ship.id}
+                    actionButton={makeCardPlayButton(ship.id, () => extractShipText(ship))}
                 />
             ))}
         </>
@@ -620,6 +639,9 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'article' && selection.slug === article.slug}
                     shareUrl={!isDesktop ? buildArticleUrl(article.slug) : undefined}
                     initialExpanded={!isDesktop && initialArticleSlug === article.slug}
+                    actionButton={makeCardPlayButton(article.slug, () =>
+                        extractArticleText(article)
+                    )}
                 />
             ))}
         </>
@@ -641,6 +663,9 @@ export const ShipLorePage: React.FC = () => {
                             isActive={
                                 selection?.type === 'article' && selection.slug === article.slug
                             }
+                            actionButton={makeCardPlayButton(article.slug, () =>
+                                extractArticleText(article)
+                            )}
                         />
                     ))}
                 </>
@@ -657,6 +682,7 @@ export const ShipLorePage: React.FC = () => {
                             searchQuery={searchQuery}
                             onClickOverride={shipClickHandler(ship.id)}
                             isActive={selection?.type === 'ship' && selection.id === ship.id}
+                            actionButton={makeCardPlayButton(ship.id, () => extractShipText(ship))}
                         />
                     ))}
                 </>
@@ -667,7 +693,7 @@ export const ShipLorePage: React.FC = () => {
     const playAllButton = supported ? (
         <Button
             variant="secondary"
-            size="sm"
+            className="flex items-center"
             onClick={() => {
                 const items =
                     activeTab === 'bios'
@@ -763,10 +789,7 @@ export const ShipLorePage: React.FC = () => {
                                 style={{ top: `${stickyTop}px` }}
                             >
                                 <div className="flex items-center justify-between mb-4">
-                                    <span className="text-xs text-theme-text-secondary uppercase tracking-wide">
-                                        Reading
-                                    </span>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 ms-auto">
                                         {supported &&
                                             (selectedShip || selectedArticle) &&
                                             ((): React.ReactNode => {
@@ -781,7 +804,7 @@ export const ShipLorePage: React.FC = () => {
                                                 return (
                                                     <Button
                                                         variant="secondary"
-                                                        size="xs"
+                                                        size="sm"
                                                         onClick={() => play(id, getText())}
                                                         aria-label={
                                                             isThisPlaying && !isPaused
@@ -807,7 +830,7 @@ export const ShipLorePage: React.FC = () => {
                                         )}
                                         <Button
                                             variant="secondary"
-                                            size="xs"
+                                            size="sm"
                                             onClick={handleCloseReader}
                                         >
                                             Close

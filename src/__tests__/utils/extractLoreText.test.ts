@@ -7,8 +7,8 @@ const makeShip = (overrides: Partial<Ship>): Ship =>
     ({ id: '1', name: 'Test', rarity: 'common', ...overrides }) as Ship;
 
 describe('extractShipText', () => {
-    it('returns empty string when ship has no bio or quote', () => {
-        expect(extractShipText(makeShip({}))).toBe('');
+    it('returns just the ship name when ship has no bio or quote', () => {
+        expect(extractShipText(makeShip({}))).toBe('Test');
     });
 
     it('includes quote and quoteAuthor', () => {
@@ -21,16 +21,16 @@ describe('extractShipText', () => {
         expect(extractShipText(ship)).toContain('"Solo quote".');
     });
 
-    it('returns only bio when quote is absent', () => {
+    it('includes name and bio when quote is absent', () => {
         const ship = makeShip({ bio: 'Plain bio text' });
-        expect(extractShipText(ship)).toBe('Plain bio text');
+        expect(extractShipText(ship)).toBe('Test\n\nPlain bio text');
     });
 
-    it('strips <h4> tags from bio', () => {
+    it('adds pause period after heading and strips tags from bio', () => {
         const ship = makeShip({ bio: '<h4>Chapter</h4>Text' });
         const result = extractShipText(ship);
         expect(result).not.toContain('<h4>');
-        expect(result).toContain('Chapter');
+        expect(result).toContain('Chapter.');
         expect(result).toContain('Text');
     });
 
@@ -57,13 +57,13 @@ describe('extractShipText', () => {
 });
 
 describe('extractArticleText', () => {
-    it('returns article body unchanged', () => {
+    it('prepends article title to body', () => {
         const article: LoreArticle = {
-            title: 'T',
+            title: 'Enemy Territory',
             slug: 's',
             body: 'Body text\n\nParagraph two',
             sourceUrl: '',
         };
-        expect(extractArticleText(article)).toBe('Body text\n\nParagraph two');
+        expect(extractArticleText(article)).toBe('Enemy Territory\n\nBody text\n\nParagraph two');
     });
 });
