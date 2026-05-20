@@ -136,6 +136,7 @@ export function useLoreAudioPlayer(): LoreAudioPlayer {
                 stop();
                 return;
             }
+            cancelledRef.current = true;
             window.speechSynthesis.cancel();
             setIsPlayingAll(false);
             playingAllKeyRef.current = '';
@@ -153,6 +154,7 @@ export function useLoreAudioPlayer(): LoreAudioPlayer {
                 stop();
                 return;
             }
+            cancelledRef.current = true;
             window.speechSynthesis.cancel();
             playingAllKeyRef.current = key;
             setIsPlayingAll(true);
