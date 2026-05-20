@@ -157,6 +157,13 @@ const DocumentationPage: React.FC = () => {
                                 </a>
                             </li>
                             <li className="[counter-increment:index]">
+                                <a href="#lore" className="text-primary hover:text-primary-light">
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Lore
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
                                 <a
                                     href="#calculators"
                                     className="text-primary hover:text-primary-light"
@@ -1964,6 +1971,84 @@ const DocumentationPage: React.FC = () => {
                                     ships. The relative score bars help you quickly identify how
                                     competitive your build is.
                                 </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Lore Section */}
+                    <section id="lore" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Lore
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Ship Bios and World Lore</h3>
+                            <p className="text-theme-text">
+                                The Lore page provides immersive storytelling with ship biographies,
+                                character quotes, and world lore articles. Two tabs let you explore
+                                ship bios and world lore separately, with full-text search across
+                                both.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Ship Bios Tab</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>Browse biographies for 149 ships</li>
+                                    <li>Read character quotes and author information</li>
+                                    <li>Search ships by name, faction, or bio content</li>
+                                    <li>
+                                        Quick links to ship details and databases from bio cards
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">World Lore Tab</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>Read 30 articles about the game world and universe</li>
+                                    <li>Explore lore directly from starborne.com</li>
+                                    <li>Search lore articles by title and content</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Audio Reader</h4>
+                                <p className="text-theme-text mb-2">
+                                    The lore page includes a text-to-speech audio reader. Use{' '}
+                                    <strong>Play All</strong> in the toolbar to listen through all
+                                    entries in the current tab hands-free, or the play button on any
+                                    card to hear a single entry. Playback uses the browser&apos;s
+                                    built-in speech synthesis (prefers the Microsoft Michelle Online
+                                    voice on Windows).
+                                </p>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Cross-Tab Search
+                                </h4>
+                                <p className="text-theme-text">
+                                    The search bar works across both tabs. When you search, results
+                                    from the other tab appear below with a separate section header,
+                                    making it easy to find related content across ship bios and
+                                    world lore.
+                                </p>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
+                                <h4 className="font-semibold text-blue-200 mb-2">Use Cases</h4>
+                                <ul className="text-blue-100 space-y-2">
+                                    <li>
+                                        Discover the story and background behind your favorite ships
+                                    </li>
+                                    <li>
+                                        Understand the game world and universe lore while away from
+                                        the game
+                                    </li>
+                                    <li>
+                                        Use the audio reader to learn lore hands-free during
+                                        commutes or downtime
+                                    </li>
+                                </ul>
                             </div>
                         </div>
                     </section>
