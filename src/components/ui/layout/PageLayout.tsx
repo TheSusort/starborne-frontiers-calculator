@@ -15,6 +15,7 @@ interface PageLayoutProps {
         variant?: 'primary' | 'secondary';
         dataTutorial?: string;
     };
+    actionNode?: React.ReactNode;
     helpLink?: string;
     tutorialGroupId?: string | string[];
 }
@@ -24,6 +25,7 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
     description,
     children,
     action,
+    actionNode,
     helpLink,
     tutorialGroupId,
 }) => {
@@ -36,16 +38,19 @@ export const PageLayout: React.FC<PageLayoutProps> = ({
             <div>
                 <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold ">{title}</h1>
-                    {action && (
-                        <Button
-                            aria-label={action.label}
-                            variant={action.variant || 'primary'}
-                            onClick={action.onClick}
-                            data-tutorial={action.dataTutorial}
-                        >
-                            {action.label}
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {actionNode}
+                        {action && (
+                            <Button
+                                aria-label={action.label}
+                                variant={action.variant || 'primary'}
+                                onClick={action.onClick}
+                                data-tutorial={action.dataTutorial}
+                            >
+                                {action.label}
+                            </Button>
+                        )}
+                    </div>
                 </div>
                 {description && (
                     <p className="text-sm text-theme-text-secondary order-2 w-full">

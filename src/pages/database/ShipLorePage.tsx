@@ -482,28 +482,6 @@ export const ShipLorePage: React.FC = () => {
 
     const { supported, isPlaying, isPlayingAll, playingId, play, playAll } = useLoreAudioPlayer();
 
-    const makePlayButton = (
-        id: string,
-        getText: () => string,
-        onSelectOnPlay?: () => void
-    ): React.ReactNode => {
-        if (!supported) return undefined;
-        const isThisPlaying = playingId === id && isPlaying;
-        return (
-            <Button
-                variant="secondary"
-                size="xs"
-                onClick={() => {
-                    if (!isThisPlaying) onSelectOnPlay?.();
-                    play(id, getText());
-                }}
-                aria-label={isThisPlaying ? 'Stop audio' : 'Play audio'}
-            >
-                {isThisPlaying ? <StopIcon /> : <PlayIcon />}
-            </Button>
-        );
-    };
-
     const buildBioUrl = (id: string) =>
         `${window.location.origin}/ships/lore?bio=${encodeURIComponent(id)}`;
     const buildArticleUrl = (slug: string) =>
@@ -625,11 +603,6 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'ship' && selection.id === ship.id}
                     shareUrl={!isDesktop ? buildBioUrl(ship.id) : undefined}
                     initialExpanded={!isDesktop && initialBioId === ship.id}
-                    actionButton={makePlayButton(
-                        ship.id,
-                        () => extractShipText(ship),
-                        isDesktop ? () => handleSelectShip(ship.id) : undefined
-                    )}
                 />
             ))}
         </>
@@ -646,11 +619,6 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'article' && selection.slug === article.slug}
                     shareUrl={!isDesktop ? buildArticleUrl(article.slug) : undefined}
                     initialExpanded={!isDesktop && initialArticleSlug === article.slug}
-                    actionButton={makePlayButton(
-                        article.slug,
-                        () => extractArticleText(article),
-                        isDesktop ? () => handleSelectArticle(article.slug) : undefined
-                    )}
                 />
             ))}
         </>
@@ -672,9 +640,6 @@ export const ShipLorePage: React.FC = () => {
                             isActive={
                                 selection?.type === 'article' && selection.slug === article.slug
                             }
-                            actionButton={makePlayButton(article.slug, () =>
-                                extractArticleText(article)
-                            )}
                         />
                     ))}
                 </>
@@ -691,7 +656,6 @@ export const ShipLorePage: React.FC = () => {
                             searchQuery={searchQuery}
                             onClickOverride={shipClickHandler(ship.id)}
                             isActive={selection?.type === 'ship' && selection.id === ship.id}
-                            actionButton={makePlayButton(ship.id, () => extractShipText(ship))}
                         />
                     ))}
                 </>
@@ -699,12 +663,46 @@ export const ShipLorePage: React.FC = () => {
         </>
     );
 
+    const playAllButton = supported ? (
+        <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+                const items =
+                    activeTab === 'bios'
+                        ? filteredShips.map((s) => ({
+                              id: s.id,
+                              text: extractShipText(s),
+                              onStart: isDesktop ? () => handleSelectShip(s.id) : undefined,
+                          }))
+                        : filteredArticles.map((a) => ({
+                              id: a.slug,
+                              text: extractArticleText(a),
+                              onStart: isDesktop ? () => handleSelectArticle(a.slug) : undefined,
+                          }));
+                playAll(items);
+            }}
+            aria-label={isPlayingAll ? 'Stop all audio' : 'Play all lore entries'}
+        >
+            {isPlayingAll ? (
+                <>
+                    <StopIcon className="mr-1" /> Stop
+                </>
+            ) : (
+                <>
+                    <PlayIcon className="mr-1" /> Play All
+                </>
+            )}
+        </Button>
+    ) : undefined;
+
     return (
         <>
             <Seo {...SEO_CONFIG.shipLore} />
             <PageLayout
                 title="Lore"
                 description="Browse and search through ship bios, diaries, and world lore. Look for easter eggs, cross-references, and hidden connections."
+                actionNode={playAllButton}
             >
                 {isDesktop ? (
                     <div className="flex gap-6">
@@ -722,47 +720,6 @@ export const ShipLorePage: React.FC = () => {
                                         placeholder="Search all lore..."
                                         className="flex-1"
                                     />
-                                    {supported && (
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => {
-                                                const items =
-                                                    activeTab === 'bios'
-                                                        ? filteredShips.map((s) => ({
-                                                              id: s.id,
-                                                              text: extractShipText(s),
-                                                              onStart: isDesktop
-                                                                  ? () => handleSelectShip(s.id)
-                                                                  : undefined,
-                                                          }))
-                                                        : filteredArticles.map((a) => ({
-                                                              id: a.slug,
-                                                              text: extractArticleText(a),
-                                                              onStart: isDesktop
-                                                                  ? () =>
-                                                                        handleSelectArticle(a.slug)
-                                                                  : undefined,
-                                                          }));
-                                                playAll(items);
-                                            }}
-                                            aria-label={
-                                                isPlayingAll
-                                                    ? 'Stop all audio'
-                                                    : 'Play all lore entries'
-                                            }
-                                        >
-                                            {isPlayingAll ? (
-                                                <>
-                                                    <StopIcon className="mr-1" /> Stop
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <PlayIcon className="mr-1" /> Play All
-                                                </>
-                                            )}
-                                        </Button>
-                                    )}
                                     <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                         {resultCount}
                                     </span>
@@ -869,44 +826,6 @@ export const ShipLorePage: React.FC = () => {
                                 placeholder="Search all lore..."
                                 className="flex-1"
                             />
-                            {supported && (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => {
-                                        const items =
-                                            activeTab === 'bios'
-                                                ? filteredShips.map((s) => ({
-                                                      id: s.id,
-                                                      text: extractShipText(s),
-                                                      onStart: isDesktop
-                                                          ? () => handleSelectShip(s.id)
-                                                          : undefined,
-                                                  }))
-                                                : filteredArticles.map((a) => ({
-                                                      id: a.slug,
-                                                      text: extractArticleText(a),
-                                                      onStart: isDesktop
-                                                          ? () => handleSelectArticle(a.slug)
-                                                          : undefined,
-                                                  }));
-                                        playAll(items);
-                                    }}
-                                    aria-label={
-                                        isPlayingAll ? 'Stop all audio' : 'Play all lore entries'
-                                    }
-                                >
-                                    {isPlayingAll ? (
-                                        <>
-                                            <StopIcon className="mr-1" /> Stop
-                                        </>
-                                    ) : (
-                                        <>
-                                            <PlayIcon className="mr-1" /> Play All
-                                        </>
-                                    )}
-                                </Button>
-                            )}
                             <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                 {resultCount}
                             </span>
