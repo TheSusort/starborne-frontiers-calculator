@@ -12,7 +12,10 @@ import { SEO_CONFIG } from '../../constants/seo';
 import { Ship } from '../../types/ship';
 import { ShipIcon, getAffinityClass } from '../../components/ship/shipDisplayComponents';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
+import { PlayIcon, StopIcon } from '../../components/ui/icons/PlayIcon';
 import { Tabs } from '../../components/ui/layout/Tabs';
+import { useLoreAudioPlayer } from '../../hooks/useLoreAudioPlayer';
+import { extractShipText, extractArticleText } from '../../utils/extractLoreText';
 import { WEBSITE_LORE, LoreArticle } from '../../constants/websiteLore';
 import {
     BioContent,
@@ -107,6 +110,7 @@ const ExpandableCard: React.FC<{
     isActive?: boolean;
     shareUrl?: string;
     initialExpanded?: boolean;
+    actionButton?: React.ReactNode;
 }> = ({
     title,
     snippet,
@@ -121,6 +125,7 @@ const ExpandableCard: React.FC<{
     isActive = false,
     shareUrl,
     initialExpanded = false,
+    actionButton,
 }) => {
     const [expanded, setExpanded] = useState(initialExpanded);
     const cardRef = useRef<HTMLDivElement>(null);
@@ -168,11 +173,21 @@ const ExpandableCard: React.FC<{
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                         {title}
-                        {!onClickOverride && (
-                            <ChevronDownIcon
-                                className={`w-5 h-5 text-theme-text-secondary ml-auto flex-shrink-0 transition-transform duration-300 ${showExpanded ? 'rotate-180' : ''}`}
-                            />
-                        )}
+                        <div className="flex items-center gap-1 ml-auto flex-shrink-0">
+                            {actionButton && (
+                                <span
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                >
+                                    {actionButton}
+                                </span>
+                            )}
+                            {!onClickOverride && (
+                                <ChevronDownIcon
+                                    className={`w-5 h-5 text-theme-text-secondary transition-transform duration-300 ${showExpanded ? 'rotate-180' : ''}`}
+                                />
+                            )}
+                        </div>
                     </div>
                     {!showExpanded && snippet && <SnippetText text={snippet} query={searchQuery} />}
                     {!showExpanded && !snippet && quote && (
@@ -229,7 +244,16 @@ const ShipBioCard: React.FC<{
     isActive?: boolean;
     shareUrl?: string;
     initialExpanded?: boolean;
-}> = ({ ship, searchQuery, onClickOverride, isActive, shareUrl, initialExpanded }) => {
+    actionButton?: React.ReactNode;
+}> = ({
+    ship,
+    searchQuery,
+    onClickOverride,
+    isActive,
+    shareUrl,
+    initialExpanded,
+    actionButton,
+}) => {
     const snippet = useMemo(() => {
         if (!searchQuery || searchQuery.length < 2) return null;
         const query = searchQuery.toLowerCase();
@@ -272,6 +296,7 @@ const ShipBioCard: React.FC<{
             onClickOverride={onClickOverride}
             shareUrl={shareUrl}
             initialExpanded={initialExpanded}
+            actionButton={actionButton}
             content={
                 <BioContent
                     bio={ship.bio ?? ''}
@@ -302,7 +327,16 @@ const LoreArticleCard: React.FC<{
     isActive?: boolean;
     shareUrl?: string;
     initialExpanded?: boolean;
-}> = ({ article, searchQuery, onClickOverride, isActive, shareUrl, initialExpanded }) => {
+    actionButton?: React.ReactNode;
+}> = ({
+    article,
+    searchQuery,
+    onClickOverride,
+    isActive,
+    shareUrl,
+    initialExpanded,
+    actionButton,
+}) => {
     const snippet = useMemo(
         () => getMatchSnippet(article.body, searchQuery),
         [article.body, searchQuery]
@@ -318,6 +352,7 @@ const LoreArticleCard: React.FC<{
             activeBgColor="bg-primary"
             shareUrl={shareUrl}
             initialExpanded={initialExpanded}
+            actionButton={actionButton}
             content={
                 <PlainTextContent
                     text={article.body}
@@ -445,6 +480,30 @@ export const ShipLorePage: React.FC = () => {
     });
     const isDesktop = useMediaQuery('(min-width: 1280px)');
 
+    const { supported, isPlaying, isPlayingAll, playingId, play, playAll } = useLoreAudioPlayer();
+
+    const makePlayButton = (
+        id: string,
+        getText: () => string,
+        onSelectOnPlay?: () => void
+    ): React.ReactNode => {
+        if (!supported) return undefined;
+        const isThisPlaying = playingId === id && isPlaying;
+        return (
+            <Button
+                variant="secondary"
+                size="xs"
+                onClick={() => {
+                    if (!isThisPlaying) onSelectOnPlay?.();
+                    play(id, getText());
+                }}
+                aria-label={isThisPlaying ? 'Stop audio' : 'Play audio'}
+            >
+                {isThisPlaying ? <StopIcon /> : <PlayIcon />}
+            </Button>
+        );
+    };
+
     const buildBioUrl = (id: string) =>
         `${window.location.origin}/ships/lore?bio=${encodeURIComponent(id)}`;
     const buildArticleUrl = (slug: string) =>
@@ -566,6 +625,11 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'ship' && selection.id === ship.id}
                     shareUrl={!isDesktop ? buildBioUrl(ship.id) : undefined}
                     initialExpanded={!isDesktop && initialBioId === ship.id}
+                    actionButton={makePlayButton(
+                        ship.id,
+                        () => extractShipText(ship),
+                        isDesktop ? () => handleSelectShip(ship.id) : undefined
+                    )}
                 />
             ))}
         </>
@@ -582,6 +646,11 @@ export const ShipLorePage: React.FC = () => {
                     isActive={selection?.type === 'article' && selection.slug === article.slug}
                     shareUrl={!isDesktop ? buildArticleUrl(article.slug) : undefined}
                     initialExpanded={!isDesktop && initialArticleSlug === article.slug}
+                    actionButton={makePlayButton(
+                        article.slug,
+                        () => extractArticleText(article),
+                        isDesktop ? () => handleSelectArticle(article.slug) : undefined
+                    )}
                 />
             ))}
         </>
@@ -603,6 +672,9 @@ export const ShipLorePage: React.FC = () => {
                             isActive={
                                 selection?.type === 'article' && selection.slug === article.slug
                             }
+                            actionButton={makePlayButton(article.slug, () =>
+                                extractArticleText(article)
+                            )}
                         />
                     ))}
                 </>
@@ -619,6 +691,7 @@ export const ShipLorePage: React.FC = () => {
                             searchQuery={searchQuery}
                             onClickOverride={shipClickHandler(ship.id)}
                             isActive={selection?.type === 'ship' && selection.id === ship.id}
+                            actionButton={makePlayButton(ship.id, () => extractShipText(ship))}
                         />
                     ))}
                 </>
@@ -649,6 +722,47 @@ export const ShipLorePage: React.FC = () => {
                                         placeholder="Search all lore..."
                                         className="flex-1"
                                     />
+                                    {supported && (
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={() => {
+                                                const items =
+                                                    activeTab === 'bios'
+                                                        ? filteredShips.map((s) => ({
+                                                              id: s.id,
+                                                              text: extractShipText(s),
+                                                              onStart: isDesktop
+                                                                  ? () => handleSelectShip(s.id)
+                                                                  : undefined,
+                                                          }))
+                                                        : filteredArticles.map((a) => ({
+                                                              id: a.slug,
+                                                              text: extractArticleText(a),
+                                                              onStart: isDesktop
+                                                                  ? () =>
+                                                                        handleSelectArticle(a.slug)
+                                                                  : undefined,
+                                                          }));
+                                                playAll(items);
+                                            }}
+                                            aria-label={
+                                                isPlayingAll
+                                                    ? 'Stop all audio'
+                                                    : 'Play all lore entries'
+                                            }
+                                        >
+                                            {isPlayingAll ? (
+                                                <>
+                                                    <StopIcon className="mr-1" /> Stop
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <PlayIcon className="mr-1" /> Play All
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
                                     <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                         {resultCount}
                                     </span>
@@ -685,6 +799,36 @@ export const ShipLorePage: React.FC = () => {
                                         Reading
                                     </span>
                                     <div className="flex items-center gap-2">
+                                        {supported &&
+                                            (selectedShip || selectedArticle) &&
+                                            ((): React.ReactNode => {
+                                                const id = selectedShip
+                                                    ? selectedShip.id
+                                                    : selectedArticle!.slug;
+                                                const getText = () =>
+                                                    selectedShip
+                                                        ? extractShipText(selectedShip)
+                                                        : extractArticleText(selectedArticle!);
+                                                const isThisPlaying = playingId === id && isPlaying;
+                                                return (
+                                                    <Button
+                                                        variant="secondary"
+                                                        size="xs"
+                                                        onClick={() => play(id, getText())}
+                                                        aria-label={
+                                                            isThisPlaying
+                                                                ? 'Stop audio'
+                                                                : 'Play audio'
+                                                        }
+                                                    >
+                                                        {isThisPlaying ? (
+                                                            <StopIcon />
+                                                        ) : (
+                                                            <PlayIcon />
+                                                        )}
+                                                    </Button>
+                                                );
+                                            })()}
                                         {selectedShip && (
                                             <CopyLinkButton url={buildBioUrl(selectedShip.id)} />
                                         )}
@@ -725,6 +869,44 @@ export const ShipLorePage: React.FC = () => {
                                 placeholder="Search all lore..."
                                 className="flex-1"
                             />
+                            {supported && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => {
+                                        const items =
+                                            activeTab === 'bios'
+                                                ? filteredShips.map((s) => ({
+                                                      id: s.id,
+                                                      text: extractShipText(s),
+                                                      onStart: isDesktop
+                                                          ? () => handleSelectShip(s.id)
+                                                          : undefined,
+                                                  }))
+                                                : filteredArticles.map((a) => ({
+                                                      id: a.slug,
+                                                      text: extractArticleText(a),
+                                                      onStart: isDesktop
+                                                          ? () => handleSelectArticle(a.slug)
+                                                          : undefined,
+                                                  }));
+                                        playAll(items);
+                                    }}
+                                    aria-label={
+                                        isPlayingAll ? 'Stop all audio' : 'Play all lore entries'
+                                    }
+                                >
+                                    {isPlayingAll ? (
+                                        <>
+                                            <StopIcon className="mr-1" /> Stop
+                                        </>
+                                    ) : (
+                                        <>
+                                            <PlayIcon className="mr-1" /> Play All
+                                        </>
+                                    )}
+                                </Button>
+                            )}
                             <span className="text-sm text-theme-text-secondary whitespace-nowrap">
                                 {resultCount}
                             </span>
