@@ -14,6 +14,7 @@ export * from './HealingIcon';
 export * from './InfoIcon';
 export * from './LockIcon';
 export * from './MenuIcon';
+export * from './PlayIcon';
 export * from './ResetIcon';
 export * from './TargetIcon';
 export * from './TrophyIcon';
