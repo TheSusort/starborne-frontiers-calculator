@@ -32,7 +32,9 @@ function selectVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | nul
     return (
         voices.find((v) => v.name.includes('Michelle Online (Natural)')) ??
         voices.find((v) => v.lang === 'en-US' && /female/i.test(v.name)) ??
+        voices.find((v) => v.name === 'Samantha') ??
         voices.find((v) => v.lang === 'en-US') ??
+        voices.find((v) => v.lang.startsWith('en')) ??
         null
     );
 }
