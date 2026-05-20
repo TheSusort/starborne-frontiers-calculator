@@ -12,7 +12,7 @@ import { SEO_CONFIG } from '../../constants/seo';
 import { Ship } from '../../types/ship';
 import { ShipIcon, getAffinityClass } from '../../components/ship/shipDisplayComponents';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
-import { PlayIcon, StopIcon } from '../../components/ui/icons/PlayIcon';
+import { PlayIcon, PauseIcon } from '../../components/ui/icons/PlayIcon';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { useLoreAudioPlayer } from '../../hooks/useLoreAudioPlayer';
 import { extractShipText, extractArticleText } from '../../utils/extractLoreText';
@@ -480,7 +480,8 @@ export const ShipLorePage: React.FC = () => {
     });
     const isDesktop = useMediaQuery('(min-width: 1280px)');
 
-    const { supported, isPlaying, isPlayingAll, playingId, play, playAll } = useLoreAudioPlayer();
+    const { supported, isPlaying, isPaused, isPlayingAll, playingId, play, playAll } =
+        useLoreAudioPlayer();
 
     const buildBioUrl = (id: string) =>
         `${window.location.origin}/ships/lore?bio=${encodeURIComponent(id)}`;
@@ -682,11 +683,21 @@ export const ShipLorePage: React.FC = () => {
                           }));
                 playAll(items);
             }}
-            aria-label={isPlayingAll ? 'Stop all audio' : 'Play all lore entries'}
+            aria-label={
+                isPlayingAll && !isPaused
+                    ? 'Pause audio'
+                    : isPlayingAll && isPaused
+                      ? 'Resume audio'
+                      : 'Play all lore entries'
+            }
         >
-            {isPlayingAll ? (
+            {isPlayingAll && !isPaused ? (
                 <>
-                    <StopIcon className="mr-1" /> Stop
+                    <PauseIcon className="mr-1" /> Pause
+                </>
+            ) : isPlayingAll && isPaused ? (
+                <>
+                    <PlayIcon className="mr-1" /> Resume
                 </>
             ) : (
                 <>
@@ -773,13 +784,13 @@ export const ShipLorePage: React.FC = () => {
                                                         size="xs"
                                                         onClick={() => play(id, getText())}
                                                         aria-label={
-                                                            isThisPlaying
-                                                                ? 'Stop audio'
+                                                            isThisPlaying && !isPaused
+                                                                ? 'Pause audio'
                                                                 : 'Play audio'
                                                         }
                                                     >
-                                                        {isThisPlaying ? (
-                                                            <StopIcon />
+                                                        {isThisPlaying && !isPaused ? (
+                                                            <PauseIcon />
                                                         ) : (
                                                             <PlayIcon />
                                                         )}

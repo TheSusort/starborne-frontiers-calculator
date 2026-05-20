@@ -9,6 +9,7 @@ export interface PlayItem {
 export interface LoreAudioPlayer {
     supported: boolean;
     isPlaying: boolean;
+    isPaused: boolean;
     isPlayingAll: boolean;
     playingId: string | null;
     play: (id: string, text: string) => void;
@@ -19,6 +20,7 @@ export interface LoreAudioPlayer {
 const NOOP_PLAYER: LoreAudioPlayer = {
     supported: false,
     isPlaying: false,
+    isPaused: false,
     isPlayingAll: false,
     playingId: null,
     play: () => {},
@@ -39,6 +41,7 @@ export function useLoreAudioPlayer(): LoreAudioPlayer {
     const supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
     const [isPlayingAll, setIsPlayingAll] = useState(false);
     const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -123,6 +126,7 @@ export function useLoreAudioPlayer(): LoreAudioPlayer {
         cancelledRef.current = true;
         window.speechSynthesis.cancel();
         setIsPlaying(false);
+        setIsPaused(false);
         setIsPlayingAll(false);
         setPlayingId(null);
         playingAllKeyRef.current = '';
@@ -131,39 +135,57 @@ export function useLoreAudioPlayer(): LoreAudioPlayer {
     const play = useCallback(
         (id: string, text: string) => {
             if (!supported) return;
-            // Toggle: clicking the same item again stops it.
-            if (playingId === id && isPlaying) {
-                stop();
+            // Same item currently speaking → pause
+            if (playingId === id && isPlaying && !isPaused) {
+                window.speechSynthesis.pause();
+                setIsPaused(true);
                 return;
             }
+            // Same item currently paused → resume
+            if (playingId === id && isPaused) {
+                window.speechSynthesis.resume();
+                setIsPaused(false);
+                return;
+            }
+            // Different item or idle → cancel current and start new
             cancelledRef.current = true;
             window.speechSynthesis.cancel();
+            setIsPaused(false);
             setIsPlayingAll(false);
             playingAllKeyRef.current = '';
             speakItem(id, text);
         },
-        [supported, playingId, isPlaying, stop, speakItem]
+        [supported, playingId, isPlaying, isPaused, speakItem]
     );
 
     const playAll = useCallback(
         (items: PlayItem[]) => {
             if (!supported || items.length === 0) return;
             const key = items.map((i) => i.id).join(',');
-            // Toggle: clicking Play All while the same list is playing stops it.
-            if (isPlayingAll && playingAllKeyRef.current === key) {
-                stop();
+            // Same list currently speaking → pause
+            if (isPlayingAll && playingAllKeyRef.current === key && !isPaused) {
+                window.speechSynthesis.pause();
+                setIsPaused(true);
                 return;
             }
+            // Same list currently paused → resume
+            if (isPlayingAll && playingAllKeyRef.current === key && isPaused) {
+                window.speechSynthesis.resume();
+                setIsPaused(false);
+                return;
+            }
+            // New list → cancel current and start
             cancelledRef.current = true;
             window.speechSynthesis.cancel();
+            setIsPaused(false);
             playingAllKeyRef.current = key;
             setIsPlayingAll(true);
             chainPlay(items, 0);
         },
-        [supported, isPlayingAll, stop, chainPlay]
+        [supported, isPlayingAll, isPaused, chainPlay]
     );
 
     if (!supported) return NOOP_PLAYER;
 
-    return { supported: true, isPlaying, isPlayingAll, playingId, play, stop, playAll };
+    return { supported: true, isPlaying, isPaused, isPlayingAll, playingId, play, stop, playAll };
 }
