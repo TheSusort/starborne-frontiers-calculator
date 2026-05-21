@@ -12,6 +12,7 @@ import { Ship } from '../../types/ship';
 import { ShipSelector } from '../../components/ship/ShipSelector';
 import { SelectedGameBuff } from '../../types/calculator';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
+import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 
 // Mode 1: Calculate final speed from base speed and total modifier
 const calculateFinalSpeed = (baseSpeed: number, totalModifier: number): number => {
@@ -113,6 +114,8 @@ const SpeedCalculatorPage: React.FC = () => {
         );
         setSelectedShip(ship);
         setBaseSpeed(Math.round(statsBreakdown.final.speed));
+        const { selfBuffs } = buildSkillBuffAutoFill(ship);
+        setForwardBuffs((prev) => mergeAutoFill(prev, selfBuffs));
     };
 
     const tabs = [
