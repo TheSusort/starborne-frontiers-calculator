@@ -167,3 +167,20 @@ export function parseSkillHeal(text: string): number {
 export function detectFullyCharged(texts: (string | undefined)[]): boolean {
     return texts.some((t) => t?.toLowerCase().includes('fully charged') ?? false);
 }
+
+export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passive3';
+
+export interface SkillEffect {
+    buffName: string;
+    target: 'self' | 'enemy';
+    duration: number | 'recurring' | null;
+    stacks?: number;
+    source: SkillSource;
+}
+
+export function parseSkillEffects(
+    _skillText: string | null | undefined,
+    _source: SkillSource
+): SkillEffect[] {
+    return [];
+}
