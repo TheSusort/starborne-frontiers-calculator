@@ -11,6 +11,7 @@ import {
     SelectedGameBuff,
 } from '../../types/calculator';
 import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
+import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import {
@@ -292,6 +293,7 @@ const DPSCalculatorPage: React.FC = () => {
         );
         const final = statsBreakdown.final;
         const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+        const { selfBuffs, enemyDebuffs } = buildSkillBuffAutoFill(ship);
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
@@ -315,9 +317,11 @@ const DPSCalculatorPage: React.FC = () => {
                     ]),
                     autoFilledFields,
                     affinity: ship.affinity,
+                    buffs: mergeAutoFill(c.buffs, selfBuffs),
                 };
             })
         );
+        setEnemyBuffs((prev) => mergeAutoFill(prev, enemyDebuffs));
     };
 
     const addDoTEntry = (configId: string, dotField: 'activeDoTs' | 'chargedDoTs') => {
