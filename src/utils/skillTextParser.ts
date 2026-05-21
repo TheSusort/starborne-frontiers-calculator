@@ -178,9 +178,144 @@ export interface SkillEffect {
     source: SkillSource;
 }
 
+const APPLICATION_VERBS = new Set(['grants', 'gains', 'inflicts', 'applies']);
+const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists']);
+const DURATION_RE = /for\s+(\d+)\s+turns?/i;
+const RECURRING_RE = /every\s+turn/i;
+// Matches "N stacks of" at the END of a text segment (immediately before the tag)
+const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
+// Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or ")
+const CONNECTOR_RE = /^\s*(,\s*)?(and|or)?\s*$/i;
+const MAX_SCAN_CHARS = 120;
+
+/**
+ * Scans forward from startIndex through connector-only text segments and non-text segments,
+ * looking for a shared "for N turns" or "every turn" that applies to all preceding tags.
+ * Stops at a sentence boundary or any non-connector, non-tag text.
+ */
+function findSharedDuration(
+    segments: SkillTextSegment[],
+    startIndex: number
+): number | 'recurring' | null {
+    for (let j = startIndex; j < segments.length; j++) {
+        const s = segments[j];
+        if (s.type === 'unit-skill' || s.type === 'unit-damage' || s.type === 'unit-aid') continue;
+        if (s.type !== 'text') break;
+        if (/[.;]|<br\s*\/?>/i.test(s.text)) break;
+        const m = DURATION_RE.exec(s.text);
+        if (m) return parseInt(m[1], 10);
+        if (RECURRING_RE.test(s.text)) return 'recurring';
+        if (!CONNECTOR_RE.test(s.text)) break;
+    }
+    return null;
+}
+
+/**
+ * Scans backward through preceding text segments to find the nearest application verb,
+ * stopping at sentence boundaries (. ; <br>) or MAX_SCAN_CHARS.
+ * Returns the verb string, null if a skip verb was found first, or undefined if none found.
+ */
+function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null | undefined {
+    let accumulatedText = '';
+    let charCount = 0;
+
+    for (let i = tagIndex - 1; i >= 0; i--) {
+        const seg = segments[i];
+        if (seg.type !== 'text') continue; // non-text segments don't reset context
+
+        const text = seg.text;
+        // Find the last sentence boundary in this segment
+        const boundaryMatches = [...text.matchAll(/[.;]|<br\s*\/?>/gi)];
+        if (boundaryMatches.length > 0) {
+            const last = boundaryMatches[boundaryMatches.length - 1];
+            const afterBoundary = text.slice((last.index ?? 0) + last[0].length);
+            accumulatedText = afterBoundary + accumulatedText;
+            break;
+        }
+
+        charCount += text.length;
+        if (charCount > MAX_SCAN_CHARS) {
+            const take = text.length - (charCount - MAX_SCAN_CHARS);
+            accumulatedText = text.slice(text.length - take) + accumulatedText;
+            break;
+        }
+        accumulatedText = text + accumulatedText;
+    }
+
+    // Scan words right-to-left (closest to tag first)
+    const words = accumulatedText.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
+    for (let i = words.length - 1; i >= 0; i--) {
+        if (APPLICATION_VERBS.has(words[i])) return words[i];
+        if (SKIP_VERBS.has(words[i])) return null;
+    }
+    return undefined;
+}
+
+/**
+ * Maps a verb to a target side, cross-referencing BUFFS type for the ambiguous "applies" verb.
+ * "applies" with a buff-type effect → self; anything else → enemy.
+ */
+function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
+    if (verb === 'gains' || verb === 'grants') return 'self';
+    if (verb === 'inflicts') return 'enemy';
+    // applies: use BUFFS type to disambiguate
+    const found = BUFFS.find((b) => b.name === buffName);
+    return found?.type === 'buff' ? 'self' : 'enemy';
+}
+
 export function parseSkillEffects(
-    _skillText: string | null | undefined,
-    _source: SkillSource
+    skillText: string | null | undefined,
+    source: SkillSource
 ): SkillEffect[] {
-    return [];
+    if (!skillText) return [];
+
+    const segments = parseSkillText(skillText);
+    const effects: SkillEffect[] = [];
+
+    for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        if (seg.type !== 'unit-skill') continue;
+
+        const buffName = seg.text;
+
+        // Step 1: Find application verb
+        const verb = findVerb(segments, i);
+        if (verb === null || verb === undefined) continue; // skip verb or no verb
+
+        // Step 2: Target
+        const target = verbToTarget(verb, buffName);
+
+        // Step 3: Duration from immediately following text segment
+        const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
+        let duration: number | 'recurring' | null = null;
+        const durationMatch = DURATION_RE.exec(nextText);
+        if (durationMatch) {
+            duration = parseInt(durationMatch[1], 10);
+        } else if (RECURRING_RE.test(nextText)) {
+            duration = 'recurring';
+        } else {
+            // Shared duration: "inflicts X and Y for 2 turns" — X has no immediate duration,
+            // but scanning forward finds the duration that applies to the whole group.
+            duration = findSharedDuration(segments, i + 1);
+        }
+
+        // Step 4: Stack detection from immediately preceding text segment
+        const prevText = segments[i - 1]?.type === 'text' ? segments[i - 1].text : '';
+        const stackMatch = STACKS_RE.exec(prevText);
+        const stacks = stackMatch ? parseInt(stackMatch[1], 10) : undefined;
+        // Only use 'recurring' from stacks if no finite duration was found
+        if (stacks !== undefined && duration === null) {
+            duration = 'recurring';
+        }
+
+        effects.push({
+            buffName,
+            target,
+            duration,
+            ...(stacks !== undefined ? { stacks } : {}),
+            source,
+        });
+    }
+
+    return effects;
 }
