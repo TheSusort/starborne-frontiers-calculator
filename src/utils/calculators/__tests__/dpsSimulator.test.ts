@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
+import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
+
+function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
+    return { id, buffName: id, stacks: 1, parsedEffects: effects, isStackable: false };
+}
 
 describe('simulateDPS', () => {
     const baseInput = {
@@ -15,7 +20,8 @@ describe('simulateDPS', () => {
         enemyDefense: 0,
         enemyHp: 500000,
         rounds: 3,
-        buffs: [],
+        selfBuffs: [] as SelectedGameBuff[],
+        enemyDebuffs: [] as SelectedGameBuff[],
     };
 
     describe('active-only ship (no charged, no DoTs)', () => {
@@ -160,7 +166,7 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 attack: 10000,
                 activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 2 }],
-                buffs: [{ id: '1', stat: 'attack', value: 50 }],
+                selfBuffs: [makeAlwaysBuff('1', { attack: 50 })],
                 rounds: 1,
             });
             expect(withAtkBuff.rounds[0].infernoDamage).toBe(4500);
@@ -169,7 +175,7 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 attack: 10000,
                 activeDoTs: [{ id: '1', type: 'inferno', tier: 30, stacks: 1, duration: 2 }],
-                buffs: [{ id: '1', stat: 'outgoingDamage', value: 50 }],
+                selfBuffs: [makeAlwaysBuff('1', { outgoingDamage: 50 })],
                 rounds: 1,
             });
             expect(withOutgoingBuff.rounds[0].infernoDamage).toBe(3000);
@@ -212,7 +218,7 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 attack: 10000,
                 activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 1 }],
-                buffs: [{ id: '1', stat: 'attack', value: 50 }],
+                selfBuffs: [makeAlwaysBuff('1', { attack: 50 })],
                 rounds: 1,
             });
             // effectiveAttack = 10000 * 1.5 = 15000, bomb = 1 * 15000 = 15000
@@ -230,7 +236,7 @@ describe('simulateDPS', () => {
                 ...baseInput,
                 attack: 10000,
                 activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 1 }],
-                buffs: [{ id: '1', stat: 'outgoingDamage', value: 50 }],
+                selfBuffs: [makeAlwaysBuff('1', { outgoingDamage: 50 })],
                 rounds: 1,
             });
             expect(noBuff.rounds[0].bombDamage).toBe(withBuff.rounds[0].bombDamage);
@@ -343,8 +349,8 @@ describe('simulateDPS', () => {
         });
     });
 
-    describe('buff picker inputs', () => {
-        const base: typeof baseInput = {
+    describe('always-active buffs', () => {
+        const base = {
             attack: 1000,
             crit: 0,
             critDamage: 150,
@@ -357,23 +363,35 @@ describe('simulateDPS', () => {
             enemyDefense: 0,
             enemyHp: 10000,
             rounds: 1,
-            buffs: [],
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
         };
 
         it('defensePenetrationBuff adds to defensePenetration', () => {
-            const withPen = simulateDPS({ ...base, enemyDefense: 500, defensePenetrationBuff: 20 });
+            const withPen = simulateDPS({
+                ...base,
+                enemyDefense: 500,
+                selfBuffs: [makeAlwaysBuff('pen', { defensePenetration: 20 })],
+            });
             const noPen = simulateDPS({ ...base, enemyDefense: 500 });
             expect(withPen.summary.totalDamage).toBeGreaterThan(noPen.summary.totalDamage);
         });
 
         it('enemyDefenseModifier reduces enemy defense', () => {
-            const withMod = simulateDPS({ ...base, enemyDefense: 1000, enemyDefenseModifier: -30 });
+            const withMod = simulateDPS({
+                ...base,
+                enemyDefense: 1000,
+                enemyDebuffs: [makeAlwaysBuff('defdown', { defense: -30 })],
+            });
             const noMod = simulateDPS({ ...base, enemyDefense: 1000 });
             expect(withMod.summary.totalDamage).toBeGreaterThan(noMod.summary.totalDamage);
         });
 
         it('incomingDamageModifier multiplies direct damage', () => {
-            const withMod = simulateDPS({ ...base, incomingDamageModifier: 30 });
+            const withMod = simulateDPS({
+                ...base,
+                enemyDebuffs: [makeAlwaysBuff('incdmg', { incomingDamage: 30 })],
+            });
             const noMod = simulateDPS({ ...base });
             expect(withMod.summary.totalDamage).toBeCloseTo(noMod.summary.totalDamage * 1.3, -1);
         });
@@ -385,7 +403,10 @@ describe('simulateDPS', () => {
                     { id: '1', type: 'corrosion' as const, stacks: 1, tier: 10, duration: 2 },
                 ],
             };
-            const withMod = simulateDPS({ ...dotBase, dotDamageModifier: 50 });
+            const withMod = simulateDPS({
+                ...dotBase,
+                selfBuffs: [makeAlwaysBuff('dotup', { dotDamage: 50 })],
+            });
             const noMod = simulateDPS({ ...dotBase });
             expect(withMod.summary.totalCorrosionDamage).toBeGreaterThan(
                 noMod.summary.totalCorrosionDamage
@@ -398,7 +419,10 @@ describe('simulateDPS', () => {
                     { id: '1', type: 'inferno' as const, stacks: 1, tier: 30, duration: 2 },
                 ],
             };
-            const withMod = simulateDPS({ ...dotBase, dotDamageModifier: 50 });
+            const withMod = simulateDPS({
+                ...dotBase,
+                selfBuffs: [makeAlwaysBuff('dotup', { dotDamage: 50 })],
+            });
             const noMod = simulateDPS({ ...dotBase });
             expect(withMod.summary.totalInfernoDamage).toBeGreaterThan(
                 noMod.summary.totalInfernoDamage
@@ -420,7 +444,8 @@ describe('simulateDPS', () => {
             enemyDefense: 0,
             enemyHp: 500000,
             rounds: 3,
-            buffs: [],
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
         };
 
         it('advantage multiplies all damage by 1.25', () => {
@@ -465,7 +490,8 @@ describe('simulateDPS', () => {
                 enemyDefense: 0,
                 enemyHp: 500000,
                 rounds: 5,
-                buffs: [],
+                selfBuffs: [],
+                enemyDebuffs: [],
                 startCharged: true,
             });
             expect(result.rounds[0].action).toBe('charged');
@@ -485,7 +511,8 @@ describe('simulateDPS', () => {
                 enemyDefense: 0,
                 enemyHp: 500000,
                 rounds: 5,
-                buffs: [],
+                selfBuffs: [],
+                enemyDebuffs: [],
                 startCharged: false,
             });
             expect(result.rounds[0].action).toBe('active');
@@ -505,7 +532,8 @@ describe('simulateDPS', () => {
                 enemyDefense: 0,
                 enemyHp: 500000,
                 rounds: 5,
-                buffs: [],
+                selfBuffs: [],
+                enemyDebuffs: [],
             });
             expect(result.rounds[0].action).toBe('active');
         });

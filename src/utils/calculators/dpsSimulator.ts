@@ -1,5 +1,6 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
-import { Buff, DoTApplicationConfig } from '../../types/calculator';
+import { Buff, DoTApplicationConfig, SelectedGameBuff } from '../../types/calculator';
+import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from './dpsBuffHelpers';
 
 export interface DPSSimulationInput {
     attack: number;
@@ -14,13 +15,9 @@ export interface DPSSimulationInput {
     enemyDefense: number;
     enemyHp: number;
     rounds: number;
-    buffs: Buff[];
+    selfBuffs: SelectedGameBuff[];
+    enemyDebuffs: SelectedGameBuff[];
     startCharged?: boolean;
-    defensePenetrationBuff?: number;
-    dotDamageModifier?: number;
-    /** Percentage modifier on enemy base defense. Negative values reduce defense (e.g. -30 → ×0.70). */
-    enemyDefenseModifier?: number;
-    incomingDamageModifier?: number;
     /** Percentage additive modifier from affinity (e.g. 25, -25, 0). Applied to all damage types. */
     affinityDamageModifier?: number;
     /** Hard ceiling on effective crit rate from affinity matchup (75 for disadvantage, 100 otherwise). */
@@ -115,19 +112,19 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyDefense,
         enemyHp,
         rounds: numRounds,
-        buffs,
+        selfBuffs,
+        enemyDebuffs,
     } = input;
-    const {
-        defensePenetrationBuff = 0,
-        dotDamageModifier = 0,
-        enemyDefenseModifier = 0,
-        incomingDamageModifier = 0,
-        affinityDamageModifier = 0,
-        affinityCritCap = 100,
-        affinityCritPenalty = 0,
-    } = input;
+    const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
-    const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(buffs);
+    const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
+        selfBuffs,
+        enemyDebuffs
+    );
+    const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyDebuffs);
+    const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(
+        toSimBuffs(selfBuffs)
+    );
 
     const effectiveAttack = attack * (1 + attackBuff / 100);
     const effectiveCrit = Math.min(
@@ -135,7 +132,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         Math.max(0, crit + critBuff - affinityCritPenalty)
     );
     const effectiveCritDamage = critDamage + critDamageBuff;
-
     const critMultiplier = calculateCritMultiplier({
         attack: effectiveAttack,
         crit: effectiveCrit,
@@ -147,7 +143,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         speed: 0,
         healModifier: 0,
     });
-
     const effectivePen = defensePenetration + defensePenetrationBuff;
     const effectiveDefense =
         enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);

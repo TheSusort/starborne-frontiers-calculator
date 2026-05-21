@@ -14,11 +14,6 @@ import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParse
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-import {
-    toSimBuffs,
-    toEnemyModifiers,
-    toDotAndPenModifiers,
-} from '../../utils/calculators/dpsBuffHelpers';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -190,15 +185,9 @@ const DPSCalculatorPage: React.FC = () => {
     );
 
     const simResults = useMemo(() => {
-        const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyBuffs);
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
             const allAttackerBuffs = [...attackerBuffs, ...config.buffs];
-            const simBuffs = toSimBuffs(allAttackerBuffs);
-            const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
-                allAttackerBuffs,
-                enemyBuffs
-            );
             const { damageModifier, critCap, critPenalty } = computeAffinityModifiers(
                 config.affinity,
                 enemyAffinity
@@ -218,12 +207,9 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyDefense,
                     enemyHp,
                     rounds,
-                    buffs: simBuffs,
+                    selfBuffs: allAttackerBuffs,
+                    enemyDebuffs: enemyBuffs,
                     startCharged: config.startCharged,
-                    defensePenetrationBuff,
-                    dotDamageModifier,
-                    enemyDefenseModifier,
-                    incomingDamageModifier,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
