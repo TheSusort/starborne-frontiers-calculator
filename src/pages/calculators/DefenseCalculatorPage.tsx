@@ -17,6 +17,7 @@ import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Ship } from '../../types/ship';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
+import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 
 const DefenseCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -145,6 +146,7 @@ const DefenseCalculatorPage: React.FC = () => {
         const hp = Math.round(final.hp);
         const defense = Math.round(final.defence);
         const security = Math.round(final.security ?? 0);
+        const { selfBuffs } = buildSkillBuffAutoFill(ship);
         setConfigs((prev) =>
             prev.map((c) =>
                 c.id === configId
@@ -157,6 +159,7 @@ const DefenseCalculatorPage: React.FC = () => {
                           security,
                           damageReduction: calculateDamageReduction(defense),
                           effectiveHP: calculateEffectiveHP(hp, defense),
+                          buffs: mergeAutoFill(c.buffs, selfBuffs),
                       }
                     : c
             )
