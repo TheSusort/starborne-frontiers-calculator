@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.62.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Added audio reader to the Lore page — play individual ship bios and world lore articles via text-to-speech, or use Play All to listen through the entire list hands-free.',
     'Calculators now auto-fill buff and debuff pickers based on the selected ship\'s skill text — buffs granted by the ship appear pre-populated with a "skill" badge and can be removed manually.',
+    'DPS Calculator: buffs and debuffs now only apply during the rounds they are actually active. Hover any round on the damage chart to see which buffs and debuffs are active and how many turns remain.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

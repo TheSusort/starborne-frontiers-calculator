@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import {
     BaseChart,
@@ -9,6 +9,7 @@ import {
 } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
+import { DPSBuffPanel } from './DPSBuffPanel';
 
 interface ShipSimResult {
     id: string;
@@ -82,6 +83,13 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
 
 export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, height = 400 }) => {
     const colors = useThemeColors();
+    const [hoveredRound, setHoveredRound] = useState<number | null>(null);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleMouseMove = (data: any) => {
+        if (data?.activeLabel != null) setHoveredRound(Number(data.activeLabel));
+    };
+    const handleMouseLeave = () => setHoveredRound(null);
 
     if (ships.length === 0) return null;
 
@@ -98,59 +106,75 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
     const shipMap = new Map(ships.map((s) => [s.id, s]));
 
     return (
-        <>
-            <BaseChart height={height}>
-                <LineChart data={chartData} margin={LINE_CHART_MARGIN}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
-                    <XAxis
-                        dataKey="round"
-                        label={{
-                            value: 'Round',
-                            position: 'insideBottom',
-                            offset: -10,
-                            fill: colors.text,
-                        }}
-                        tick={{ fill: colors.text }}
-                    />
-                    <YAxis
-                        tickFormatter={(v) =>
-                            v >= 1000000
-                                ? `${(v / 1000000).toFixed(1)}M`
-                                : v >= 1000
-                                  ? `${(v / 1000).toFixed(0)}k`
-                                  : v.toString()
-                        }
-                        label={{
-                            value: 'Cumulative Damage',
-                            angle: -90,
-                            position: 'insideLeft',
-                            offset: 10,
-                            fill: colors.text,
-                        }}
-                        tick={{ fill: colors.text }}
-                    />
-                    <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
-                    {ships.map((ship, i) => {
-                        const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
-                        return (
-                            <Line
-                                key={ship.id}
-                                type="monotone"
-                                dataKey={ship.id}
-                                name={ship.name}
-                                stroke={color}
-                                {...chartLineDefaults(color)}
-                            />
-                        );
-                    })}
-                </LineChart>
-            </BaseChart>
-            <ChartLegend
-                items={ships.map((ship, i) => ({
-                    label: ship.name,
-                    color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+        <div className="flex gap-4 items-start">
+            <div className="flex-1 min-w-0">
+                <BaseChart height={height}>
+                    <LineChart
+                        data={chartData}
+                        margin={LINE_CHART_MARGIN}
+                        onMouseMove={handleMouseMove}
+                        onMouseLeave={handleMouseLeave}
+                    >
+                        <CartesianGrid strokeDasharray="3 3" stroke={colors.gridStroke} />
+                        <XAxis
+                            dataKey="round"
+                            label={{
+                                value: 'Round',
+                                position: 'insideBottom',
+                                offset: -10,
+                                fill: colors.text,
+                            }}
+                            tick={{ fill: colors.text }}
+                        />
+                        <YAxis
+                            tickFormatter={(v) =>
+                                v >= 1000000
+                                    ? `${(v / 1000000).toFixed(1)}M`
+                                    : v >= 1000
+                                      ? `${(v / 1000).toFixed(0)}k`
+                                      : v.toString()
+                            }
+                            label={{
+                                value: 'Cumulative Damage',
+                                angle: -90,
+                                position: 'insideLeft',
+                                offset: 10,
+                                fill: colors.text,
+                            }}
+                            tick={{ fill: colors.text }}
+                        />
+                        <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
+                        {ships.map((ship, i) => {
+                            const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                            return (
+                                <Line
+                                    key={ship.id}
+                                    type="monotone"
+                                    dataKey={ship.id}
+                                    name={ship.name}
+                                    stroke={color}
+                                    {...chartLineDefaults(color)}
+                                />
+                            );
+                        })}
+                    </LineChart>
+                </BaseChart>
+                <ChartLegend
+                    items={ships.map((ship, i) => ({
+                        label: ship.name,
+                        color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                    }))}
+                />
+            </div>
+            <DPSBuffPanel
+                ships={ships.map((s) => ({
+                    name: s.name,
+                    roundData:
+                        hoveredRound != null ? (s.result.rounds[hoveredRound - 1] ?? null) : null,
                 }))}
+                totalRounds={rounds}
+                hoveredRound={hoveredRound}
             />
-        </>
+        </div>
     );
 };
