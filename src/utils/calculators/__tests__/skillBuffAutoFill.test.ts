@@ -3,8 +3,6 @@ import { buildSkillBuffAutoFill, mergeAutoFill } from '../skillBuffAutoFill';
 import { SelectedGameBuff } from '../../../types/calculator';
 import type { Ship } from '../../../types/ship';
 
-type SelectedGameBuffWithAutoFill = SelectedGameBuff & { autoFilled?: boolean };
-
 describe('buildSkillBuffAutoFill', () => {
     it('returns empty arrays for a ship with no tagged skill text', () => {
         const ship = {} as Ship;
@@ -21,7 +19,7 @@ describe('buildSkillBuffAutoFill', () => {
         // 'Attack Up III' must be in BUFFS for this to produce a result
         expect(result.selfBuffs.length).toBeGreaterThanOrEqual(0);
         if (result.selfBuffs.length > 0) {
-            const buff = result.selfBuffs[0] as SelectedGameBuffWithAutoFill;
+            const buff = result.selfBuffs[0];
             expect(buff.buffName).toBe('Attack Up III');
             expect(buff.autoFilled).toBe(true);
             expect(buff.id).toBe('Attack Up III');
@@ -35,7 +33,7 @@ describe('buildSkillBuffAutoFill', () => {
         } as unknown as Ship;
         const result = buildSkillBuffAutoFill(ship);
         if (result.enemyDebuffs.length > 0) {
-            const buff = result.enemyDebuffs[0] as SelectedGameBuffWithAutoFill;
+            const buff = result.enemyDebuffs[0];
             expect(buff.buffName).toBe('Defense Down II');
             expect(buff.autoFilled).toBe(true);
         }
@@ -63,7 +61,7 @@ describe('buildSkillBuffAutoFill', () => {
 });
 
 describe('mergeAutoFill', () => {
-    const makeEntry = (buffName: string, autoFilled = false): SelectedGameBuffWithAutoFill => ({
+    const makeEntry = (buffName: string, autoFilled = false): SelectedGameBuff => ({
         id: buffName,
         buffName,
         stacks: 1,
@@ -85,7 +83,7 @@ describe('mergeAutoFill', () => {
         const result = mergeAutoFill(existing, autoFilled);
         expect(result).toHaveLength(1);
         // Existing (manual) entry is kept, not the auto-filled one
-        expect((result[0] as SelectedGameBuffWithAutoFill).autoFilled).toBeFalsy();
+        expect(result[0].autoFilled).toBeFalsy();
     });
 
     it('returns existing unchanged when autoFilled is empty', () => {

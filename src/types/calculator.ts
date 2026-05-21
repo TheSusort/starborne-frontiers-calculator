@@ -51,6 +51,7 @@ export interface SelectedGameBuff {
     parsedEffects: ParsedBuffEffects; // effects for 1 stack
     isStackable: boolean;
     maxStacks?: number; // e.g. 10 for "up to 10 times"
+    autoFilled?: boolean; // true when populated from skill text parsing
 }
 
 export interface DPSShipConfig {

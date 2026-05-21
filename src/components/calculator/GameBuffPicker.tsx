@@ -249,9 +249,16 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                 className="card flex items-center gap-2 px-2 py-1"
                             >
                                 <div className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">
-                                        {selected.buffName}
-                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="block truncate text-sm font-medium">
+                                            {selected.buffName}
+                                        </span>
+                                        {selected.autoFilled && (
+                                            <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium bg-primary/20 text-primary border border-primary/30">
+                                                skill
+                                            </span>
+                                        )}
+                                    </div>
                                     <span className="text-xs text-theme-text-secondary">
                                         {summary}
                                     </span>

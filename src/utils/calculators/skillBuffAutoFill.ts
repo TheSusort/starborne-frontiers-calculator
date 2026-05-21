@@ -38,7 +38,7 @@ function toSelectedBuffs(effects: SkillEffect[]): SelectedGameBuff[] {
             isStackable: stackInfo.stackable,
             maxStacks: stackInfo.maxStacks,
             autoFilled: true,
-        } as SelectedGameBuff & { autoFilled: boolean });
+        });
     }
 
     return result;
