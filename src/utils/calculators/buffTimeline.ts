@@ -1,5 +1,3 @@
-import { SelectedGameBuff } from '../../types/calculator';
-
 export interface ActiveBuff {
     buffName: string;
     turnsRemaining: number | 'recurring';
@@ -30,6 +28,3 @@ export function computeChargeSchedule(
     }
     return chargedRounds;
 }
-
-// SelectedGameBuff will be used by computeBuffTimeline (Task 2)
-export type { SelectedGameBuff };
