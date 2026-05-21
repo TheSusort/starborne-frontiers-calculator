@@ -125,11 +125,14 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyDebuffs
     );
 
-    // Pre-compute per-round timeline
+    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
+
+    // Pre-compute per-round timeline — pass 0 charges when charged skill never fires
+    // to keep the buff timeline consistent with the damage simulation
     const timeline = computeBuffTimeline(
         selfBuffs,
         enemyDebuffs,
-        chargeCount,
+        hasChargedSkill ? chargeCount : 0,
         input.startCharged ?? false,
         numRounds
     );
@@ -140,8 +143,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         const existing = buffLookup.get(b.buffName) ?? [];
         buffLookup.set(b.buffName, [...existing, b]);
     }
-
-    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
 
     let charges = input.startCharged ? input.chargeCount : 0;
     let cumulativeDamage = 0;

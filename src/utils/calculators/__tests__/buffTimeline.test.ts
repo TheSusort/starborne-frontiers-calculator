@@ -165,4 +165,15 @@ describe('computeBuffTimeline', () => {
         const result = computeBuffTimeline([buff], [], 2, true, 1);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 1 }]);
     });
+
+    it('deduplicates always-active buffs with the same buffName', () => {
+        const buff1 = makeBuff('Overload');
+        const buff2 = makeBuff('Overload'); // same name, different instance
+        const result = computeBuffTimeline([buff1, buff2], [], 2, false, 2);
+        expect(result[0].activeSelfBuffs).toHaveLength(1);
+        expect(result[0].activeSelfBuffs[0]).toEqual({
+            buffName: 'Overload',
+            turnsRemaining: 'recurring',
+        });
+    });
 });

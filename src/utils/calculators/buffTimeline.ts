@@ -113,23 +113,25 @@ export function computeBuffTimeline(
         applyBuffs(timedEnemy, enemyMap);
 
         // Step 4: Snapshot — always-active buffs injected as 'recurring'
+        // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects
+        const selfAlwaysSnap = [...new Map(alwaysSelf.map((b) => [b.buffName, b])).values()].map(
+            (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
+        );
+        const enemyAlwaysSnap = [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map(
+            (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
+        );
+
         entries.push({
             round: r,
             activeSelfBuffs: [
-                ...alwaysSelf.map((b) => ({
-                    buffName: b.buffName,
-                    turnsRemaining: 'recurring' as const,
-                })),
+                ...selfAlwaysSnap,
                 ...[...selfMap.values()].map((s) => ({
                     buffName: s.buffName,
                     turnsRemaining: s.turnsRemaining,
                 })),
             ],
             activeEnemyDebuffs: [
-                ...alwaysEnemy.map((b) => ({
-                    buffName: b.buffName,
-                    turnsRemaining: 'recurring' as const,
-                })),
+                ...enemyAlwaysSnap,
                 ...[...enemyMap.values()].map((s) => ({
                     buffName: s.buffName,
                     turnsRemaining: s.turnsRemaining,
