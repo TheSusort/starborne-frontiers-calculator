@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.62.0';
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
     'Added audio reader to the Lore page — play individual ship bios and world lore articles via text-to-speech, or use Play All to listen through the entire list hands-free.',
+    'Calculators now auto-fill buff and debuff pickers based on the selected ship\'s skill text — buffs granted by the ship appear pre-populated with a "skill" badge and can be removed manually.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
