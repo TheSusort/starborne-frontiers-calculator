@@ -4,7 +4,9 @@ import {
     parseSkillHeal,
     detectFullyCharged,
     parseSkillEffects,
+    parseAllSkillEffects,
 } from '../skillTextParser';
+import type { Ship } from '../../types/ship';
 
 describe('parseSkillDamage', () => {
     it('returns 0 for empty string', () => {
@@ -300,5 +302,27 @@ describe('parseSkillEffects', () => {
                 'passive1'
             )
         ).toEqual([]);
+    });
+});
+
+describe('parseAllSkillEffects', () => {
+    it('returns [] for a ship with no skill text', () => {
+        const ship = { activeSkillText: undefined, chargeSkillText: undefined } as unknown as Ship;
+        expect(parseAllSkillEffects(ship)).toEqual([]);
+    });
+
+    it('combines effects from all five skill fields with correct source labels', () => {
+        const ship = {
+            activeSkillText:
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns',
+            chargeSkillText: 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn',
+            firstPassiveSkillText: undefined,
+            secondPassiveSkillText: undefined,
+            thirdPassiveSkillText: undefined,
+        } as unknown as Ship;
+        const result = parseAllSkillEffects(ship);
+        expect(result).toHaveLength(2);
+        expect(result.find((e) => e.source === 'active')?.buffName).toBe('Defense Down II');
+        expect(result.find((e) => e.source === 'charge')?.buffName).toBe('Attack Up III');
     });
 });

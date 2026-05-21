@@ -1,4 +1,5 @@
 import { BUFFS } from '../constants/buffs';
+import { Ship } from '../types/ship';
 
 /**
  * Represents a parsed segment of skill text
@@ -318,4 +319,14 @@ export function parseSkillEffects(
     }
 
     return effects;
+}
+
+export function parseAllSkillEffects(ship: Ship): SkillEffect[] {
+    return [
+        ...parseSkillEffects(ship.activeSkillText, 'active'),
+        ...parseSkillEffects(ship.chargeSkillText, 'charge'),
+        ...parseSkillEffects(ship.firstPassiveSkillText, 'passive1'),
+        ...parseSkillEffects(ship.secondPassiveSkillText, 'passive2'),
+        ...parseSkillEffects(ship.thirdPassiveSkillText, 'passive3'),
+    ];
 }
