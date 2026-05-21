@@ -1,6 +1,7 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
 import { Buff, DoTApplicationConfig, SelectedGameBuff } from '../../types/calculator';
 import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from './dpsBuffHelpers';
+import { ActiveBuff, computeBuffTimeline } from './buffTimeline';
 
 export interface DPSSimulationInput {
     attack: number;
@@ -39,6 +40,8 @@ export interface RoundData {
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
+    activeSelfBuffs: ActiveBuff[];
+    activeEnemyDebuffs: ActiveBuff[];
 }
 
 export interface DPSSimulationSummary {
@@ -121,32 +124,22 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         selfBuffs,
         enemyDebuffs
     );
-    const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyDebuffs);
-    const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(
-        toSimBuffs(selfBuffs)
+
+    // Pre-compute per-round timeline
+    const timeline = computeBuffTimeline(
+        selfBuffs,
+        enemyDebuffs,
+        chargeCount,
+        input.startCharged ?? false,
+        numRounds
     );
 
-    const effectiveAttack = attack * (1 + attackBuff / 100);
-    const effectiveCrit = Math.min(
-        affinityCritCap,
-        Math.max(0, crit + critBuff - affinityCritPenalty)
-    );
-    const effectiveCritDamage = critDamage + critDamageBuff;
-    const critMultiplier = calculateCritMultiplier({
-        attack: effectiveAttack,
-        crit: effectiveCrit,
-        critDamage: effectiveCritDamage,
-        hp: 0,
-        defence: 0,
-        hacking: 0,
-        security: 0,
-        speed: 0,
-        healModifier: 0,
-    });
-    const effectivePen = defensePenetration + defensePenetrationBuff;
-    const effectiveDefense =
-        enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
-    const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
+    // Build lookup: buffName → SelectedGameBuff[] (array handles rare duplicate buffName with different stacks counts)
+    const buffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of [...selfBuffs, ...enemyDebuffs]) {
+        const existing = buffLookup.get(b.buffName) ?? [];
+        buffLookup.set(b.buffName, [...existing, b]);
+    }
 
     const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
 
@@ -181,6 +174,45 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                 charges += 1;
             }
         }
+
+        // Per-round buff totals from timeline
+        const entry = timeline[r - 1];
+
+        const roundSelfBuffs = entry.activeSelfBuffs.flatMap(
+            (ab) => buffLookup.get(ab.buffName) ?? []
+        );
+        const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(
+            toSimBuffs(roundSelfBuffs)
+        );
+
+        const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap(
+            (ab) => buffLookup.get(ab.buffName) ?? []
+        );
+        const { enemyDefenseModifier, incomingDamageModifier } =
+            toEnemyModifiers(roundEnemyDebuffs);
+
+        const effectiveAttack = attack * (1 + attackBuff / 100);
+        const effectiveCrit = Math.min(
+            affinityCritCap,
+            Math.max(0, crit + critBuff - affinityCritPenalty)
+        );
+        const effectiveCritDamage = critDamage + critDamageBuff;
+        const critMultiplier = calculateCritMultiplier({
+            attack: effectiveAttack,
+            crit: effectiveCrit,
+            critDamage: effectiveCritDamage,
+            hp: 0,
+            defence: 0,
+            hacking: 0,
+            security: 0,
+            speed: 0,
+            healModifier: 0,
+        });
+        const effectivePen = defensePenetration + defensePenetrationBuff;
+        const effectiveDefense =
+            enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
+        const damageReduction =
+            effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 
         // Step 1: Calculate direct damage
         const dotMult = 1 + dotDamageModifier / 100;
@@ -261,6 +293,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
+            activeSelfBuffs: entry.activeSelfBuffs,
+            activeEnemyDebuffs: entry.activeEnemyDebuffs,
         });
     }
 

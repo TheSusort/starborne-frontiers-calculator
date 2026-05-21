@@ -475,6 +475,97 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('per-round buff accuracy', () => {
+        // chargeCount=2, startCharged=false → charged fires on rounds 3, 6, 9…
+        // (active r1, active r2, charged r3, active r4, active r5, charged r6, …)
+        const chargeBuffBase = {
+            attack: 10000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            activeMultiplier: 100,
+            chargedMultiplier: 200,
+            chargeCount: 2,
+            activeDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
+            chargedDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
+            enemyDefense: 0,
+            enemyHp: 10000,
+            rounds: 6,
+            enemyDebuffs: [] as SelectedGameBuff[],
+            startCharged: false as const,
+        };
+
+        it('charge buff only fires on charge rounds', () => {
+            // Buff applies on 'charge', duration 2 → active during rounds 3, 4 (then expires)
+            // attackBuff of 100 doubles effectiveAttack when active
+            const chargeBuff: SelectedGameBuff = {
+                id: 'cb1',
+                buffName: 'Power Surge',
+                stacks: 1,
+                parsedEffects: { attack: 100 },
+                isStackable: false,
+                skillSource: 'charge',
+                skillDuration: 2,
+            };
+            const result = simulateDPS({
+                ...chargeBuffBase,
+                selfBuffs: [chargeBuff],
+            });
+
+            // Rounds 1, 2: no charge buff → lower direct damage
+            const dmgR1 = result.rounds[0].directDamage;
+            const dmgR2 = result.rounds[1].directDamage;
+            // Rounds 3, 4: buff active (attack doubled) → higher direct damage
+            const dmgR3 = result.rounds[2].directDamage;
+            const dmgR4 = result.rounds[3].directDamage;
+            // Round 5: buff expired → lower again
+            const dmgR5 = result.rounds[4].directDamage;
+
+            expect(dmgR1).toBeLessThan(dmgR3);
+            expect(dmgR2).toBeLessThan(dmgR3);
+            // Rounds 3 and 4 should have higher damage (buff active)
+            expect(dmgR3).toBeGreaterThan(dmgR1);
+            expect(dmgR4).toBeGreaterThan(dmgR1);
+            // Round 5: buff expired, back to base active-skill damage
+            expect(dmgR5).toBe(dmgR1);
+        });
+
+        it('RoundData.activeSelfBuffs reflects timeline', () => {
+            const chargeBuff: SelectedGameBuff = {
+                id: 'cb1',
+                buffName: 'Power Surge',
+                stacks: 1,
+                parsedEffects: { attack: 100 },
+                isStackable: false,
+                skillSource: 'charge',
+                skillDuration: 2,
+            };
+            const result = simulateDPS({
+                ...chargeBuffBase,
+                selfBuffs: [chargeBuff],
+            });
+
+            // Round 1 (index 0): no charge buff yet
+            expect(result.rounds[0].activeSelfBuffs).toHaveLength(0);
+            // Round 3 (index 2): charge fires → buff is active
+            const round3Buffs = result.rounds[2].activeSelfBuffs;
+            expect(round3Buffs.some((ab) => ab.buffName === 'Power Surge')).toBe(true);
+        });
+
+        it('always-active buff present every round', () => {
+            const alwaysBuff = makeAlwaysBuff('always1', { attack: 10 });
+            const result = simulateDPS({
+                ...chargeBuffBase,
+                selfBuffs: [alwaysBuff],
+            });
+
+            // Every round should have the always-active buff in activeSelfBuffs
+            for (const round of result.rounds) {
+                expect(round.activeSelfBuffs.some((ab) => ab.buffName === 'always1')).toBe(true);
+            }
+        });
+    });
+
     describe('startCharged', () => {
         it('fires charged skill on round 1 when startCharged is true', () => {
             const result = simulateDPS({
