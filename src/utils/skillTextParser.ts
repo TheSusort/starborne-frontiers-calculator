@@ -180,7 +180,7 @@ export interface SkillEffect {
 }
 
 const APPLICATION_VERBS = new Set(['grants', 'gains', 'inflicts', 'applies']);
-const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists']);
+const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
 const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)

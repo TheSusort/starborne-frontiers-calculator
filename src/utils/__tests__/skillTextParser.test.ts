@@ -303,6 +303,12 @@ describe('parseSkillEffects', () => {
             )
         ).toEqual([]);
     });
+
+    it('skips tags preceded by when', () => {
+        expect(
+            parseSkillEffects('When this Unit has <unit-skill>Blast</unit-skill>', 'passive1')
+        ).toEqual([]);
+    });
 });
 
 describe('parseAllSkillEffects', () => {
