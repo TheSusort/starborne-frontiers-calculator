@@ -565,19 +565,22 @@ describe('simulateDPS', () => {
                 sourceChargeCount: 2,
                 sourceStartCharged: false,
             };
-            const result = simulateDPS({
+            const base = {
                 ...chargeBuffBase,
                 selfBuffs: [] as SelectedGameBuff[],
                 enemyDefense: 1000,
-                enemyDebuffs: [chargeScopeDebuff],
-            });
-            // Round 3 (index 2): debuff fires → higher damage than round 1
-            expect(result.rounds[2].directDamage).toBeGreaterThan(result.rounds[0].directDamage);
+            };
+            const withDebuff = simulateDPS({ ...base, enemyDebuffs: [chargeScopeDebuff] });
+            const withoutDebuff = simulateDPS({ ...base, enemyDebuffs: [] });
+            // Round 3 (index 2) is a charged round in both cases; debuff reduces enemy defense → more damage
+            expect(withDebuff.rounds[2].directDamage).toBeGreaterThan(
+                withoutDebuff.rounds[2].directDamage
+            );
             // RoundData reflects the debuff on round 3, not on round 1
             expect(
-                result.rounds[2].activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce')
+                withDebuff.rounds[2].activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce')
             ).toBe(true);
-            expect(result.rounds[0].activeEnemyDebuffs).toHaveLength(0);
+            expect(withDebuff.rounds[0].activeEnemyDebuffs).toHaveLength(0);
         });
 
         it('always-active buff present every round', () => {

@@ -85,9 +85,8 @@ export function mergeAutoFill(
     existing: SelectedGameBuff[],
     autoFilled: SelectedGameBuff[]
 ): SelectedGameBuff[] {
-    const incomingNames = new Set(autoFilled.map((b) => b.buffName));
-    // Remove stale auto-filled entries that are being replaced by the new set
-    const kept = existing.filter((b) => !b.autoFilled || !incomingNames.has(b.buffName));
+    // Remove ALL stale auto-filled entries; keep only manual ones
+    const kept = existing.filter((b) => !b.autoFilled);
     // Append new auto-filled entries that aren't already present (manual entries take precedence)
     const keptNames = new Set(kept.map((b) => b.buffName));
     return [...kept, ...autoFilled.filter((b) => !keptNames.has(b.buffName))];

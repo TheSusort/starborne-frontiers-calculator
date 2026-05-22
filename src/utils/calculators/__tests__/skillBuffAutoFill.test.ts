@@ -96,6 +96,16 @@ describe('mergeAutoFill', () => {
         expect(result.some((b) => b.buffName === 'Attack Up III')).toBe(true);
     });
 
+    it('removes stale auto-fills when the new ship has a completely different buff', () => {
+        const staleAuto = makeEntry('Old Buff', true); // auto-filled by old ship
+        const manual = makeEntry('Attack Up III'); // manually added
+        const result = mergeAutoFill([staleAuto, manual], [makeEntry('New Buff', true)]);
+        expect(result.some((b) => b.buffName === 'Old Buff')).toBe(false);
+        expect(result.some((b) => b.buffName === 'New Buff')).toBe(true);
+        expect(result.some((b) => b.buffName === 'Attack Up III')).toBe(true);
+        expect(result).toHaveLength(2);
+    });
+
     it('manual entry with same name as incoming auto-fill takes precedence', () => {
         const manualAtk = makeEntry('Attack Up III'); // manually added (autoFilled=false)
         const autoAtk = makeEntry('Attack Up III', true); // incoming auto-fill
