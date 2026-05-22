@@ -1,5 +1,10 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
-import { Buff, DoTApplicationConfig, SelectedGameBuff } from '../../types/calculator';
+import {
+    Buff,
+    DoTApplicationConfig,
+    DoTApplicationEntry,
+    SelectedGameBuff,
+} from '../../types/calculator';
 import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from './dpsBuffHelpers';
 import { ActiveBuff, computeBuffTimeline } from './buffTimeline';
 
@@ -42,6 +47,8 @@ export interface RoundData {
     activeBombCount: number;
     activeSelfBuffs: ActiveBuff[];
     activeEnemyDebuffs: ActiveBuff[];
+    appliedDoTs: DoTApplicationEntry[];
+    activeDoTStates: ActiveDoTState[];
 }
 
 export interface DPSSimulationSummary {
@@ -68,6 +75,14 @@ interface PendingBomb {
     countdown: number;
     damagePerStack: number;
     stacks: number;
+    tier: number;
+}
+
+export interface ActiveDoTState {
+    type: 'corrosion' | 'inferno' | 'bomb';
+    tier: number;
+    stacks: number;
+    ticksRemaining: number;
 }
 
 function calculateBuffTotals(buffs: Buff[]) {
@@ -179,16 +194,25 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
 
-        const roundSelfBuffs = entry.activeSelfBuffs.flatMap(
-            (ab) => buffLookup.get(ab.buffName) ?? []
-        );
+        const roundSelfBuffs = entry.activeSelfBuffs.flatMap((ab) => {
+            const bufs = buffLookup.get(ab.buffName) ?? [];
+            // Accumulating buff: override static stacks with per-round count; skip when 0
+            if (ab.stacks !== undefined) {
+                return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
+            }
+            return bufs;
+        });
         const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(
             toSimBuffs(roundSelfBuffs)
         );
 
-        const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap(
-            (ab) => buffLookup.get(ab.buffName) ?? []
-        );
+        const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
+            const bufs = buffLookup.get(ab.buffName) ?? [];
+            if (ab.stacks !== undefined) {
+                return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
+            }
+            return bufs;
+        });
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
 
@@ -246,6 +270,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
                     countdown: Math.max(1, dot.duration),
                     damagePerStack: effectiveAttack * (dot.tier / 100),
                     stacks: dot.stacks,
+                    tier: dot.tier,
                 });
             }
         }
@@ -296,6 +321,27 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             activeBombCount: pendingBombs.length,
             activeSelfBuffs: entry.activeSelfBuffs,
             activeEnemyDebuffs: entry.activeEnemyDebuffs,
+            appliedDoTs: dotsConfig,
+            activeDoTStates: [
+                ...corrosionEntries.map((e) => ({
+                    type: 'corrosion' as const,
+                    tier: e.tier,
+                    stacks: e.stacks,
+                    ticksRemaining: e.remainingRounds,
+                })),
+                ...infernoEntries.map((e) => ({
+                    type: 'inferno' as const,
+                    tier: e.tier,
+                    stacks: e.stacks,
+                    ticksRemaining: e.remainingRounds,
+                })),
+                ...pendingBombs.map((b) => ({
+                    type: 'bomb' as const,
+                    tier: b.tier,
+                    stacks: b.stacks,
+                    ticksRemaining: b.countdown,
+                })),
+            ],
         });
     }
 

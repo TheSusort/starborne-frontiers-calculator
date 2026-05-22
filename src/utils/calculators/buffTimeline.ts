@@ -3,6 +3,7 @@ import { SelectedGameBuff } from '../../types/calculator';
 export interface ActiveBuff {
     buffName: string;
     turnsRemaining: number | 'recurring';
+    stacks?: number; // defined for accumulating buffs; represents the current stack count
 }
 
 export interface BuffTimelineEntry {
@@ -33,14 +34,23 @@ export function computeChargeSchedule(
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
 const TIER_VALUES: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+// DoTs stack independently — Inferno I and Inferno II can both be active simultaneously.
+// Each tier is its own entity, not a family where higher replaces lower.
+const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 
 function deriveFamilyKey(name: string): { familyKey: string; tier: number } {
+    if (DOT_PREFIXES.has(name.split(' ')[0])) return { familyKey: name, tier: 0 };
     const m = ROMAN_SUFFIX.exec(name);
     if (!m) return { familyKey: name, tier: 0 };
     return { familyKey: name.slice(0, m.index), tier: TIER_VALUES[m[1]] };
 }
 
+function isAccumulating(buff: SelectedGameBuff): boolean {
+    return !!buff.stackTrigger && buff.isStackable;
+}
+
 function isAlwaysActive(buff: SelectedGameBuff): boolean {
+    if (isAccumulating(buff)) return false;
     return (
         !buff.skillSource ||
         buff.skillSource.startsWith('passive') ||
@@ -56,6 +66,14 @@ interface BuffState {
     tier: number;
 }
 
+interface AccumulatingState {
+    buffName: string;
+    stacks: number;
+    maxStacks: number | undefined;
+    rate: number;
+    trigger: 'per-round' | 'per-active' | 'per-charge';
+}
+
 /** Runs the per-round buff state machine and returns one entry per round. */
 export function computeBuffTimeline(
     selfBuffs: SelectedGameBuff[],
@@ -66,10 +84,60 @@ export function computeBuffTimeline(
 ): BuffTimelineEntry[] {
     const chargedSet = new Set(computeChargeSchedule(chargeCount, startCharged, totalRounds));
 
-    const alwaysSelf = selfBuffs.filter(isAlwaysActive);
-    const timedSelf = selfBuffs.filter((b) => !isAlwaysActive(b));
-    const alwaysEnemy = enemyDebuffs.filter(isAlwaysActive);
-    const timedEnemy = enemyDebuffs.filter((b) => !isAlwaysActive(b));
+    const alwaysSelf = selfBuffs.filter((b) => !isAccumulating(b) && isAlwaysActive(b));
+    const timedSelf = selfBuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b));
+    const accumSelf = selfBuffs.filter(isAccumulating);
+    const alwaysEnemy = enemyDebuffs.filter((b) => !isAccumulating(b) && isAlwaysActive(b));
+    const timedEnemy = enemyDebuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b));
+    const accumEnemy = enemyDebuffs.filter(isAccumulating);
+
+    // Build accumulating state maps — start at 0 stacks, increment each trigger
+    const accumSelfMap = new Map<string, AccumulatingState>();
+    for (const b of accumSelf) {
+        accumSelfMap.set(b.buffName, {
+            buffName: b.buffName,
+            stacks: 0,
+            maxStacks: b.maxStacks,
+            rate: b.stacks,
+            trigger: b.stackTrigger!,
+        });
+    }
+    const accumEnemyMap = new Map<string, AccumulatingState>();
+    for (const b of accumEnemy) {
+        accumEnemyMap.set(b.buffName, {
+            buffName: b.buffName,
+            stacks: 0,
+            maxStacks: b.maxStacks,
+            rate: b.stacks,
+            trigger: b.stackTrigger!,
+        });
+    }
+
+    // Pre-compute charged sets for each unique source schedule among timed enemy debuffs.
+    // Enemy debuffs fire on the APPLIER's schedule, not the current ship's schedule.
+    // Falls back to the current ship's chargedSet when no source schedule is stored.
+    const sourceScheduleCache = new Map<string, Set<number>>();
+    const getSourceChargedSet = (buff: {
+        sourceChargeCount?: number;
+        sourceStartCharged?: boolean;
+    }): Set<number> => {
+        if (buff.sourceChargeCount === undefined || buff.sourceStartCharged === undefined)
+            return chargedSet;
+        const key = `${buff.sourceChargeCount}-${buff.sourceStartCharged}`;
+        if (!sourceScheduleCache.has(key)) {
+            sourceScheduleCache.set(
+                key,
+                new Set(
+                    computeChargeSchedule(
+                        buff.sourceChargeCount,
+                        buff.sourceStartCharged,
+                        totalRounds
+                    )
+                )
+            );
+        }
+        return sourceScheduleCache.get(key)!;
+    };
 
     const selfMap = new Map<string, BuffState>();
     const enemyMap = new Map<string, BuffState>();
@@ -94,23 +162,47 @@ export function computeBuffTimeline(
         // Step 2: Determine skill fired this round
         const skillFired: 'active' | 'charge' = chargedSet.has(r) ? 'charge' : 'active';
 
-        // Step 3: Apply timed buffs from fired skill
-        const applyBuffs = (buffs: SelectedGameBuff[], map: Map<string, BuffState>) => {
-            for (const buff of buffs) {
-                if (buff.skillSource !== skillFired) continue;
-                if (typeof buff.skillDuration !== 'number') continue;
-                const { familyKey, tier } = deriveFamilyKey(buff.buffName);
-                const existing = map.get(familyKey);
-                if (existing && existing.tier >= tier) continue;
-                map.set(familyKey, {
-                    buffName: buff.buffName,
-                    turnsRemaining: buff.skillDuration,
-                    tier,
-                });
+        // Step 2b: Increment accumulating stacks
+        const incrementAccum = (map: Map<string, AccumulatingState>) => {
+            for (const state of map.values()) {
+                const fires =
+                    state.trigger === 'per-round' ||
+                    (state.trigger === 'per-active' && skillFired === 'active') ||
+                    (state.trigger === 'per-charge' && skillFired === 'charge');
+                if (fires) {
+                    state.stacks =
+                        state.maxStacks !== undefined
+                            ? Math.min(state.stacks + state.rate, state.maxStacks)
+                            : state.stacks + state.rate;
+                }
             }
         };
-        applyBuffs(timedSelf, selfMap);
-        applyBuffs(timedEnemy, enemyMap);
+        incrementAccum(accumSelfMap);
+        incrementAccum(accumEnemyMap);
+
+        // Step 3: Apply timed buffs — self-buffs use this ship's schedule;
+        // enemy debuffs use the applier's stored source schedule.
+        const upsertBuff = (buff: SelectedGameBuff, map: Map<string, BuffState>) => {
+            if (typeof buff.skillDuration !== 'number') return;
+            const { familyKey, tier } = deriveFamilyKey(buff.buffName);
+            const existing = map.get(familyKey);
+            if (existing && existing.tier >= tier) return;
+            map.set(familyKey, {
+                buffName: buff.buffName,
+                turnsRemaining: buff.skillDuration,
+                tier,
+            });
+        };
+
+        for (const buff of timedSelf) {
+            if (buff.skillSource === skillFired) upsertBuff(buff, selfMap);
+        }
+        for (const buff of timedEnemy) {
+            const sourceSkillFired: 'active' | 'charge' = getSourceChargedSet(buff).has(r)
+                ? 'charge'
+                : 'active';
+            if (buff.skillSource === sourceSkillFired) upsertBuff(buff, enemyMap);
+        }
 
         // Step 4: Snapshot — always-active buffs injected as 'recurring'
         // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects
@@ -120,11 +212,27 @@ export function computeBuffTimeline(
         const enemyAlwaysSnap = [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map(
             (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
         );
+        // Accumulating buffs: include only when stacks > 0
+        const selfAccumSnap = [...accumSelfMap.values()]
+            .filter((s) => s.stacks > 0)
+            .map((s) => ({
+                buffName: s.buffName,
+                turnsRemaining: 'recurring' as const,
+                stacks: s.stacks,
+            }));
+        const enemyAccumSnap = [...accumEnemyMap.values()]
+            .filter((s) => s.stacks > 0)
+            .map((s) => ({
+                buffName: s.buffName,
+                turnsRemaining: 'recurring' as const,
+                stacks: s.stacks,
+            }));
 
         entries.push({
             round: r,
             activeSelfBuffs: [
                 ...selfAlwaysSnap,
+                ...selfAccumSnap,
                 ...[...selfMap.values()].map((s) => ({
                     buffName: s.buffName,
                     turnsRemaining: s.turnsRemaining,
@@ -132,6 +240,7 @@ export function computeBuffTimeline(
             ],
             activeEnemyDebuffs: [
                 ...enemyAlwaysSnap,
+                ...enemyAccumSnap,
                 ...[...enemyMap.values()].map((s) => ({
                     buffName: s.buffName,
                     turnsRemaining: s.turnsRemaining,

@@ -6,6 +6,22 @@ function makeBuff(id: string, overrides: Partial<SelectedGameBuff> = {}): Select
     return { id, buffName: id, stacks: 1, parsedEffects: {}, isStackable: false, ...overrides };
 }
 
+function makeAccumBuff(
+    id: string,
+    trigger: 'per-round' | 'per-active' | 'per-charge',
+    overrides: Partial<SelectedGameBuff> = {}
+): SelectedGameBuff {
+    return {
+        id,
+        buffName: id,
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: true,
+        stackTrigger: trigger,
+        ...overrides,
+    };
+}
+
 describe('computeChargeSchedule', () => {
     it('returns empty array for 0 rounds', () => {
         expect(computeChargeSchedule(2, false, 0)).toEqual([]);
@@ -104,12 +120,58 @@ describe('computeBuffTimeline', () => {
         expect(result[5].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 2 }]); // r6: reapplied
     });
 
+    it('enemy debuff uses source ship schedule, not current ship schedule', () => {
+        // Current ship (Los): startCharged=true, chargeCount=2 → Round 1 is charge
+        // Source ship (Judge): startCharged=false, chargeCount=2 → Round 1 is active
+        // Concentrate Fire (active, 1t) should fire based on Judge's schedule, so Round 1 is active for it
+        const concentrateFire = makeBuff('Concentrate Fire', {
+            skillSource: 'active',
+            skillDuration: 1,
+            sourceChargeCount: 2,
+            sourceStartCharged: false,
+        });
+        const result = computeBuffTimeline([], [concentrateFire], 2, true, 3);
+        // Round 1: charge for Los, but active for Judge → CF fires
+        expect(result[0].activeEnemyDebuffs).toEqual([
+            { buffName: 'Concentrate Fire', turnsRemaining: 1 },
+        ]);
+        // Round 2: active for Los, active for Judge → CF fires (re-applied after expiry)
+        expect(result[1].activeEnemyDebuffs).toEqual([
+            { buffName: 'Concentrate Fire', turnsRemaining: 1 },
+        ]);
+        // Round 3: active for Los, charge for Judge (chargeCount=2, so round 3 is charge) → CF does NOT fire
+        expect(result[2].activeEnemyDebuffs).toEqual([]);
+    });
+
+    it('enemy debuff without source schedule falls back to current ship schedule', () => {
+        // No sourceChargeCount/sourceStartCharged → uses current ship's chargedSet
+        // Current ship: startCharged=true, chargeCount=2 → Round 1 is charge
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
+        const result = computeBuffTimeline([], [debuff], 2, true, 1);
+        // Round 1 is charge for current ship, active debuff does not fire
+        expect(result[0].activeEnemyDebuffs).toEqual([]);
+    });
+
     it('enemy debuffs tracked separately', () => {
         const selfBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
         const enemyDebuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
         const result = computeBuffTimeline([selfBuff], [enemyDebuff], 2, false, 1);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
         expect(result[0].activeEnemyDebuffs).toEqual([{ buffName: 'Def Down', turnsRemaining: 1 }]);
+    });
+
+    it('DoT tiers stack independently — Inferno I and Inferno II coexist', () => {
+        // Both applied on active; they are separate entities, neither overwrites the other
+        const infernoI = makeBuff('Inferno I', { skillSource: 'active', skillDuration: 2 });
+        const infernoII = makeBuff('Inferno II', { skillSource: 'active', skillDuration: 2 });
+        const result = computeBuffTimeline([], [infernoI, infernoII], 0, false, 1);
+        expect(result[0].activeEnemyDebuffs).toHaveLength(2);
+        expect(result[0].activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                { buffName: 'Inferno I', turnsRemaining: 2 },
+                { buffName: 'Inferno II', turnsRemaining: 2 },
+            ])
+        );
     });
 
     it('higher tier replaces lower tier of same family', () => {
@@ -164,6 +226,79 @@ describe('computeBuffTimeline', () => {
         const buff = makeBuff('Crit Power', { skillSource: 'charge', skillDuration: 1 });
         const result = computeBuffTimeline([buff], [], 2, true, 1);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 1 }]);
+    });
+
+    it('per-round accumulating buff starts at 0 and increments every round', () => {
+        const buff = makeAccumBuff('Overload', 'per-round', { maxStacks: 10 });
+        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        // Round 1: first increment → 1 stack
+        expect(result[0].activeSelfBuffs[0]).toEqual({
+            buffName: 'Overload',
+            turnsRemaining: 'recurring',
+            stacks: 1,
+        });
+        expect(result[1].activeSelfBuffs[0]).toEqual({
+            buffName: 'Overload',
+            turnsRemaining: 'recurring',
+            stacks: 2,
+        });
+        expect(result[2].activeSelfBuffs[0]).toEqual({
+            buffName: 'Overload',
+            turnsRemaining: 'recurring',
+            stacks: 3,
+        });
+        expect(result[3].activeSelfBuffs[0]).toEqual({
+            buffName: 'Overload',
+            turnsRemaining: 'recurring',
+            stacks: 4,
+        });
+    });
+
+    it('per-round accumulating buff is absent from snapshot until round 1', () => {
+        // Confirm it doesn't appear at stacks=0 (before first increment)
+        const buff = makeAccumBuff('Overload', 'per-round');
+        const result = computeBuffTimeline([buff], [], 2, false, 3);
+        // All 3 rounds should show stacks ≥ 1 (incremented before snapshot)
+        result.forEach((entry, i) => {
+            expect(entry.activeSelfBuffs[0].stacks).toBe(i + 1);
+        });
+    });
+
+    it('per-round accumulating buff is capped at maxStacks', () => {
+        const buff = makeAccumBuff('Overload', 'per-round', { maxStacks: 3 });
+        const result = computeBuffTimeline([buff], [], 2, false, 5);
+        expect(result[2].activeSelfBuffs[0].stacks).toBe(3);
+        expect(result[3].activeSelfBuffs[0].stacks).toBe(3);
+        expect(result[4].activeSelfBuffs[0].stacks).toBe(3);
+    });
+
+    it('per-active accumulating buff only increments on active rounds', () => {
+        // chargeCount=2, startCharged=false: active r1,r2 then charged r3
+        const buff = makeAccumBuff('Core Charge I', 'per-active', { maxStacks: 10 });
+        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        expect(result[0].activeSelfBuffs[0].stacks).toBe(1); // r1: active
+        expect(result[1].activeSelfBuffs[0].stacks).toBe(2); // r2: active
+        expect(result[2].activeSelfBuffs[0].stacks).toBe(2); // r3: charged — no increment
+        expect(result[3].activeSelfBuffs[0].stacks).toBe(3); // r4: active
+    });
+
+    it('per-charge accumulating buff only increments on charge rounds', () => {
+        // chargeCount=2, startCharged=false: charged r3, r6
+        const buff = makeAccumBuff('Blast', 'per-charge', { maxStacks: 10 });
+        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        // r1,r2: active — no increment; r3: charged → 1; r4: active → still 1
+        expect(result[0].activeSelfBuffs).toEqual([]); // 0 stacks → excluded from snapshot
+        expect(result[1].activeSelfBuffs).toEqual([]);
+        expect(result[2].activeSelfBuffs[0].stacks).toBe(1); // r3: charged
+        expect(result[3].activeSelfBuffs[0].stacks).toBe(1); // r4: active, no increment
+    });
+
+    it('accumulating buff with rate > 1 increments by rate each trigger', () => {
+        const buff = makeAccumBuff('Blast', 'per-round', { stacks: 2, maxStacks: 10 });
+        const result = computeBuffTimeline([buff], [], 2, false, 3);
+        expect(result[0].activeSelfBuffs[0].stacks).toBe(2);
+        expect(result[1].activeSelfBuffs[0].stacks).toBe(4);
+        expect(result[2].activeSelfBuffs[0].stacks).toBe(6);
     });
 
     it('deduplicates always-active buffs with the same buffName', () => {

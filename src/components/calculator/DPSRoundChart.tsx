@@ -43,10 +43,12 @@ interface CustomTooltipProps {
 const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, shipMap }) => {
     if (!active || !payload || !label) return null;
 
+    const sorted = [...payload].sort((a, b) => b.value - a.value);
+
     return (
         <div className="bg-dark-lighter p-2 border border-dark-border text-white text-sm">
             <p className="font-bold mb-1">Round {label}</p>
-            {payload.map((entry) => {
+            {sorted.map((entry) => {
                 const ship = shipMap.get(entry.dataKey);
                 const roundData = ship?.result.rounds[label - 1];
                 return (

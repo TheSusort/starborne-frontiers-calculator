@@ -264,6 +264,7 @@ describe('parseSkillEffects', () => {
                 duration: 'recurring',
                 stacks: 1,
                 source: 'passive1',
+                stackTrigger: 'per-round',
             },
         ]);
     });

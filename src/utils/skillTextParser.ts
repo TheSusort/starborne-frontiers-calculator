@@ -1,5 +1,6 @@
 import { BUFFS } from '../constants/buffs';
 import { Ship } from '../types/ship';
+import { StackTrigger } from '../types/calculator';
 
 /**
  * Represents a parsed segment of skill text
@@ -177,6 +178,7 @@ export interface SkillEffect {
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
+    stackTrigger?: StackTrigger;
 }
 
 const APPLICATION_VERBS = new Set(['grants', 'gains', 'inflicts', 'applies']);
@@ -309,11 +311,25 @@ export function parseSkillEffects(
             duration = 'recurring';
         }
 
+        // Detect accumulating buffs: stacks gained per trigger with a recurring duration.
+        // passive sources → per-round; active/charge → per-active/per-charge.
+        let stackTrigger: StackTrigger | undefined;
+        if (stacks !== undefined && duration === 'recurring') {
+            if (source === 'passive1' || source === 'passive2' || source === 'passive3') {
+                stackTrigger = 'per-round';
+            } else if (source === 'active') {
+                stackTrigger = 'per-active';
+            } else if (source === 'charge') {
+                stackTrigger = 'per-charge';
+            }
+        }
+
         effects.push({
             buffName,
             target,
             duration,
             ...(stacks !== undefined ? { stacks } : {}),
+            ...(stackTrigger !== undefined ? { stackTrigger } : {}),
             source,
         });
     }
