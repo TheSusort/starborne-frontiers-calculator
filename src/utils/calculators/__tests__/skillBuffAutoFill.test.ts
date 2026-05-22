@@ -16,14 +16,10 @@ describe('buildSkillBuffAutoFill', () => {
             activeSkillText: 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn',
         } as unknown as Ship;
         const result = buildSkillBuffAutoFill(ship);
-        // 'Attack Up III' must be in BUFFS for this to produce a result
-        expect(result.selfBuffs.length).toBeGreaterThanOrEqual(0);
-        if (result.selfBuffs.length > 0) {
-            const buff = result.selfBuffs[0];
-            expect(buff.buffName).toBe('Attack Up III');
-            expect(buff.autoFilled).toBe(true);
-            expect(buff.id).toBe('Attack Up III');
-        }
+        expect(result.selfBuffs).toHaveLength(1);
+        expect(result.selfBuffs[0].buffName).toBe('Attack Up III');
+        expect(result.selfBuffs[0].autoFilled).toBe(true);
+        expect(result.selfBuffs[0].id).toBe('Attack Up III');
     });
 
     it('routes enemy effects to enemyDebuffs', () => {
@@ -32,11 +28,9 @@ describe('buildSkillBuffAutoFill', () => {
                 'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns',
         } as unknown as Ship;
         const result = buildSkillBuffAutoFill(ship);
-        if (result.enemyDebuffs.length > 0) {
-            const buff = result.enemyDebuffs[0];
-            expect(buff.buffName).toBe('Defense Down II');
-            expect(buff.autoFilled).toBe(true);
-        }
+        expect(result.enemyDebuffs).toHaveLength(1);
+        expect(result.enemyDebuffs[0].buffName).toBe('Defense Down II');
+        expect(result.enemyDebuffs[0].autoFilled).toBe(true);
     });
 
     it('discards buff names not found in BUFFS', () => {
@@ -89,5 +83,24 @@ describe('mergeAutoFill', () => {
     it('returns existing unchanged when autoFilled is empty', () => {
         const existing = [makeEntry('Attack Up III')];
         expect(mergeAutoFill(existing, [])).toEqual(existing);
+    });
+
+    it('replaces stale auto-filled entries when a new ship is selected', () => {
+        const staleOverload = makeEntry('Overload', true); // auto-filled by old ship
+        const manualAtk = makeEntry('Attack Up III'); // manually added
+        const newOverload = makeEntry('Overload', true); // auto-filled by new ship
+        const result = mergeAutoFill([staleOverload, manualAtk], [newOverload]);
+        // Stale auto-fill replaced; manual entry preserved; new auto-fill added
+        expect(result).toHaveLength(2);
+        expect(result.filter((b) => b.buffName === 'Overload')).toHaveLength(1);
+        expect(result.some((b) => b.buffName === 'Attack Up III')).toBe(true);
+    });
+
+    it('manual entry with same name as incoming auto-fill takes precedence', () => {
+        const manualAtk = makeEntry('Attack Up III'); // manually added (autoFilled=false)
+        const autoAtk = makeEntry('Attack Up III', true); // incoming auto-fill
+        const result = mergeAutoFill([manualAtk], [autoAtk]);
+        expect(result).toHaveLength(1);
+        expect(result[0].autoFilled).toBeFalsy();
     });
 });

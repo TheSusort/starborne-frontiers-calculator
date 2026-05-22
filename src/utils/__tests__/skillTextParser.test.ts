@@ -216,6 +216,16 @@ describe('parseSkillEffects', () => {
         });
     });
 
+    it('handles shared duration with trailing period: inflicts X and Y for 2 turns.', () => {
+        const result = parseSkillEffects(
+            'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Speed Down II</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toHaveLength(2);
+        expect(result[0].duration).toBe(2);
+        expect(result[1].duration).toBe(2);
+    });
+
     it('handles shared duration across three tags: inflicts X, Y, and Z for 2 turns', () => {
         const result = parseSkillEffects(
             'This Unit inflicts <unit-skill>Defense Down II</unit-skill>, <unit-skill>Speed Down II</unit-skill>, and <unit-skill>Attack Down II</unit-skill> for 2 turns',

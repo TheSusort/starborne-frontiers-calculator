@@ -77,15 +77,20 @@ function toSelectedBuffs(
 }
 
 /**
- * Merges auto-filled buff entries into an existing list, skipping duplicates by buffName.
- * Existing entries always win over auto-filled entries of the same buff.
+ * Merges auto-filled buff entries into an existing list.
+ * Stale auto-filled entries whose buffName appears in the new set are replaced.
+ * Manually-added entries always take precedence over auto-filled ones.
  */
 export function mergeAutoFill(
     existing: SelectedGameBuff[],
     autoFilled: SelectedGameBuff[]
 ): SelectedGameBuff[] {
-    const existingNames = new Set(existing.map((b) => b.buffName));
-    return [...existing, ...autoFilled.filter((b) => !existingNames.has(b.buffName))];
+    const incomingNames = new Set(autoFilled.map((b) => b.buffName));
+    // Remove stale auto-filled entries that are being replaced by the new set
+    const kept = existing.filter((b) => !b.autoFilled || !incomingNames.has(b.buffName));
+    // Append new auto-filled entries that aren't already present (manual entries take precedence)
+    const keptNames = new Set(kept.map((b) => b.buffName));
+    return [...kept, ...autoFilled.filter((b) => !keptNames.has(b.buffName))];
 }
 
 // Maps parsed buff names to their DoT type and numeric tier.

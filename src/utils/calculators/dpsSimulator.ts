@@ -152,11 +152,16 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         numRounds
     );
 
-    // Build lookup: buffName → SelectedGameBuff[] (array handles rare duplicate buffName with different stacks counts)
-    const buffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of [...selfBuffs, ...enemyDebuffs]) {
-        const existing = buffLookup.get(b.buffName) ?? [];
-        buffLookup.set(b.buffName, [...existing, b]);
+    // Separate lookups prevent name collisions between self-buffs and enemy debuffs
+    const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of selfBuffs) {
+        const existing = selfBuffLookup.get(b.buffName) ?? [];
+        selfBuffLookup.set(b.buffName, [...existing, b]);
+    }
+    const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of enemyDebuffs) {
+        const existing = enemyDebuffLookup.get(b.buffName) ?? [];
+        enemyDebuffLookup.set(b.buffName, [...existing, b]);
     }
 
     let charges = input.startCharged ? input.chargeCount : 0;
@@ -195,7 +200,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         const entry = timeline[r - 1];
 
         const roundSelfBuffs = entry.activeSelfBuffs.flatMap((ab) => {
-            const bufs = buffLookup.get(ab.buffName) ?? [];
+            const bufs = selfBuffLookup.get(ab.buffName) ?? [];
             // Accumulating buff: override static stacks with per-round count; skip when 0
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
@@ -207,7 +212,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         );
 
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
-            const bufs = buffLookup.get(ab.buffName) ?? [];
+            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
             }

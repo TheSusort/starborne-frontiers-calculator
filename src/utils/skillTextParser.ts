@@ -204,10 +204,11 @@ function findSharedDuration(
         const s = segments[j];
         if (s.type === 'unit-skill' || s.type === 'unit-damage' || s.type === 'unit-aid') continue;
         if (s.type !== 'text') break;
-        if (/[.;]|<br\s*\/?>/i.test(s.text)) break;
+        // Test duration patterns before the sentence-boundary check so "for 2 turns." is parsed.
         const m = DURATION_RE.exec(s.text);
         if (m) return parseInt(m[1], 10);
         if (RECURRING_RE.test(s.text)) return 'recurring';
+        if (/[.;]|<br\s*\/?>/i.test(s.text)) break;
         if (!CONNECTOR_RE.test(s.text)) break;
     }
     return null;

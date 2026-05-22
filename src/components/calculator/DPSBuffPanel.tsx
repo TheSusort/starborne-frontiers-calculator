@@ -122,7 +122,7 @@ const ShipSection: React.FC<{ name: string; roundData: RoundData | null }> = ({
 };
 
 export const DPSBuffPanel: React.FC<DPSBuffPanelProps> = ({ ships, totalRounds, hoveredRound }) => (
-    <div className="w-48 flex-shrink-0 bg-dark border border-dark-border rounded overflow-hidden">
+    <div className="w-48 flex-shrink-0 card !p-0 rounded overflow-hidden">
         <div className="bg-dark-lighter px-2.5 py-1.5 text-xs font-semibold text-theme-text-secondary uppercase tracking-wide">
             {hoveredRound != null ? `Round ${hoveredRound} of ${totalRounds}` : 'Hover a round'}
         </div>

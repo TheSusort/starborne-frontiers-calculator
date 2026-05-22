@@ -552,6 +552,34 @@ describe('simulateDPS', () => {
             expect(round3Buffs.some((ab) => ab.buffName === 'Power Surge')).toBe(true);
         });
 
+        it('charge-scoped enemy debuff fires on the source ship charge rounds', () => {
+            // sourceChargeCount=2, sourceStartCharged=false → charge rounds are 3, 6
+            const chargeScopeDebuff: SelectedGameBuff = {
+                id: 'cs1',
+                buffName: 'Armor Pierce',
+                stacks: 1,
+                parsedEffects: { defense: -20 },
+                isStackable: false,
+                skillSource: 'charge',
+                skillDuration: 1,
+                sourceChargeCount: 2,
+                sourceStartCharged: false,
+            };
+            const result = simulateDPS({
+                ...chargeBuffBase,
+                selfBuffs: [] as SelectedGameBuff[],
+                enemyDefense: 1000,
+                enemyDebuffs: [chargeScopeDebuff],
+            });
+            // Round 3 (index 2): debuff fires → higher damage than round 1
+            expect(result.rounds[2].directDamage).toBeGreaterThan(result.rounds[0].directDamage);
+            // RoundData reflects the debuff on round 3, not on round 1
+            expect(
+                result.rounds[2].activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce')
+            ).toBe(true);
+            expect(result.rounds[0].activeEnemyDebuffs).toHaveLength(0);
+        });
+
         it('always-active buff present every round', () => {
             const alwaysBuff = makeAlwaysBuff('always1', { attack: 10 });
             const result = simulateDPS({
