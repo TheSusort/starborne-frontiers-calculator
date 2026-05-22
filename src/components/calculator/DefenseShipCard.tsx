@@ -116,6 +116,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}
+                        noEffectLabel="No defensive effect"
                     />
 
                     {selectedShip && (

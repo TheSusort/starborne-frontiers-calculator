@@ -11,6 +11,7 @@ import { simulateHealing } from '../../utils/calculators/healingSimulator';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { parseSkillHeal } from '../../utils/skillTextParser';
 import { Ship } from '../../types/ship';
+import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -154,6 +155,7 @@ const HealingCalculatorPage: React.FC = () => {
               parseSkillHeal(ship.secondPassiveSkillText ?? '') ||
               parseSkillHeal(ship.thirdPassiveSkillText ?? '')
             : 0;
+        const { selfBuffs } = buildSkillBuffAutoFill(ship);
 
         setConfigs((prev) =>
             prev.map((c) => {
@@ -168,6 +170,7 @@ const HealingCalculatorPage: React.FC = () => {
                     healModifier: Math.round(final.healModifier ?? 0),
                     healModifierAutoFilled: (final.healModifier ?? 0) > 0,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
+                    buffs: mergeAutoFill(c.buffs, selfBuffs),
                     ...(parsedActive || parsedFallback
                         ? {
                               healPercent: parsedActive || parsedFallback,

@@ -44,6 +44,7 @@ interface ShipConfigCardProps {
         updates: Partial<DoTApplicationEntry>
     ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
+    onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
     enemyAffinity: AffinityName;
 }
 
@@ -64,6 +65,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onRemoveDoT,
     onUpdateDoT,
     onBuffsChange,
+    onEnemyDebuffsChange,
     enemyAffinity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
@@ -219,24 +221,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         </div>
                     </div>
 
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
-                        Ship Buffs
-                    </div>
-                    <GameBuffPicker
-                        label="Ship Buffs"
-                        relevantStats={[
-                            'attack',
-                            'crit',
-                            'critDamage',
-                            'outgoingDamage',
-                            'defensePenetration',
-                            'dotDamage',
-                        ]}
-                        excludeTypes={['effect']}
-                        value={config.buffs}
-                        onChange={onBuffsChange}
-                    />
-
                     {selectedShip && (
                         <>
                             <Button
@@ -258,6 +242,35 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             </CollapsibleForm>
                         </>
                     )}
+
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
+                        Ship Buffs
+                    </div>
+                    <GameBuffPicker
+                        label="Ship Buffs"
+                        relevantStats={[
+                            'attack',
+                            'crit',
+                            'critDamage',
+                            'outgoingDamage',
+                            'defensePenetration',
+                            'dotDamage',
+                        ]}
+                        excludeTypes={['effect']}
+                        value={config.buffs}
+                        onChange={onBuffsChange}
+                    />
+
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
+                        Applied Enemy Debuffs
+                    </div>
+                    <GameBuffPicker
+                        label="Applied Enemy Debuffs"
+                        relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
+                        excludeTypes={['effect']}
+                        value={config.enemyDebuffs}
+                        onChange={onEnemyDebuffsChange}
+                    />
 
                     <DoTEditor
                         dots={config.activeDoTs}

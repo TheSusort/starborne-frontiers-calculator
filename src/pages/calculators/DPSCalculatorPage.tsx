@@ -11,13 +11,14 @@ import {
     SelectedGameBuff,
 } from '../../types/calculator';
 import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
+import {
+    buildSkillBuffAutoFill,
+    buildDoTAutoFill,
+    mergeAutoFill,
+    mergeAutoFillDoTs,
+} from '../../utils/calculators/skillBuffAutoFill';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
-import {
-    toSimBuffs,
-    toEnemyModifiers,
-    toDotAndPenModifiers,
-} from '../../utils/calculators/dpsBuffHelpers';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
@@ -91,6 +92,7 @@ const DPSCalculatorPage: React.FC = () => {
                             activeDoTs: [...DEFAULT_DOT_CONFIG],
                             chargedDoTs: [...DEFAULT_DOT_CONFIG],
                             buffs: [],
+                            enemyDebuffs: [],
                         },
                     ],
                     nextId: 2,
@@ -113,6 +115,7 @@ const DPSCalculatorPage: React.FC = () => {
                     activeDoTs: [...DEFAULT_DOT_CONFIG],
                     chargedDoTs: [...DEFAULT_DOT_CONFIG],
                     buffs: [],
+                    enemyDebuffs: [],
                 },
             ],
             nextId: 2,
@@ -189,15 +192,9 @@ const DPSCalculatorPage: React.FC = () => {
     );
 
     const simResults = useMemo(() => {
-        const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(enemyBuffs);
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
             const allAttackerBuffs = [...attackerBuffs, ...config.buffs];
-            const simBuffs = toSimBuffs(allAttackerBuffs);
-            const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
-                allAttackerBuffs,
-                enemyBuffs
-            );
             const { damageModifier, critCap, critPenalty } = computeAffinityModifiers(
                 config.affinity,
                 enemyAffinity
@@ -217,12 +214,9 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyDefense,
                     enemyHp,
                     rounds,
-                    buffs: simBuffs,
+                    selfBuffs: allAttackerBuffs,
+                    enemyDebuffs: [...enemyBuffs, ...config.enemyDebuffs],
                     startCharged: config.startCharged,
-                    defensePenetrationBuff,
-                    dotDamageModifier,
-                    enemyDefenseModifier,
-                    incomingDamageModifier,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
@@ -250,6 +244,7 @@ const DPSCalculatorPage: React.FC = () => {
                 activeDoTs: [...DEFAULT_DOT_CONFIG],
                 chargedDoTs: [...DEFAULT_DOT_CONFIG],
                 buffs: [],
+                enemyDebuffs: [],
             },
         ]);
         setNextId(nextId + 1);
@@ -292,9 +287,14 @@ const DPSCalculatorPage: React.FC = () => {
         );
         const final = statsBreakdown.final;
         const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+        const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
+        const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
+
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
+                // Keep manually-added enemy debuffs; replace auto-filled ones with the new ship's
+                const manualEnemyDebuffs = c.enemyDebuffs.filter((b) => !b.autoFilled);
                 return {
                     ...c,
                     shipId: ship.id,
@@ -315,6 +315,10 @@ const DPSCalculatorPage: React.FC = () => {
                     ]),
                     autoFilledFields,
                     affinity: ship.affinity,
+                    buffs: mergeAutoFill(c.buffs, selfBuffs),
+                    enemyDebuffs: mergeAutoFill(manualEnemyDebuffs, newEnemyDebuffs),
+                    activeDoTs: mergeAutoFillDoTs(c.activeDoTs, newActiveDoTs),
+                    chargedDoTs: mergeAutoFillDoTs(c.chargedDoTs, newChargedDoTs),
                 };
             })
         );
@@ -380,6 +384,10 @@ const DPSCalculatorPage: React.FC = () => {
 
     const updateConfigBuffs = (id: string, buffs: SelectedGameBuff[]) => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
+    };
+
+    const updateConfigEnemyDebuffs = (id: string, enemyDebuffs: SelectedGameBuff[]) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, enemyDebuffs } : c)));
     };
 
     const bestConfig = configs.reduce<DPSShipConfig | null>((best, current) => {
@@ -464,8 +472,29 @@ const DPSCalculatorPage: React.FC = () => {
                                     updateDoTEntry(config.id, dotField, dotId, updates)
                                 }
                                 onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
+                                onEnemyDebuffsChange={(debuffs) =>
+                                    updateConfigEnemyDebuffs(config.id, debuffs)
+                                }
                             />
                         ))}
+                    </div>
+
+                    <div className="card">
+                        <h3 className="text-lg font-bold mb-2">Damage Over Time</h3>
+                        <p className="text-sm text-theme-text-secondary mb-4">
+                            Cumulative damage comparison across rounds. Burst ships climb fast then
+                            plateau; DoT ships ramp up over time.
+                        </p>
+                        <DPSRoundChart
+                            ships={configs
+                                .map((config) => ({
+                                    id: config.id,
+                                    name: config.name,
+                                    result: simResults.get(config.id)!,
+                                }))
+                                .filter((s) => s.result)}
+                            rounds={rounds}
+                        />
                     </div>
 
                     <div className="card">
@@ -502,24 +531,6 @@ const DPSCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
-                        <h3 className="text-lg font-bold mb-2">Damage Over Time</h3>
-                        <p className="text-sm text-theme-text-secondary mb-4">
-                            Cumulative damage comparison across rounds. Burst ships climb fast then
-                            plateau; DoT ships ramp up over time.
-                        </p>
-                        <DPSRoundChart
-                            ships={configs
-                                .map((config) => ({
-                                    id: config.id,
-                                    name: config.name,
-                                    result: simResults.get(config.id)!,
-                                }))
-                                .filter((s) => s.result)}
-                            rounds={rounds}
-                        />
-                    </div>
-
-                    <div className="card">
                         <h3 className="text-lg font-bold mb-4">Defense Penetration</h3>
                         <p className="text-sm text-theme-text-secondary mb-4">
                             Shows how defense penetration affects damage increase for different
@@ -547,6 +558,11 @@ const DPSCalculatorPage: React.FC = () => {
                             combined Out. DoT + Inc. DoT modifier from the buff pickers.
                         </p>
                         <p>All DoTs stack permanently and tick on the turn they are applied.</p>
+                        <p className="mt-2">
+                            Hacking is not modelled — all debuffs are assumed to land every time.
+                            Conditional buffs and debuffs (e.g. &quot;on kill&quot;, &quot;when
+                            enemy has 3+ debuffs&quot;) are treated as always active for simplicity.
+                        </p>
                     </div>
                 </div>
             </PageLayout>

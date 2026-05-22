@@ -2111,7 +2111,7 @@ const DocumentationPage: React.FC = () => {
                                         no impact on the simulation. Stackable buffs include a stack
                                         counter.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Enemy Buffs / Debuffs:</span>{' '}
                                         Select buffs or debuffs that affect the enemy — for example
                                         Defense Down (reduces enemy defense before penetration is
@@ -2119,6 +2119,14 @@ const DocumentationPage: React.FC = () => {
                                         hits the enemy receives). Out. DoT and Inc. DoT modifiers
                                         from both sections are combined and applied as a single
                                         multiplier on corrosion and inferno damage.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        Buffs and debuffs only apply during the rounds they are
+                                        actually active — timed buffs expire after their duration
+                                        and charged-skill buffs only appear in rounds where the
+                                        charge fires. Hover a round bar on the damage chart to see
+                                        which buffs and debuffs are active that round and how many
+                                        turns remain.
                                     </p>
                                 </div>
 

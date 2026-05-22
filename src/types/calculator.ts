@@ -1,5 +1,7 @@
 import { AffinityName } from './ship';
 
+export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
+
 export interface Buff {
     id: string;
     stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
@@ -14,6 +16,7 @@ export interface DoTApplicationEntry {
     tier: number; // 3/6/9 for corrosion, 15/30/45 for inferno, 100/200/300 for bomb
     stacks: number; // stacks applied per use
     duration: number; // rounds before expiry (corrosion/inferno), or countdown for bombs
+    autoFilled?: boolean;
 }
 
 export type DoTApplicationConfig = DoTApplicationEntry[];
@@ -51,6 +54,16 @@ export interface SelectedGameBuff {
     parsedEffects: ParsedBuffEffects; // effects for 1 stack
     isStackable: boolean;
     maxStacks?: number; // e.g. 10 for "up to 10 times"
+    autoFilled?: boolean; // true when populated from skill text parsing
+    skillSource?: 'active' | 'charge' | 'passive1' | 'passive2' | 'passive3';
+    skillDuration?: number | 'recurring' | null;
+    // For auto-filled enemy debuffs: the charge schedule of the ship that applies this debuff.
+    // Used so the debuff fires on the applier's schedule, not the simulated ship's schedule.
+    sourceChargeCount?: number;
+    sourceStartCharged?: boolean;
+    // For accumulating stackable buffs: how stacks are gained over rounds.
+    // When set, `stacks` is the rate (stacks per trigger), not the total.
+    stackTrigger?: StackTrigger;
 }
 
 export interface DPSShipConfig {
@@ -70,6 +83,7 @@ export interface DPSShipConfig {
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
     buffs: SelectedGameBuff[];
+    enemyDebuffs: SelectedGameBuff[];
 }
 
 export type DPSShipConfigUpdateableField =

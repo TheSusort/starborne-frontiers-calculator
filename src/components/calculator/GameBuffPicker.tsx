@@ -42,7 +42,8 @@ const FLAT_STATS = new Set<keyof ParsedBuffEffects>(['security']);
 function buildEffectSummary(
     effects: ParsedBuffEffects,
     stacks = 1,
-    filter?: (keyof ParsedBuffEffects)[]
+    filter?: (keyof ParsedBuffEffects)[],
+    noEffectLabel = 'No damage effect'
 ): string {
     const fmt = (key: keyof ParsedBuffEffects, value: number, label: string) => {
         const scaled = value * stacks;
@@ -55,7 +56,24 @@ function buildEffectSummary(
         .filter((k) => effects[k] !== undefined && (!filter || filter.includes(k)))
         .map((k) => fmt(k, effects[k] as number, STAT_LABELS[k]));
 
-    return parts.length > 0 ? parts.join(', ') : 'No DPS effect';
+    return parts.length > 0 ? parts.join(', ') : noEffectLabel;
+}
+
+function formatSkillBadge(
+    source: SelectedGameBuff['skillSource'],
+    duration: SelectedGameBuff['skillDuration']
+): string {
+    const sourceLabel =
+        source === 'active'
+            ? 'Active'
+            : source === 'charge'
+              ? 'Charged'
+              : source != null
+                ? 'Passive'
+                : 'skill';
+    if (duration == null) return sourceLabel;
+    const durationLabel = duration === 'recurring' ? '∞' : `${duration}t`;
+    return `${sourceLabel} · ${durationLabel}`;
 }
 
 interface GameBuffPickerProps {
@@ -64,6 +82,7 @@ interface GameBuffPickerProps {
     value: SelectedGameBuff[];
     onChange: (buffs: SelectedGameBuff[]) => void;
     excludeTypes?: ('buff' | 'debuff' | 'effect')[];
+    noEffectLabel?: string;
 }
 
 export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
@@ -72,6 +91,7 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     value,
     onChange,
     excludeTypes,
+    noEffectLabel = 'No DPS effect',
 }) => {
     const [search, setSearch] = useState('');
 
@@ -157,7 +177,8 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                     const summary = buildEffectSummary(
                                         buff.parsedEffects,
                                         1,
-                                        relevantStats
+                                        relevantStats,
+                                        noEffectLabel
                                     );
                                     return (
                                         <button
@@ -241,7 +262,8 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                         const summary = buildEffectSummary(
                             selected.parsedEffects,
                             selected.stacks,
-                            relevantStats
+                            relevantStats,
+                            noEffectLabel
                         );
                         return (
                             <div
@@ -249,9 +271,19 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                 className="card flex items-center gap-2 px-2 py-1"
                             >
                                 <div className="min-w-0 flex-1">
-                                    <span className="block truncate text-sm font-medium">
-                                        {selected.buffName}
-                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="block truncate text-sm font-medium">
+                                            {selected.buffName}
+                                        </span>
+                                        {selected.autoFilled && (
+                                            <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium bg-primary/20 text-primary border border-primary/30">
+                                                {formatSkillBadge(
+                                                    selected.skillSource,
+                                                    selected.skillDuration
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
                                     <span className="text-xs text-theme-text-secondary">
                                         {summary}
                                     </span>

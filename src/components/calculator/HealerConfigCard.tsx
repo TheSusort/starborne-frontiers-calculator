@@ -174,6 +174,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                         excludeTypes={['effect']}
                         value={config.buffs}
                         onChange={onBuffsChange}
+                        noEffectLabel="No healing effect"
                     />
 
                     {selectedShip && (

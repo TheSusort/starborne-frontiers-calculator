@@ -42,6 +42,7 @@ export const DefenseSettingsPanel: React.FC<DefenseSettingsPanelProps> = ({
                     excludeTypes={['effect']}
                     value={defenseBuffs}
                     onChange={onDefenseBuffsChange}
+                    noEffectLabel="No defensive effect"
                 />
             </div>
         </CollapsibleForm>
