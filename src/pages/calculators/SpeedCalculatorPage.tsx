@@ -178,6 +178,7 @@ const SpeedCalculatorPage: React.FC = () => {
                                 <GameBuffPicker
                                     label="Speed Buffs"
                                     relevantStats={['speed']}
+                                    noEffectLabel="No speed effect"
                                     value={forwardBuffs}
                                     onChange={setForwardBuffs}
                                 />
@@ -276,6 +277,7 @@ const SpeedCalculatorPage: React.FC = () => {
                                 <GameBuffPicker
                                     label="Speed Buffs"
                                     relevantStats={['speed']}
+                                    noEffectLabel="No speed effect"
                                     value={reverseBuffs}
                                     onChange={setReverseBuffs}
                                 />

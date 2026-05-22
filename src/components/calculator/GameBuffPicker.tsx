@@ -42,7 +42,8 @@ const FLAT_STATS = new Set<keyof ParsedBuffEffects>(['security']);
 function buildEffectSummary(
     effects: ParsedBuffEffects,
     stacks = 1,
-    filter?: (keyof ParsedBuffEffects)[]
+    filter?: (keyof ParsedBuffEffects)[],
+    noEffectLabel = 'No damage effect'
 ): string {
     const fmt = (key: keyof ParsedBuffEffects, value: number, label: string) => {
         const scaled = value * stacks;
@@ -55,7 +56,7 @@ function buildEffectSummary(
         .filter((k) => effects[k] !== undefined && (!filter || filter.includes(k)))
         .map((k) => fmt(k, effects[k] as number, STAT_LABELS[k]));
 
-    return parts.length > 0 ? parts.join(', ') : 'No DPS effect';
+    return parts.length > 0 ? parts.join(', ') : noEffectLabel;
 }
 
 function formatSkillBadge(
@@ -81,6 +82,7 @@ interface GameBuffPickerProps {
     value: SelectedGameBuff[];
     onChange: (buffs: SelectedGameBuff[]) => void;
     excludeTypes?: ('buff' | 'debuff' | 'effect')[];
+    noEffectLabel?: string;
 }
 
 export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
@@ -89,6 +91,7 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
     value,
     onChange,
     excludeTypes,
+    noEffectLabel = 'No DPS effect',
 }) => {
     const [search, setSearch] = useState('');
 
@@ -174,7 +177,8 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                     const summary = buildEffectSummary(
                                         buff.parsedEffects,
                                         1,
-                                        relevantStats
+                                        relevantStats,
+                                        noEffectLabel
                                     );
                                     return (
                                         <button
@@ -258,7 +262,8 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                         const summary = buildEffectSummary(
                             selected.parsedEffects,
                             selected.stacks,
-                            relevantStats
+                            relevantStats,
+                            noEffectLabel
                         );
                         return (
                             <div

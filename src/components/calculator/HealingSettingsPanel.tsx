@@ -59,6 +59,7 @@ export const HealingSettingsPanel: React.FC<HealingSettingsPanelProps> = ({
                     excludeTypes={['effect']}
                     value={healerBuffs}
                     onChange={onHealerBuffsChange}
+                    noEffectLabel="No healing effect"
                 />
             </div>
         </CollapsibleForm>
