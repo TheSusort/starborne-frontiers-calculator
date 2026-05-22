@@ -46,7 +46,7 @@ export const DoTEditor: React.FC<DoTEditorProps> = ({
     onUpdate,
 }) => (
     <>
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mt-2">
             <div className={`text-xs font-semibold uppercase tracking-wide ${labelClassName}`}>
                 {label}
             </div>

@@ -58,6 +58,23 @@ function buildEffectSummary(
     return parts.length > 0 ? parts.join(', ') : 'No DPS effect';
 }
 
+function formatSkillBadge(
+    source: SelectedGameBuff['skillSource'],
+    duration: SelectedGameBuff['skillDuration']
+): string {
+    const sourceLabel =
+        source === 'active'
+            ? 'Active'
+            : source === 'charge'
+              ? 'Charged'
+              : source != null
+                ? 'Passive'
+                : 'skill';
+    if (duration == null) return sourceLabel;
+    const durationLabel = duration === 'recurring' ? '∞' : `${duration}t`;
+    return `${sourceLabel} · ${durationLabel}`;
+}
+
 interface GameBuffPickerProps {
     label: string;
     relevantStats: (keyof ParsedBuffEffects)[];
@@ -255,7 +272,10 @@ export const GameBuffPicker: React.FC<GameBuffPickerProps> = ({
                                         </span>
                                         {selected.autoFilled && (
                                             <span className="shrink-0 rounded px-1 py-0.5 text-[10px] font-medium bg-primary/20 text-primary border border-primary/30">
-                                                skill
+                                                {formatSkillBadge(
+                                                    selected.skillSource,
+                                                    selected.skillDuration
+                                                )}
                                             </span>
                                         )}
                                     </div>
