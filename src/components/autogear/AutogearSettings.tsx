@@ -108,7 +108,9 @@ const SetPriorityForm: React.FC<{
     editingValue?: SetPriority;
     onSave?: (priority: SetPriority) => void;
     onCancel?: () => void;
-}> = ({ onAdd, editingValue, onSave, onCancel }) => {
+    mode?: 'gearSet' | 'implantType';
+    availableImplantTypes?: { key: string; name: string; label: string }[];
+}> = ({ onAdd, editingValue, onSave, onCancel, mode = 'gearSet', availableImplantTypes }) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
 
@@ -118,47 +120,63 @@ const SetPriorityForm: React.FC<{
             setCount(editingValue.count);
         } else {
             setSelectedSet('');
-            setCount(2);
+            setCount(mode === 'implantType' ? 1 : 2);
         }
-    }, [editingValue]);
+    }, [editingValue, mode]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedSet) return;
-        const value = { setName: selectedSet, count };
+        const value: SetPriority =
+            mode === 'implantType'
+                ? { setName: selectedSet, count: 1, kind: 'implant' }
+                : { setName: selectedSet, count };
         if (editingValue && onSave) {
             onSave(value);
             return;
         }
         onAdd(value);
         setSelectedSet('');
-        setCount(2);
+        setCount(mode === 'implantType' ? 1 : 2);
     };
+
+    const selectOptions =
+        mode === 'implantType'
+            ? (availableImplantTypes ?? [])
+                  .map((t) => ({ value: t.key, label: t.label }))
+                  .sort((a, b) => a.label.localeCompare(b.label))
+            : Object.entries(GEAR_SETS)
+                  .map(([key, set]) => ({ value: key, label: set.name }))
+                  .sort((a, b) => a.label.localeCompare(b.label));
 
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
-                    label="Gear set"
+                    label={mode === 'implantType' ? 'Implant type' : 'Gear set'}
                     className="flex-1 min-w-[8rem]"
-                    options={Object.entries(GEAR_SETS)
-                        .map(([key, set]) => ({ value: key, label: set.name }))
-                        .sort((a, b) => a.label.localeCompare(b.label))}
+                    options={selectOptions}
                     value={selectedSet}
                     onChange={(value) => setSelectedSet(value)}
                     noDefaultSelection
-                    helpLabel="Select a gear set to be met by the gear you equip."
+                    helpLabel={
+                        mode === 'implantType'
+                            ? 'Select an implant type to be required in the autogear result.'
+                            : 'Select a gear set to be met by the gear you equip.'
+                    }
                 />
-                <div className="w-24">
-                    <Input
-                        label="No. of pieces"
-                        type="number"
-                        min="0"
-                        max="6"
-                        value={count}
-                        onChange={(e) => setCount(parseInt(e.target.value))}
-                    />
-                </div>
+                {mode === 'gearSet' && (
+                    <div className="w-24">
+                        <Input
+                            label="No. of pieces"
+                            type="number"
+                            min="0"
+                            max="6"
+                            value={count}
+                            onChange={(e) => setCount(parseInt(e.target.value))}
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="flex justify-end gap-2 flex-wrap">
