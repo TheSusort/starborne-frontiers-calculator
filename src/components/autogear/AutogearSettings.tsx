@@ -117,34 +117,57 @@ const SetPriorityForm: React.FC<{
     onCancel?: () => void;
     mode?: 'gearSet' | 'implantType';
     availableImplantTypes?: { key: string; name: string; label: string }[];
-}> = ({ onAdd, editingValue, onSave, onCancel, mode = 'gearSet', availableImplantTypes }) => {
+    onSubmitImplant?: (setName: string, preferenceMode: 'require' | 'exclude') => void;
+    editingExcludeKey?: string;
+}> = ({
+    onAdd,
+    editingValue,
+    onSave,
+    onCancel,
+    mode = 'gearSet',
+    availableImplantTypes,
+    onSubmitImplant,
+    editingExcludeKey,
+}) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
+    const [preferenceMode, setPreferenceMode] = useState<'require' | 'exclude'>('require');
 
     useEffect(() => {
         if (editingValue) {
             setSelectedSet(editingValue.setName);
             setCount(editingValue.count);
+            if (mode === 'implantType') setPreferenceMode('require');
+        } else if (editingExcludeKey) {
+            setSelectedSet(editingExcludeKey);
+            setPreferenceMode('exclude');
         } else {
             setSelectedSet('');
             setCount(mode === 'implantType' ? 1 : 2);
+            setPreferenceMode('require');
         }
-    }, [editingValue, mode]);
+    }, [editingValue, editingExcludeKey, mode]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedSet) return;
-        const value: SetPriority =
-            mode === 'implantType'
-                ? { setName: selectedSet, count: 1, kind: 'implant' }
-                : { setName: selectedSet, count };
+
+        if (mode === 'implantType') {
+            onSubmitImplant?.(selectedSet, preferenceMode);
+            setSelectedSet('');
+            setPreferenceMode('require');
+            return;
+        }
+
+        // gearSet mode only reaches here
+        const value: SetPriority = { setName: selectedSet, count };
         if (editingValue && onSave) {
             onSave(value);
             return;
         }
         onAdd(value);
         setSelectedSet('');
-        setCount(mode === 'implantType' ? 1 : 2);
+        setCount(2);
     };
 
     const selectOptions =
@@ -159,6 +182,17 @@ const SetPriorityForm: React.FC<{
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <div className="flex gap-3 items-end flex-wrap">
+                {mode === 'implantType' && (
+                    <Select
+                        label="Preference"
+                        options={[
+                            { value: 'require', label: 'Require — must appear in result' },
+                            { value: 'exclude', label: 'Exclude — never used in result' },
+                        ]}
+                        value={preferenceMode}
+                        onChange={(v) => setPreferenceMode(v as 'require' | 'exclude')}
+                    />
+                )}
                 <Select
                     label={mode === 'implantType' ? 'Implant type' : 'Gear set'}
                     className="flex-1 min-w-[8rem]"
@@ -168,7 +202,9 @@ const SetPriorityForm: React.FC<{
                     noDefaultSelection
                     helpLabel={
                         mode === 'implantType'
-                            ? 'Select an implant type to be required in the autogear result.'
+                            ? preferenceMode === 'require'
+                                ? 'Select an implant type to be required in the autogear result.'
+                                : 'Select an implant type to exclude from autogear.'
                             : 'Select a gear set to be met by the gear you equip.'
                     }
                 />
