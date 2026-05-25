@@ -1,10 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { SetPriorityRow } from '../../../components/autogear/SetPriorityRow';
 
 // Sidebar imports /favicon.ico?url which is not available in test environment
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
-
-import { SetPriorityRow } from '../../../components/autogear/SetPriorityRow';
 
 const noop = vi.fn();
 const baseProps = {
