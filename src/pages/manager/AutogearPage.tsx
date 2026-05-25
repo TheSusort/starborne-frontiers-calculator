@@ -1385,8 +1385,11 @@ export const AutogearPage: React.FC = () => {
                     onAddSetPriority={(priority) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
+                            const isImplantEntry = priority.kind === 'implant';
                             const existingIndex = config.setPriorities.findIndex(
-                                (p) => p.setName === priority.setName
+                                (p) =>
+                                    p.setName === priority.setName &&
+                                    (p.kind === 'implant') === isImplantEntry
                             );
                             const updatedPriorities =
                                 existingIndex >= 0
@@ -1394,18 +1397,32 @@ export const AutogearPage: React.FC = () => {
                                           i === existingIndex ? priority : p
                                       )
                                     : [...config.setPriorities, priority];
+                            const updatedExcluded = isImplantEntry
+                                ? (config.excludedImplantTypes ?? []).filter(
+                                      (k) => k !== priority.setName
+                                  )
+                                : config.excludedImplantTypes;
                             updateShipConfig(shipSettings.id, {
                                 setPriorities: updatedPriorities,
+                                excludedImplantTypes: updatedExcluded,
                             });
                         }
                     }}
                     onUpdateSetPriority={(index, priority) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
+                            const updatedPriorities = config.setPriorities.map((p, i) =>
+                                i === index ? priority : p
+                            );
+                            const updatedExcluded =
+                                priority.kind === 'implant'
+                                    ? (config.excludedImplantTypes ?? []).filter(
+                                          (k) => k !== priority.setName
+                                      )
+                                    : config.excludedImplantTypes;
                             updateShipConfig(shipSettings.id, {
-                                setPriorities: config.setPriorities.map((p, i) =>
-                                    i === index ? priority : p
-                                ),
+                                setPriorities: updatedPriorities,
+                                excludedImplantTypes: updatedExcluded,
                             });
                         }
                     }}
@@ -1475,8 +1492,13 @@ export const AutogearPage: React.FC = () => {
                     }
                     onSetExcludedImplantTypes={(keys) => {
                         if (shipSettings) {
+                            const config = getShipConfig(shipSettings.id);
+                            const filteredPriorities = config.setPriorities.filter(
+                                (p) => !(p.kind === 'implant' && keys.includes(p.setName))
+                            );
                             updateShipConfig(shipSettings.id, {
                                 excludedImplantTypes: keys,
+                                setPriorities: filteredPriorities,
                             });
                         }
                     }}
