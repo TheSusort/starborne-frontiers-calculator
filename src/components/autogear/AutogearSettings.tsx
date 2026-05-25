@@ -34,7 +34,13 @@ type TweakView =
     | { mode: 'picker' }
     | {
           mode: 'form';
-          type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'excludedImplant';
+          type:
+              | 'priority'
+              | 'setPriority'
+              | 'implantPriority'
+              | 'statBonus'
+              | 'fleetBuff'
+              | 'excludedImplant';
           editIndex: number | null;
       };
 
@@ -309,7 +315,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
-        type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'excludedImplant',
+        type:
+            | 'priority'
+            | 'setPriority'
+            | 'implantPriority'
+            | 'statBonus'
+            | 'fleetBuff'
+            | 'excludedImplant',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
     const backToList = () => setTweakView({ mode: 'list' });
@@ -319,6 +331,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     const isEditingSetPriority = (index: number) =>
         tweakView.mode === 'form' &&
         tweakView.type === 'setPriority' &&
+        tweakView.editIndex === index;
+    const isEditingImplantPriority = (index: number) =>
+        tweakView.mode === 'form' &&
+        tweakView.type === 'implantPriority' &&
         tweakView.editIndex === index;
     const isEditingStatBonus = (index: number) =>
         tweakView.mode === 'form' &&
@@ -439,33 +455,177 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ))}
                                         </div>
                                     )}
-                                    {setPriorities.length > 0 && (
-                                        <div className="space-y-1">
-                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Gear set
-                                            </h4>
-                                            {setPriorities.map((priority, index) => (
-                                                <SetPriorityRow
-                                                    key={`set-${index}`}
-                                                    priority={priority}
-                                                    isEditing={isEditingSetPriority(index)}
-                                                    canMoveUp={index > 0}
-                                                    canMoveDown={index < setPriorities.length - 1}
-                                                    onUpdate={(updated) =>
-                                                        onUpdateSetPriority(index, updated)
-                                                    }
-                                                    onEdit={() => openForm('setPriority', index)}
-                                                    onMoveUp={() =>
-                                                        onMoveSetPriority(index, index - 1)
-                                                    }
-                                                    onMoveDown={() =>
-                                                        onMoveSetPriority(index, index + 1)
-                                                    }
-                                                    onRemove={() => onRemoveSetPriority(index)}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
+                                    {(() => {
+                                        const gearSetAbsoluteIndices = setPriorities
+                                            .map((_, i) => i)
+                                            .filter((i) => setPriorities[i].kind !== 'implant');
+                                        const implantAbsoluteIndices = setPriorities
+                                            .map((_, i) => i)
+                                            .filter((i) => setPriorities[i].kind === 'implant');
+
+                                        return (
+                                            <>
+                                                {gearSetAbsoluteIndices.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                            Gear set
+                                                        </h4>
+                                                        {setPriorities
+                                                            .map((priority, absoluteIndex) => ({
+                                                                priority,
+                                                                absoluteIndex,
+                                                            }))
+                                                            .filter(
+                                                                ({ priority }) =>
+                                                                    priority.kind !== 'implant'
+                                                            )
+                                                            .map(({ priority, absoluteIndex }) => {
+                                                                const kindIdx =
+                                                                    gearSetAbsoluteIndices.indexOf(
+                                                                        absoluteIndex
+                                                                    );
+                                                                const prevKindIdx =
+                                                                    gearSetAbsoluteIndices[
+                                                                        kindIdx - 1
+                                                                    ];
+                                                                const nextKindIdx =
+                                                                    gearSetAbsoluteIndices[
+                                                                        kindIdx + 1
+                                                                    ];
+                                                                return (
+                                                                    <SetPriorityRow
+                                                                        key={`set-${absoluteIndex}`}
+                                                                        priority={priority}
+                                                                        isEditing={isEditingSetPriority(
+                                                                            absoluteIndex
+                                                                        )}
+                                                                        canMoveUp={
+                                                                            prevKindIdx !==
+                                                                            undefined
+                                                                        }
+                                                                        canMoveDown={
+                                                                            nextKindIdx !==
+                                                                            undefined
+                                                                        }
+                                                                        onUpdate={(updated) =>
+                                                                            onUpdateSetPriority(
+                                                                                absoluteIndex,
+                                                                                updated
+                                                                            )
+                                                                        }
+                                                                        onEdit={() =>
+                                                                            openForm(
+                                                                                'setPriority',
+                                                                                absoluteIndex
+                                                                            )
+                                                                        }
+                                                                        onMoveUp={() =>
+                                                                            onMoveSetPriority(
+                                                                                absoluteIndex,
+                                                                                prevKindIdx
+                                                                            )
+                                                                        }
+                                                                        onMoveDown={() =>
+                                                                            onMoveSetPriority(
+                                                                                absoluteIndex,
+                                                                                nextKindIdx
+                                                                            )
+                                                                        }
+                                                                        onRemove={() =>
+                                                                            onRemoveSetPriority(
+                                                                                absoluteIndex
+                                                                            )
+                                                                        }
+                                                                        availableImplantTypes={
+                                                                            availableImplantTypes
+                                                                        }
+                                                                    />
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                                {implantAbsoluteIndices.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                            Required implants
+                                                        </h4>
+                                                        {setPriorities
+                                                            .map((priority, absoluteIndex) => ({
+                                                                priority,
+                                                                absoluteIndex,
+                                                            }))
+                                                            .filter(
+                                                                ({ priority }) =>
+                                                                    priority.kind === 'implant'
+                                                            )
+                                                            .map(({ priority, absoluteIndex }) => {
+                                                                const kindIdx =
+                                                                    implantAbsoluteIndices.indexOf(
+                                                                        absoluteIndex
+                                                                    );
+                                                                const prevKindIdx =
+                                                                    implantAbsoluteIndices[
+                                                                        kindIdx - 1
+                                                                    ];
+                                                                const nextKindIdx =
+                                                                    implantAbsoluteIndices[
+                                                                        kindIdx + 1
+                                                                    ];
+                                                                return (
+                                                                    <SetPriorityRow
+                                                                        key={`implant-${absoluteIndex}`}
+                                                                        priority={priority}
+                                                                        isEditing={isEditingImplantPriority(
+                                                                            absoluteIndex
+                                                                        )}
+                                                                        canMoveUp={
+                                                                            prevKindIdx !==
+                                                                            undefined
+                                                                        }
+                                                                        canMoveDown={
+                                                                            nextKindIdx !==
+                                                                            undefined
+                                                                        }
+                                                                        onUpdate={(updated) =>
+                                                                            onUpdateSetPriority(
+                                                                                absoluteIndex,
+                                                                                updated
+                                                                            )
+                                                                        }
+                                                                        onEdit={() =>
+                                                                            openForm(
+                                                                                'implantPriority',
+                                                                                absoluteIndex
+                                                                            )
+                                                                        }
+                                                                        onMoveUp={() =>
+                                                                            onMoveSetPriority(
+                                                                                absoluteIndex,
+                                                                                prevKindIdx
+                                                                            )
+                                                                        }
+                                                                        onMoveDown={() =>
+                                                                            onMoveSetPriority(
+                                                                                absoluteIndex,
+                                                                                nextKindIdx
+                                                                            )
+                                                                        }
+                                                                        onRemove={() =>
+                                                                            onRemoveSetPriority(
+                                                                                absoluteIndex
+                                                                            )
+                                                                        }
+                                                                        availableImplantTypes={
+                                                                            availableImplantTypes
+                                                                        }
+                                                                    />
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                     {statBonuses.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
@@ -649,6 +809,19 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         </div>
                                     </button>
                                 )}
+                                {optimizeImplants && availableImplantTypes.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                        onClick={() => openForm('implantPriority')}
+                                    >
+                                        <div className="font-semibold">Forced implant type</div>
+                                        <div className="text-xs text-theme-text-secondary">
+                                            Require a specific implant type to appear in the
+                                            autogear result (e.g. Bulwark).
+                                        </div>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -679,7 +852,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ? 'scale'
                                             : tweakView.type === 'fleetBuff'
                                               ? 'buff'
-                                              : 'excluded implant type'}
+                                              : tweakView.type === 'implantPriority'
+                                                ? 'forced implant type'
+                                                : 'excluded implant type'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (
@@ -707,6 +882,31 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             )}
                             {tweakView.type === 'setPriority' && (
                                 <SetPriorityForm
+                                    onAdd={(p) => {
+                                        onAddSetPriority(p);
+                                        backToList();
+                                    }}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? setPriorities[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(p) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdateSetPriority(tweakView.editIndex, p);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
+                            {tweakView.type === 'implantPriority' && (
+                                <SetPriorityForm
+                                    mode="implantType"
+                                    availableImplantTypes={availableImplantTypes}
                                     onAdd={(p) => {
                                         onAddSetPriority(p);
                                         backToList();
