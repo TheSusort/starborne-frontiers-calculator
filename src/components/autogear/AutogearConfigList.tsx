@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import { GEAR_SETS, ShipTypeName } from '../../constants';
+import { IMPLANTS } from '../../constants/implants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
@@ -88,7 +89,11 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                     <>
                         {setPriorities.map((setPriority, index) => (
                             <span key={index}>
-                                {setPriority.count} x {GEAR_SETS[setPriority.setName]?.name}
+                                {setPriority.kind === 'implant'
+                                    ? (GEAR_SETS[setPriority.setName]?.name ??
+                                      IMPLANTS[setPriority.setName]?.name ??
+                                      setPriority.setName)
+                                    : `${setPriority.count} x ${GEAR_SETS[setPriority.setName]?.name ?? setPriority.setName}`}
                             </span>
                         ))}
                     </>
