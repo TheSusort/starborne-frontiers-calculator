@@ -109,7 +109,7 @@ interface AutogearSettingsProps {
 }
 
 const SetPriorityForm: React.FC<{
-    onAdd: (priority: SetPriority) => void;
+    onAdd?: (priority: SetPriority) => void;
     editingValue?: SetPriority;
     onSave?: (priority: SetPriority) => void;
     onCancel?: () => void;
@@ -163,7 +163,7 @@ const SetPriorityForm: React.FC<{
             onSave(value);
             return;
         }
-        onAdd(value);
+        onAdd?.(value);
         setSelectedSet('');
         setCount(2);
     };
@@ -313,10 +313,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         if (!et || !target) return et === target;
         if (et.kind !== target.kind) return false;
         if (et.kind === 'require' && target.kind === 'require') return et.index === target.index;
-        return (
-            (et as { kind: 'exclude'; key: string }).key ===
-            (target as { kind: 'exclude'; key: string }).key
-        );
+        if (et.kind === 'exclude' && target.kind === 'exclude') return et.key === target.key;
+        return false;
     };
     const isEditingStatBonus = (index: number) =>
         tweakView.mode === 'form' &&
@@ -898,7 +896,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         <SetPriorityForm
                                             mode="implantType"
                                             availableImplantTypes={availableImplantTypes}
-                                            onAdd={() => {}}
                                             editingValue={
                                                 editTarget?.kind === 'require'
                                                     ? setPriorities[editTarget.index]
@@ -911,6 +908,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             }
                                             onSubmitImplant={(setName, pMode) => {
                                                 if (pMode === 'require') {
+                                                    if (editTarget?.kind === 'exclude') {
+                                                        onRemoveExcludedImplantType(editTarget.key);
+                                                    }
                                                     if (editTarget?.kind === 'require') {
                                                         onUpdateSetPriority(editTarget.index, {
                                                             setName,
@@ -925,6 +925,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                         });
                                                     }
                                                 } else {
+                                                    if (editTarget?.kind === 'require') {
+                                                        onRemoveSetPriority(editTarget.index);
+                                                    }
                                                     const oldKey =
                                                         editTarget?.kind === 'exclude'
                                                             ? editTarget.key
