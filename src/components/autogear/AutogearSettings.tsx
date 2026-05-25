@@ -224,7 +224,7 @@ const SetPriorityForm: React.FC<{
             </div>
 
             <div className="flex justify-end gap-2 flex-wrap">
-                {editingValue ? (
+                {editingValue || editingExcludeKey ? (
                     <>
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
