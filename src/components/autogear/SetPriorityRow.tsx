@@ -21,6 +21,7 @@ interface SetPriorityRowProps {
     onMoveDown: () => void;
     onRemove: () => void;
     availableImplantTypes?: { key: string; name: string; label: string }[];
+    modeLabel?: string;
 }
 
 export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
@@ -34,6 +35,7 @@ export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
     onMoveDown,
     onRemove,
     availableImplantTypes,
+    modeLabel,
 }) => {
     const label =
         GEAR_SETS[priority.setName]?.name ??
@@ -85,6 +87,11 @@ export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
                         </InlineNumberEdit>
                         {' pieces)'}
                     </>
+                )}
+                {modeLabel && (
+                    <span className="text-xs text-theme-text-secondary border border-dark-border rounded px-1 ml-1">
+                        {modeLabel}
+                    </span>
                 )}
                 {isEditing && (
                     <span className="ml-2 text-xs text-theme-text-secondary">(editing)</span>
