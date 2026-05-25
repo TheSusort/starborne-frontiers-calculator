@@ -520,12 +520,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                             )
                                                                         }
                                                                         onMoveUp={() =>
+                                                                            prevKindIdx !==
+                                                                                undefined &&
                                                                             onMoveSetPriority(
                                                                                 absoluteIndex,
                                                                                 prevKindIdx
                                                                             )
                                                                         }
                                                                         onMoveDown={() =>
+                                                                            nextKindIdx !==
+                                                                                undefined &&
                                                                             onMoveSetPriority(
                                                                                 absoluteIndex,
                                                                                 nextKindIdx
@@ -599,12 +603,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                             )
                                                                         }
                                                                         onMoveUp={() =>
+                                                                            prevKindIdx !==
+                                                                                undefined &&
                                                                             onMoveSetPriority(
                                                                                 absoluteIndex,
                                                                                 prevKindIdx
                                                                             )
                                                                         }
                                                                         onMoveDown={() =>
+                                                                            nextKindIdx !==
+                                                                                undefined &&
                                                                             onMoveSetPriority(
                                                                                 absoluteIndex,
                                                                                 nextKindIdx
