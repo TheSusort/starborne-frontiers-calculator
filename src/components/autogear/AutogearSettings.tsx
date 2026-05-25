@@ -934,7 +934,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     }}
                                     editingValue={
                                         tweakView.editTarget !== null &&
-                                        tweakView.editTarget?.kind === 'require'
+                                        tweakView.editTarget.kind === 'require'
                                             ? setPriorities[tweakView.editTarget.index]
                                             : undefined
                                     }
@@ -942,7 +942,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         if (
                                             tweakView.mode === 'form' &&
                                             tweakView.editTarget !== null &&
-                                            tweakView.editTarget?.kind === 'require'
+                                            tweakView.editTarget.kind === 'require'
                                         ) {
                                             onUpdateSetPriority(tweakView.editTarget.index, p);
                                             backToList();
