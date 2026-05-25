@@ -13,6 +13,7 @@ export interface StatPriority {
 export interface SetPriority {
     setName: string;
     count: number;
+    kind?: 'implant';
 }
 
 export interface GearSuggestion {
