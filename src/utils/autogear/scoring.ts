@@ -241,6 +241,17 @@ export function calculateTotalScore(
     }
     performanceTracker.endTimer('CalculateSetCount');
 
+    // Build implantSetCount separately — keeps setCount gear-only for the orphan penalty loop
+    const implantSetCount: Record<string, number> = {};
+    if (ship.implants) {
+        for (const gearId of Object.values(ship.implants)) {
+            if (!gearId) continue;
+            const gear = getGearPiece(gearId);
+            if (!gear?.setBonus) continue;
+            implantSetCount[gear.setBonus] = (implantSetCount[gear.setBonus] || 0) + 1;
+        }
+    }
+
     // Calculate Arcane Siege multiplier if applicable (reuses setCount, caches implant lookup)
     performanceTracker.startTimer('CalculateArcaneSiege');
     const arcaneSiegeMultiplier = calculateArcaneSiegeMultiplier(ship, setCount, getGearPiece);
@@ -265,7 +276,8 @@ export function calculateTotalScore(
         setPriorities,
         statBonuses,
         tryToCompleteSets,
-        arcaneSiegeMultiplier
+        arcaneSiegeMultiplier,
+        implantSetCount
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 
