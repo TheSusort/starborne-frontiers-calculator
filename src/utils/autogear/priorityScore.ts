@@ -401,11 +401,11 @@ export function calculatePriorityScore(
     }
 
     // Calculate set requirement penalties
-    if (setPriorities && setPriorities.length > 0 && setCount) {
+    if (setPriorities && setPriorities.length > 0) {
         for (const setPriority of setPriorities) {
-            const currentCount =
-                (setCount[setPriority.setName] || 0) +
-                (implantSetCount?.[setPriority.setName] || 0);
+            const gearCount = setCount?.[setPriority.setName] || 0;
+            const implantCount = implantSetCount?.[setPriority.setName] || 0;
+            const currentCount = setPriority.kind === 'implant' ? implantCount : gearCount;
             if (currentCount < setPriority.count) {
                 // Calculate penalty as percentage below required count
                 // Multiply by 2 to make set requirements more important

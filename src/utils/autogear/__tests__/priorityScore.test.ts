@@ -88,4 +88,25 @@ describe('calculatePriorityScore — implant set requirements', () => {
         // Having an AMBUSH implant (satisfied requirement) should not reduce score vs no requirement
         expect(scoreWithImplant).toBeCloseTo(scoreNoImplant, 5);
     });
+
+    it('implant count does NOT satisfy a gear-set requirement of the same name', () => {
+        // AMBUSH exists in both GEAR_SETS and IMPLANTS — gear requirement must not be satisfied by implant
+        const gearSetPriority: SetPriority[] = [{ setName: 'AMBUSH', count: 1 }];
+        const implantSetCount = { AMBUSH: 1 };
+        const noGearCount = {};
+        const penalised = calculatePriorityScore(
+            stats,
+            [],
+            'ATTACKER',
+            noGearCount,
+            gearSetPriority,
+            [],
+            false,
+            0,
+            implantSetCount
+        );
+        const clean = calculatePriorityScore(stats, [], 'ATTACKER', {}, [], [], false, 0);
+        // Gear requirement is unsatisfied — penalty should fire even though implant count is present
+        expect(penalised).toBeLessThan(clean);
+    });
 });

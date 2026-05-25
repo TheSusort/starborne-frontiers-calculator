@@ -179,7 +179,10 @@ const SetPriorityForm: React.FC<{
                             min="0"
                             max="6"
                             value={count}
-                            onChange={(e) => setCount(parseInt(e.target.value))}
+                            onChange={(e) => {
+                                const next = Number.parseInt(e.target.value, 10);
+                                setCount(Number.isNaN(next) ? 0 : next);
+                            }}
                         />
                     </div>
                 )}
