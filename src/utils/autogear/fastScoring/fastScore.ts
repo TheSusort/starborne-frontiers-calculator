@@ -90,6 +90,18 @@ export function fastScore(
         if (c > 0) setCount[context.gearRegistry.setIdToName[setId]] = c;
     }
 
+    // Build implantSetCount separately — do NOT add to setCount (workspace.setCount is gear-only)
+    const implantSetCount: Record<string, number> = {};
+    for (let i = 0; i < effectiveImplantIds.length; i++) {
+        const id = effectiveImplantIds[i];
+        if (id < 0) continue;
+        const setId = context.implantRegistry.setIds[id];
+        if (setId !== 0) {
+            const name = context.implantRegistry.setIdToName[setId];
+            if (name) implantSetCount[name] = (implantSetCount[name] || 0) + 1;
+        }
+    }
+
     // Arcane siege — check effectiveImplantIds for ARCANE_SIEGE
     let arcaneSiegeMultiplier = 0;
     const shieldCount = setCount['SHIELD'] || 0;
@@ -113,7 +125,8 @@ export function fastScore(
         context.setPriorities as SetPriority[],
         context.statBonuses as StatBonus[],
         context.tryToCompleteSets,
-        arcaneSiegeMultiplier
+        arcaneSiegeMultiplier,
+        implantSetCount
     );
 
     if (!hasHardRequirements) {
