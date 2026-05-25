@@ -38,7 +38,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
         setPriorities.length > 0 ||
         statBonuses.length > 0 ||
         fleetBuffs.length > 0 ||
-        (excludedImplantTypes?.length ?? 0) > 0 ||
+        excludedImplantTypes.length > 0 ||
         optimizeImplants ||
         ignoreEquipped ||
         ignoreUnleveled ||
@@ -127,7 +127,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                 )}
 
                 {/* Excluded Implant Types */}
-                {(excludedImplantTypes ?? []).map((key) => (
+                {excludedImplantTypes.map((key) => (
                     <span key={key}>Excl. {IMPLANTS[key]?.name ?? key}</span>
                 ))}
             </div>
