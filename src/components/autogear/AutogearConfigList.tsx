@@ -17,6 +17,7 @@ interface AutogearConfigListProps {
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
+    excludedImplantTypes?: string[];
 }
 
 export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
@@ -30,12 +31,14 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
     useUpgradedStats,
     tryToCompleteSets,
     optimizeImplants,
+    excludedImplantTypes = [],
 }) => {
     const hasConfig =
         statPriorities.length > 0 ||
         setPriorities.length > 0 ||
         statBonuses.length > 0 ||
         fleetBuffs.length > 0 ||
+        (excludedImplantTypes?.length ?? 0) > 0 ||
         optimizeImplants ||
         ignoreEquipped ||
         ignoreUnleveled ||
@@ -122,6 +125,11 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                         ))}
                     </>
                 )}
+
+                {/* Excluded Implant Types */}
+                {(excludedImplantTypes ?? []).map((key) => (
+                    <span key={key}>Excl. {IMPLANTS[key]?.name ?? key}</span>
+                ))}
             </div>
         </div>
     );
