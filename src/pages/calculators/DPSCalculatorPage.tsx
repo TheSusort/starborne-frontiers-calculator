@@ -678,11 +678,12 @@ const DPSCalculatorPage: React.FC = () => {
                                 clamp(hacking − enemySecurity, 0, 100)%
                             </span>{' '}
                             chance to land. At the defaults (hacking 200, security 100) debuffs
-                            always land. Because each roll is random, damage numbers are computed as
-                            a 200-run Monte Carlo average so comparisons between ships remain
-                            stable. Conditional buffs and debuffs (e.g. &quot;on kill&quot;,
-                            &quot;when enemy has 3+ debuffs&quot;) are treated as always active for
-                            simplicity.
+                            always land. Each simulation is a single stochastic run — rounds where
+                            the roll fails show no DoT or debuff damage, while rounds where it lands
+                            show full effect. The chart reflects one realistic playthrough rather
+                            than a smoothed average. Conditional buffs and debuffs (e.g. &quot;on
+                            kill&quot;, &quot;when enemy has 3+ debuffs&quot;) are treated as always
+                            active for simplicity.
                         </p>
                     </div>
                 </div>
