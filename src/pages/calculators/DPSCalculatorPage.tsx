@@ -36,7 +36,7 @@ import { SEO_CONFIG } from '../../constants/seo';
 function buildSkillAutoFill(ship: Ship) {
     const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
     const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
-    const autoFilledFields = new Set<'activeMultiplier' | 'chargedMultiplier'>();
+    const autoFilledFields = new Set<'activeMultiplier' | 'chargedMultiplier' | 'hacking'>();
     if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
     if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
     return { activeParsed, chargedParsed, autoFilledFields };
@@ -69,14 +69,7 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const {
-                    activeParsed,
-                    chargedParsed,
-                    autoFilledFields: rawAutoFilledFields,
-                } = buildSkillAutoFill(ship);
-                const autoFilledFields = rawAutoFilledFields as Set<
-                    'activeMultiplier' | 'chargedMultiplier' | 'hacking'
-                >;
+                const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
                 autoFilledFields.add('hacking');
                 return {
                     configs: [
@@ -349,14 +342,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const {
-            activeParsed,
-            chargedParsed,
-            autoFilledFields: rawAutoFilledFields,
-        } = buildSkillAutoFill(ship);
-        const autoFilledFields = rawAutoFilledFields as Set<
-            'activeMultiplier' | 'chargedMultiplier' | 'hacking'
-        >;
+        const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
         autoFilledFields.add('hacking');
         const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
