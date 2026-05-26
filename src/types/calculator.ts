@@ -155,3 +155,11 @@ export type HealerConfigUpdateableField =
     | 'crit'
     | 'critDamage'
     | 'healModifier';
+
+export interface TeamShipConfig {
+    id: string;
+    shipId?: string;
+    buffs: SelectedGameBuff[]; // parsed self/team buffs → merge into global attackerBuffs
+    enemyDebuffs: SelectedGameBuff[]; // parsed enemy debuffs  → merge into global enemyBuffs
+    startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
+}
