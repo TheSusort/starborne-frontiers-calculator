@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from '../dpsBuffHelpers';
+import {
+    toSimBuffs,
+    toEnemyModifiers,
+    toDotAndPenModifiers,
+    toEnemyDotModifier,
+} from '../dpsBuffHelpers';
 import { SelectedGameBuff } from '../../../types/calculator';
 
 const makeBuff = (
@@ -87,5 +92,32 @@ describe('toDotAndPenModifiers', () => {
             [makeBuff({ incomingDotDamage: 20 })]
         );
         expect(result.dotDamageModifier).toBe(50);
+    });
+});
+
+describe('toEnemyDotModifier', () => {
+    it('returns 0 for empty array', () => {
+        expect(toEnemyDotModifier([])).toBe(0);
+    });
+
+    it('returns incomingDotDamage value', () => {
+        expect(toEnemyDotModifier([makeBuff({ incomingDotDamage: 25 })])).toBe(25);
+    });
+
+    it('sums across multiple buffs', () => {
+        expect(
+            toEnemyDotModifier([
+                makeBuff({ incomingDotDamage: 25 }),
+                makeBuff({ incomingDotDamage: 15 }),
+            ])
+        ).toBe(40);
+    });
+
+    it('applies stacks', () => {
+        expect(toEnemyDotModifier([makeBuff({ incomingDotDamage: 10 }, 3)])).toBe(30);
+    });
+
+    it('ignores non-dot enemy effects', () => {
+        expect(toEnemyDotModifier([makeBuff({ defense: -30, incomingDamage: 20 })])).toBe(0);
     });
 });
