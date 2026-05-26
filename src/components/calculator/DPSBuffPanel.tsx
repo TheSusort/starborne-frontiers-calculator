@@ -34,18 +34,26 @@ function activeDoTLabel(dot: ActiveDoTState): string {
     return dot.stacks > 1 ? `${name} ×${dot.stacks}` : name;
 }
 
-const BuffRow: React.FC<{ buff: ActiveBuff; variant: 'self' | 'enemy' }> = ({ buff, variant }) => (
-    <div className="flex items-center gap-1.5 mb-1">
+const BuffRow: React.FC<{
+    buff: ActiveBuff;
+    variant: 'self' | 'enemy';
+    resisted?: boolean;
+}> = ({ buff, variant, resisted }) => (
+    <div className={`flex items-center gap-1.5 mb-1 ${resisted ? 'opacity-40' : ''}`}>
         <div
-            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${variant === 'self' ? 'bg-blue-500' : 'bg-red-500'}`}
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${resisted ? 'bg-dark-border' : variant === 'self' ? 'bg-blue-500' : 'bg-red-500'}`}
         />
         <span className="flex-1 text-xs text-theme-text-primary truncate">{buff.buffName}</span>
         {buff.stacks !== undefined && (
             <span className="text-xs text-theme-text-secondary">×{buff.stacks}</span>
         )}
-        <span className="text-xs text-theme-text-secondary">
-            {formatTurns(buff.turnsRemaining)}
-        </span>
+        {resisted ? (
+            <span className="text-xs text-theme-text-secondary italic">resisted</span>
+        ) : (
+            <span className="text-xs text-theme-text-secondary">
+                {formatTurns(buff.turnsRemaining)}
+            </span>
+        )}
     </div>
 );
 
@@ -56,8 +64,15 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
 }) => {
     const selfBuffs = roundData?.activeSelfBuffs ?? [];
     const enemyDebuffs = roundData?.activeEnemyDebuffs ?? [];
+    const resistedEnemyDebuffs = roundData?.resistedEnemyDebuffs ?? [];
     const appliedDoTs = roundData?.appliedDoTs ?? [];
+    const dotsLanded = roundData?.dotsLanded ?? true;
     const activeDoTStates = roundData?.activeDoTStates ?? [];
+
+    const hasDebuffs = enemyDebuffs.length > 0 || resistedEnemyDebuffs.length > 0;
+    const hasDoTs = appliedDoTs.length > 0;
+    const isEmpty =
+        selfBuffs.length === 0 && !hasDebuffs && !hasDoTs && activeDoTStates.length === 0;
 
     return (
         <div className="px-2.5 py-2 border-b border-dark-border last:border-b-0">
@@ -72,26 +87,47 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                     ))}
                 </>
             )}
-            {enemyDebuffs.length > 0 && (
+            {hasDebuffs && (
                 <>
                     <div className="text-xs text-theme-text-secondary mt-2 mb-1">Enemy Debuffs</div>
                     {enemyDebuffs.map((b, i) => (
                         <BuffRow key={`enemy-${b.buffName}-${i}`} buff={b} variant="enemy" />
                     ))}
+                    {resistedEnemyDebuffs.map((b, i) => (
+                        <BuffRow
+                            key={`resisted-${b.buffName}-${i}`}
+                            buff={b}
+                            variant="enemy"
+                            resisted
+                        />
+                    ))}
                 </>
             )}
-            {appliedDoTs.length > 0 && (
+            {hasDoTs && (
                 <>
-                    <div className="text-xs text-theme-text-secondary mt-2 mb-1">DoTs Applied</div>
+                    <div className="text-xs text-theme-text-secondary mt-2 mb-1">
+                        {dotsLanded ? 'DoTs Applied' : 'DoTs Resisted'}
+                    </div>
                     {appliedDoTs.map((dot, i) => (
-                        <div key={`dot-${i}`} className="flex items-center gap-1.5 mb-1">
-                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
+                        <div
+                            key={`dot-${i}`}
+                            className={`flex items-center gap-1.5 mb-1 ${!dotsLanded ? 'opacity-40' : ''}`}
+                        >
+                            <div
+                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotsLanded ? 'bg-orange-500' : 'bg-dark-border'}`}
+                            />
                             <span className="flex-1 text-xs text-theme-text-primary truncate">
                                 {dotLabel(dot)}
                             </span>
-                            <span className="text-xs text-theme-text-secondary">
-                                {dot.duration}t
-                            </span>
+                            {dotsLanded ? (
+                                <span className="text-xs text-theme-text-secondary">
+                                    {dot.duration}t
+                                </span>
+                            ) : (
+                                <span className="text-xs text-theme-text-secondary italic">
+                                    resisted
+                                </span>
+                            )}
                         </div>
                     ))}
                 </>
@@ -114,12 +150,7 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                     ))}
                 </>
             )}
-            {selfBuffs.length === 0 &&
-                enemyDebuffs.length === 0 &&
-                appliedDoTs.length === 0 &&
-                activeDoTStates.length === 0 && (
-                    <p className="text-xs text-dark-border italic">Nothing active</p>
-                )}
+            {isEmpty && <p className="text-xs text-dark-border italic">Nothing active</p>}
         </div>
     );
 };

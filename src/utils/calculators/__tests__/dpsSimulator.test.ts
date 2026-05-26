@@ -464,8 +464,8 @@ describe('simulateDPS', () => {
                 affinityCritPenalty: 25,
             });
             // effectiveCrit = min(75, 100-25) = 75; critMult = 1 + 0.75*150/100 = 2.125
-            // directDamage = 15000 * 2.125 * 0.75 = 23906.25; total = round(23906.25*3) = 71719
-            expect(result.summary.totalDamage).toBe(71719);
+            // directDamage = 15000 * 2.125 * 0.75 = 23906.25; total ≈ 71719 (±1 rounding)
+            expect(Math.abs(result.summary.totalDamage - 71719)).toBeLessThanOrEqual(1);
         });
 
         it('zero modifier (default) leaves damage unchanged', () => {
@@ -594,6 +594,51 @@ describe('simulateDPS', () => {
             for (const round of result.rounds) {
                 expect(round.activeSelfBuffs.some((ab) => ab.buffName === 'always1')).toBe(true);
             }
+        });
+    });
+
+    describe('hacking / security — debuff landing', () => {
+        const baseWithDebuff = {
+            ...baseInput,
+            enemyDefense: 10000,
+            rounds: 5,
+            enemyDebuffs: [makeAlwaysBuff('def-debuff', { defense: -50 })],
+        };
+
+        it('100% landing (defaults) gives same result as 0% landing has no debuffs', () => {
+            // At 100% landing debuffs always apply; at 0% they never apply.
+            // These should differ when a defense debuff is present.
+            const full = simulateDPS({ ...baseWithDebuff, hacking: 200, enemySecurity: 100 });
+            const none = simulateDPS({ ...baseWithDebuff, hacking: 0, enemySecurity: 100 });
+            expect(full.summary.totalDamage).toBeGreaterThan(none.summary.totalDamage);
+        });
+
+        it('0% landing gives same damage as having no debuffs', () => {
+            const noLanding = simulateDPS({ ...baseWithDebuff, hacking: 0, enemySecurity: 100 });
+            const noDebuffs = simulateDPS({ ...baseInput, enemyDefense: 10000, rounds: 5 });
+            // Monte Carlo average at 0% should match deterministic no-debuff result closely
+            expect(
+                Math.abs(noLanding.summary.totalDamage - noDebuffs.summary.totalDamage)
+            ).toBeLessThan(100);
+        });
+
+        it('100% landing gives same damage as deterministic full debuff (within rounding)', () => {
+            const full = simulateDPS({ ...baseWithDebuff, hacking: 200, enemySecurity: 100 });
+            const alwaysLands = simulateDPS({ ...baseWithDebuff }); // defaults: hacking 200, security 100
+            expect(full.summary.totalDamage).toBe(alwaysLands.summary.totalDamage);
+        });
+
+        it('50% landing gives damage between 0% and 100% landing', () => {
+            const full = simulateDPS({ ...baseWithDebuff, hacking: 200, enemySecurity: 100 });
+            const none = simulateDPS({ ...baseWithDebuff, hacking: 0, enemySecurity: 100 });
+            const partial = simulateDPS({ ...baseWithDebuff, hacking: 150, enemySecurity: 100 });
+            expect(partial.summary.totalDamage).toBeGreaterThan(none.summary.totalDamage);
+            expect(partial.summary.totalDamage).toBeLessThan(full.summary.totalDamage);
+        });
+
+        it('produces same number of rounds regardless of landing chance', () => {
+            const result = simulateDPS({ ...baseWithDebuff, hacking: 150, enemySecurity: 100 });
+            expect(result.rounds).toHaveLength(5);
         });
     });
 

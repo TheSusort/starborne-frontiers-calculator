@@ -5,7 +5,12 @@ import {
     DoTApplicationEntry,
     SelectedGameBuff,
 } from '../../types/calculator';
-import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from './dpsBuffHelpers';
+import {
+    toSimBuffs,
+    toEnemyModifiers,
+    toDotAndPenModifiers,
+    toEnemyDotModifier,
+} from './dpsBuffHelpers';
 import { ActiveBuff, computeBuffTimeline } from './buffTimeline';
 
 export interface DPSSimulationInput {
@@ -30,6 +35,10 @@ export interface DPSSimulationInput {
     affinityCritCap?: number;
     /** Additive pp reduction on effective crit rate (25 for disadvantage, 0 otherwise). */
     affinityCritPenalty?: number;
+    /** Attacker hacking stat. Landing chance = clamp(hacking - enemySecurity, 0, 100) / 100. Default 200. */
+    hacking?: number;
+    /** Defender security stat. Default 100. */
+    enemySecurity?: number;
 }
 
 export interface RoundData {
@@ -47,7 +56,9 @@ export interface RoundData {
     activeBombCount: number;
     activeSelfBuffs: ActiveBuff[];
     activeEnemyDebuffs: ActiveBuff[];
+    resistedEnemyDebuffs: ActiveBuff[];
     appliedDoTs: DoTApplicationEntry[];
+    dotsLanded: boolean;
     activeDoTStates: ActiveDoTState[];
 }
 
@@ -116,7 +127,31 @@ function expireStacks(entries: ActiveDoTStack[]): void {
     }
 }
 
-export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
+function runSinglePass(params: {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    activeMultiplier: number;
+    chargedMultiplier: number;
+    chargeCount: number;
+    activeDoTs: DoTApplicationConfig;
+    chargedDoTs: DoTApplicationConfig;
+    enemyDefense: number;
+    enemyHp: number;
+    numRounds: number;
+    timeline: ReturnType<typeof computeBuffTimeline>;
+    selfBuffLookup: Map<string, SelectedGameBuff[]>;
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+    debuffLandingChance: number;
+    selfDotModifier: number;
+    defensePenetrationBuff: number;
+    hasChargedSkill: boolean;
+    startCharged: boolean;
+    affinityDamageModifier: number;
+    affinityCritCap: number;
+    affinityCritPenalty: number;
+}): RoundData[] {
     const {
         attack,
         crit,
@@ -129,51 +164,26 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         chargedDoTs,
         enemyDefense,
         enemyHp,
-        rounds: numRounds,
-        selfBuffs,
-        enemyDebuffs,
-    } = input;
-    const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
+        numRounds,
+        timeline,
+        selfBuffLookup,
+        enemyDebuffLookup,
+        debuffLandingChance,
+        selfDotModifier,
+        defensePenetrationBuff,
+        hasChargedSkill,
+        startCharged,
+        affinityDamageModifier,
+        affinityCritCap,
+        affinityCritPenalty,
+    } = params;
 
-    const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
-        selfBuffs,
-        enemyDebuffs
-    );
-
-    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
-
-    // Pre-compute per-round timeline — pass 0 charges when charged skill never fires
-    // to keep the buff timeline consistent with the damage simulation
-    const timeline = computeBuffTimeline(
-        selfBuffs,
-        enemyDebuffs,
-        hasChargedSkill ? chargeCount : 0,
-        input.startCharged ?? false,
-        numRounds
-    );
-
-    // Separate lookups prevent name collisions between self-buffs and enemy debuffs
-    const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of selfBuffs) {
-        const existing = selfBuffLookup.get(b.buffName) ?? [];
-        selfBuffLookup.set(b.buffName, [...existing, b]);
-    }
-    const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of enemyDebuffs) {
-        const existing = enemyDebuffLookup.get(b.buffName) ?? [];
-        enemyDebuffLookup.set(b.buffName, [...existing, b]);
-    }
-
-    let charges = input.startCharged ? input.chargeCount : 0;
+    // All mutable state declared fresh on every call
+    let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
-
-    let totalDirectDamage = 0;
-    let totalCorrosionDamage = 0;
-    let totalInfernoDamage = 0;
-    let totalBombDamage = 0;
 
     const roundData: RoundData[] = [];
 
@@ -211,7 +221,14 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             toSimBuffs(roundSelfBuffs)
         );
 
+        const landedEnemyDebuffs: ActiveBuff[] = [];
+        const resistedEnemyDebuffs: ActiveBuff[] = [];
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
+            if (Math.random() >= debuffLandingChance) {
+                resistedEnemyDebuffs.push(ab);
+                return [];
+            }
+            landedEnemyDebuffs.push(ab);
             const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
@@ -245,7 +262,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 
         // Step 1: Calculate direct damage
-        const dotMult = 1 + dotDamageModifier / 100;
+        const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
+        const dotMult = 1 + (selfDotModifier + enemyDotMod) / 100;
         const affinityMult = 1 + affinityDamageModifier / 100;
         const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
         const directDamage =
@@ -255,28 +273,31 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             (1 + incomingDamageModifier / 100) *
             affinityMult;
 
-        // Step 3: Apply new DoT stacks from this round's skill
-        for (const dot of dotsConfig) {
-            if (dot.stacks <= 0 || dot.tier <= 0) continue;
-            if (dot.type === 'corrosion') {
-                corrosionEntries.push({
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                    remainingRounds: dot.duration,
-                });
-            } else if (dot.type === 'inferno') {
-                infernoEntries.push({
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                    remainingRounds: dot.duration,
-                });
-            } else if (dot.type === 'bomb') {
-                pendingBombs.push({
-                    countdown: Math.max(1, dot.duration),
-                    damagePerStack: effectiveAttack * (dot.tier / 100),
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                });
+        // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
+        const dotsLanded = Math.random() < debuffLandingChance;
+        if (dotsLanded) {
+            for (const dot of dotsConfig) {
+                if (dot.stacks <= 0 || dot.tier <= 0) continue;
+                if (dot.type === 'corrosion') {
+                    corrosionEntries.push({
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                        remainingRounds: dot.duration,
+                    });
+                } else if (dot.type === 'inferno') {
+                    infernoEntries.push({
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                        remainingRounds: dot.duration,
+                    });
+                } else if (dot.type === 'bomb') {
+                    pendingBombs.push({
+                        countdown: Math.max(1, dot.duration),
+                        damagePerStack: effectiveAttack * (dot.tier / 100),
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                    });
+                }
             }
         }
 
@@ -305,11 +326,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
         cumulativeDamage += totalRoundDamage;
 
-        totalDirectDamage += directDamage;
-        totalCorrosionDamage += corrosionDamage;
-        totalInfernoDamage += infernoDamage;
-        totalBombDamage += bombDamage;
-
         // Report stacks after expiry (state going into next round)
         roundData.push({
             round: r,
@@ -325,8 +341,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
             activeSelfBuffs: entry.activeSelfBuffs,
-            activeEnemyDebuffs: entry.activeEnemyDebuffs,
+            activeEnemyDebuffs: landedEnemyDebuffs,
+            resistedEnemyDebuffs,
             appliedDoTs: dotsConfig,
+            dotsLanded,
             activeDoTStates: [
                 ...corrosionEntries.map((e) => ({
                     type: 'corrosion' as const,
@@ -350,15 +368,108 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         });
     }
 
+    return roundData;
+}
+
+export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
+    const {
+        attack,
+        crit,
+        critDamage,
+        defensePenetration,
+        activeMultiplier,
+        chargedMultiplier,
+        chargeCount,
+        activeDoTs,
+        chargedDoTs,
+        enemyDefense,
+        enemyHp,
+        rounds: numRounds,
+        selfBuffs,
+        enemyDebuffs,
+    } = input;
+    const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
+
+    // Compute debuff landing chance
+    const hacking = input.hacking ?? 200;
+    const enemySecurity = input.enemySecurity ?? 100;
+    const debuffLandingChance = Math.min(100, Math.max(0, hacking - enemySecurity)) / 100;
+
+    // Self-side constants (not subject to rolls)
+    const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
+        selfBuffs,
+        []
+    );
+    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
+
+    // Pre-compute deterministic buff timeline
+    const timeline = computeBuffTimeline(
+        selfBuffs,
+        enemyDebuffs,
+        hasChargedSkill ? chargeCount : 0,
+        input.startCharged ?? false,
+        numRounds
+    );
+
+    // Build lookup maps
+    const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of selfBuffs) {
+        const existing = selfBuffLookup.get(b.buffName) ?? [];
+        selfBuffLookup.set(b.buffName, [...existing, b]);
+    }
+    const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of enemyDebuffs) {
+        const existing = enemyDebuffLookup.get(b.buffName) ?? [];
+        enemyDebuffLookup.set(b.buffName, [...existing, b]);
+    }
+
+    const rounds = runSinglePass({
+        attack,
+        crit,
+        critDamage,
+        defensePenetration,
+        activeMultiplier,
+        chargedMultiplier,
+        chargeCount,
+        activeDoTs,
+        chargedDoTs,
+        enemyDefense,
+        enemyHp,
+        numRounds,
+        timeline,
+        selfBuffLookup,
+        enemyDebuffLookup,
+        debuffLandingChance,
+        selfDotModifier,
+        defensePenetrationBuff,
+        hasChargedSkill,
+        startCharged: input.startCharged ?? false,
+        affinityDamageModifier,
+        affinityCritCap,
+        affinityCritPenalty,
+    });
+
+    let totalDirectDamage = 0;
+    let totalCorrosionDamage = 0;
+    let totalInfernoDamage = 0;
+    let totalBombDamage = 0;
+    for (const rd of rounds) {
+        totalDirectDamage += rd.directDamage;
+        totalCorrosionDamage += rd.corrosionDamage;
+        totalInfernoDamage += rd.infernoDamage;
+        totalBombDamage += rd.bombDamage;
+    }
+    const totalDamage = rounds[rounds.length - 1]?.cumulativeDamage ?? 0;
+
     return {
-        rounds: roundData,
+        rounds,
         summary: {
-            totalDamage: Math.round(cumulativeDamage),
-            avgDamagePerRound: Math.round(cumulativeDamage / numRounds),
-            totalDirectDamage: Math.round(totalDirectDamage),
-            totalCorrosionDamage: Math.round(totalCorrosionDamage),
-            totalInfernoDamage: Math.round(totalInfernoDamage),
-            totalBombDamage: Math.round(totalBombDamage),
+            totalDamage,
+            avgDamagePerRound: Math.round(totalDamage / numRounds),
+            totalDirectDamage,
+            totalCorrosionDamage,
+            totalInfernoDamage,
+            totalBombDamage,
         },
     };
 }

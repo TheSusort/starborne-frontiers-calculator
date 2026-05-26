@@ -58,3 +58,10 @@ export function toDotAndPenModifiers(
             enemy.reduce((sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks, 0),
     };
 }
+
+export function toEnemyDotModifier(selected: SelectedGameBuff[]): number {
+    return selected.reduce(
+        (sum, s) => sum + (s.parsedEffects.incomingDotDamage ?? 0) * s.stacks,
+        0
+    );
+}
