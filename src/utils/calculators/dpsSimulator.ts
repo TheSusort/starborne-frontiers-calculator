@@ -185,11 +185,6 @@ function runSinglePass(params: {
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
 
-    let totalDirectDamage = 0;
-    let totalCorrosionDamage = 0;
-    let totalInfernoDamage = 0;
-    let totalBombDamage = 0;
-
     const roundData: RoundData[] = [];
 
     for (let r = 1; r <= numRounds; r++) {
@@ -321,11 +316,6 @@ function runSinglePass(params: {
 
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
         cumulativeDamage += totalRoundDamage;
-
-        totalDirectDamage += directDamage;
-        totalCorrosionDamage += corrosionDamage;
-        totalInfernoDamage += infernoDamage;
-        totalBombDamage += bombDamage;
 
         // Report stacks after expiry (state going into next round)
         roundData.push({
