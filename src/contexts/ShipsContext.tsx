@@ -295,8 +295,6 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         if (!storageShips) return;
 
-        let cancelled = false;
-
         // Authenticated path: loadShips() handles enrichment via the ship_templates join
         if (activeProfileId) {
             setLocalShips(storageShips);
@@ -310,6 +308,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             return;
         }
 
+        const controller = new AbortController();
         const uniqueNames = [...new Set(shipsNeedingText.map((s) => s.name))];
         void supabase
             .from('ship_templates')
@@ -317,8 +316,9 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 'name, active_skill_text, charge_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text'
             )
             .in('name', uniqueNames)
+            .abortSignal(controller.signal)
             .then(({ data }) => {
-                if (cancelled) return;
+                if (controller.signal.aborted) return;
                 if (!data) {
                     setLocalShips(storageShips);
                     return;
@@ -343,7 +343,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
 
         return () => {
-            cancelled = true;
+            controller.abort();
         };
     }, [storageShips, activeProfileId]);
 
