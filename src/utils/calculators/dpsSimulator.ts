@@ -315,8 +315,10 @@ function runSinglePass(params: {
             }
         }
 
-        // Step 4: Tick corrosion (scales with enemy HP)
-        const corrosionDamage = tickDoTStacks(corrosionEntries, enemyHp) * dotMult * affinityMult;
+        // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
+        const corrosionBaseHp = Math.min(enemyHp, 500_000);
+        const corrosionDamage =
+            tickDoTStacks(corrosionEntries, corrosionBaseHp) * dotMult * affinityMult;
 
         // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
         const infernoDamage =
