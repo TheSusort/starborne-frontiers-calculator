@@ -675,15 +675,16 @@ const DPSCalculatorPage: React.FC = () => {
                             Debuff landing is modelled via hacking and security stats. Each round,
                             every active enemy debuff is rolled independently:{' '}
                             <span className="font-mono">
-                                clamp(hacking − enemySecurity, 0, 100)%
+                                clamp(hacking × affinityMult − enemySecurity, 0, 100)%
                             </span>{' '}
-                            chance to land. At the defaults (hacking 200, security 100) debuffs
-                            always land. Each simulation is a single stochastic run — rounds where
-                            the roll fails show no DoT or debuff damage, while rounds where it lands
-                            show full effect. The chart reflects one realistic playthrough rather
-                            than a smoothed average. Conditional buffs and debuffs (e.g. &quot;on
-                            kill&quot;, &quot;when enemy has 3+ debuffs&quot;) are treated as always
-                            active for simplicity.
+                            chance to land, where affinityMult is ×1.25 for advantage, ×0.75 for
+                            disadvantage, or ×1 for neutral. At the defaults (hacking 200, security
+                            100) debuffs always land. Each simulation is a single stochastic run —
+                            rounds where the roll fails show no DoT or debuff damage, while rounds
+                            where it lands show full effect. The chart reflects one realistic
+                            playthrough rather than a smoothed average. Conditional buffs and
+                            debuffs (e.g. &quot;on kill&quot;, &quot;when enemy has 3+
+                            debuffs&quot;) are treated as always active for simplicity.
                         </p>
                     </div>
                 </div>

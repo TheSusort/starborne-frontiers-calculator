@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Calculators now auto-fill buff and debuff pickers based on the selected ship\'s skill text — buffs granted by the ship appear pre-populated with a "skill" badge and can be removed manually.',
     'DPS Calculator: buffs and debuffs now only apply during the rounds they are actually active. Hover any round on the damage chart to see which buffs and debuffs are active and how many turns remain.',
     "Hacking and security stats added to the DPS calculator. Set your ship's hacking (auto-filled from ship data) and the enemy's security (Combat Settings) to model the probability of debuffs landing. Defaults keep current behaviour (always land). Damage numbers with partial landing rates reflect a single stochastic combat run.",
+    'DPS Calculator: affinity now affects hacking — advantage gives ×1.25 effective hacking, disadvantage gives ×0.75, matching how affinity scales damage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

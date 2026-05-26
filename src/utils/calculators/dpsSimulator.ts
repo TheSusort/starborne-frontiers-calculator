@@ -417,10 +417,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
-    // Compute debuff landing chance
+    // Compute debuff landing chance (affinity modifier applies multiplicatively to hacking)
     const hacking = input.hacking ?? 200;
     const enemySecurity = input.enemySecurity ?? 100;
-    const debuffLandingChance = Math.min(100, Math.max(0, hacking - enemySecurity)) / 100;
+    const effectiveHacking = hacking * (1 + affinityDamageModifier / 100);
+    const debuffLandingChance = Math.min(100, Math.max(0, effectiveHacking - enemySecurity)) / 100;
 
     // Self-side constants (not subject to rolls)
     const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
