@@ -221,8 +221,10 @@ function runSinglePass(params: {
             toSimBuffs(roundSelfBuffs)
         );
 
+        const landedEnemyDebuffs: ActiveBuff[] = [];
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
             if (Math.random() >= debuffLandingChance) return [];
+            landedEnemyDebuffs.push(ab);
             const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
@@ -332,7 +334,7 @@ function runSinglePass(params: {
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
             activeSelfBuffs: entry.activeSelfBuffs,
-            activeEnemyDebuffs: entry.activeEnemyDebuffs,
+            activeEnemyDebuffs: landedEnemyDebuffs,
             appliedDoTs: dotsConfig,
             activeDoTStates: [
                 ...corrosionEntries.map((e) => ({
