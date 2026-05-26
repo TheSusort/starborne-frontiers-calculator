@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship } from '../../types/ship';
 import { TeamShipConfig, SelectedGameBuff } from '../../types/calculator';
 import { Button } from '../ui/Button';
@@ -32,6 +32,10 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     const [skillRefOpen, setSkillRefOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+
+    useEffect(() => {
+        if (!selectedShip) setSkillRefOpen(false);
+    }, [selectedShip]);
 
     return (
         <div className="card space-y-2">
@@ -67,7 +71,7 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                             <Button
                                 variant="link"
                                 onClick={() => setSkillRefOpen((v) => !v)}
-                                className="w-full flex justify-between items-center border-b border-dark-border pb-4"
+                                className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
                             >
                                 <span className="flex items-center gap-2">
                                     <ChevronDownIcon
@@ -93,7 +97,7 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                     />
 
                     {/* Ship Buffs */}
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide">
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mt-4 mb-2">
                         Ship Buffs
                     </div>
                     <GameBuffPicker
@@ -112,7 +116,7 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                     />
 
                     {/* Applied Enemy Debuffs */}
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mt-4">
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mt-4 mb-2">
                         Applied Enemy Debuffs
                     </div>
                     <GameBuffPicker
