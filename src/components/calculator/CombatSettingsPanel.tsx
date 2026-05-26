@@ -16,6 +16,8 @@ interface CombatSettingsPanelProps {
     onEnemyDefenseChange: (v: number) => void;
     enemyHp: number;
     onEnemyHpChange: (v: number) => void;
+    enemySecurity: number;
+    onEnemySecurityChange: (v: number) => void;
     rounds: number;
     onRoundsChange: (v: number) => void;
     attackerBuffs: SelectedGameBuff[];
@@ -40,6 +42,8 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onEnemyDefenseChange,
     enemyHp,
     onEnemyHpChange,
+    enemySecurity,
+    onEnemySecurityChange,
     rounds,
     onRoundsChange,
     attackerBuffs,
@@ -71,7 +75,7 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                     <Input
                         label="Enemy Defense"
                         type="number"
@@ -83,6 +87,13 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                         type="number"
                         value={enemyHp}
                         onChange={(e) => onEnemyHpChange(parseInt(e.target.value) || 0)}
+                    />
+                    <Input
+                        label="Enemy Security"
+                        type="number"
+                        min="0"
+                        value={enemySecurity}
+                        onChange={(e) => onEnemySecurityChange(parseInt(e.target.value) || 0)}
                     />
                     <Input
                         label="Rounds"
