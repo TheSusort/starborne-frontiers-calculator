@@ -181,7 +181,7 @@ export interface SkillEffect {
     stackTrigger?: StackTrigger;
 }
 
-const APPLICATION_VERBS = new Set(['grants', 'gains', 'inflicts', 'applies']);
+const APPLICATION_VERBS = new Set(['grants', 'granted', 'gains', 'inflicts', 'applies']);
 const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
 const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
@@ -260,7 +260,7 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
  * "applies" with a buff-type effect → self; anything else → enemy.
  */
 function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
-    if (verb === 'gains' || verb === 'grants') return 'self';
+    if (verb === 'gains' || verb === 'grants' || verb === 'granted') return 'self';
     if (verb === 'inflicts') return 'enemy';
     // applies: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);

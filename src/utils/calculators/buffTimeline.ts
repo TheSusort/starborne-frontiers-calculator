@@ -186,7 +186,7 @@ export function computeBuffTimeline(
             if (typeof buff.skillDuration !== 'number') return;
             const { familyKey, tier } = deriveFamilyKey(buff.buffName);
             const existing = map.get(familyKey);
-            if (existing && existing.tier >= tier) return;
+            if (existing && existing.tier > tier) return;
             map.set(familyKey, {
                 buffName: buff.buffName,
                 turnsRemaining: buff.skillDuration,

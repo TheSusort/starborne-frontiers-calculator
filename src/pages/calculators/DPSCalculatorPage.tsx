@@ -49,7 +49,7 @@ const DPSCalculatorPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
     const nextDoTIdRef = useRef(1);
-    const nextTeamIdRef = useRef(1);
+    const nextTeamIdRef = useRef(2);
 
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
@@ -133,7 +133,9 @@ const DPSCalculatorPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
-    const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([]);
+    const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([
+        { id: 'team-1', buffs: [], enemyDebuffs: [], startCharged: false },
+    ]);
     const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
     const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
 
@@ -271,7 +273,28 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const removeConfig = (id: string) => {
-        setConfigs((prev) => prev.filter((config) => config.id !== id));
+        setConfigs((prev) => {
+            if (prev.length <= 1)
+                return [
+                    {
+                        id: prev[0].id,
+                        name: prev[0].name,
+                        attack: 15000,
+                        crit: 100,
+                        critDamage: 125,
+                        defensePenetration: 0,
+                        activeMultiplier: 100,
+                        chargedMultiplier: 0,
+                        chargeCount: 0,
+                        startCharged: false,
+                        activeDoTs: [...DEFAULT_DOT_CONFIG],
+                        chargedDoTs: [...DEFAULT_DOT_CONFIG],
+                        buffs: [],
+                        enemyDebuffs: [],
+                    },
+                ];
+            return prev.filter((config) => config.id !== id);
+        });
     };
 
     const updateConfig = (
@@ -417,7 +440,11 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const removeTeamShip = (id: string) => {
-        setTeamShips((prev) => prev.filter((t) => t.id !== id));
+        setTeamShips((prev) => {
+            if (prev.length <= 1)
+                return [{ id: prev[0].id, buffs: [], enemyDebuffs: [], startCharged: false }];
+            return prev.filter((t) => t.id !== id);
+        });
     };
 
     const selectShipForTeamSlot = (id: string, ship: Ship) => {

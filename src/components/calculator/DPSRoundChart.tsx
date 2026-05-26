@@ -55,6 +55,9 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                     <div key={entry.dataKey} className="mb-1">
                         <p style={{ color: entry.color }} className="font-medium">
                             {entry.name}: {entry.value.toLocaleString()}
+                            {roundData?.action === 'charged' && (
+                                <span className="ml-1 text-yellow-400 text-xs">Charged</span>
+                            )}
                         </p>
                         {roundData && (
                             <div className="text-xs text-theme-text-secondary pl-2">
@@ -169,11 +172,17 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
                 />
             </div>
             <DPSBuffPanel
-                ships={ships.map((s) => ({
-                    name: s.name,
-                    roundData:
-                        hoveredRound != null ? (s.result.rounds[hoveredRound - 1] ?? null) : null,
-                }))}
+                ships={ships
+                    .map((s, i) => ({
+                        name: s.name,
+                        color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                        totalDamage: s.result.summary.totalDamage,
+                        roundData:
+                            hoveredRound != null
+                                ? (s.result.rounds[hoveredRound - 1] ?? null)
+                                : null,
+                    }))
+                    .sort((a, b) => b.totalDamage - a.totalDamage)}
                 totalRounds={rounds}
                 hoveredRound={hoveredRound}
             />

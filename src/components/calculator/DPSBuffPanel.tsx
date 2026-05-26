@@ -6,6 +6,8 @@ import { DoTApplicationEntry, DoTType } from '../../types/calculator';
 interface DPSBuffPanelProps {
     ships: Array<{
         name: string;
+        color: string;
+        totalDamage: number;
         roundData: RoundData | null;
     }>;
     totalRounds: number;
@@ -47,8 +49,9 @@ const BuffRow: React.FC<{ buff: ActiveBuff; variant: 'self' | 'enemy' }> = ({ bu
     </div>
 );
 
-const ShipSection: React.FC<{ name: string; roundData: RoundData | null }> = ({
+const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData | null }> = ({
     name,
+    color,
     roundData,
 }) => {
     const selfBuffs = roundData?.activeSelfBuffs ?? [];
@@ -58,7 +61,7 @@ const ShipSection: React.FC<{ name: string; roundData: RoundData | null }> = ({
 
     return (
         <div className="px-2.5 py-2 border-b border-dark-border last:border-b-0">
-            <div className="text-xs text-theme-text-secondary uppercase tracking-wide mb-1.5">
+            <div className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color }}>
                 {name}
             </div>
             {selfBuffs.length > 0 && (
@@ -127,7 +130,7 @@ export const DPSBuffPanel: React.FC<DPSBuffPanelProps> = ({ ships, totalRounds, 
             {hoveredRound != null ? `Round ${hoveredRound} of ${totalRounds}` : 'Hover a round'}
         </div>
         {ships.map((ship, i) => (
-            <ShipSection key={i} name={ship.name} roundData={ship.roundData} />
+            <ShipSection key={i} name={ship.name} color={ship.color} roundData={ship.roundData} />
         ))}
     </div>
 );

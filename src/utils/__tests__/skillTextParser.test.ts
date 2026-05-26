@@ -320,6 +320,26 @@ describe('parseSkillEffects', () => {
             parseSkillEffects('When this Unit has <unit-skill>Blast</unit-skill>', 'passive1')
         ).toEqual([]);
     });
+
+    it('parses "granted" (passive voice) as a self-targeting buff', () => {
+        const result = parseSkillEffects(
+            '(All) allies are granted <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-skill>Speed Up III</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toHaveLength(2);
+        expect(result[0]).toMatchObject({
+            buffName: 'Attack Up III',
+            target: 'self',
+            duration: 2,
+            source: 'active',
+        });
+        expect(result[1]).toMatchObject({
+            buffName: 'Speed Up III',
+            target: 'self',
+            duration: 2,
+            source: 'active',
+        });
+    });
 });
 
 describe('parseAllSkillEffects', () => {

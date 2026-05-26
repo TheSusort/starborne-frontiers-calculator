@@ -200,25 +200,43 @@ describe('computeBuffTimeline', () => {
         });
     });
 
-    it('same tier does not refresh the buff', () => {
-        // Active: Attack Up II (2t), chargeCount=2
+    it('same tier re-application refreshes duration', () => {
+        // Active: Attack Up II (2t), chargeCount=2 → r1,r2 active; r3 charged; r4 active
         const buff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
         const result = computeBuffTimeline([buff], [], 2, false, 4);
+        // r1: applied fresh → 2
         expect(result[0].activeSelfBuffs[0]).toMatchObject({
             buffName: 'Attack Up II',
             turnsRemaining: 2,
         });
-        // r2: decrement→1, active fires II (tier 2 ≥ tier 2) → skip
+        // r2: decrement→1, active fires same tier → refreshed to 2
         expect(result[1].activeSelfBuffs[0]).toMatchObject({
+            buffName: 'Attack Up II',
+            turnsRemaining: 2,
+        });
+        // r3: decrement→1, charged fires (no active buff applies) → stays at 1
+        expect(result[2].activeSelfBuffs[0]).toMatchObject({
             buffName: 'Attack Up II',
             turnsRemaining: 1,
         });
-        // r3: decrement→0 deleted, charged fires (no buff)
-        expect(result[2].activeSelfBuffs).toEqual([]);
-        // r4: active fires → fresh application
+        // r4: decrement→0 (expired), active fires → fresh application
         expect(result[3].activeSelfBuffs[0]).toMatchObject({
             buffName: 'Attack Up II',
             turnsRemaining: 2,
+        });
+    });
+
+    it('active buff applied every round keeps duration refreshed (Grif scenario)', () => {
+        // Active fires every round (no charge configured), buff lasts 2 turns
+        // Buff should never drop below 2 on active rounds — always refreshed before snapshot
+        const buff = makeBuff('Out. Damage Up III', { skillSource: 'active', skillDuration: 2 });
+        const result = computeBuffTimeline([buff], [], 0, false, 5);
+        // All rounds: active fires every round, decrement then refresh → always 2
+        result.forEach((entry) => {
+            expect(entry.activeSelfBuffs[0]).toMatchObject({
+                buffName: 'Out. Damage Up III',
+                turnsRemaining: 2,
+            });
         });
     });
 
