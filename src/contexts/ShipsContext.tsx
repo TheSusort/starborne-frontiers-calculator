@@ -291,12 +291,54 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return map;
     }, [localShips]);
 
-    // Synchronize local state with storage
+    // Synchronize local state with storage, enriching skill text from templates for unauthenticated users
     useEffect(() => {
-        if (storageShips) {
+        if (!storageShips) return;
+
+        // Authenticated path: loadShips() handles enrichment via the ship_templates join
+        if (activeProfileId) {
             setLocalShips(storageShips);
+            return;
         }
-    }, [storageShips]);
+
+        // Unauthenticated path: fetch skill text from ship_templates for ships that are missing it
+        const shipsNeedingText = storageShips.filter((s) => !s.activeSkillText);
+        if (shipsNeedingText.length === 0) {
+            setLocalShips(storageShips);
+            return;
+        }
+
+        const uniqueNames = [...new Set(shipsNeedingText.map((s) => s.name))];
+        void supabase
+            .from('ship_templates')
+            .select(
+                'name, active_skill_text, charge_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text'
+            )
+            .in('name', uniqueNames)
+            .then(({ data }) => {
+                if (!data) {
+                    setLocalShips(storageShips);
+                    return;
+                }
+                const templateMap = new Map(data.map((t) => [t.name, t]));
+                setLocalShips(
+                    storageShips.map((ship) => {
+                        if (ship.activeSkillText) return ship;
+                        const t = templateMap.get(ship.name);
+                        if (!t) return ship;
+                        return {
+                            ...ship,
+                            activeSkillText: t.active_skill_text ?? undefined,
+                            chargeSkillText: t.charge_skill_text ?? undefined,
+                            chargeSkillCharge: t.charge_skill_charge ?? undefined,
+                            firstPassiveSkillText: t.first_passive_skill_text ?? undefined,
+                            secondPassiveSkillText: t.second_passive_skill_text ?? undefined,
+                            thirdPassiveSkillText: t.third_passive_skill_text ?? undefined,
+                        };
+                    })
+                );
+            });
+    }, [storageShips, activeProfileId]);
 
     const loadShips = useCallback(async () => {
         // Skip loading if we're in the middle of migration
