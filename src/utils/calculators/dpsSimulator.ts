@@ -151,7 +151,16 @@ function runSinglePass(params: {
     affinityDamageModifier: number;
     affinityCritCap: number;
     affinityCritPenalty: number;
-}): RoundData[] {
+}): {
+    rounds: RoundData[];
+    rawTotals: {
+        direct: number;
+        corrosion: number;
+        inferno: number;
+        bomb: number;
+        cumulative: number;
+    };
+} {
     const {
         attack,
         crit,
@@ -181,6 +190,10 @@ function runSinglePass(params: {
     // All mutable state declared fresh on every call
     let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
+    let totalDirectRaw = 0;
+    let totalCorrosionRaw = 0;
+    let totalInfernoRaw = 0;
+    let totalBombRaw = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
@@ -221,10 +234,11 @@ function runSinglePass(params: {
             toSimBuffs(roundSelfBuffs)
         );
 
+        const roundDebuffLanded = Math.random() < debuffLandingChance;
         const landedEnemyDebuffs: ActiveBuff[] = [];
         const resistedEnemyDebuffs: ActiveBuff[] = [];
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
-            if (Math.random() >= debuffLandingChance) {
+            if (!roundDebuffLanded) {
                 resistedEnemyDebuffs.push(ab);
                 return [];
             }
@@ -274,7 +288,7 @@ function runSinglePass(params: {
             affinityMult;
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
-        const dotsLanded = Math.random() < debuffLandingChance;
+        const dotsLanded = roundDebuffLanded;
         if (dotsLanded) {
             for (const dot of dotsConfig) {
                 if (dot.stacks <= 0 || dot.tier <= 0) continue;
@@ -325,6 +339,10 @@ function runSinglePass(params: {
 
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
         cumulativeDamage += totalRoundDamage;
+        totalDirectRaw += directDamage;
+        totalCorrosionRaw += corrosionDamage;
+        totalInfernoRaw += infernoDamage;
+        totalBombRaw += bombDamage;
 
         // Report stacks after expiry (state going into next round)
         roundData.push({
@@ -368,7 +386,16 @@ function runSinglePass(params: {
         });
     }
 
-    return roundData;
+    return {
+        rounds: roundData,
+        rawTotals: {
+            direct: totalDirectRaw,
+            corrosion: totalCorrosionRaw,
+            inferno: totalInfernoRaw,
+            bomb: totalBombRaw,
+            cumulative: cumulativeDamage,
+        },
+    };
 }
 
 export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
@@ -423,7 +450,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyDebuffLookup.set(b.buffName, [...existing, b]);
     }
 
-    const rounds = runSinglePass({
+    const { rounds, rawTotals } = runSinglePass({
         attack,
         crit,
         critDamage,
@@ -449,27 +476,17 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinityCritPenalty,
     });
 
-    let totalDirectDamage = 0;
-    let totalCorrosionDamage = 0;
-    let totalInfernoDamage = 0;
-    let totalBombDamage = 0;
-    for (const rd of rounds) {
-        totalDirectDamage += rd.directDamage;
-        totalCorrosionDamage += rd.corrosionDamage;
-        totalInfernoDamage += rd.infernoDamage;
-        totalBombDamage += rd.bombDamage;
-    }
-    const totalDamage = rounds[rounds.length - 1]?.cumulativeDamage ?? 0;
+    const totalDamage = Math.round(rawTotals.cumulative);
 
     return {
         rounds,
         summary: {
             totalDamage,
-            avgDamagePerRound: Math.round(totalDamage / numRounds),
-            totalDirectDamage,
-            totalCorrosionDamage,
-            totalInfernoDamage,
-            totalBombDamage,
+            avgDamagePerRound: Math.round(rawTotals.cumulative / numRounds),
+            totalDirectDamage: Math.round(rawTotals.direct),
+            totalCorrosionDamage: Math.round(rawTotals.corrosion),
+            totalInfernoDamage: Math.round(rawTotals.inferno),
+            totalBombDamage: Math.round(rawTotals.bomb),
         },
     };
 }

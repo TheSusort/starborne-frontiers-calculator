@@ -295,6 +295,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     useEffect(() => {
         if (!storageShips) return;
 
+        let cancelled = false;
+
         // Authenticated path: loadShips() handles enrichment via the ship_templates join
         if (activeProfileId) {
             setLocalShips(storageShips);
@@ -316,6 +318,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             )
             .in('name', uniqueNames)
             .then(({ data }) => {
+                if (cancelled) return;
                 if (!data) {
                     setLocalShips(storageShips);
                     return;
@@ -338,6 +341,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     })
                 );
             });
+
+        return () => {
+            cancelled = true;
+        };
     }, [storageShips, activeProfileId]);
 
     const loadShips = useCallback(async () => {
