@@ -46,6 +46,7 @@ interface ShipConfigCardProps {
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
     enemyAffinity: AffinityName;
+    enemySecurity: number;
 }
 
 export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
@@ -67,6 +68,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onBuffsChange,
     onEnemyDebuffsChange,
     enemyAffinity,
+    enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
@@ -154,6 +156,24 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 </Button>
 
                 <CollapsibleForm isVisible={openAdvanced}>
+                    <div className="mb-4">
+                        <Input
+                            label="Hacking"
+                            type="number"
+                            min="0"
+                            value={config.hacking ?? 200}
+                            helpLabel={
+                                config.autoFilledFields?.has('hacking') ? 'auto-filled' : undefined
+                            }
+                            onChange={(e) => onUpdate('hacking', parseInt(e.target.value) || 0)}
+                        />
+                        <p className="text-xs text-theme-text-secondary mt-1">
+                            Landing:{' '}
+                            {Math.min(100, Math.max(0, (config.hacking ?? 200) - enemySecurity))}%
+                            vs enemy
+                        </p>
+                    </div>
+
                     <div className="flex items-center gap-2 mb-4 relative">
                         <Select
                             label="Affinity"
