@@ -269,28 +269,30 @@ function runSinglePass(params: {
             (1 + incomingDamageModifier / 100) *
             affinityMult;
 
-        // Step 3: Apply new DoT stacks from this round's skill
-        for (const dot of dotsConfig) {
-            if (dot.stacks <= 0 || dot.tier <= 0) continue;
-            if (dot.type === 'corrosion') {
-                corrosionEntries.push({
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                    remainingRounds: dot.duration,
-                });
-            } else if (dot.type === 'inferno') {
-                infernoEntries.push({
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                    remainingRounds: dot.duration,
-                });
-            } else if (dot.type === 'bomb') {
-                pendingBombs.push({
-                    countdown: Math.max(1, dot.duration),
-                    damagePerStack: effectiveAttack * (dot.tier / 100),
-                    stacks: dot.stacks,
-                    tier: dot.tier,
-                });
+        // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
+        if (Math.random() < debuffLandingChance) {
+            for (const dot of dotsConfig) {
+                if (dot.stacks <= 0 || dot.tier <= 0) continue;
+                if (dot.type === 'corrosion') {
+                    corrosionEntries.push({
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                        remainingRounds: dot.duration,
+                    });
+                } else if (dot.type === 'inferno') {
+                    infernoEntries.push({
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                        remainingRounds: dot.duration,
+                    });
+                } else if (dot.type === 'bomb') {
+                    pendingBombs.push({
+                        countdown: Math.max(1, dot.duration),
+                        damagePerStack: effectiveAttack * (dot.tier / 100),
+                        stacks: dot.stacks,
+                        tier: dot.tier,
+                    });
+                }
             }
         }
 
