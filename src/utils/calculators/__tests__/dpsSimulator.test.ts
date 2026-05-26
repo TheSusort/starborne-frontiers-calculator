@@ -629,9 +629,26 @@ describe('simulateDPS', () => {
         });
 
         it('50% landing gives damage between 0% and 100% landing', () => {
-            const full = simulateDPS({ ...baseWithDebuff, hacking: 200, enemySecurity: 100 });
-            const none = simulateDPS({ ...baseWithDebuff, hacking: 0, enemySecurity: 100 });
-            const partial = simulateDPS({ ...baseWithDebuff, hacking: 150, enemySecurity: 100 });
+            // Use a large round count so the stochastic mid-landing case reliably falls
+            // between the deterministic 0% and 100% landing results.
+            const full = simulateDPS({
+                ...baseWithDebuff,
+                rounds: 1000,
+                hacking: 200,
+                enemySecurity: 100,
+            });
+            const none = simulateDPS({
+                ...baseWithDebuff,
+                rounds: 1000,
+                hacking: 0,
+                enemySecurity: 100,
+            });
+            const partial = simulateDPS({
+                ...baseWithDebuff,
+                rounds: 1000,
+                hacking: 150,
+                enemySecurity: 100,
+            });
             expect(partial.summary.totalDamage).toBeGreaterThan(none.summary.totalDamage);
             expect(partial.summary.totalDamage).toBeLessThan(full.summary.totalDamage);
         });
