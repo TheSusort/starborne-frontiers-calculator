@@ -5,7 +5,12 @@ import {
     DoTApplicationEntry,
     SelectedGameBuff,
 } from '../../types/calculator';
-import { toSimBuffs, toEnemyModifiers, toDotAndPenModifiers } from './dpsBuffHelpers';
+import {
+    toSimBuffs,
+    toEnemyModifiers,
+    toDotAndPenModifiers,
+    toEnemyDotModifier,
+} from './dpsBuffHelpers';
 import { ActiveBuff, computeBuffTimeline } from './buffTimeline';
 
 export interface DPSSimulationInput {
@@ -30,6 +35,10 @@ export interface DPSSimulationInput {
     affinityCritCap?: number;
     /** Additive pp reduction on effective crit rate (25 for disadvantage, 0 otherwise). */
     affinityCritPenalty?: number;
+    /** Attacker hacking stat. Landing chance = clamp(hacking - enemySecurity, 0, 100) / 100. Default 200. */
+    hacking?: number;
+    /** Defender security stat. Default 100. */
+    enemySecurity?: number;
 }
 
 export interface RoundData {
@@ -116,7 +125,33 @@ function expireStacks(entries: ActiveDoTStack[]): void {
     }
 }
 
-export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
+const MONTE_CARLO_RUNS = 200;
+
+function runSinglePass(params: {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    activeMultiplier: number;
+    chargedMultiplier: number;
+    chargeCount: number;
+    activeDoTs: DoTApplicationConfig;
+    chargedDoTs: DoTApplicationConfig;
+    enemyDefense: number;
+    enemyHp: number;
+    numRounds: number;
+    timeline: ReturnType<typeof computeBuffTimeline>;
+    selfBuffLookup: Map<string, SelectedGameBuff[]>;
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+    debuffLandingChance: number;
+    selfDotModifier: number;
+    defensePenetrationBuff: number;
+    hasChargedSkill: boolean;
+    startCharged: boolean;
+    affinityDamageModifier: number;
+    affinityCritCap: number;
+    affinityCritPenalty: number;
+}): RoundData[] {
     const {
         attack,
         crit,
@@ -129,42 +164,22 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         chargedDoTs,
         enemyDefense,
         enemyHp,
-        rounds: numRounds,
-        selfBuffs,
-        enemyDebuffs,
-    } = input;
-    const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
+        numRounds,
+        timeline,
+        selfBuffLookup,
+        enemyDebuffLookup,
+        debuffLandingChance,
+        selfDotModifier,
+        defensePenetrationBuff,
+        hasChargedSkill,
+        startCharged,
+        affinityDamageModifier,
+        affinityCritCap,
+        affinityCritPenalty,
+    } = params;
 
-    const { defensePenetrationBuff, dotDamageModifier } = toDotAndPenModifiers(
-        selfBuffs,
-        enemyDebuffs
-    );
-
-    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
-
-    // Pre-compute per-round timeline — pass 0 charges when charged skill never fires
-    // to keep the buff timeline consistent with the damage simulation
-    const timeline = computeBuffTimeline(
-        selfBuffs,
-        enemyDebuffs,
-        hasChargedSkill ? chargeCount : 0,
-        input.startCharged ?? false,
-        numRounds
-    );
-
-    // Separate lookups prevent name collisions between self-buffs and enemy debuffs
-    const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of selfBuffs) {
-        const existing = selfBuffLookup.get(b.buffName) ?? [];
-        selfBuffLookup.set(b.buffName, [...existing, b]);
-    }
-    const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of enemyDebuffs) {
-        const existing = enemyDebuffLookup.get(b.buffName) ?? [];
-        enemyDebuffLookup.set(b.buffName, [...existing, b]);
-    }
-
-    let charges = input.startCharged ? input.chargeCount : 0;
+    // All mutable state declared fresh on every call
+    let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
@@ -212,6 +227,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         );
 
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
+            if (Math.random() >= debuffLandingChance) return [];
             const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
@@ -245,7 +261,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
 
         // Step 1: Calculate direct damage
-        const dotMult = 1 + dotDamageModifier / 100;
+        const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
+        const dotMult = 1 + (selfDotModifier + enemyDotMod) / 100;
         const affinityMult = 1 + affinityDamageModifier / 100;
         const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
         const directDamage =
@@ -350,15 +367,147 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         });
     }
 
+    return roundData;
+}
+
+export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
+    const {
+        attack,
+        crit,
+        critDamage,
+        defensePenetration,
+        activeMultiplier,
+        chargedMultiplier,
+        chargeCount,
+        activeDoTs,
+        chargedDoTs,
+        enemyDefense,
+        enemyHp,
+        rounds: numRounds,
+        selfBuffs,
+        enemyDebuffs,
+    } = input;
+    const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
+
+    // Compute debuff landing chance
+    const hacking = input.hacking ?? 200;
+    const enemySecurity = input.enemySecurity ?? 100;
+    const debuffLandingChance = Math.min(100, Math.max(0, hacking - enemySecurity)) / 100;
+
+    // Self-side constants (not subject to rolls)
+    const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
+        selfBuffs,
+        []
+    );
+    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
+
+    // Pre-compute deterministic buff timeline
+    const timeline = computeBuffTimeline(
+        selfBuffs,
+        enemyDebuffs,
+        hasChargedSkill ? chargeCount : 0,
+        input.startCharged ?? false,
+        numRounds
+    );
+
+    // Build lookup maps
+    const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of selfBuffs) {
+        const existing = selfBuffLookup.get(b.buffName) ?? [];
+        selfBuffLookup.set(b.buffName, [...existing, b]);
+    }
+    const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
+    for (const b of enemyDebuffs) {
+        const existing = enemyDebuffLookup.get(b.buffName) ?? [];
+        enemyDebuffLookup.set(b.buffName, [...existing, b]);
+    }
+
+    // Monte Carlo accumulators
+    const acc = Array.from({ length: numRounds }, () => ({
+        directDamage: 0,
+        corrosionDamage: 0,
+        infernoDamage: 0,
+        bombDamage: 0,
+        totalRoundDamage: 0,
+    }));
+
+    let lastRun: RoundData[] = [];
+
+    const passParams = {
+        attack,
+        crit,
+        critDamage,
+        defensePenetration,
+        activeMultiplier,
+        chargedMultiplier,
+        chargeCount,
+        activeDoTs,
+        chargedDoTs,
+        enemyDefense,
+        enemyHp,
+        numRounds,
+        timeline,
+        selfBuffLookup,
+        enemyDebuffLookup,
+        debuffLandingChance,
+        selfDotModifier,
+        defensePenetrationBuff,
+        hasChargedSkill,
+        startCharged: input.startCharged ?? false,
+        affinityDamageModifier,
+        affinityCritCap,
+        affinityCritPenalty,
+    };
+
+    for (let run = 0; run < MONTE_CARLO_RUNS; run++) {
+        lastRun = runSinglePass(passParams);
+        lastRun.forEach((rd, i) => {
+            acc[i].directDamage += rd.directDamage;
+            acc[i].corrosionDamage += rd.corrosionDamage;
+            acc[i].infernoDamage += rd.infernoDamage;
+            acc[i].bombDamage += rd.bombDamage;
+            acc[i].totalRoundDamage += rd.totalRoundDamage;
+        });
+    }
+
+    // Average and reconstruct RoundData (cumulativeDamage via prefix sum)
+    let cumulativeDamage = 0;
+    let totalDirectDamage = 0;
+    let totalCorrosionDamage = 0;
+    let totalInfernoDamage = 0;
+    let totalBombDamage = 0;
+
+    const averagedRounds: RoundData[] = acc.map((a, i) => {
+        const directDamage = Math.round(a.directDamage / MONTE_CARLO_RUNS);
+        const corrosionDamage = Math.round(a.corrosionDamage / MONTE_CARLO_RUNS);
+        const infernoDamage = Math.round(a.infernoDamage / MONTE_CARLO_RUNS);
+        const bombDamage = Math.round(a.bombDamage / MONTE_CARLO_RUNS);
+        const totalRoundDamage = Math.round(a.totalRoundDamage / MONTE_CARLO_RUNS);
+        cumulativeDamage += totalRoundDamage;
+        totalDirectDamage += directDamage;
+        totalCorrosionDamage += corrosionDamage;
+        totalInfernoDamage += infernoDamage;
+        totalBombDamage += bombDamage;
+        return {
+            ...lastRun[i],
+            directDamage,
+            corrosionDamage,
+            infernoDamage,
+            bombDamage,
+            totalRoundDamage,
+            cumulativeDamage,
+        };
+    });
+
     return {
-        rounds: roundData,
+        rounds: averagedRounds,
         summary: {
-            totalDamage: Math.round(cumulativeDamage),
+            totalDamage: cumulativeDamage,
             avgDamagePerRound: Math.round(cumulativeDamage / numRounds),
-            totalDirectDamage: Math.round(totalDirectDamage),
-            totalCorrosionDamage: Math.round(totalCorrosionDamage),
-            totalInfernoDamage: Math.round(totalInfernoDamage),
-            totalBombDamage: Math.round(totalBombDamage),
+            totalDirectDamage,
+            totalCorrosionDamage,
+            totalInfernoDamage,
+            totalBombDamage,
         },
     };
 }
