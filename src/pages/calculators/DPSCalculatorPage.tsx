@@ -69,7 +69,15 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+                const {
+                    activeParsed,
+                    chargedParsed,
+                    autoFilledFields: rawAutoFilledFields,
+                } = buildSkillAutoFill(ship);
+                const autoFilledFields = rawAutoFilledFields as Set<
+                    'activeMultiplier' | 'chargedMultiplier' | 'hacking'
+                >;
+                autoFilledFields.add('hacking');
                 return {
                     configs: [
                         {
@@ -80,6 +88,7 @@ const DPSCalculatorPage: React.FC = () => {
                             crit: Math.round(final.crit),
                             critDamage: Math.round(final.critDamage),
                             defensePenetration: Math.round(final.defensePenetration || 0),
+                            hacking: Math.round(final.hacking ?? 200),
                             activeMultiplier: activeParsed > 0 ? activeParsed : 100,
                             chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
@@ -110,6 +119,7 @@ const DPSCalculatorPage: React.FC = () => {
                     crit: 100,
                     critDamage: 125,
                     defensePenetration: 0,
+                    hacking: 200,
                     activeMultiplier: 100,
                     chargedMultiplier: 0,
                     chargeCount: 0,
@@ -129,6 +139,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [nextId, setNextId] = useState(initialState.nextId);
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
+    const [enemySecurity, setEnemySecurity] = useState(100);
     const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
@@ -218,6 +229,7 @@ const DPSCalculatorPage: React.FC = () => {
                     crit: config.crit,
                     critDamage: config.critDamage,
                     defensePenetration: config.defensePenetration,
+                    hacking: config.hacking ?? 200,
                     activeMultiplier: config.activeMultiplier,
                     chargedMultiplier: config.chargedMultiplier,
                     chargeCount: config.chargeCount,
@@ -225,6 +237,7 @@ const DPSCalculatorPage: React.FC = () => {
                     chargedDoTs: config.chargedDoTs,
                     enemyDefense,
                     enemyHp,
+                    enemySecurity,
                     rounds,
                     selfBuffs: [...allAttackerBuffs, ...teamAttackerBuffs],
                     enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs, ...config.enemyDebuffs],
@@ -240,6 +253,7 @@ const DPSCalculatorPage: React.FC = () => {
         configs,
         enemyDefense,
         enemyHp,
+        enemySecurity,
         rounds,
         attackerBuffs,
         enemyBuffs,
@@ -259,6 +273,7 @@ const DPSCalculatorPage: React.FC = () => {
                 crit: 100,
                 critDamage: 150,
                 defensePenetration: 0,
+                hacking: 200,
                 activeMultiplier: 100,
                 chargedMultiplier: 0,
                 chargeCount: 0,
@@ -283,6 +298,7 @@ const DPSCalculatorPage: React.FC = () => {
                         crit: 100,
                         critDamage: 125,
                         defensePenetration: 0,
+                        hacking: 200,
                         activeMultiplier: 100,
                         chargedMultiplier: 0,
                         chargeCount: 0,
@@ -307,7 +323,11 @@ const DPSCalculatorPage: React.FC = () => {
                 if (config.id !== id) return config;
                 const normalizedValue = field === 'affinity' && value === '' ? undefined : value;
                 const updated = { ...config, [field]: normalizedValue };
-                if (field === 'activeMultiplier' || field === 'chargedMultiplier') {
+                if (
+                    field === 'activeMultiplier' ||
+                    field === 'chargedMultiplier' ||
+                    field === 'hacking'
+                ) {
                     const next = new Set(config.autoFilledFields);
                     next.delete(field);
                     updated.autoFilledFields = next;
@@ -329,7 +349,15 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+        const {
+            activeParsed,
+            chargedParsed,
+            autoFilledFields: rawAutoFilledFields,
+        } = buildSkillAutoFill(ship);
+        const autoFilledFields = rawAutoFilledFields as Set<
+            'activeMultiplier' | 'chargedMultiplier' | 'hacking'
+        >;
+        autoFilledFields.add('hacking');
         const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
 
@@ -346,6 +374,7 @@ const DPSCalculatorPage: React.FC = () => {
                     crit: Math.round(final.crit),
                     critDamage: Math.round(final.critDamage),
                     defensePenetration: Math.round(final.defensePenetration || 0),
+                    hacking: Math.round(final.hacking ?? 200),
                     activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
                     chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
@@ -521,6 +550,8 @@ const DPSCalculatorPage: React.FC = () => {
                         onEnemyBuffsChange={setEnemyBuffs}
                         enemyAffinity={enemyAffinity}
                         onEnemyAffinityChange={setEnemyAffinity}
+                        enemySecurity={enemySecurity}
+                        onEnemySecurityChange={setEnemySecurity}
                         teamShips={teamShips}
                         onAddTeamShip={addTeamShip}
                         onRemoveTeamShip={removeTeamShip}
@@ -543,6 +574,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 config={config}
                                 isBest={bestConfig?.id === config.id}
                                 enemyAffinity={enemyAffinity}
+                                enemySecurity={enemySecurity}
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestTotalDamage={bestTotalDamage}
@@ -654,9 +686,17 @@ const DPSCalculatorPage: React.FC = () => {
                         </p>
                         <p>All DoTs stack permanently and tick on the turn they are applied.</p>
                         <p className="mt-2">
-                            Hacking is not modelled — all debuffs are assumed to land every time.
-                            Conditional buffs and debuffs (e.g. &quot;on kill&quot;, &quot;when
-                            enemy has 3+ debuffs&quot;) are treated as always active for simplicity.
+                            Debuff landing is modelled via hacking and security stats. Each round,
+                            every active enemy debuff is rolled independently:{' '}
+                            <span className="font-mono">
+                                clamp(hacking − enemySecurity, 0, 100)%
+                            </span>{' '}
+                            chance to land. At the defaults (hacking 200, security 100) debuffs
+                            always land. Because each roll is random, damage numbers are computed as
+                            a 200-run Monte Carlo average so comparisons between ships remain
+                            stable. Conditional buffs and debuffs (e.g. &quot;on kill&quot;,
+                            &quot;when enemy has 3+ debuffs&quot;) are treated as always active for
+                            simplicity.
                         </p>
                     </div>
                 </div>
