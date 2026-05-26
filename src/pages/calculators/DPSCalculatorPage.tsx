@@ -9,6 +9,7 @@ import {
     DoTApplicationEntry,
     DEFAULT_DOT_CONFIG,
     SelectedGameBuff,
+    TeamShipConfig,
 } from '../../types/calculator';
 import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
 import {
@@ -48,6 +49,7 @@ const DPSCalculatorPage: React.FC = () => {
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
     const nextDoTIdRef = useRef(1);
+    const nextTeamIdRef = useRef(1);
 
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
@@ -131,6 +133,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
+    const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([]);
     const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
     const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
 
@@ -143,23 +146,30 @@ const DPSCalculatorPage: React.FC = () => {
         }
     }, [searchParams, setSearchParams]);
 
-    const globalAttackerBuffTotals = useMemo(
-        () => ({
-            attackBuff: attackerBuffs.reduce(
+    const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
+
+    const teamEnemyDebuffs = useMemo(
+        () =>
+            teamShips.flatMap((t) =>
+                t.enemyDebuffs.map((d) => ({ ...d, sourceStartCharged: t.startCharged }))
+            ),
+        [teamShips]
+    );
+
+    const globalAttackerBuffTotals = useMemo(() => {
+        const allGlobal = [...attackerBuffs, ...teamAttackerBuffs];
+        return {
+            attackBuff: allGlobal.reduce(
                 (sum, s) => sum + (s.parsedEffects.attack ?? 0) * s.stacks,
                 0
             ),
-            critBuff: attackerBuffs.reduce(
-                (sum, s) => sum + (s.parsedEffects.crit ?? 0) * s.stacks,
-                0
-            ),
-            critDamageBuff: attackerBuffs.reduce(
+            critBuff: allGlobal.reduce((sum, s) => sum + (s.parsedEffects.crit ?? 0) * s.stacks, 0),
+            critDamageBuff: allGlobal.reduce(
                 (sum, s) => sum + (s.parsedEffects.critDamage ?? 0) * s.stacks,
                 0
             ),
-        }),
-        [attackerBuffs]
-    );
+        };
+    }, [attackerBuffs, teamAttackerBuffs]);
 
     const mergedAttackerBuffTotals = useMemo(
         () =>
@@ -214,8 +224,8 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyDefense,
                     enemyHp,
                     rounds,
-                    selfBuffs: allAttackerBuffs,
-                    enemyDebuffs: [...enemyBuffs, ...config.enemyDebuffs],
+                    selfBuffs: [...allAttackerBuffs, ...teamAttackerBuffs],
+                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs, ...config.enemyDebuffs],
                     startCharged: config.startCharged,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
@@ -224,7 +234,17 @@ const DPSCalculatorPage: React.FC = () => {
             );
         });
         return map;
-    }, [configs, enemyDefense, enemyHp, rounds, attackerBuffs, enemyBuffs, enemyAffinity]);
+    }, [
+        configs,
+        enemyDefense,
+        enemyHp,
+        rounds,
+        attackerBuffs,
+        enemyBuffs,
+        enemyAffinity,
+        teamAttackerBuffs,
+        teamEnemyDebuffs,
+    ]);
 
     const addConfig = () => {
         const id = nextId.toString();
@@ -390,6 +410,46 @@ const DPSCalculatorPage: React.FC = () => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, enemyDebuffs } : c)));
     };
 
+    const addTeamShip = () => {
+        if (teamShips.length >= 4) return;
+        const id = `team-${nextTeamIdRef.current++}`;
+        setTeamShips((prev) => [...prev, { id, buffs: [], enemyDebuffs: [], startCharged: false }]);
+    };
+
+    const removeTeamShip = (id: string) => {
+        setTeamShips((prev) => prev.filter((t) => t.id !== id));
+    };
+
+    const selectShipForTeamSlot = (id: string, ship: Ship) => {
+        const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
+        const startCharged = detectFullyCharged([
+            ship.activeSkillText,
+            ship.chargeSkillText,
+            ship.firstPassiveSkillText,
+            ship.secondPassiveSkillText,
+            ship.thirdPassiveSkillText,
+        ]);
+        setTeamShips((prev) =>
+            prev.map((t) => {
+                if (t.id !== id) return t;
+                return {
+                    ...t,
+                    shipId: ship.id,
+                    startCharged,
+                    buffs: mergeAutoFill(t.buffs, selfBuffs),
+                    enemyDebuffs: mergeAutoFill(
+                        t.enemyDebuffs.filter((b) => !b.autoFilled),
+                        newEnemyDebuffs
+                    ),
+                };
+            })
+        );
+    };
+
+    const updateTeamShip = (id: string, updates: Partial<TeamShipConfig>) => {
+        setTeamShips((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+    };
+
     const bestConfig = configs.reduce<DPSShipConfig | null>((best, current) => {
         if (!best) return current;
         const bestDmg = simResults.get(best.id)?.summary.totalDamage ?? 0;
@@ -437,6 +497,17 @@ const DPSCalculatorPage: React.FC = () => {
                         onEnemyBuffsChange={setEnemyBuffs}
                         enemyAffinity={enemyAffinity}
                         onEnemyAffinityChange={setEnemyAffinity}
+                        teamShips={teamShips}
+                        onAddTeamShip={addTeamShip}
+                        onRemoveTeamShip={removeTeamShip}
+                        onSelectTeamShip={selectShipForTeamSlot}
+                        onTeamShipStartChargedChange={(id, checked) =>
+                            updateTeamShip(id, { startCharged: checked })
+                        }
+                        onTeamShipBuffsChange={(id, buffs) => updateTeamShip(id, { buffs })}
+                        onTeamShipEnemyDebuffsChange={(id, debuffs) =>
+                            updateTeamShip(id, { enemyDebuffs: debuffs })
+                        }
                     />
 
                     <div

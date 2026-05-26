@@ -24,13 +24,13 @@ interface CombatSettingsPanelProps {
     onEnemyBuffsChange: (v: SelectedGameBuff[]) => void;
     enemyAffinity: AffinityName;
     onEnemyAffinityChange: (v: AffinityName) => void;
-    teamShips?: TeamShipConfig[];
-    onAddTeamShip?: () => void;
-    onRemoveTeamShip?: (id: string) => void;
-    onSelectTeamShip?: (id: string, ship: Ship) => void;
-    onTeamShipStartChargedChange?: (id: string, checked: boolean) => void;
-    onTeamShipBuffsChange?: (id: string, buffs: SelectedGameBuff[]) => void;
-    onTeamShipEnemyDebuffsChange?: (id: string, debuffs: SelectedGameBuff[]) => void;
+    teamShips: TeamShipConfig[];
+    onAddTeamShip: () => void;
+    onRemoveTeamShip: (id: string) => void;
+    onSelectTeamShip: (id: string, ship: Ship) => void;
+    onTeamShipStartChargedChange: (id: string, checked: boolean) => void;
+    onTeamShipBuffsChange: (id: string, buffs: SelectedGameBuff[]) => void;
+    onTeamShipEnemyDebuffsChange: (id: string, debuffs: SelectedGameBuff[]) => void;
 }
 
 export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
@@ -141,22 +141,22 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                         Team ships contribute their buffs and debuffs to all ship comparisons
                     </p>
                     <div className="space-y-2">
-                        {(teamShips ?? []).map((ts) => (
+                        {teamShips.map((ts) => (
                             <TeamShipRow
                                 key={ts.id}
                                 config={ts}
-                                onRemove={() => onRemoveTeamShip?.(ts.id)}
-                                onSelectShip={(ship) => onSelectTeamShip?.(ts.id, ship)}
+                                onRemove={() => onRemoveTeamShip(ts.id)}
+                                onSelectShip={(ship) => onSelectTeamShip(ts.id, ship)}
                                 onStartChargedChange={(checked) =>
-                                    onTeamShipStartChargedChange?.(ts.id, checked)
+                                    onTeamShipStartChargedChange(ts.id, checked)
                                 }
-                                onBuffsChange={(buffs) => onTeamShipBuffsChange?.(ts.id, buffs)}
+                                onBuffsChange={(buffs) => onTeamShipBuffsChange(ts.id, buffs)}
                                 onEnemyDebuffsChange={(debuffs) =>
-                                    onTeamShipEnemyDebuffsChange?.(ts.id, debuffs)
+                                    onTeamShipEnemyDebuffsChange(ts.id, debuffs)
                                 }
                             />
                         ))}
-                        {(teamShips ?? []).length < 4 && (
+                        {teamShips.length < 4 && (
                             <Button variant="secondary" size="sm" onClick={onAddTeamShip}>
                                 + Add team ship
                             </Button>
