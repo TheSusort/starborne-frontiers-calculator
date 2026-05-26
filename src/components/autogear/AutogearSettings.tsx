@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { StatPriorityForm } from '../stats/StatPriorityForm';
 import {
     Button,
-    CheckboxGroup,
     CloseIcon,
     EditIcon,
-    SearchInput,
     Select,
     Checkbox,
     Input,
@@ -34,15 +32,16 @@ type TweakView =
     | { mode: 'picker' }
     | {
           mode: 'form';
-          type:
-              | 'priority'
-              | 'setPriority'
-              | 'implantPriority'
-              | 'statBonus'
-              | 'fleetBuff'
-              | 'excludedImplant';
+          type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff';
           editIndex: number | null;
+      }
+    | {
+          mode: 'form';
+          type: 'implantType';
+          editTarget: null | { kind: 'require'; index: number } | { kind: 'exclude'; key: string };
       };
+
+type ImplantEditTarget = Extract<TweakView, { mode: 'form'; type: 'implantType' }>['editTarget'];
 
 function formatRuleSummary(rule: {
     factions: string[] | null;
@@ -110,40 +109,63 @@ interface AutogearSettingsProps {
 }
 
 const SetPriorityForm: React.FC<{
-    onAdd: (priority: SetPriority) => void;
+    onAdd?: (priority: SetPriority) => void;
     editingValue?: SetPriority;
     onSave?: (priority: SetPriority) => void;
     onCancel?: () => void;
     mode?: 'gearSet' | 'implantType';
     availableImplantTypes?: { key: string; name: string; label: string }[];
-}> = ({ onAdd, editingValue, onSave, onCancel, mode = 'gearSet', availableImplantTypes }) => {
+    onSubmitImplant?: (setName: string, preferenceMode: 'require' | 'exclude') => void;
+    editingExcludeKey?: string;
+}> = ({
+    onAdd,
+    editingValue,
+    onSave,
+    onCancel,
+    mode = 'gearSet',
+    availableImplantTypes,
+    onSubmitImplant,
+    editingExcludeKey,
+}) => {
     const [selectedSet, setSelectedSet] = useState<string>('');
     const [count, setCount] = useState<number>(2);
+    const [preferenceMode, setPreferenceMode] = useState<'require' | 'exclude'>('require');
 
     useEffect(() => {
         if (editingValue) {
             setSelectedSet(editingValue.setName);
             setCount(editingValue.count);
+            if (mode === 'implantType') setPreferenceMode('require');
+        } else if (editingExcludeKey) {
+            setSelectedSet(editingExcludeKey);
+            setPreferenceMode('exclude');
         } else {
             setSelectedSet('');
             setCount(mode === 'implantType' ? 1 : 2);
+            setPreferenceMode('require');
         }
-    }, [editingValue, mode]);
+    }, [editingValue, editingExcludeKey, mode]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedSet) return;
-        const value: SetPriority =
-            mode === 'implantType'
-                ? { setName: selectedSet, count: 1, kind: 'implant' }
-                : { setName: selectedSet, count };
+
+        if (mode === 'implantType') {
+            onSubmitImplant?.(selectedSet, preferenceMode);
+            setSelectedSet('');
+            setPreferenceMode('require');
+            return;
+        }
+
+        // gearSet mode only reaches here
+        const value: SetPriority = { setName: selectedSet, count };
         if (editingValue && onSave) {
             onSave(value);
             return;
         }
-        onAdd(value);
+        onAdd?.(value);
         setSelectedSet('');
-        setCount(mode === 'implantType' ? 1 : 2);
+        setCount(2);
     };
 
     const selectOptions =
@@ -158,6 +180,17 @@ const SetPriorityForm: React.FC<{
     return (
         <form onSubmit={handleSubmit} className="space-y-3">
             <div className="flex gap-3 items-end flex-wrap">
+                {mode === 'implantType' && (
+                    <Select
+                        label="Preference"
+                        options={[
+                            { value: 'require', label: 'Require — must appear in result' },
+                            { value: 'exclude', label: 'Exclude — never used in result' },
+                        ]}
+                        value={preferenceMode}
+                        onChange={(v) => setPreferenceMode(v as 'require' | 'exclude')}
+                    />
+                )}
                 <Select
                     label={mode === 'implantType' ? 'Implant type' : 'Gear set'}
                     className="flex-1 min-w-[8rem]"
@@ -167,7 +200,9 @@ const SetPriorityForm: React.FC<{
                     noDefaultSelection
                     helpLabel={
                         mode === 'implantType'
-                            ? 'Select an implant type to be required in the autogear result.'
+                            ? preferenceMode === 'require'
+                                ? 'Select an implant type to be required in the autogear result.'
+                                : 'Select an implant type to exclude from autogear.'
                             : 'Select a gear set to be met by the gear you equip.'
                     }
                 />
@@ -189,7 +224,7 @@ const SetPriorityForm: React.FC<{
             </div>
 
             <div className="flex justify-end gap-2 flex-wrap">
-                {editingValue ? (
+                {editingValue || editingExcludeKey ? (
                     <>
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
@@ -205,65 +240,6 @@ const SetPriorityForm: React.FC<{
                 )}
             </div>
         </form>
-    );
-};
-
-const ExcludedImplantForm: React.FC<{
-    availableImplantTypes: { key: string; name: string; label: string }[];
-    excludedImplantTypes: string[];
-    onSave: (keys: string[]) => void;
-    onCancel: () => void;
-}> = ({ availableImplantTypes, excludedImplantTypes, onSave, onCancel }) => {
-    const [selected, setSelected] = useState<string[]>(excludedImplantTypes);
-    const [searchTerm, setSearchTerm] = useState('');
-    const allOptions = availableImplantTypes.map((t) => ({ value: t.key, label: t.label }));
-    const options = searchTerm
-        ? allOptions.filter((o) => o.label.toLowerCase().includes(searchTerm.toLowerCase()))
-        : allOptions;
-
-    if (allOptions.length === 0) {
-        return (
-            <div className="space-y-3">
-                <p className="text-sm text-theme-text-secondary">
-                    No implant types available in your inventory.
-                </p>
-                <div className="flex justify-end">
-                    <Button type="button" variant="secondary" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-3">
-            <SearchInput
-                value={searchTerm}
-                onChange={setSearchTerm}
-                placeholder="Search implant types..."
-            />
-            {options.length === 0 ? (
-                <p className="text-sm text-theme-text-secondary">
-                    No implant types match your search.
-                </p>
-            ) : (
-                <CheckboxGroup
-                    label="Implant types"
-                    options={options}
-                    values={selected}
-                    onChange={setSelected}
-                />
-            )}
-            <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button type="button" variant="primary" onClick={() => onSave(selected)}>
-                    Save
-                </Button>
-            </div>
-        </div>
     );
 };
 
@@ -318,15 +294,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
-        type:
-            | 'priority'
-            | 'setPriority'
-            | 'implantPriority'
-            | 'statBonus'
-            | 'fleetBuff'
-            | 'excludedImplant',
+        type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
+    const openImplantForm = (editTarget: ImplantEditTarget = null) =>
+        setTweakView({ mode: 'form', type: 'implantType', editTarget });
     const backToList = () => setTweakView({ mode: 'list' });
 
     const isEditingPriority = (index: number) =>
@@ -335,10 +307,15 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         tweakView.mode === 'form' &&
         tweakView.type === 'setPriority' &&
         tweakView.editIndex === index;
-    const isEditingImplantPriority = (index: number) =>
-        tweakView.mode === 'form' &&
-        tweakView.type === 'implantPriority' &&
-        tweakView.editIndex === index;
+    const isEditingImplantType = (target: ImplantEditTarget) => {
+        if (tweakView.mode !== 'form' || tweakView.type !== 'implantType') return false;
+        const et = tweakView.editTarget;
+        if (!et || !target) return et === target;
+        if (et.kind !== target.kind) return false;
+        if (et.kind === 'require' && target.kind === 'require') return et.index === target.index;
+        if (et.kind === 'exclude' && target.kind === 'exclude') return et.key === target.key;
+        return false;
+    };
     const isEditingStatBonus = (index: number) =>
         tweakView.mode === 'form' &&
         tweakView.type === 'statBonus' &&
@@ -551,11 +528,13 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                             })}
                                                     </div>
                                                 )}
-                                                {implantAbsoluteIndices.length > 0 && (
+                                                {(implantAbsoluteIndices.length > 0 ||
+                                                    excludedImplantTypes.length > 0) && (
                                                     <div className="space-y-1">
                                                         <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                            Required implants
+                                                            Implant types
                                                         </h4>
+                                                        {/* Require rows */}
                                                         {setPriorities
                                                             .map((priority, absoluteIndex) => ({
                                                                 priority,
@@ -582,8 +561,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                     <SetPriorityRow
                                                                         key={`implant-${absoluteIndex}`}
                                                                         priority={priority}
-                                                                        isEditing={isEditingImplantPriority(
-                                                                            absoluteIndex
+                                                                        isEditing={isEditingImplantType(
+                                                                            {
+                                                                                kind: 'require',
+                                                                                index: absoluteIndex,
+                                                                            }
                                                                         )}
                                                                         canMoveUp={
                                                                             prevKindIdx !==
@@ -600,10 +582,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                             )
                                                                         }
                                                                         onEdit={() =>
-                                                                            openForm(
-                                                                                'implantPriority',
-                                                                                absoluteIndex
-                                                                            )
+                                                                            openImplantForm({
+                                                                                kind: 'require',
+                                                                                index: absoluteIndex,
+                                                                            })
                                                                         }
                                                                         onMoveUp={() =>
                                                                             prevKindIdx !==
@@ -629,9 +611,58 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                         availableImplantTypes={
                                                                             availableImplantTypes
                                                                         }
+                                                                        modeLabel="Require"
                                                                     />
                                                                 );
                                                             })}
+                                                        {/* Exclude rows */}
+                                                        {excludedImplantTypes.map((key) => {
+                                                            const label =
+                                                                availableImplantTypes.find(
+                                                                    (t) => t.key === key
+                                                                )?.label ??
+                                                                IMPLANTS[key]?.name ??
+                                                                key;
+                                                            return (
+                                                                <div
+                                                                    key={key}
+                                                                    className="flex items-center text-sm gap-2"
+                                                                >
+                                                                    <span>
+                                                                        {label}
+                                                                        <span className="text-xs text-theme-text-secondary border border-dark-border rounded px-1 ml-1">
+                                                                            Exclude
+                                                                        </span>
+                                                                    </span>
+                                                                    <Button
+                                                                        aria-label="Edit implant type preference"
+                                                                        variant="secondary"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            openImplantForm({
+                                                                                kind: 'exclude',
+                                                                                key,
+                                                                            })
+                                                                        }
+                                                                        className="ml-auto"
+                                                                    >
+                                                                        <EditIcon />
+                                                                    </Button>
+                                                                    <Button
+                                                                        aria-label="Remove implant type preference"
+                                                                        variant="danger"
+                                                                        size="sm"
+                                                                        onClick={() =>
+                                                                            onRemoveExcludedImplantType(
+                                                                                key
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <CloseIcon />
+                                                                    </Button>
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </>
@@ -689,49 +720,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                     onRemove={() => onRemoveFleetBuff(index)}
                                                 />
                                             ))}
-                                        </div>
-                                    )}
-                                    {excludedImplantTypes.length > 0 && (
-                                        <div className="space-y-1">
-                                            <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                                                Excluded implants
-                                            </h4>
-                                            {excludedImplantTypes.map((key) => {
-                                                const label =
-                                                    availableImplantTypes.find((t) => t.key === key)
-                                                        ?.label ??
-                                                    IMPLANTS[key]?.name ??
-                                                    key;
-                                                return (
-                                                    <div
-                                                        key={key}
-                                                        className="flex items-center text-sm gap-2"
-                                                    >
-                                                        <span>{label}</span>
-                                                        <Button
-                                                            aria-label="Edit excluded implant types"
-                                                            variant="secondary"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                openForm('excludedImplant')
-                                                            }
-                                                            className="ml-auto"
-                                                        >
-                                                            <EditIcon />
-                                                        </Button>
-                                                        <Button
-                                                            aria-label="Remove excluded implant type"
-                                                            variant="danger"
-                                                            size="sm"
-                                                            onClick={() =>
-                                                                onRemoveExcludedImplantType(key)
-                                                            }
-                                                        >
-                                                            <CloseIcon />
-                                                        </Button>
-                                                    </div>
-                                                );
-                                            })}
                                         </div>
                                     )}
                                     <p className="text-xs text-theme-text-secondary italic">
@@ -811,25 +799,12 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     <button
                                         type="button"
                                         className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
-                                        onClick={() => openForm('excludedImplant')}
+                                        onClick={() => openImplantForm(null)}
                                     >
-                                        <div className="font-semibold">Excluded implant type</div>
+                                        <div className="font-semibold">Implant type</div>
                                         <div className="text-xs text-theme-text-secondary">
-                                            Prevent a specific implant type from being used in
-                                            autogear (e.g. Bulwark).
-                                        </div>
-                                    </button>
-                                )}
-                                {optimizeImplants && availableImplantTypes.length > 0 && (
-                                    <button
-                                        type="button"
-                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
-                                        onClick={() => openForm('implantPriority')}
-                                    >
-                                        <div className="font-semibold">Forced implant type</div>
-                                        <div className="text-xs text-theme-text-secondary">
-                                            Require a specific implant type to appear in the
-                                            autogear result (e.g. Bulwark).
+                                            Require or exclude a specific implant type from autogear
+                                            results.
                                         </div>
                                     </button>
                                 )}
@@ -850,8 +825,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 </Button>
                                 <span className="text-theme-text-secondary">·</span>
                                 <span>
-                                    {tweakView.type === 'excludedImplant'
-                                        ? 'Edit'
+                                    {tweakView.type === 'implantType'
+                                        ? tweakView.editTarget === null
+                                            ? 'Add'
+                                            : 'Edit'
                                         : tweakView.editIndex === null
                                           ? 'Add'
                                           : 'Edit'}{' '}
@@ -863,9 +840,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ? 'scale'
                                             : tweakView.type === 'fleetBuff'
                                               ? 'buff'
-                                              : tweakView.type === 'implantPriority'
-                                                ? 'forced implant type'
-                                                : 'excluded implant type'}
+                                              : 'implant type'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (
@@ -914,31 +889,72 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onCancel={backToList}
                                 />
                             )}
-                            {tweakView.type === 'implantPriority' && (
-                                <SetPriorityForm
-                                    mode="implantType"
-                                    availableImplantTypes={availableImplantTypes}
-                                    onAdd={(p) => {
-                                        onAddSetPriority(p);
-                                        backToList();
-                                    }}
-                                    editingValue={
-                                        tweakView.editIndex !== null
-                                            ? setPriorities[tweakView.editIndex]
-                                            : undefined
-                                    }
-                                    onSave={(p) => {
-                                        if (
-                                            tweakView.mode === 'form' &&
-                                            tweakView.editIndex !== null
-                                        ) {
-                                            onUpdateSetPriority(tweakView.editIndex, p);
-                                            backToList();
-                                        }
-                                    }}
-                                    onCancel={backToList}
-                                />
-                            )}
+                            {tweakView.type === 'implantType' &&
+                                (() => {
+                                    const editTarget = tweakView.editTarget;
+                                    return (
+                                        <SetPriorityForm
+                                            mode="implantType"
+                                            availableImplantTypes={availableImplantTypes}
+                                            editingValue={
+                                                editTarget?.kind === 'require'
+                                                    ? setPriorities[editTarget.index]
+                                                    : undefined
+                                            }
+                                            editingExcludeKey={
+                                                editTarget?.kind === 'exclude'
+                                                    ? editTarget.key
+                                                    : undefined
+                                            }
+                                            onSubmitImplant={(setName, pMode) => {
+                                                if (pMode === 'require') {
+                                                    if (editTarget?.kind === 'exclude') {
+                                                        onRemoveExcludedImplantType(editTarget.key);
+                                                    }
+                                                    if (editTarget?.kind === 'require') {
+                                                        onUpdateSetPriority(editTarget.index, {
+                                                            setName,
+                                                            count: 1,
+                                                            kind: 'implant',
+                                                        });
+                                                    } else {
+                                                        onAddSetPriority({
+                                                            setName,
+                                                            count: 1,
+                                                            kind: 'implant',
+                                                        });
+                                                    }
+                                                } else {
+                                                    if (editTarget?.kind === 'require') {
+                                                        onRemoveSetPriority(editTarget.index);
+                                                    }
+                                                    const oldKey =
+                                                        editTarget?.kind === 'exclude'
+                                                            ? editTarget.key
+                                                            : null;
+                                                    const newExcluded = oldKey
+                                                        ? Array.from(
+                                                              new Set([
+                                                                  ...excludedImplantTypes.filter(
+                                                                      (k) => k !== oldKey
+                                                                  ),
+                                                                  setName,
+                                                              ])
+                                                          )
+                                                        : Array.from(
+                                                              new Set([
+                                                                  ...excludedImplantTypes,
+                                                                  setName,
+                                                              ])
+                                                          );
+                                                    onSetExcludedImplantTypes(newExcluded);
+                                                }
+                                                backToList();
+                                            }}
+                                            onCancel={backToList}
+                                        />
+                                    );
+                                })()}
                             {tweakView.type === 'statBonus' && (
                                 <StatBonusForm
                                     onAdd={(b) => {
@@ -981,17 +997,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             onUpdateFleetBuff(tweakView.editIndex, b);
                                             backToList();
                                         }
-                                    }}
-                                    onCancel={backToList}
-                                />
-                            )}
-                            {tweakView.type === 'excludedImplant' && (
-                                <ExcludedImplantForm
-                                    availableImplantTypes={availableImplantTypes}
-                                    excludedImplantTypes={excludedImplantTypes}
-                                    onSave={(keys) => {
-                                        onSetExcludedImplantTypes(keys);
-                                        backToList();
                                     }}
                                     onCancel={backToList}
                                 />

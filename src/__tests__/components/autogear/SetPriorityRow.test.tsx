@@ -47,4 +47,17 @@ describe('SetPriorityRow', () => {
         );
         expect(screen.getByText('UNKNOWN_TYPE')).toBeInTheDocument();
     });
+
+    it('renders a mode badge when modeLabel is provided', () => {
+        const availableImplantTypes = [{ key: 'HASTE', name: 'Haste', label: 'Haste' }];
+        render(
+            <SetPriorityRow
+                {...baseProps}
+                priority={{ setName: 'HASTE', count: 1, kind: 'implant' }}
+                availableImplantTypes={availableImplantTypes}
+                modeLabel="Require"
+            />
+        );
+        expect(screen.getByText('Require')).toBeInTheDocument();
+    });
 });
