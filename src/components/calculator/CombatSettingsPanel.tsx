@@ -134,9 +134,9 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                     onChange={onAttackerBuffsChange}
                 />
                 <div className="border-t border-dark-border pt-4">
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">
                         Team (up to 4)
-                    </p>
+                    </div>
                     <p className="text-sm text-theme-text-secondary mb-3">
                         Team ships contribute their buffs and debuffs to all ship comparisons
                     </p>
