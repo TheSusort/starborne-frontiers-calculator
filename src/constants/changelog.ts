@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.62.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Add team support ships to DPS Calculator — select up to 4 ships in Combat Settings to contribute their skill buffs and enemy debuffs to all attacker comparisons.',
     'Autogear: merged "Excluded implant type" and "Forced implant type" tweaks into a single "Implant type" entry with Require/Exclude mode selector',
     'Autogear: force a specific implant type to always appear in optimized loadouts (requires Optimize implants to be enabled)',
     'Added audio reader to the Lore page — play individual ship bios and world lore articles via text-to-speech, or use Play All to listen through the entire list hands-free.',
