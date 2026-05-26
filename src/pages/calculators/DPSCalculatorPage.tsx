@@ -437,10 +437,7 @@ const DPSCalculatorPage: React.FC = () => {
                     shipId: ship.id,
                     startCharged,
                     buffs: mergeAutoFill(t.buffs, selfBuffs),
-                    enemyDebuffs: mergeAutoFill(
-                        t.enemyDebuffs.filter((b) => !b.autoFilled),
-                        newEnemyDebuffs
-                    ),
+                    enemyDebuffs: mergeAutoFill(t.enemyDebuffs, newEnemyDebuffs),
                 };
             })
         );
