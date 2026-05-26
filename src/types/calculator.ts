@@ -74,12 +74,13 @@ export interface DPSShipConfig {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    hacking?: number;
     affinity?: AffinityName;
     activeMultiplier: number;
     chargedMultiplier: number;
     chargeCount: number;
     startCharged: boolean;
-    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier'>;
+    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier' | 'hacking'>;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
     buffs: SelectedGameBuff[];
@@ -92,6 +93,7 @@ export type DPSShipConfigUpdateableField =
     | 'crit'
     | 'critDamage'
     | 'defensePenetration'
+    | 'hacking'
     | 'affinity'
     | 'activeMultiplier'
     | 'chargedMultiplier'
