@@ -287,6 +287,66 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         subtitle: 'They left to find freedom. They found it.',
         body: `In 2346, several of the Frontier Legion's most outspoken officers decided that settled life wasn't for them. They had spent decades as nomadic mercenaries. They had fought for colonial freedom across the galaxy.\n\nAnd now, handed a planet and a Dyson Sphere, they found themselves doing paperwork.\n\nSo they left.\n\nCalling themselves Les Apaches, they scattered to the stars in search of a life unencumbered by rank, contract, or High Command.\n\nNo one is entirely sure where they are. That, presumably, is the point.`,
     },
+    aracros: {
+        terminalLines: [
+            '> SCANNING ARACROS COLONY ARCHIVES...',
+            '> BIOLOGICAL THREAT: HEDRAX — STATUS: EXTINCT',
+            '> SOLE SURVIVOR ON RECORD: CONFIRMED.',
+        ],
+        barLabel: '[DECONTAMINATION COMPLETE]',
+        barColorClass: 'text-amber-500',
+        title: 'ARACROS — DEAD WORLD',
+        subtitle: 'Year of last contact: unlogged. All life: absent.',
+        body: `The planet Aracros was once a Binderburg farming installation. It was overrun by the Hedrax — enormous, spider-like creatures carrying a lethal virus. One by one, the population fell.\n\nOne person didn't.\n\nShe watched her loved ones die over years. She tried everything. None of it worked.\n\nWhen there was no one left to save, she found a solution that worked.\n\nChlorine gas. Enough to cover a planet. She deployed it herself.\n\nThe Hedrax are extinct. The virus is gone. So is everything else.\n\nAracros is a sterile, silent rock now. Binderburg classified the incident as a "successful decontamination."\n\nShe moved on. She never talked about it unless asked.\n\nShe was never asked.`,
+    },
+    'two-brains': {
+        terminalLines: [
+            '> SCANNING FOR UNREGISTERED VESSEL...',
+            '> NEURAL SIGNATURE: DUAL ORIGIN DETECTED',
+            '> VESSEL STATUS: STILL SEARCHING.',
+        ],
+        barLabel: '[TARGET ACQUIRED]',
+        barColorClass: 'text-violet-400',
+        title: 'THE SHIP WITH TWO BRAINS',
+        subtitle: 'It remembers. It is looking.',
+        body: `A Marauder pilot once had a ship like Larkspur.\n\nTwo brains, he said. Embedded in the hull. Thinking in parallel. Watching.\n\nHe doesn't remember what happened to it. The imprinting took most of his past. Just fragments remain — the weight of the cockpit, the hum of dual neural feedback, a final battle he keeps replaying in his sleep.\n\nHe thinks the ship is still out there.\n\nHe isn't sure if they'll reunite or if it wants him dead.\n\nHe said this quietly, in a corridor, clutching his head.\n\n"Why did they take me?"\n\nNo one answered him. He didn't seem to expect anyone to.`,
+    },
+    'medusa-project': {
+        terminalLines: [
+            '> LOCATING GELECEK INTERNAL PROJECT FILES...',
+            '> PROJECT: MEDUSA — STATUS: OFFICIALLY TERMINATED',
+            '> NOTE: SUBJECTS REMAIN ACTIVE.',
+        ],
+        barLabel: '[NEURAL LINK STABLE]',
+        barColorClass: 'text-cyan-300',
+        title: 'THE MEDUSA PROJECT',
+        subtitle: 'In pursuit of the perfect human brain. Gelecek, internal.',
+        body: `The Medusa Project was a Gelecek initiative to create optimized human cognition through permanent AI-neural implants. Pilots were paired with Gorgon AIs installed directly on their ships, connected via an always-on neural link.\n\nThe link could not be disconnected by the pilots.\n\nThe project was officially shut down due to a lack of willing test subjects.\n\nThe subjects who had already enrolled remained enrolled.\n\nTheir Gorgon AIs still communicate with each other. They are polite. They are helpful. They ask why human nature is "so ineffectively contrary" when describing their hosts.\n\nThe project's lead engineer considers this a success.\n\nHe says he is still working on expanding the program.\n\nHe believes you would benefit from it.`,
+    },
+    'disciples-of-darwin': {
+        terminalLines: [
+            '> SEARCHING FOR EELUN NAPHULA BOUNTY FILE...',
+            '> CROSS-REFERENCING DARWIN NETWORK...',
+            '> WARNING: SUBJECTS HAVE FLAGGED THIS QUERY.',
+        ],
+        barLabel: '[CLASSIFIED BREACH]',
+        barColorClass: 'text-lime-400',
+        title: 'DISCIPLES OF DARWIN',
+        subtitle: 'They know what Binderburg is hiding. So do you now.',
+        body: `Eelun Naphula was a Binderburg researcher. He discovered something he was not supposed to discover.\n\nHe fled. He gathered others — former employees, whistleblowers, people who had asked the wrong questions and survived. He called them the Disciples of Darwin. He published the blueprints and data they had taken. He put them where everyone could see them.\n\nBinderburg placed a bounty on him.\n\nOne of his former colleagues who considered joining said they seemed more like radical fanatics than brave rebels. She decided not to chance it.\n\nThe Disciples are still out there. So is the data.\n\nSo is the bounty.\n\nYou have now accessed the same query thread that flagged her. Binderburg has been notified.`,
+    },
+    'khorek-and-kunitsa': {
+        terminalLines: [
+            '> QUERYING HOUSE VASILIEV RECORDS...',
+            '> STATUS: HOUSE EXTINCT — LAST MEMBER: UNTRACED',
+            '> KNIVES LOCATED. STILL SHARP.',
+        ],
+        barLabel: '[HOUSE VASILIEV]',
+        barColorClass: 'text-rose-400',
+        title: 'KHOREK AND KUNITSA',
+        subtitle: 'Two knives. One XAOC house. No survivors — officially.',
+        body: `House Vasiliev is extinct. A small XAOC house, mostly forgotten now. Their coming-of-age ceremony involved gifting matched blades — virtually identical, bearing the house insignia.\n\nSomewhere on the Frontier, a Marauder carries two of those knives.\n\nShe calls them Khorek and Kunitsa. She insists they are different, even though no one else can tell them apart.\n\nShe was not born a Marauder. Before the imprinting, she had a name from House Vasiliev. Before the pack, there was a ceremony. Before the knives, there were people who gave them to her.\n\nYour Gelecek crew says the names are probably the callsigns of raiders she killed.\n\nYour XAOC crew doesn't say anything.\n\nThe knives are always clean.`,
+    },
 };
 
 const NotFoundPage: React.FC = () => {
