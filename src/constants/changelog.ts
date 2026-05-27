@@ -5,9 +5,7 @@ export const CURRENT_VERSION = '1.63.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [
-    'Easter egg 404 pages: navigate to /the-bludgeon, /binderburg-rd, /tenebris, or /foot-the-path for lore-flavored secrets.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
