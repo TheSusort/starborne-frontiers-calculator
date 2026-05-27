@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { CLASSIFIED_FRAGMENTS } from '../constants/classifiedArchive';
 
 const BAR_TOTAL = 22;
 const BAR_FINAL_FILLED_DEFAULT = 13;
@@ -20,7 +21,10 @@ interface EasterEggConfig {
     title: string;
     subtitle: string;
     body: string;
+    authCode?: string;
 }
+
+const _codes = Object.fromEntries(CLASSIFIED_FRAGMENTS.map((f) => [f.sourceEggSlug, f.authCode]));
 
 const EASTER_EGGS: Record<string, EasterEggConfig> = {
     'the-bludgeon': {
@@ -34,6 +38,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'TARGET LOST FROM ALL SCANNERS',
         subtitle: 'Drive data wiped. No record found.',
         body: `You were close. The Bludgeon — designation unofficial, nature unknown — was spotted here moments ago.\n\nArmored plating that reforms around damage. Plasma-encased missiles. A communications method no scanner has ever detected.\n\nThe running theory: it sensed your approach and actively counteracted it in real time.\n\nYour drive data has been wiped. There are no records.`,
+        authCode: _codes['the-bludgeon'],
     },
     'binderburg-rd': {
         terminalLines: [
@@ -190,6 +195,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'MECHANISM — CLASS UNKNOWN',
         subtitle: 'Both Gelecek and Binderburg R&D deny knowledge of this location.',
         body: `You have found something you were not meant to find.\n\nThe mechanisms — gravimetric anomalies clustered near black holes and the Tau Scorpii star — predate every known civilization. Binderburg has been quietly fortifying research stations in their vicinity for decades. Gelecek believes they are evidence of alien intelligence.\n\nBoth are wrong. Both are right. Neither will share their data.\n\nThis finding has been logged. Undocumented facilities in this sector have been placed on alert.\n\nStep away from the mechanism.`,
+        authCode: _codes['the-mechanisms'],
     },
     'the-apostate': {
         terminalLines: [
@@ -214,6 +220,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'THE ABYSS — BLOCKADE ACTIVE',
         subtitle: 'Time-space anomaly. Class: unknown. Origin: unknown.',
         body: `You have reached the blockade perimeter established around the anomaly known as The Abyss.\n\nAll six sovereign factions have agreed — for once — that no ship should pass.\n\nWhat lies beyond has not been documented. What has been documented has not been shared. Everliving ships have been observed moving through the region. MPL Chair Gwayne Erebus has taken a personal interest.\n\nTurn back.\n\nOr don't. The Abyss doesn't care either way.`,
+        authCode: _codes['the-abyss'],
     },
     'furnace-of-heaven': {
         terminalLines: [
@@ -226,6 +233,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'FURNACE OF HEAVEN',
         subtitle: 'Uninhabitable nebula. Edge of the Abyss. Do not approach.',
         body: `The encrypted data dumps trace back here. A nebula near the infamous Furnace of Heaven, on the edge of the Abyss and generally considered uninhabitable.\n\nSomething is in there.\n\nWhen confronted, Tsar Rasputin only smiled. "A new star is forming, Commander. Your fleet is cute. Stay clear of the flames."\n\nThe source of the signal has not been identified. Three probes and one unarmed scout were dispatched to triangulate. None returned.\n\nStep back from the telescope.`,
+        authCode: _codes['furnace-of-heaven'],
     },
     'gamish-waypoint': {
         terminalLines: [
@@ -360,6 +368,10 @@ const NotFoundPage: React.FC = () => {
 
     const slug = pathname.replace(/^\//, '');
     const easterEgg = EASTER_EGGS[slug] ?? null;
+    const EASTER_EGG_SLUGS = Object.keys(EASTER_EGGS);
+    const [hintSlug] = useState(
+        () => EASTER_EGG_SLUGS[Math.floor(Math.random() * EASTER_EGG_SLUGS.length)]
+    );
     const terminalLines = easterEgg?.terminalLines ?? DEFAULT_TERMINAL_LINES;
     const barFinalFilled = easterEgg ? BAR_TOTAL : BAR_FINAL_FILLED_DEFAULT;
 
@@ -514,6 +526,16 @@ const NotFoundPage: React.FC = () => {
                                                 <p key={i}>{para}</p>
                                             ))}
                                         </div>
+                                        {easterEgg.authCode && (
+                                            <p className="text-xs text-gray-600 font-mono mt-2">
+                                                {'> SIGNAL ID: '}
+                                                <span className="group inline-block cursor-pointer">
+                                                    <span className="blur-sm group-hover:blur-none transition-[filter] duration-300 select-all text-gray-400">
+                                                        {easterEgg.authCode}
+                                                    </span>
+                                                </span>
+                                            </p>
+                                        )}
                                         <div className="flex justify-center">
                                             <Button
                                                 variant="secondary"
@@ -542,6 +564,9 @@ const NotFoundPage: React.FC = () => {
                                             </p>
                                         </div>
 
+                                        <p className="text-center text-[0.6rem] text-gray-700 font-mono tracking-widest mt-2">
+                                            {`> TRANSMISSION REF: ${hintSlug}`}
+                                        </p>
                                         <div className="flex justify-center gap-3">
                                             <Button
                                                 variant="primary"
