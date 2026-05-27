@@ -330,7 +330,7 @@ const NotFoundPage: React.FC = () => {
     return (
         <>
             <Seo {...SEO_CONFIG.notFound} />
-            <div className="not-found-scanlines fixed inset-0 z-[110] overflow-hidden font-secondary">
+            <div className="not-found-scanlines fixed inset-0 z-[110] font-secondary">
                 {/* Layer 1: Deep Crevasse */}
                 <div className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-top" />
 
@@ -349,8 +349,8 @@ const NotFoundPage: React.FC = () => {
                 )}
 
                 {/* Content */}
-                <div className="relative z-10 flex items-center justify-center h-full p-4">
-                    <div className="card max-w-lg w-full space-y-6 backdrop-blur-sm">
+                <div className="relative z-10 flex items-start justify-center h-full overflow-y-auto p-4">
+                    <div className="card max-w-lg w-full space-y-6 backdrop-blur-sm my-auto">
                         {/* // label */}
                         <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em] [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]">
                             {'// STARBORNE PLANNER'}
