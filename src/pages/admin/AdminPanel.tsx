@@ -21,6 +21,7 @@ import {
 } from '../../components/admin/AddShipTemplateForm';
 import { LiveTrafficCard } from '../../components/admin/LiveTrafficCard';
 import { ArenaModifiersTab } from '../../components/admin/ArenaModifiersTab';
+import { SkillAuditSection } from '../../components/admin/SkillAuditSection';
 import { getAllSeasons } from '../../services/arenaModifierService';
 import { ArenaSeason } from '../../types/arena';
 import {
@@ -613,6 +614,11 @@ export const AdminPanel: React.FC = () => {
                             proposals={templateProposals}
                             onApprove={handleApproveProposal}
                             onReject={handleRejectProposal}
+                        />
+
+                        <SkillAuditSection
+                            allTemplates={allTemplates}
+                            onSelectTemplate={handleSelectTemplate}
                         />
                     </div>
                 )}
