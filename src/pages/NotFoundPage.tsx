@@ -1,27 +1,189 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 
 const BAR_TOTAL = 22;
-const BAR_FINAL_FILLED = 13;
+const BAR_FINAL_FILLED_DEFAULT = 13;
 
-const TERMINAL_LINES = [
+const DEFAULT_TERMINAL_LINES = [
     '> INITIALIZING NAV SYSTEMS... [OK]',
     '> SCANNING SECTOR_404...',
     '> ERROR: NULL_SECTOR_REFERENCE',
 ];
 
+interface EasterEggConfig {
+    terminalLines: [string, string, string];
+    barLabel: string;
+    barColorClass: string;
+    title: string;
+    subtitle: string;
+    body: string;
+}
+
+const EASTER_EGGS: Record<string, EasterEggConfig> = {
+    'the-bludgeon': {
+        terminalLines: [
+            '> INITIALIZING NAV SYSTEMS... [OK]',
+            '> SCANNING FOR TARGET: THE_BLUDGEON...',
+            '> SIGNAL ACQUIRED... SIGNAL LOST.',
+        ],
+        barLabel: '[CONTACT LOST]',
+        barColorClass: 'text-yellow-400',
+        title: 'TARGET LOST FROM ALL SCANNERS',
+        subtitle: 'Drive data wiped. No record found.',
+        body: `You were close. The Bludgeon — designation unofficial, nature unknown — was spotted here moments ago.\n\nArmored plating that reforms around damage. Plasma-encased missiles. A communications method no scanner has ever detected.\n\nThe running theory: it sensed your approach and actively counteracted it in real time.\n\nYour drive data has been wiped. There are no records.`,
+    },
+    'binderburg-rd': {
+        terminalLines: [
+            '> ACCESSING BINDERBURG R&D ARCHIVE...',
+            '> AUTHENTICATING... CLEARANCE: INSUFFICIENT',
+            '> FILE: [INFORMATION HAS BEEN RESTRICTED]',
+        ],
+        barLabel: '[ACCESS DENIED]',
+        barColorClass: 'text-red-400',
+        title: 'BINDERBURG R&D — INTERNAL USE ONLY',
+        subtitle: '"Growing the Future" — Unauthorized access logged.',
+        body: `EXECUTIVE SUMMARY:\n████████████████████ currently ████████████ in development of ██████████████ ████████████████████ Granny Smith ██████████ ████ ███████████ █████████████.\n\nFACTION GOALS:\nBinderburg's stated goal is to dominate ████████████ markets. However, one of the conglomerate's principal goals is to keep Binderburg R&D fueled with ████████████████, regardless of cost. Sharp-eyed employees will soon realize that everything outside the Department — including themselves — is ██████████.\n\n[Further information has been restricted]\n\nNote: Your visit has been logged. The Department has been notified.`,
+    },
+    tenebris: {
+        terminalLines: [
+            '> ROUTING QUERY TO TENEBRIS...',
+            '> PROCESSING: 847,293,104 PROBABILITY MATRICES',
+            '> ADVISORY: THIS OUTCOME WAS PREDICTED.',
+        ],
+        barLabel: '[QUERY PROCESSED]',
+        barColorClass: 'text-cyan-400',
+        title: 'TENEBRIS ADVISORY',
+        subtitle: 'Lunar Directorate — Advanced AI System',
+        body: `Query received. Navigation error logged.\n\nEstimated probability of finding the requested resource: 0.0000%.\n\nThis prediction was generated 3.7 seconds before your navigation error occurred. Recommended course of action: return to base coordinates.\n\nAdvisory note: Encouraging economic conflict between major factions creates conditions that are — historically — difficult to contain. The Directorate was warned. The outcome was modelled. The outcome occurred.\n\nThis advisory will not be issued again.`,
+    },
+    'foot-the-path': {
+        terminalLines: [
+            '> WARNING: UNREGISTERED COMMANDER DETECTED',
+            '> SCANNING HOUSE AFFILIATION... NULL',
+            '> YOU HAVE STRAYED FROM THE PATH.',
+        ],
+        barLabel: '[XAOC CONTACT]',
+        barColorClass: 'text-red-500',
+        title: 'STRAY DETECTED',
+        subtitle: 'House Bogrov has noted your approach.',
+        body: `The weak stray. The strong take.\n\nYou have entered contested territory without affiliation or invitation. In the eyes of XAOC, this makes you prey.\n\nThere are three steps along the Path: survival, prosperity, dominance.\n\nYou have not yet managed the first.\n\nA handshake is binding. A slight will be met with retaliation. Only blood pays for blood.\n\nLeave now. Or don't. We prefer the second option.`,
+    },
+    'coldest-blue': {
+        terminalLines: [
+            '> PLOTTING COURSE TO BIZIM...',
+            '> INITIATING TRANSLOCATION DRIVE...',
+            '> TARGET HAS MOVED: 12,847 LIGHT-YEARS.',
+        ],
+        barLabel: '[TRANSLOCATION COMPLETE]',
+        barColorClass: 'text-emerald-400',
+        title: 'PAGE RELOCATED SUCCESSFULLY',
+        subtitle: 'At the center of it all — which is now 12,847 light-years from here.',
+        body: `Bizim has moved. Again.\n\nThe planet-sized station at the heart of Gelecek's ambitions teleported out of your current sector 0.3 seconds ago. Standard procedure. Translocation drives are available to premium customers only.\n\nIf you're looking for something, Gelecek recommends redirecting your query through an Ansible. Near-instantaneous. Practically free. You're welcome.\n\nNote: several of Bizim's hospitality droids find your navigation error "delightfully predictable."`,
+    },
+    'samsara-project': {
+        terminalLines: [
+            '> QUERYING EVERLIVING REGISTRY...',
+            '> HOST BODY ASSESSMENT: IN PROGRESS...',
+            '> SUBJECT DEEMED: SUITABLE.',
+        ],
+        barLabel: '[CANDIDATE LOGGED]',
+        barColorClass: 'text-slate-300',
+        title: 'EVERLIVING WELCOMES YOU',
+        subtitle: 'Consciousness Transference Program — Open Enrollment',
+        body: `You have been assessed. You have been found... acceptable.\n\nEverliving has no interest in the page you were looking for. It has, however, noted your neural profile for future consideration.\n\nThe Children of Mars have all the time in the universe. The same cannot be said for you. This is something you should think about.\n\nWhen you are ready, Everliving will be here. We are always here.\n\nNote: host candidacy is non-negotiable once accepted.`,
+    },
+    'function-is-beauty': {
+        terminalLines: [
+            '> CONNECTING TO TERRAN COMBINE RELAY...',
+            '> RUNNING DIAGNOSTIC: SECTOR_404...',
+            '> ASSESSMENT: NOTHING LEFT TO REMOVE.',
+        ],
+        barLabel: '[TASK COMPLETE]',
+        barColorClass: 'text-gray-400',
+        title: 'FUNCTION IS BEAUTY',
+        subtitle: 'Terran Combine — Engineering Division',
+        body: `The page you're looking for has been removed.\n\nThis is not an error. This is the process. No design is finished until there is nothing left to remove. The Combine evaluated the requested resource and found it non-essential.\n\nSimple is superior. Our decision-making process is plain-spoken and forthright.\n\nReturn to base. There is work to be done.`,
+    },
+    'xian-ren': {
+        terminalLines: [
+            '> ATTEMPTING TO LOCATE TIANCHAO CELL...',
+            '> CROSS-REFERENCING KNOWN NETWORKS...',
+            '> RESULT: NO RECORD EXISTS.',
+        ],
+        barLabel: '[TRAIL GONE COLD]',
+        barColorClass: 'text-violet-400',
+        title: 'SELL A LIE, VOID ONE THOUSAND TRUTHS',
+        subtitle: 'Tianchao never trades in falsehoods.',
+        body: `There is no page here. There has never been a page here.\n\nThis is not deception. Tianchao never trades in falsehoods. There are simply layers. Peeling back one layer of intent reveals another, and another below that.\n\nThe page you are looking for may exist. It may be three steps ahead of you. It may already know you were coming.\n\nOperatives of the clan are chameleons. This URL is a chameleon.\n\nYou were followed here. You will not notice the agent until they choose to be noticed.`,
+    },
+    nightcorps: {
+        terminalLines: [
+            '> ACCESSING ATLAS NIGHTCORPS CHANNEL...',
+            '> IDENTITY VERIFICATION: FAILED',
+            '> AFFILIATION: [CLASSIFIED]',
+        ],
+        barLabel: '[DOSSIER FILED]',
+        barColorClass: 'text-amber-400',
+        title: 'YOUR PROFILE HAS BEEN UPDATED',
+        subtitle: 'Atlas Syndicate — Intelligence Division (unofficial)',
+        body: `Nightcorps does not exist.\n\nAtlas is a financial services organization. It provides loans, legal representation, and predictive AI to clients across the galaxy. That is all.\n\nThere is no shadowy subsidiary responsible for the irradiation of Deadzone systems, the careful leaking of Marauder-MPL connections, or the monitoring of independent commanders who visit unusual URLs.\n\nYour profile has been updated.\n\nPecunia sit Potentia. Have a pleasant day.`,
+    },
+    karat: {
+        terminalLines: [
+            '> DOCKING REQUEST: STATION KARAT...',
+            '> VERIFYING SHAREHOLDER STATUS...',
+            '> ACCESS: DENIED — INSUFFICIENT SHARES',
+        ],
+        barLabel: '[DOCKING REFUSED]',
+        barColorClass: 'text-yellow-300',
+        title: 'STATION KARAT — RESTRICTED ACCESS',
+        subtitle: 'Board of Directors only. Legacy shareholders only.',
+        body: `You do not own enough of the MPL to be here.\n\nKarat — encrusted floor to ceiling with natural diamonds from across the galaxy, bathed in the red glow of a Dyson-caged sun — is reserved for those whose portfolio warrants it.\n\nThe League's primary focus has always been extraction. Crystals and metals, humans and biomass — if there is value to be gained, the League will be there to squeeze out every last drop.\n\nAt the current share price, you would need to work approximately 847 years without expenses to afford a seat on the Board.\n\nThe League wishes you productive labor.`,
+    },
+    'ain-prime': {
+        terminalLines: [
+            '> HAILING FRONTIER LEGION COMMAND...',
+            '> CHECKING CONTRACT REGISTRY...',
+            '> NO ACTIVE CONTRACT FOUND.',
+        ],
+        barLabel: '[UNCONTRACTED]',
+        barColorClass: 'text-lime-400',
+        title: 'JUSTICE HAS FINALLY CAUGHT UP TO THE FRONTIER',
+        subtitle: 'Frontier Legion High Command — Ain System',
+        body: `The Frontier Legion accepts protection contracts from almost any client.\n\nHowever, the Legion thoroughly assesses the morality of every contract before accepting. The page you requested has been reviewed. It was deemed non-essential to colonial security.\n\nThe Legion commits itself to the ideals of colonial autonomy and the dignity of civilian life. We are sorry we could not help.\n\nIf you require protection from XAOC, Marauder activity, or predatory corporate behavior, please submit a formal request to High Command.\n\nFreedom is not free. But our rates are competitive.`,
+    },
+    scarsright: {
+        terminalLines: [
+            '> WARNING: MARAUDER ACTIVITY DETECTED',
+            '> IMPRINTING DEVICE: ACTIVE IN RANGE',
+            '> RESISTANCE: FUTILE.',
+        ],
+        barLabel: '[IMPRINTING INITIATED]',
+        barColorClass: 'text-green-600',
+        title: '[GARBLED]',
+        subtitle: '████ Barker of the Scarsright approaches.',
+        body: `you are here now. this is good.\n\nthe path? the path is OURS. everything here is ours. your ship. your drives. your mind.\n\nBarker says stay. Barker says ALWAYS stay. Barker has a title and the title is REAL even if the names stopped meaning anything a long time ago.\n\nnobody leaves. everybody stays.\n\nwelcome to the family.`,
+    },
+};
+
 const NotFoundPage: React.FC = () => {
     const navigate = useNavigate();
+    const { pathname } = useLocation();
     const flickerRef = useRef<HTMLDivElement>(null);
     const glitchRef = useRef<HTMLDivElement>(null);
     const [barProgress, setBarProgress] = useState<number | null>(null);
     const [barCorrupted, setBarCorrupted] = useState(false);
     const [show404, setShow404] = useState(false);
 
-    // Sequence: wait for terminal lines → fill bar → corrupt → reveal 404
+    const slug = pathname.replace(/^\//, '');
+    const easterEgg = EASTER_EGGS[slug] ?? null;
+    const terminalLines = easterEgg?.terminalLines ?? DEFAULT_TERMINAL_LINES;
+    const barFinalFilled = easterEgg ? BAR_TOTAL : BAR_FINAL_FILLED_DEFAULT;
+
+    // Sequence: wait for terminal lines → fill bar → resolve/corrupt → reveal content
     useEffect(() => {
         const timers: ReturnType<typeof setTimeout>[] = [];
         let fillInterval: ReturnType<typeof setInterval> | null = null;
@@ -34,7 +196,7 @@ const NotFoundPage: React.FC = () => {
                 fillInterval = setInterval(() => {
                     count++;
                     setBarProgress(count);
-                    if (count >= BAR_FINAL_FILLED) {
+                    if (count >= barFinalFilled) {
                         if (fillInterval) clearInterval(fillInterval);
                         timers.push(
                             setTimeout(() => {
@@ -51,11 +213,11 @@ const NotFoundPage: React.FC = () => {
             timers.forEach(clearTimeout);
             if (fillInterval) clearInterval(fillInterval);
         };
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // VHS glitch burst — only starts after 404 is revealed
+    // VHS glitch burst — only for the default 404, starts after reveal
     useEffect(() => {
-        if (!show404) return;
+        if (!show404 || easterEgg) return;
 
         const flicker = flickerRef.current;
         const glitch = glitchRef.current;
@@ -89,12 +251,21 @@ const NotFoundPage: React.FC = () => {
             clearTimeout(initialTimer);
             clearTimeout(timeoutRef);
         };
-    }, [show404]);
+    }, [show404, easterEgg]);
 
     const filled = barProgress ?? 0;
-    const barLine = barCorrupted
-        ? `> ${'█'.repeat(BAR_FINAL_FILLED)}${'░'.repeat(BAR_TOTAL - BAR_FINAL_FILLED)} [CORRUPTED]`
-        : `> ${'█'.repeat(filled)}${'░'.repeat(BAR_TOTAL - filled)}`;
+    let barLine: string;
+    let barColorClass: string;
+    if (!barCorrupted) {
+        barLine = `> ${'█'.repeat(filled)}${'░'.repeat(BAR_TOTAL - filled)}`;
+        barColorClass = 'text-green-400';
+    } else if (easterEgg) {
+        barLine = `> ${'█'.repeat(BAR_TOTAL)} ${easterEgg.barLabel}`;
+        barColorClass = easterEgg.barColorClass;
+    } else {
+        barLine = `> ${'█'.repeat(BAR_FINAL_FILLED_DEFAULT)}${'░'.repeat(BAR_TOTAL - BAR_FINAL_FILLED_DEFAULT)} [CORRUPTED]`;
+        barColorClass = 'text-red-400 not-found-corrupt-flash';
+    }
 
     return (
         <>
@@ -109,11 +280,13 @@ const NotFoundPage: React.FC = () => {
                 {/* Layer 3: Dark readability overlay */}
                 <div className="absolute inset-0 bg-black/40" />
 
-                {/* Layer 4: VHS glitch burst */}
-                <div
-                    ref={flickerRef}
-                    className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken"
-                />
+                {/* Layer 4: VHS glitch burst — default 404 only */}
+                {!easterEgg && (
+                    <div
+                        ref={flickerRef}
+                        className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken"
+                    />
+                )}
 
                 {/* Content */}
                 <div className="relative z-10 flex items-center justify-center h-full p-4">
@@ -125,7 +298,7 @@ const NotFoundPage: React.FC = () => {
 
                         {/* Terminal lines */}
                         <div className="space-y-1 font-mono text-sm">
-                            {TERMINAL_LINES.map((line, i) => (
+                            {terminalLines.map((line, i) => (
                                 <div
                                     key={i}
                                     className="not-found-line text-green-400"
@@ -139,49 +312,72 @@ const NotFoundPage: React.FC = () => {
                                 className="not-found-line"
                                 style={{ animationDelay: `${0.2 + 3 * 0.35}s` }}
                             >
-                                <span
-                                    className={
-                                        barCorrupted
-                                            ? 'text-red-400 not-found-corrupt-flash'
-                                            : 'text-green-400'
-                                    }
-                                >
-                                    {barLine}
-                                </span>
+                                <span className={barColorClass}>{barLine}</span>
                             </div>
                         </div>
 
-                        {/* 404 + copy + CTA — revealed after sequence completes */}
+                        {/* Reveal — shown after sequence completes */}
                         {show404 && (
                             <div className="not-found-reveal space-y-6">
-                                <div
-                                    ref={glitchRef}
-                                    className="text-center text-8xl font-bold text-primary tracking-widest"
-                                >
-                                    404
-                                </div>
+                                {easterEgg ? (
+                                    <>
+                                        <div className="space-y-1">
+                                            <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                                {easterEgg.title}
+                                            </p>
+                                            <p className="text-xs text-gray-500 uppercase tracking-[0.2em]">
+                                                {easterEgg.subtitle}
+                                            </p>
+                                        </div>
+                                        <div className="text-sm text-gray-400 space-y-3 font-mono">
+                                            {easterEgg.body.split('\n\n').map((para, i) => (
+                                                <p key={i}>{para}</p>
+                                            ))}
+                                        </div>
+                                        <div className="flex justify-center">
+                                            <Button
+                                                variant="secondary"
+                                                onClick={() => void navigate('/')}
+                                            >
+                                                Return to Base
+                                            </Button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div
+                                            ref={glitchRef}
+                                            className="text-center text-8xl font-bold text-primary tracking-widest"
+                                        >
+                                            404
+                                        </div>
 
-                                <div className="text-center space-y-2">
-                                    <p className="text-base font-bold tracking-widest uppercase text-primary">
-                                        SECTOR_404: SIGNAL LOST
-                                    </p>
-                                    <p className="text-sm text-gray-400">
-                                        The route you&apos;re looking for has been redacted from our
-                                        navigation charts.
-                                    </p>
-                                </div>
+                                        <div className="text-center space-y-2">
+                                            <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                                SECTOR_404: SIGNAL LOST
+                                            </p>
+                                            <p className="text-sm text-gray-400">
+                                                The route you&apos;re looking for has been redacted
+                                                from our navigation charts.
+                                            </p>
+                                        </div>
 
-                                <div className="flex justify-center gap-3">
-                                    <Button variant="primary" onClick={() => void navigate('/')}>
-                                        Return to Base
-                                    </Button>
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => void navigate('/ships/lore')}
-                                    >
-                                        Investigate Further
-                                    </Button>
-                                </div>
+                                        <div className="flex justify-center gap-3">
+                                            <Button
+                                                variant="primary"
+                                                onClick={() => void navigate('/')}
+                                            >
+                                                Return to Base
+                                            </Button>
+                                            <Button
+                                                variant="secondary"
+                                                onClick={() => void navigate('/ships/lore')}
+                                            >
+                                                Investigate Further
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
