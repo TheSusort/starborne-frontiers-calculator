@@ -101,21 +101,10 @@ const NotFoundPage: React.FC = () => {
             <Seo {...SEO_CONFIG.notFound} />
             <div className="not-found-scanlines fixed inset-0 z-[110] overflow-hidden font-secondary">
                 {/* Layer 1: Deep Crevasse */}
-                <div
-                    className="absolute inset-0 bg-cover bg-top"
-                    style={{ backgroundImage: "url('/images/Deep_crevasse_01_extended.webp')" }}
-                />
+                <div className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-top" />
 
                 {/* Layer 2: BG2 HUD chrome */}
-                <div
-                    className="absolute inset-0"
-                    style={{
-                        backgroundImage: "url('/images/BG2.png')",
-                        backgroundSize: 'cover',
-                        opacity: 0.15,
-                        mixBlendMode: 'screen',
-                    }}
-                />
+                <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
 
                 {/* Layer 3: Dark readability overlay */}
                 <div className="absolute inset-0 bg-black/40" />
@@ -123,12 +112,7 @@ const NotFoundPage: React.FC = () => {
                 {/* Layer 4: VHS glitch burst */}
                 <div
                     ref={flickerRef}
-                    className="not-found-burst absolute inset-0 pointer-events-none"
-                    style={{
-                        backgroundImage: "url('/images/transition.webp')",
-                        backgroundSize: 'cover',
-                        mixBlendMode: 'darken',
-                    }}
+                    className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken"
                 />
 
                 {/* Content */}

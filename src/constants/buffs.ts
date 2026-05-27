@@ -837,13 +837,13 @@ export const BUFFS: Buff[] = [
     {
         name: 'Damage Over Time effect',
         description:
-            'Damage dealth over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
+            'Damage dealt over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
         type: 'effect',
     },
     {
         name: 'Damage Over Time effects',
         description:
-            'Damage dealth over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
+            'Damage dealt over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
         type: 'effect',
     },
 ];

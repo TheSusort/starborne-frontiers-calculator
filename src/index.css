@@ -877,6 +877,19 @@
         z-index: 5;
     }
 
+    /* 404 page: disable animations for users who prefer reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+        .not-found-burst-active,
+        .not-found-glitch-active,
+        .not-found-line,
+        .not-found-corrupt-flash,
+        .not-found-reveal {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+        }
+    }
+
     /* Synthwave: Background color on body (image moved to fixed div for mobile compat) */
     [data-theme='synthwave'] body {
         background-color: rgb(var(--color-bg));

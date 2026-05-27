@@ -192,13 +192,14 @@ function buildAuditColumns(
             render: (issue) => {
                 const template = allTemplates.find((t) => t.id === issue.templateId);
                 return template ? (
-                    <button
-                        type="button"
-                        className="text-primary hover:underline text-left"
+                    <Button
+                        variant="link"
+                        size="sm"
                         onClick={() => onSelectTemplate(template)}
+                        className="!text-primary hover:!text-primary hover:underline !h-auto"
                     >
                         {issue.shipName}
-                    </button>
+                    </Button>
                 ) : (
                     issue.shipName
                 );
@@ -221,6 +222,19 @@ function formatDuration(duration: SkillEffect['duration']): string {
     if (duration === 'recurring') return 'recurring';
     return String(duration);
 }
+
+const EFFECT_COLUMNS: Column<SkillEffect>[] = [
+    {
+        key: 'buffName',
+        label: 'Buff Name',
+        render: (e) => <span className="font-medium text-primary">{e.buffName}</span>,
+    },
+    { key: 'target', label: 'Target' },
+    { key: 'duration', label: 'Duration', render: (e) => formatDuration(e.duration) },
+    { key: 'stacks', label: 'Stacks', render: (e) => String(e.stacks ?? '—') },
+    { key: 'stackTrigger', label: 'Trigger', render: (e) => String(e.stackTrigger ?? '—') },
+    { key: 'source', label: 'Source' },
+];
 
 // ─── Sub-panel 1: Audit Report ────────────────────────────────────────────────
 
@@ -380,7 +394,7 @@ function SkillParserInspectorPanel({
                             placeholder="Search ships by name (min 2 characters)..."
                         />
                         {searchResults.length > 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-dark border border-dark-border shadow-lg max-h-60 overflow-y-auto">
+                            <div className="card !p-0 absolute z-10 w-full mt-1 shadow-lg max-h-60 overflow-y-auto">
                                 {searchResults.map((template) => (
                                     <button
                                         key={template.id}
@@ -441,62 +455,11 @@ function SkillParserInspectorPanel({
                                                         No effects parsed
                                                     </p>
                                                 ) : (
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-sm">
-                                                            <thead>
-                                                                <tr className="border-b border-dark-border text-theme-text-secondary text-xs">
-                                                                    <th className="pb-2 text-left">
-                                                                        Buff Name
-                                                                    </th>
-                                                                    <th className="pb-2 text-left">
-                                                                        Target
-                                                                    </th>
-                                                                    <th className="pb-2 text-left">
-                                                                        Duration
-                                                                    </th>
-                                                                    <th className="pb-2 text-left">
-                                                                        Stacks
-                                                                    </th>
-                                                                    <th className="pb-2 text-left">
-                                                                        Trigger
-                                                                    </th>
-                                                                    <th className="pb-2 text-left">
-                                                                        Source
-                                                                    </th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {effects.map((effect, i) => (
-                                                                    <tr
-                                                                        key={i}
-                                                                        className="border-b border-dark-border/50"
-                                                                    >
-                                                                        <td className="py-1.5 pr-3 font-medium text-primary">
-                                                                            {effect.buffName}
-                                                                        </td>
-                                                                        <td className="py-1.5 pr-3">
-                                                                            {effect.target}
-                                                                        </td>
-                                                                        <td className="py-1.5 pr-3">
-                                                                            {formatDuration(
-                                                                                effect.duration
-                                                                            )}
-                                                                        </td>
-                                                                        <td className="py-1.5 pr-3">
-                                                                            {effect.stacks ?? '—'}
-                                                                        </td>
-                                                                        <td className="py-1.5 pr-3">
-                                                                            {effect.stackTrigger ??
-                                                                                '—'}
-                                                                        </td>
-                                                                        <td className="py-1.5">
-                                                                            {effect.source}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                                                    <DataTable
+                                                        data={effects}
+                                                        columns={EFFECT_COLUMNS}
+                                                        getRowKey={(_, i) => String(i)}
+                                                    />
                                                 )}
                                             </div>
                                         </div>
