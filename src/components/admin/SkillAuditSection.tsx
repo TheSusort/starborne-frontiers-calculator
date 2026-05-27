@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ShipTemplate } from '../../services/shipTemplateProposalService';
 import { Button } from '../ui/Button';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
@@ -326,10 +326,26 @@ function AuditReportPanel({ allTemplates, onSelectTemplate }: SkillAuditSectionP
 
 // ─── Sub-panel 2: Skill Parser Inspector ──────────────────────────────────────
 
-function SkillParserInspectorPanel({ allTemplates }: Pick<SkillAuditSectionProps, 'allTemplates'>) {
+interface SkillParserInspectorPanelProps {
+    allTemplates: ShipTemplate[];
+    autoSelectTemplate?: ShipTemplate | null;
+}
+
+function SkillParserInspectorPanel({
+    allTemplates,
+    autoSelectTemplate,
+}: SkillParserInspectorPanelProps) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [selected, setSelected] = useState<ShipTemplate | null>(null);
+
+    useEffect(() => {
+        if (autoSelectTemplate) {
+            setSelected(autoSelectTemplate);
+            setQuery(autoSelectTemplate.name);
+            setOpen(true);
+        }
+    }, [autoSelectTemplate]);
 
     const searchResults = useMemo(() => {
         if (query.length < 2 || selected) return [];
@@ -501,11 +517,21 @@ export const SkillAuditSection: React.FC<SkillAuditSectionProps> = ({
     allTemplates,
     onSelectTemplate,
 }) => {
+    const [autoSelectTemplate, setAutoSelectTemplate] = useState<ShipTemplate | null>(null);
+
+    const handleAuditShipClick = (template: ShipTemplate) => {
+        onSelectTemplate(template);
+        setAutoSelectTemplate(template);
+    };
+
     return (
         <div className="space-y-4">
             <h3 className="text-lg font-semibold text-theme-text">Skill Audit</h3>
-            <AuditReportPanel allTemplates={allTemplates} onSelectTemplate={onSelectTemplate} />
-            <SkillParserInspectorPanel allTemplates={allTemplates} />
+            <AuditReportPanel allTemplates={allTemplates} onSelectTemplate={handleAuditShipClick} />
+            <SkillParserInspectorPanel
+                allTemplates={allTemplates}
+                autoSelectTemplate={autoSelectTemplate}
+            />
         </div>
     );
 };
