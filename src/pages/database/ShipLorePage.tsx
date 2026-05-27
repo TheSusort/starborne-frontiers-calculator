@@ -151,24 +151,25 @@ const ExpandableCard: React.FC<{
     const showExpanded = !onClickOverride && expanded;
 
     return (
-        <div ref={cardRef} className={`card transition-colors duration-150 relative ${className}`}>
+        <div
+            ref={cardRef}
+            className={`card transition-colors duration-150 relative cursor-pointer ${className}`}
+            onClick={handleClick}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClick();
+                }
+            }}
+        >
             {isActive && (
                 <div
                     className={`absolute inset-0 ${activeBgColor} opacity-20 pointer-events-none rounded-[inherit]`}
                 />
             )}
-            <div
-                className="flex items-start gap-3 cursor-pointer"
-                onClick={handleClick}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleClick();
-                    }
-                }}
-            >
+            <div className="flex items-start gap-3">
                 {children}
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -210,6 +211,8 @@ const ExpandableCard: React.FC<{
                         maxHeight: showExpanded ? '5000px' : '0',
                         opacity: showExpanded ? 1 : 0,
                     }}
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
                 >
                     <div className="mt-3 pt-3 border-t border-dark-border">
                         {shareUrl && (
