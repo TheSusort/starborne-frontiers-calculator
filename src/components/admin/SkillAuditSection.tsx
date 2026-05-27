@@ -83,7 +83,7 @@ function auditSlotText(
     const tagRe = /<([^>]+)>/g;
     let m: RegExpExecArray | null;
     while ((m = tagRe.exec(text)) !== null) {
-        if (!KNOWN_GOOD_TAGS.has(m[1])) {
+        if (!KNOWN_GOOD_TAGS.has(m[1]) && !m[1].startsWith('/')) {
             push('error', `Unknown tag: <${m[1]}>`);
         }
     }
