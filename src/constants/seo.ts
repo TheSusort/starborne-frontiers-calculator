@@ -131,4 +131,9 @@ export const SEO_CONFIG = {
             'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.',
         keywords: 'ship lore, ship bios, starborne frontiers lore, ship backstories, ship quotes',
     },
+    notFound: {
+        title: 'Sector Not Found',
+        description: 'The page you are looking for does not exist in the Starborne Planner.',
+        keywords: 'starborne, frontiers, 404, not found',
+    },
 } as const;

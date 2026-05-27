@@ -61,6 +61,7 @@ const ChronoReaverCalculatorPage = lazy(
     () => import('./pages/calculators/ChronoReaverCalculatorPage')
 );
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 const App: React.FC = () => {
     const [showChangelog, setShowChangelog] = useState(false);
@@ -296,6 +297,12 @@ const App: React.FC = () => {
                                                                                         path="/admin"
                                                                                         element={
                                                                                             <AdminPanel />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="*"
+                                                                                        element={
+                                                                                            <NotFoundPage />
                                                                                         }
                                                                                     />
                                                                                 </Routes>

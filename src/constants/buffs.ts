@@ -140,7 +140,12 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Stealth',
-        description: 'Remains untargetable unless no targets without stealth are available',
+        description: 'Remains untargetable unless no targets without stealth are available.',
+        type: 'buff',
+    },
+    {
+        name: 'Tianchao Precision I',
+        description: '+15% Crit Power, +10 Hacking',
         type: 'buff',
     },
     {
@@ -162,6 +167,11 @@ export const BUFFS: Buff[] = [
         name: 'Crit Rate Down III',
         description: '-30% Crit Rate',
         type: 'debuff',
+    },
+    {
+        name: 'Gelecek Contagion I',
+        description: '+15 Hacking',
+        type: 'buff',
     },
     {
         name: 'Gelecek Contagion II',
@@ -335,6 +345,11 @@ export const BUFFS: Buff[] = [
     {
         name: 'Attack Up III',
         description: '+45% Attack',
+        type: 'buff',
+    },
+    {
+        name: 'Legion Discipline I',
+        description: '+10% Attack, +10 Security',
         type: 'buff',
     },
     {
@@ -567,6 +582,18 @@ export const BUFFS: Buff[] = [
         name: 'Bomb III',
         description: '300% Damage',
         type: 'debuff',
+    },
+    {
+        name: 'Bomb',
+        description:
+            'Deals ATK x 100/200/300% upon expiration and if the ship is destroyed beforehand, deals 25% of that damage as splash damage to adjacent ships. All bomb damage bypasses Defense, is not categorized as DoT damage, and affects shields.',
+        type: 'effect',
+    },
+    {
+        name: 'Bombs',
+        description:
+            'Deals ATK x 100/200/300% upon expiration and if the ship is destroyed beforehand, deals 25% of that damage as splash damage to adjacent ships. All bomb damage bypasses Defense, is not categorized as DoT damage, and affects shields.',
+        type: 'effect',
     },
     {
         name: 'Terran Guard I',
@@ -806,5 +833,17 @@ export const BUFFS: Buff[] = [
         name: 'Defense Shred',
         description: '-2% Defense. Stackable up to 20 times.',
         type: 'debuff',
+    },
+    {
+        name: 'Damage Over Time effect',
+        description:
+            'Damage dealt over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
+        type: 'effect',
+    },
+    {
+        name: 'Damage Over Time effects',
+        description:
+            'Damage dealt over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
+        type: 'effect',
     },
 ];
