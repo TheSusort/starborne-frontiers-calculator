@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Seo from '../components/seo/Seo';
 import { Button } from '../components/ui';
@@ -23,6 +23,15 @@ export default function ClassifiedPage() {
     const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [decrypting, setDecrypting] = useState<Record<string, boolean>>({});
     const [barProgress, setBarProgress] = useState<Record<string, number>>({});
+
+    const intervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+    useEffect(() => {
+        const intervals = intervalsRef.current;
+        return () => {
+            Object.values(intervals).forEach(clearInterval);
+        };
+    }, []);
 
     const unlockedCount = unlocked.length;
     const allUnlocked = unlockedCount === CLASSIFIED_FRAGMENTS.length;
@@ -50,6 +59,7 @@ export default function ClassifiedPage() {
                 setDecrypting((d) => ({ ...d, [fragmentId]: false }));
             }
         }, 40);
+        intervalsRef.current[fragmentId] = interval;
     }
 
     return (
