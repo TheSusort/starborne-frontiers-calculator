@@ -587,13 +587,13 @@ export const BUFFS: Buff[] = [
         name: 'Bomb',
         description:
             'Deals ATK x 100/200/300% upon expiration and if the ship is destroyed beforehand, deals 25% of that damage as splash damage to adjacent ships. All bomb damage bypasses Defense, is not categorized as DoT damage, and affects shields.',
-        type: 'debuff',
+        type: 'effect',
     },
     {
         name: 'Bombs',
         description:
             'Deals ATK x 100/200/300% upon expiration and if the ship is destroyed beforehand, deals 25% of that damage as splash damage to adjacent ships. All bomb damage bypasses Defense, is not categorized as DoT damage, and affects shields.',
-        type: 'debuff',
+        type: 'effect',
     },
     {
         name: 'Terran Guard I',
