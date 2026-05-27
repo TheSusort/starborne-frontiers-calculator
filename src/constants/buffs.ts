@@ -328,6 +328,11 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Repair Over Time III',
+        description: '20% Applying Unit HP%',
+        type: 'buff',
+    },
+    {
         name: 'Attack Up III',
         description: '+45% Attack',
         type: 'buff',
