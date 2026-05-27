@@ -75,7 +75,7 @@ export function parseSkillText(skillText: string | null | undefined): SkillTextS
  * Finds buff description from the BUFFS constant
  * Handles exact matches and partial matches (e.g., "Corrosion I" matches "Corrosion 1")
  */
-function findBuffDescription(buffName: string): string | undefined {
+export function findBuffDescription(buffName: string): string | undefined {
     // Try exact match first
     const exactMatch = BUFFS.find((buff) => buff.name === buffName);
     if (exactMatch) return exactMatch.description;
