@@ -354,7 +354,7 @@ function SkillParserInspectorPanel({ allTemplates }: Pick<SkillAuditSectionProps
             <Button variant="secondary" onClick={() => setOpen((v) => !v)}>
                 {open ? 'Hide Skill Parser Inspector' : 'Show Skill Parser Inspector'}
             </Button>
-            <CollapsibleForm isVisible={open} className="!max-h-none">
+            <CollapsibleForm isVisible={open}>
                 <div className="mt-4 space-y-4">
                     {/* Search */}
                     <div className="relative">
