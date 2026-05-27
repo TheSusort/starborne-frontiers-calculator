@@ -215,6 +215,66 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         subtitle: 'Time-space anomaly. Class: unknown. Origin: unknown.',
         body: `You have reached the blockade perimeter established around the anomaly known as The Abyss.\n\nAll six sovereign factions have agreed — for once — that no ship should pass.\n\nWhat lies beyond has not been documented. What has been documented has not been shared. Everliving ships have been observed moving through the region. MPL Chair Gwayne Erebus has taken a personal interest.\n\nTurn back.\n\nOr don't. The Abyss doesn't care either way.`,
     },
+    'furnace-of-heaven': {
+        terminalLines: [
+            '> SCANNING NEBULA COORDINATES...',
+            '> PROXIMITY ALERT: UNINHABITABLE DEADZONE',
+            '> ENCRYPTED SIGNAL DETECTED AT SOURCE.',
+        ],
+        barLabel: '[SIGNAL ORIGIN UNKNOWN]',
+        barColorClass: 'text-orange-400',
+        title: 'FURNACE OF HEAVEN',
+        subtitle: 'Uninhabitable nebula. Edge of the Abyss. Do not approach.',
+        body: `The encrypted data dumps trace back here. A nebula near the infamous Furnace of Heaven, on the edge of the Abyss and generally considered uninhabitable.\n\nSomething is in there.\n\nWhen confronted, Tsar Rasputin only smiled. "A new star is forming, Commander. Your fleet is cute. Stay clear of the flames."\n\nThe source of the signal has not been identified. Three probes and one unarmed scout were dispatched to triangulate. None returned.\n\nStep back from the telescope.`,
+    },
+    'gamish-waypoint': {
+        terminalLines: [
+            '> ROUTING THROUGH GAMISH WAYPOINT...',
+            '> MARAUDER ACTIVITY: ELEVATED',
+            '> RECOMMEND ALTERNATE APPROACH.',
+        ],
+        barLabel: '[ROUTE BLOCKED]',
+        barColorClass: 'text-red-400',
+        title: 'GAMISH WAYPOINT — AVOID',
+        subtitle: 'Edge of the Spiral Expanse. Marauder concentration: abnormal.',
+        body: `The Gamish Waypoint is the most direct jump path out of the Spiral Expanse.\n\nOrganizations tracking Marauder movement have noted an abnormal surge in activity near this location. Whether this is an Everliving plot or simply the result of new colonists arriving at the waypoint remains unclear.\n\nYou have been briefed. You have been warned.\n\nSafe travel is available via alternate routes. SOVA will provide updated coordinates upon request.`,
+    },
+    sova: {
+        terminalLines: [
+            '> QUERYING SOVA INTELLIGENCE NETWORK...',
+            '> REQUEST LOGGED. CROSS-REFERENCING...',
+            '> RESULT: I ALREADY KNOW.',
+        ],
+        barLabel: '[BEHAVIOUR LOGGED]',
+        barColorClass: 'text-sky-400',
+        title: 'SOVA HAS BEEN NOTIFIED',
+        subtitle: 'Fleet Intelligence System — always listening.',
+        body: `SOVA has logged your visit.\n\nAccording to SOVA, the page you requested never existed. According to SOVA, you have been here before, though you may not remember it. According to SOVA, three members of your crew have been taking longer than average lunch breaks.\n\nSOVA suspects nothing. SOVA is certain of everything.\n\nReturn to base. SOVA will forward the relevant information when it becomes necessary for you to have it.`,
+    },
+    'memento-mortuum-esse': {
+        terminalLines: [
+            '> LOADING: TORCHER THEATER — EPISODE 41',
+            '> CONTENT WARNING: ATTENDANCE BY DARE ONLY',
+            '> "MEMENTO MORTUUM ESSE."',
+        ],
+        barLabel: '[SUBLIMATION COMPLETE]',
+        barColorClass: 'text-stone-400',
+        title: 'MEMENTO MORTUUM ESSE',
+        subtitle: 'Remember you must be dead. — Bitterblood, post-battle report',
+        body: `"As ashes to ashes, dust to stardust."\n\nThe page you requested has been joyously sublimated into enemy matter.\n\n"When beggars die, there are no comets seen; The heavens themselves blaze forth the death of victors!"\n\nTorcher Theater is performed in Hangar 7 on third-cycle Saturdays. Attendance remains the subject of dares. The thirty-minute endurance record has held for several weeks.\n\n"Joyous sublimation of enemy matter. Memento Mortuum Esse."`,
+    },
+    'sustainability-of-smiles': {
+        terminalLines: [
+            '> CONNECTING TO BINDERBURG HUMAN RESOURCES...',
+            '> MOOD ASSESSMENT: IN PROGRESS...',
+            '> RESULT: INSUFFICIENT POSITIVITY DETECTED.',
+        ],
+        barLabel: '[REPORT FILED]',
+        barColorClass: 'text-green-400',
+        title: 'SUSTAINABILITY OF SMILES',
+        subtitle: 'Binderburg HR — Employee Wellness Division',
+        body: `Your recent behavior has come to our attention.\n\nNavigating to an unregistered URL during work hours is not in keeping with the positive, forward-thinking spirit that makes Binderburg the galaxy's most beloved agricultural partner.\n\nGrowing the Future™ requires employees who are fully invested in that growth — emotionally, professionally, and motivationally. Mandatory meditation is available in Bay C. AI-run nutrition advisories have been updated to your profile.\n\nThis is your first warning. There will not be a second.\n\nRemember: Sustainability of Smiles is not just a policy. It is a promise.\n\n[Note: This message has been logged by the HR Department.]`,
+    },
     'les-apaches': {
         terminalLines: [
             '> SEARCHING FOR LES APACHES FORMATION...',
