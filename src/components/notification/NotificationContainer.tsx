@@ -6,7 +6,10 @@ export const NotificationContainer: React.FC = () => {
     const { notifications, removeNotification } = useNotification();
 
     return (
-        <div className="fixed top-4 right-4 z-[110] w-96 space-y-2" role="complementary">
+        <div
+            className="fixed top-4 right-4 z-[110] w-[calc(100vw-2rem)] sm:w-96 space-y-2"
+            role="complementary"
+        >
             {notifications.map((notification) => (
                 <NotificationItem
                     key={notification.id}
