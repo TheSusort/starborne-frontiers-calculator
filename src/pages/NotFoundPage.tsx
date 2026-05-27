@@ -167,6 +167,66 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         subtitle: '████ Barker of the Scarsright approaches.',
         body: `you are here now. this is good.\n\nthe path? the path is OURS. everything here is ours. your ship. your drives. your mind.\n\nBarker says stay. Barker says ALWAYS stay. Barker has a title and the title is REAL even if the names stopped meaning anything a long time ago.\n\nnobody leaves. everybody stays.\n\nwelcome to the family.`,
     },
+    'pampas-planitiei': {
+        terminalLines: [
+            '> LOCATING ROSS 128 B EXPEDITION FILES...',
+            '> CROSS-REFERENCING LUNAR ACADEMY ARCHIVES...',
+            '> JOURNAL AND REMARKS — DR. [REDACTED], 2248.',
+        ],
+        barLabel: '[EXPEDITION LOG FOUND]',
+        barColorClass: 'text-teal-400',
+        title: 'ROSS 128 B — PAMPAS PLANITIEI',
+        subtitle: 'Survey mission, science vessel Ryōken — 27/12/2248',
+        body: `Life confirmed.\n\nThe grasses of the plain rise to the knee and far above — greens like polished jade, shades of chartreuse streaked with olive. Feathery soft to the touch, drifting in the wind like undersea forests.\n\nOn the dark side, the Ross Monophyletic Clade pulses with a pale bioluminescent glow. Do not handle samples without protective equipment. Do not sleep near samples.\n\nNote: this survey was considered a defining moment in human history. That significance has since diminished.\n\nWe may no longer be alone. But there is still no one to talk to.`,
+    },
+    'the-mechanisms': {
+        terminalLines: [
+            '> SCANNING FOR GRAVIMETRIC ANOMALIES...',
+            '> MECHANISM DETECTED: PROXIMITY ALERT',
+            '> BINDERBURG R&D HAS BEEN NOTIFIED.',
+        ],
+        barLabel: '[SIGNAL LOCKED]',
+        barColorClass: 'text-indigo-400',
+        title: 'MECHANISM — CLASS UNKNOWN',
+        subtitle: 'Both Gelecek and Binderburg R&D deny knowledge of this location.',
+        body: `You have found something you were not meant to find.\n\nThe mechanisms — gravimetric anomalies clustered near black holes and the Tau Scorpii star — predate every known civilization. Binderburg has been quietly fortifying research stations in their vicinity for decades. Gelecek believes they are evidence of alien intelligence.\n\nBoth are wrong. Both are right. Neither will share their data.\n\nThis finding has been logged. Undocumented facilities in this sector have been placed on alert.\n\nStep away from the mechanism.`,
+    },
+    'the-apostate': {
+        terminalLines: [
+            '> QUERYING ENDURING COUNCIL RECORDS...',
+            '> SUBJECT: HOUSE OSOKIN — ANARCH STATUS',
+            '> CLASSIFICATION: THE APOSTATE.',
+        ],
+        barLabel: '[BOUNTY ACTIVE]',
+        barColorClass: 'text-red-600',
+        title: 'THE APOSTATE',
+        subtitle: 'One empty seat on the Enduring Council awaits.',
+        body: `You have found the name XAOC does not speak above a whisper.\n\nHouse Osokin betrayed the movement. They traded the freedom of their kin for amnesty with the Lunar Directorate. They destroyed one of the original Old Houses as the price of legality. They became Ataka.\n\nThe Enduring Council holds seven seats. One remains permanently empty — to be awarded to the House that delivers the Apostate's head.\n\nNo House has claimed it yet.\n\nIf you know something, you know who to contact. A handshake is binding.`,
+    },
+    'the-abyss': {
+        terminalLines: [
+            '> PLOTTING COURSE: SPIRAL EXPANSE...',
+            '> BLOCKADE PERIMETER: DETECTED',
+            '> ALL SHIPS PROHIBITED. TURN BACK.',
+        ],
+        barLabel: '[APPROACH DENIED]',
+        barColorClass: 'text-purple-400',
+        title: 'THE ABYSS — BLOCKADE ACTIVE',
+        subtitle: 'Time-space anomaly. Class: unknown. Origin: unknown.',
+        body: `You have reached the blockade perimeter established around the anomaly known as The Abyss.\n\nAll six sovereign factions have agreed — for once — that no ship should pass.\n\nWhat lies beyond has not been documented. What has been documented has not been shared. Everliving ships have been observed moving through the region. MPL Chair Gwayne Erebus has taken a personal interest.\n\nTurn back.\n\nOr don't. The Abyss doesn't care either way.`,
+    },
+    'les-apaches': {
+        terminalLines: [
+            '> SEARCHING FOR LES APACHES FORMATION...',
+            '> LAST KNOWN HEADING: UNKNOWN',
+            '> SIGNAL: GONE.',
+        ],
+        barLabel: '[GONE ROGUE]',
+        barColorClass: 'text-orange-400',
+        title: 'LES APACHES — GONE INTO THE BLACK',
+        subtitle: 'They left to find freedom. They found it.',
+        body: `In 2346, several of the Frontier Legion's most outspoken officers decided that settled life wasn't for them. They had spent decades as nomadic mercenaries. They had fought for colonial freedom across the galaxy.\n\nAnd now, handed a planet and a Dyson Sphere, they found themselves doing paperwork.\n\nSo they left.\n\nCalling themselves Les Apaches, they scattered to the stars in search of a life unencumbered by rank, contract, or High Command.\n\nNo one is entirely sure where they are. That, presumably, is the point.`,
+    },
 };
 
 const NotFoundPage: React.FC = () => {
