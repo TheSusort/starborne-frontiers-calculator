@@ -6,9 +6,10 @@ interface SeoProps {
     title?: string;
     keywords?: string;
     ogImage?: string;
+    noIndex?: boolean;
 }
 
-const Seo: React.FC<SeoProps> = ({ title, description, keywords, ogImage }) => {
+const Seo: React.FC<SeoProps> = ({ title, description, keywords, ogImage, noIndex }) => {
     const siteTitle = 'Starborne Planner';
     const fullTitle = title ? `${title} | ${siteTitle}` : siteTitle;
     const siteUrl = 'https://starborneplanner.com';
@@ -21,6 +22,7 @@ const Seo: React.FC<SeoProps> = ({ title, description, keywords, ogImage }) => {
             <meta name="description" content={description} />
             {keywords && <meta name="keywords" content={keywords} />}
             <link rel="canonical" href={canonicalUrl} />
+            {noIndex && <meta name="robots" content="noindex,nofollow" />}
 
             {/* Open Graph / Facebook */}
             <meta property="og:type" content="website" />
