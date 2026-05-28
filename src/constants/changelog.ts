@@ -5,12 +5,7 @@ export const CURRENT_VERSION = '1.63.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [
-    'Engineering optimizer now recommends multiple level upgrades per stat when your budget allows, instead of capping at one level per stat.',
-    'Engineering optimizer now ranks upgrades by total fleet improvement (sum across all starred ships in a role) rather than per-ship average, so stats that benefit many ships are correctly prioritised over those that benefit just one.',
-    'Engineering optimizer grouped recommendations now show the full level range and accumulated per-ship improvement for each stat.',
-    "Classified archive fragments now contain real lore based on the game's faction history and pilot bios, replacing the original placeholder text.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
