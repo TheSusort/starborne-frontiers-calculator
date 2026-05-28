@@ -275,7 +275,7 @@ const DocumentationPage: React.FC = () => {
                                         <li>The Steam client</li>
                                     </ul>
 
-                                    <div className="p-4 bg-dark-lighter">
+                                    <div className="card">
                                         <h4 className="font-semibold text-primary mb-2">
                                             Steps to Export Data:
                                         </h4>
@@ -323,7 +323,7 @@ const DocumentationPage: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="p-4 bg-dark-lighter">
+                                    <div className="card">
                                         <h4 className="font-semibold text-primary mb-2">
                                             Importing into the Calculator:
                                         </h4>
@@ -1109,7 +1109,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <h4 className="text-lg font-semibold">Attacker Roles</h4>
                                     <div className="flex flex-wrap gap-4">
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">Attacker</h4>
                                             <p className="text-theme-text">
                                                 Focuses on maximizing damage output through:
@@ -1123,7 +1123,7 @@ const DocumentationPage: React.FC = () => {
                                     </div>
                                     <h4 className="text-lg font-semibold">Defender Roles</h4>
                                     <div className="flex flex-wrap gap-4">
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">Defender</h4>
                                             <p className="text-theme-text">
                                                 Optimizes for survival through:
@@ -1135,7 +1135,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Defender (Security)
                                             </h4>
@@ -1151,7 +1151,7 @@ const DocumentationPage: React.FC = () => {
                                     </div>
                                     <h4 className="text-lg font-semibold">Debuffer Roles</h4>
                                     <div className="flex flex-wrap gap-4">
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">Debuffer</h4>
                                             <p className="text-theme-text">
                                                 Specializes in hacking and damage:
@@ -1161,7 +1161,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Defensive)
                                             </h4>
@@ -1173,7 +1173,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Defensive, Security)
                                             </h4>
@@ -1185,7 +1185,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Bomber)
                                             </h4>
@@ -1197,7 +1197,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Debuffer (Corrosion)
                                             </h4>
@@ -1212,7 +1212,7 @@ const DocumentationPage: React.FC = () => {
                                     </div>
                                     <h4 className="text-lg font-semibold">Supporter Roles</h4>
                                     <div className="flex flex-wrap gap-4">
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Supporter
                                             </h4>
@@ -1226,7 +1226,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Buffer)
                                             </h4>
@@ -1242,7 +1242,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Offensive)
                                             </h4>
@@ -1258,7 +1258,7 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
 
-                                        <div className="p-4 bg-dark-lighter">
+                                        <div className="card">
                                             <h4 className="font-semibold text-primary">
                                                 Supporter (Shield)
                                             </h4>
@@ -1308,7 +1308,7 @@ const DocumentationPage: React.FC = () => {
                                     list — order matters, higher tweaks weigh more in scoring.
                                 </p>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Stat Priorities</h4>
                                     <p className="text-theme-text">
                                         Define minimum and maximum values for specific stats. The
@@ -1322,7 +1322,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Hard Requirements</h4>
                                     <p className="text-theme-text mb-2">
                                         Any min/max limit on a stat priority can be flagged as a{' '}
@@ -1345,7 +1345,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Set Priorities</h4>
                                     <p className="text-theme-text">
                                         Specify which gear sets you want to complete and how many
@@ -1361,7 +1361,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Stat Bonuses</h4>
                                     <p className="text-theme-text">
                                         Add bonus effects that contribute to the role score. For
@@ -1375,7 +1375,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Buffs</h4>
                                     <p className="text-theme-text">
                                         Add external buffs as tweaks (e.g. Volk&apos;s +30% crit
@@ -1388,7 +1388,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Equipment Constraints</h4>
                                     <ul className="text-theme-text list-disc pl-4 space-y-1">
                                         <li>
@@ -1418,7 +1418,7 @@ const DocumentationPage: React.FC = () => {
                                     </ul>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold">Arena Season Modifiers</h4>
                                     <p className="text-theme-text">
                                         PVP arena seasons apply temporary stat modifiers to ships
@@ -1454,7 +1454,7 @@ const DocumentationPage: React.FC = () => {
                                 Available Algorithms
                             </h3>
                             <div className="space-y-4">
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary">
                                         Genetic Algorithm (Recommended)
                                     </h4>
@@ -1467,7 +1467,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary">
                                         Two-Pass Algorithm
                                     </h4>
@@ -1478,7 +1478,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary">
                                         Set-First Approach
                                     </h4>
@@ -1489,7 +1489,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary">Beam Search</h4>
                                     <p className="text-theme-text">
                                         A balanced approach that keeps multiple possible
@@ -2053,6 +2053,57 @@ const DocumentationPage: React.FC = () => {
                         </div>
                     </section>
 
+                    {/* Classified Archive Section */}
+                    <section id="classified" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Classified Archive
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Terminal Interface</h3>
+                            <p className="text-theme-text">
+                                The Classified Archive (<code>/classified</code>) is a hidden
+                                terminal interface containing encrypted lore fragments. Navigate and
+                                decrypt them to uncover backstory and hidden transmissions.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="card">
+                                    <h4 className="font-semibold text-primary mb-2">Navigation</h4>
+                                    <ul className="text-theme-text space-y-1 list-disc list-inside">
+                                        <li>
+                                            <strong>↑ / ↓ arrow keys</strong> — move the cursor
+                                            between fragments on the index screen
+                                        </li>
+                                        <li>
+                                            <strong>Enter or click</strong> — open the selected
+                                            fragment
+                                        </li>
+                                        <li>
+                                            <strong>ESC</strong> — return to the index from a
+                                            fragment detail; from the index, ESC navigates home
+                                        </li>
+                                        <li>
+                                            <strong>Mouse hover</strong> — moves the cursor to the
+                                            hovered row
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold text-primary mb-2">Decryption</h4>
+                                    <p className="text-theme-text">
+                                        Each fragment requires an authorisation code. Enter the
+                                        correct code to start the decrypt sequence — a progress bar
+                                        counts to 100% and the lore text fades in. Once decrypted, a
+                                        fragment can be re-read at any time without re-entering the
+                                        code. Decrypt all 4 fragments to reveal a final
+                                        transmission.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Calculators Section */}
                     <section id="calculators" className="space-y-4 [counter-increment:section]">
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
@@ -2068,7 +2119,7 @@ const DocumentationPage: React.FC = () => {
                             </p>
 
                             <div className="space-y-4">
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         DPS Calculator
                                     </h4>
@@ -2130,7 +2181,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Defense Calculator
                                     </h4>
@@ -2140,7 +2191,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Healing Calculator
                                     </h4>
@@ -2152,7 +2203,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Damage Deconstruction
                                     </h4>
@@ -2162,7 +2213,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         JSON Diff Calculator
                                     </h4>
@@ -2173,7 +2224,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Speed Calculator
                                     </h4>
@@ -2226,7 +2277,7 @@ const DocumentationPage: React.FC = () => {
                             </p>
 
                             <div className="space-y-4">
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Beacon Types
                                     </h4>
@@ -2237,7 +2288,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Faction Events
                                     </h4>
@@ -2249,7 +2300,7 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                 </div>
 
-                                <div className="p-4 bg-dark-lighter">
+                                <div className="card">
                                     <h4 className="font-semibold text-primary mb-2">
                                         Individual Event Ships
                                     </h4>

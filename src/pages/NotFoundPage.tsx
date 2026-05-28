@@ -3,15 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
+import { CLASSIFIED_FRAGMENTS } from '../constants/classifiedArchive';
 
 const BAR_TOTAL = 22;
 const BAR_FINAL_FILLED_DEFAULT = 13;
-
-const DEFAULT_TERMINAL_LINES = [
-    '> INITIALIZING NAV SYSTEMS... [OK]',
-    '> SCANNING SECTOR_404...',
-    '> ERROR: NULL_SECTOR_REFERENCE',
-];
 
 interface EasterEggConfig {
     terminalLines: [string, string, string];
@@ -20,7 +15,41 @@ interface EasterEggConfig {
     title: string;
     subtitle: string;
     body: string;
+    authCode?: string;
 }
+
+const _codes = Object.fromEntries(CLASSIFIED_FRAGMENTS.map((f) => [f.sourceEggSlug, f.authCode]));
+
+const SLUG_CIPHERS: Array<(text: string) => string> = [
+    // +1 Caesar
+    (t) =>
+        t.replace(/[a-zA-Z]/g, (c) => {
+            const b = c >= 'a' ? 97 : 65;
+            return String.fromCharCode(((c.charCodeAt(0) - b + 1) % 26) + b);
+        }),
+    // +2 Caesar
+    (t) =>
+        t.replace(/[a-zA-Z]/g, (c) => {
+            const b = c >= 'a' ? 97 : 65;
+            return String.fromCharCode(((c.charCodeAt(0) - b + 2) % 26) + b);
+        }),
+    // Reverse
+    (t) => t.split('').reverse().join(''),
+    // Letters → 1-based position numbers, dot-separated, hyphens preserved
+    (t) =>
+        t
+            .split('-')
+            .map((w) =>
+                w
+                    .split('')
+                    .map((c) => {
+                        const n = c.toLowerCase().charCodeAt(0) - 96;
+                        return n >= 1 && n <= 26 ? String(n) : c;
+                    })
+                    .join('.')
+            )
+            .join('-'),
+];
 
 const EASTER_EGGS: Record<string, EasterEggConfig> = {
     'the-bludgeon': {
@@ -34,6 +63,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'TARGET LOST FROM ALL SCANNERS',
         subtitle: 'Drive data wiped. No record found.',
         body: `You were close. The Bludgeon — designation unofficial, nature unknown — was spotted here moments ago.\n\nArmored plating that reforms around damage. Plasma-encased missiles. A communications method no scanner has ever detected.\n\nThe running theory: it sensed your approach and actively counteracted it in real time.\n\nYour drive data has been wiped. There are no records.`,
+        authCode: _codes['the-bludgeon'],
     },
     'binderburg-rd': {
         terminalLines: [
@@ -190,6 +220,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'MECHANISM — CLASS UNKNOWN',
         subtitle: 'Both Gelecek and Binderburg R&D deny knowledge of this location.',
         body: `You have found something you were not meant to find.\n\nThe mechanisms — gravimetric anomalies clustered near black holes and the Tau Scorpii star — predate every known civilization. Binderburg has been quietly fortifying research stations in their vicinity for decades. Gelecek believes they are evidence of alien intelligence.\n\nBoth are wrong. Both are right. Neither will share their data.\n\nThis finding has been logged. Undocumented facilities in this sector have been placed on alert.\n\nStep away from the mechanism.`,
+        authCode: _codes['the-mechanisms'],
     },
     'the-apostate': {
         terminalLines: [
@@ -214,6 +245,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'THE ABYSS — BLOCKADE ACTIVE',
         subtitle: 'Time-space anomaly. Class: unknown. Origin: unknown.',
         body: `You have reached the blockade perimeter established around the anomaly known as The Abyss.\n\nAll six sovereign factions have agreed — for once — that no ship should pass.\n\nWhat lies beyond has not been documented. What has been documented has not been shared. Everliving ships have been observed moving through the region. MPL Chair Gwayne Erebus has taken a personal interest.\n\nTurn back.\n\nOr don't. The Abyss doesn't care either way.`,
+        authCode: _codes['the-abyss'],
     },
     'furnace-of-heaven': {
         terminalLines: [
@@ -226,6 +258,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         title: 'FURNACE OF HEAVEN',
         subtitle: 'Uninhabitable nebula. Edge of the Abyss. Do not approach.',
         body: `The encrypted data dumps trace back here. A nebula near the infamous Furnace of Heaven, on the edge of the Abyss and generally considered uninhabitable.\n\nSomething is in there.\n\nWhen confronted, Tsar Rasputin only smiled. "A new star is forming, Commander. Your fleet is cute. Stay clear of the flames."\n\nThe source of the signal has not been identified. Three probes and one unarmed scout were dispatched to triangulate. None returned.\n\nStep back from the telescope.`,
+        authCode: _codes['furnace-of-heaven'],
     },
     'gamish-waypoint': {
         terminalLines: [
@@ -360,7 +393,20 @@ const NotFoundPage: React.FC = () => {
 
     const slug = pathname.replace(/^\//, '');
     const easterEgg = EASTER_EGGS[slug] ?? null;
-    const terminalLines = easterEgg?.terminalLines ?? DEFAULT_TERMINAL_LINES;
+    const EASTER_EGG_SLUGS = Object.keys(EASTER_EGGS);
+    const [hintSlug] = useState(
+        () => EASTER_EGG_SLUGS[Math.floor(Math.random() * EASTER_EGG_SLUGS.length)]
+    );
+    const [hintCipher] = useState(
+        () => SLUG_CIPHERS[Math.floor(Math.random() * SLUG_CIPHERS.length)]
+    );
+    const slugLabel = slug ? slug.toUpperCase().replace(/-/g, '_') : 'UNKNOWN';
+    const defaultTerminalLines: [string, string, string] = [
+        '> INITIALIZING NAV SYSTEMS... [OK]',
+        `> SCANNING SECTOR: ${slugLabel}...`,
+        '> ERROR: NULL_SECTOR_REFERENCE',
+    ];
+    const terminalLines = easterEgg?.terminalLines ?? defaultTerminalLines;
     const barFinalFilled = easterEgg ? BAR_TOTAL : BAR_FINAL_FILLED_DEFAULT;
 
     // Sequence: wait for terminal lines → fill bar → resolve/corrupt → reveal content
@@ -472,7 +518,7 @@ const NotFoundPage: React.FC = () => {
                 <div className="relative z-10 flex items-start justify-center h-full overflow-y-auto p-4">
                     <div className="card max-w-lg w-full space-y-6 backdrop-blur-sm my-auto">
                         {/* // label */}
-                        <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em] [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]">
+                        <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em]">
                             {'// STARBORNE PLANNER'}
                         </div>
 
@@ -514,6 +560,19 @@ const NotFoundPage: React.FC = () => {
                                                 <p key={i}>{para}</p>
                                             ))}
                                         </div>
+                                        {easterEgg.authCode && (
+                                            <p className="text-xs text-gray-600 font-mono mt-2">
+                                                {'> SIGNAL ID: '}
+                                                <span className="group inline-block cursor-pointer">
+                                                    <span
+                                                        tabIndex={0}
+                                                        className="blur-sm group-hover:blur-none focus:blur-none transition-[filter] duration-300 select-all text-gray-400 outline-none"
+                                                    >
+                                                        {easterEgg.authCode}
+                                                    </span>
+                                                </span>
+                                            </p>
+                                        )}
                                         <div className="flex justify-center">
                                             <Button
                                                 variant="secondary"
@@ -525,23 +584,22 @@ const NotFoundPage: React.FC = () => {
                                     </>
                                 ) : (
                                     <>
-                                        <div
-                                            ref={glitchRef}
-                                            className="text-center text-8xl font-bold text-primary tracking-widest"
-                                        >
-                                            404
-                                        </div>
-
-                                        <div className="text-center space-y-2">
-                                            <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                        <div className="space-y-2">
+                                            <p
+                                                ref={glitchRef}
+                                                className="text-base font-bold tracking-widest uppercase text-primary"
+                                            >
                                                 SECTOR_404: SIGNAL LOST
                                             </p>
-                                            <p className="text-sm text-gray-400">
+                                            <p className="text-sm text-gray-400 space-y-3 font-mono">
                                                 The route you&apos;re looking for has been redacted
                                                 from our navigation charts.
                                             </p>
                                         </div>
 
+                                        <p className="text-xs text-gray-700 font-mono tracking-widest mt-2">
+                                            {`> TRANSMISSION REF: ${hintCipher(hintSlug)}`}
+                                        </p>
                                         <div className="flex justify-center gap-3">
                                             <Button
                                                 variant="primary"

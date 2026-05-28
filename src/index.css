@@ -890,6 +890,117 @@
         }
     }
 
+    /* ── Classified Archive page ──────────────────────────── */
+
+    .classified-static {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+        background-size: 150px 150px;
+        animation: classified-static-scroll 0.4s steps(4) infinite;
+        transition-property: opacity;
+        transition-duration: 700ms;
+        transition-timing-function: ease-out;
+        pointer-events: none;
+    }
+
+    @keyframes classified-static-scroll {
+        0% {
+            background-position: 0 0;
+        }
+        25% {
+            background-position: 50px 25px;
+        }
+        50% {
+            background-position: 25px 50px;
+        }
+        75% {
+            background-position: 75px 0;
+        }
+        100% {
+            background-position: 0 75px;
+        }
+    }
+
+    .classified-title-glitch {
+        animation: classified-title-glitch 8s steps(1) infinite;
+    }
+
+    @keyframes classified-title-glitch {
+        0%,
+        92%,
+        100% {
+            text-shadow: none;
+            clip-path: none;
+            transform: none;
+        }
+        93% {
+            text-shadow:
+                2px 0 #f0f,
+                -2px 0 #0ff;
+            clip-path: inset(20% 0 60% 0);
+            transform: translateX(3px);
+        }
+        94% {
+            text-shadow:
+                -2px 0 #f0f,
+                2px 0 #0ff;
+            clip-path: inset(60% 0 10% 0);
+            transform: translateX(-3px);
+        }
+        95% {
+            text-shadow: none;
+            clip-path: none;
+            transform: none;
+        }
+        96% {
+            text-shadow: 1px 0 #f0f;
+            clip-path: inset(40% 0 40% 0);
+            transform: translateX(1px);
+        }
+        97% {
+            text-shadow: none;
+            clip-path: none;
+            transform: none;
+        }
+    }
+
+    .classified-fragment-noise::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+        background-size: 100px 100px;
+        animation: classified-static-scroll 0.5s steps(3) infinite;
+        pointer-events: none;
+        border-radius: inherit;
+    }
+
+    .classified-decode {
+        animation: classified-decode 0.6s ease-out forwards;
+    }
+
+    @keyframes classified-decode {
+        from {
+            opacity: 0;
+            filter: blur(4px);
+            letter-spacing: 0.4em;
+        }
+        to {
+            opacity: 1;
+            filter: none;
+            letter-spacing: normal;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .classified-static,
+        .classified-title-glitch,
+        .classified-fragment-noise::before,
+        .classified-decode {
+            animation: none !important;
+            transition: none !important;
+        }
+    }
+
     /* Synthwave: Background color on body (image moved to fixed div for mobile compat) */
     [data-theme='synthwave'] body {
         background-color: rgb(var(--color-bg));
