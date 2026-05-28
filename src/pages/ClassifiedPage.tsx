@@ -20,7 +20,6 @@ type Mode = 'index' | 'detail';
 export default function ClassifiedPage() {
     const navigate = useNavigate();
     const [unlocked, setUnlocked] = useState<string[]>(() => readUnlocked());
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [inputs, setInputs] = useState<Record<string, string>>({});
     const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [decrypting, setDecrypting] = useState<Record<string, boolean>>({});
@@ -134,13 +133,9 @@ export default function ClassifiedPage() {
         ? (CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId) ?? null)
         : null;
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const detailIsUnlocked = activeFragmentId ? unlocked.includes(activeFragmentId) : false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const detailIsDecrypting = activeFragmentId ? (decrypting[activeFragmentId] ?? false) : false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const detailProgress = activeFragmentId ? (barProgress[activeFragmentId] ?? 0) : 0;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const detailHasError = activeFragmentId ? (errors[activeFragmentId] ?? false) : false;
 
     return (
@@ -266,10 +261,123 @@ export default function ClassifiedPage() {
                             </div>
                         )}
 
-                        {/* DETAIL SCREEN — implemented in Task 4 */}
+                        {/* DETAIL SCREEN */}
                         {mode === 'detail' && activeFragment && (
                             <div key={activeFragmentId} className="classified-decode">
-                                <p className="font-mono text-xs text-gray-500">Loading fragment…</p>
+                                <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
+                                    {'// FRAGMENT ACCESS'}
+                                </div>
+                                <p
+                                    className={`font-mono text-sm font-bold tracking-[0.3em] uppercase ${activeFragment.barColorClass} mt-1 mb-3`}
+                                >
+                                    {activeFragment.title.toUpperCase()}
+                                </p>
+
+                                {/* DECRYPTING STATE */}
+                                {detailIsDecrypting && (
+                                    <div className="space-y-1 font-mono text-xs">
+                                        <p className="text-gray-500 tracking-widest">
+                                            {'> STATUS: '}
+                                            <span className="text-green-400">DECRYPTING...</span>
+                                        </p>
+                                        <hr className="border-gray-800 my-2" />
+                                        <p className={activeFragment.barColorClass}>
+                                            {`> ${'█'.repeat(detailProgress)}${'░'.repeat(BAR_TOTAL - detailProgress)} ${Math.round((detailProgress / BAR_TOTAL) * 100)}%`}
+                                        </p>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="text-gray-600 tracking-widest">{'— — —'}</p>
+                                    </div>
+                                )}
+
+                                {/* UNLOCKED STATE */}
+                                {!detailIsDecrypting && detailIsUnlocked && (
+                                    <div>
+                                        <p
+                                            className={`font-mono text-xs tracking-widest ${activeFragment.barColorClass} mb-3`}
+                                        >
+                                            {`> ${'█'.repeat(BAR_TOTAL)} [DECRYPTED]`}
+                                        </p>
+                                        <hr className="border-gray-800 mb-3" />
+                                        <div className="classified-decode text-sm text-gray-400 space-y-3 font-mono">
+                                            {activeFragment.body.split('\n\n').map((para, i) => (
+                                                <p key={i}>{para}</p>
+                                            ))}
+                                        </div>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-1">
+                                                ESC
+                                            </span>
+                                            back to index
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* LOCKED STATE */}
+                                {!detailIsDecrypting && !detailIsUnlocked && (
+                                    <div>
+                                        <p className="font-mono text-xs text-gray-600 tracking-widest">
+                                            {`> ORIGIN FILE: ${activeFragment.hintLine} — FIELD AGENTS ONLY`}
+                                        </p>
+                                        <p className="font-mono text-xs text-gray-600 tracking-widest mt-1">
+                                            {'> STATUS: '}
+                                            <span className="text-red-400">
+                                                LOCKED — AUTH REQUIRED
+                                            </span>
+                                        </p>
+                                        <hr className="border-gray-800 my-3" />
+                                        <p
+                                            className={`font-mono text-xs tracking-widest ${
+                                                detailHasError ? 'text-red-400' : 'text-gray-500'
+                                            }`}
+                                        >
+                                            {detailHasError
+                                                ? '> [AUTHORIZATION FAILED]'
+                                                : '> ENTER AUTH CODE TO DECRYPT'}
+                                        </p>
+                                        <div className="flex items-center gap-2 font-mono text-sm mt-2">
+                                            <span className="text-green-400">{'>'}</span>
+                                            <input
+                                                type="text"
+                                                maxLength={12}
+                                                placeholder="_ _ _ _ _ _"
+                                                value={inputs[activeFragment.id] ?? ''}
+                                                onChange={(e) =>
+                                                    setInputs((p) => ({
+                                                        ...p,
+                                                        [activeFragment.id]: e.target.value,
+                                                    }))
+                                                }
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter')
+                                                        handleSubmit(
+                                                            activeFragment.id,
+                                                            activeFragment.authCode
+                                                        );
+                                                }}
+                                                className={`bg-transparent border-b ${
+                                                    detailHasError
+                                                        ? 'border-red-500 text-red-400'
+                                                        : 'border-gray-600 text-green-400'
+                                                } outline-none uppercase tracking-widest w-40 placeholder-gray-700 text-sm`}
+                                                autoComplete="off"
+                                                spellCheck={false}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-0.5">
+                                                ↵
+                                            </span>
+                                            {'submit · '}
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mx-1">
+                                                ESC
+                                            </span>
+                                            back to index
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
