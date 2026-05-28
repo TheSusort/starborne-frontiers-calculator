@@ -2053,6 +2053,57 @@ const DocumentationPage: React.FC = () => {
                         </div>
                     </section>
 
+                    {/* Classified Archive Section */}
+                    <section id="classified" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Classified Archive
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Terminal Interface</h3>
+                            <p className="text-theme-text">
+                                The Classified Archive (<code>/classified</code>) is a hidden
+                                terminal interface containing encrypted lore fragments. Navigate and
+                                decrypt them to uncover backstory and hidden transmissions.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">Navigation</h4>
+                                    <ul className="text-theme-text space-y-1 list-disc list-inside">
+                                        <li>
+                                            <strong>↑ / ↓ arrow keys</strong> — move the cursor
+                                            between fragments on the index screen
+                                        </li>
+                                        <li>
+                                            <strong>Enter or click</strong> — open the selected
+                                            fragment
+                                        </li>
+                                        <li>
+                                            <strong>ESC</strong> — return to the index from a
+                                            fragment detail; from the index, ESC navigates home
+                                        </li>
+                                        <li>
+                                            <strong>Mouse hover</strong> — moves the cursor to the
+                                            hovered row
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="p-4 bg-dark-lighter">
+                                    <h4 className="font-semibold text-primary mb-2">Decryption</h4>
+                                    <p className="text-theme-text">
+                                        Each fragment requires an authorisation code. Enter the
+                                        correct code to start the decrypt sequence — a progress bar
+                                        counts to 100% and the lore text fades in. Once decrypted, a
+                                        fragment can be re-read at any time without re-entering the
+                                        code. Decrypt all 4 fragments to reveal a final
+                                        transmission.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
                     {/* Calculators Section */}
                     <section id="calculators" className="space-y-4 [counter-increment:section]">
                         <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
