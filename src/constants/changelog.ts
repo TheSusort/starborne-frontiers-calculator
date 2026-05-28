@@ -9,6 +9,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Engineering optimizer now recommends multiple level upgrades per stat when your budget allows, instead of capping at one level per stat.',
     'Engineering optimizer now ranks upgrades by total fleet improvement (sum across all starred ships in a role) rather than per-ship average, so stats that benefit many ships are correctly prioritised over those that benefit just one.',
     'Engineering optimizer grouped recommendations now show the full level range and accumulated per-ship improvement for each stat.',
+    "Classified archive fragments now contain real lore based on the game's faction history and pilot bios, replacing the original placeholder text.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
