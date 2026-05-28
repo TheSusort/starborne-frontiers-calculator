@@ -514,15 +514,17 @@ export const ShipLorePage: React.FC = () => {
                 ship.quoteAuthor?.toLowerCase().includes(query)
         );
     }, [shipsWithBios, searchQuery, isSearching]);
-
+    // TODO: reverse sort articles.
     const filteredArticles = useMemo(() => {
-        if (!isSearching) return WEBSITE_LORE;
+        if (!isSearching) return [...WEBSITE_LORE].reverse();
         const query = searchQuery.toLowerCase();
-        return WEBSITE_LORE.filter(
-            (article) =>
-                article.title.toLowerCase().includes(query) ||
-                article.body.toLowerCase().includes(query)
-        );
+        return [
+            ...WEBSITE_LORE.filter(
+                (article) =>
+                    article.title.toLowerCase().includes(query) ||
+                    article.body.toLowerCase().includes(query)
+            ),
+        ].reverse();
     }, [searchQuery, isSearching]);
 
     const selectedShip = useMemo(() => {
