@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Seo from '../components/seo/Seo';
-import { Button } from '../components/ui';
 import { CLASSIFIED_FRAGMENTS, readUnlocked, writeUnlocked } from '../constants/classifiedArchive';
 
 const BAR_TOTAL = 22;
@@ -19,8 +18,10 @@ const FINAL_TRANSMISSION = `[PLACEHOLDER — awaiting dev lore]\n\nThe mechanism
 type Mode = 'index' | 'detail';
 
 export default function ClassifiedPage() {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const navigate = useNavigate();
     const [unlocked, setUnlocked] = useState<string[]>(() => readUnlocked());
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [inputs, setInputs] = useState<Record<string, string>>({});
     const [errors, setErrors] = useState<Record<string, boolean>>({});
     const [decrypting, setDecrypting] = useState<Record<string, boolean>>({});
@@ -28,10 +29,8 @@ export default function ClassifiedPage() {
 
     const intervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-    // New state — two-screen model (used in Tasks 2–4; suppress until then)
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // New state — two-screen model
     const [mode, setMode] = useState<Mode>('index');
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [cursorIndex, setCursorIndex] = useState(0);
     const [activeFragmentId, setActiveFragmentId] = useState<string | null>(null);
 
@@ -46,6 +45,7 @@ export default function ClassifiedPage() {
     const allUnlocked = unlockedCount === CLASSIFIED_FRAGMENTS.length;
     const staticOpacity = OPACITY_BY_UNLOCKED[Math.min(unlockedCount, 4)];
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const handleSubmit = useCallback(
         (fragmentId: string, authCode: string) => {
             const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
@@ -74,7 +74,6 @@ export default function ClassifiedPage() {
         [inputs]
     );
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const navigateToFragment = useCallback((index: number) => {
         const fragment = CLASSIFIED_FRAGMENTS[index];
         setCursorIndex(index);
@@ -88,7 +87,6 @@ export default function ClassifiedPage() {
         setActiveFragmentId(null);
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const activeFragment = activeFragmentId
         ? (CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId) ?? null)
         : null;
@@ -121,142 +119,116 @@ export default function ClassifiedPage() {
                 />
 
                 {/* Content */}
-                <div className="relative z-10 flex flex-col items-center min-h-full p-4 py-12 gap-6">
-                    {/* Header */}
-                    <div className="max-w-2xl w-full card backdrop-blur-sm space-y-3">
-                        <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em]">
-                            {'// STARBORNE PLANNER'}
-                        </div>
-                        <p className="classified-title-glitch font-mono text-sm font-bold tracking-[0.3em] uppercase text-primary">
-                            {'> ABYSS INCIDENT — CLASSIFIED ARCHIVE'}
-                        </p>
-                        <p className="font-mono text-xs text-gray-500 tracking-widest">
-                            {`[${unlockedCount}/${CLASSIFIED_FRAGMENTS.length} FRAGMENTS DECRYPTED]`}
-                        </p>
-                    </div>
+                <div className="relative z-10 flex flex-col items-center min-h-full p-4 py-12">
+                    <div className="max-w-2xl w-full card backdrop-blur-sm">
+                        {/* INDEX SCREEN */}
+                        {mode === 'index' && (
+                            <div key="index" className="classified-decode">
+                                {/* Header */}
+                                <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
+                                    {'// STARBORNE PLANNER'}
+                                </div>
+                                <p className="classified-title-glitch font-mono text-sm font-bold tracking-[0.3em] uppercase text-primary mt-1">
+                                    {'> ABYSS INCIDENT — CLASSIFIED ARCHIVE'}
+                                </p>
+                                <p className="font-mono text-xs text-gray-500 tracking-widest mt-1 mb-3">
+                                    {`[${unlockedCount}/${CLASSIFIED_FRAGMENTS.length} FRAGMENTS DECRYPTED]`}
+                                </p>
 
-                    {/* Fragment slots */}
-                    {CLASSIFIED_FRAGMENTS.map((fragment) => {
-                        const isUnlocked = unlocked.includes(fragment.id);
-                        const isDecrypting = decrypting[fragment.id] ?? false;
-                        const progress = barProgress[fragment.id] ?? 0;
-                        const hasError = errors[fragment.id] ?? false;
+                                <hr className="border-gray-800 mb-3" />
 
-                        return (
-                            <div
-                                key={fragment.id}
-                                className="max-w-2xl w-full card backdrop-blur-sm relative overflow-hidden"
-                            >
-                                {/* Noise overlay on locked fragments */}
-                                {!isUnlocked && !isDecrypting && (
-                                    <div className="classified-fragment-noise absolute inset-0 z-0" />
+                                {/* Instruction hint */}
+                                <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest mb-3">
+                                    {'USE ↑↓ TO NAVIGATE · ENTER OR CLICK TO ACCESS'}
+                                </p>
+
+                                {/* Fragment rows */}
+                                <div>
+                                    {CLASSIFIED_FRAGMENTS.map((fragment, i) => {
+                                        const isFocused = cursorIndex === i;
+                                        const isRowUnlocked = unlocked.includes(fragment.id);
+                                        return (
+                                            <div
+                                                key={fragment.id}
+                                                className={`flex items-center justify-between py-0.5 cursor-pointer ${
+                                                    isFocused
+                                                        ? 'bg-green-950/30 border-l-2 border-green-400 -mx-4 px-[14px]'
+                                                        : 'pl-5'
+                                                }`}
+                                                onMouseEnter={() => setCursorIndex(i)}
+                                                onClick={() => navigateToFragment(i)}
+                                            >
+                                                <span className="font-mono text-xs tracking-widest flex items-center gap-2">
+                                                    <span
+                                                        className={`w-3 shrink-0 text-green-400 ${isFocused ? '' : 'invisible'}`}
+                                                    >
+                                                        ▶
+                                                    </span>
+                                                    <span className={fragment.barColorClass}>
+                                                        {fragment.title.toUpperCase()}
+                                                    </span>
+                                                </span>
+                                                <span
+                                                    className={`font-mono text-[0.6rem] font-bold tracking-widest px-1 border ml-2 shrink-0 ${
+                                                        isRowUnlocked
+                                                            ? 'text-green-400 border-green-900 bg-green-950/50'
+                                                            : 'text-red-400 border-red-900 bg-red-950/30'
+                                                    }`}
+                                                >
+                                                    {isRowUnlocked ? 'DECRYPTED' : 'LOCKED'}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Final transmission — 4/4 only, index mode only */}
+                                {allUnlocked && (
+                                    <div className="classified-decode mt-4 space-y-3">
+                                        <hr className="border-gray-800" />
+                                        <p className="font-mono text-xs text-red-500 tracking-widest uppercase font-bold">
+                                            {'> FINAL TRANSMISSION — DECRYPTED'}
+                                        </p>
+                                        <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                            ARCHIVE COMPLETE
+                                        </p>
+                                        <div className="text-sm text-gray-400 space-y-3 font-mono">
+                                            {FINAL_TRANSMISSION.split('\n\n').map((para, i) => (
+                                                <p key={i}>{para}</p>
+                                            ))}
+                                        </div>
+                                    </div>
                                 )}
 
-                                <div className="relative z-10 space-y-4">
-                                    {isDecrypting ? (
-                                        <div className="space-y-2 font-mono text-sm">
-                                            <p className="text-green-400">{'> DECRYPTING...'}</p>
-                                            <p className={fragment.barColorClass}>
-                                                {`> ${'█'.repeat(progress)}${'░'.repeat(BAR_TOTAL - progress)}`}
-                                            </p>
-                                        </div>
-                                    ) : isUnlocked ? (
-                                        <div className="classified-decode space-y-4">
-                                            <div className="flex items-center justify-between">
-                                                <p
-                                                    className={`font-mono text-xs font-bold tracking-widest uppercase ${fragment.barColorClass}`}
-                                                >
-                                                    {`> ${'█'.repeat(BAR_TOTAL)} [DECRYPTED]`}
-                                                </p>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <p className="text-base font-bold tracking-widest uppercase text-primary">
-                                                    {fragment.title}
-                                                </p>
-                                            </div>
-                                            <div className="text-sm text-gray-400 space-y-3 font-mono">
-                                                {fragment.body.split('\n\n').map((para, i) => (
-                                                    <p key={i}>{para}</p>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <p className="font-mono text-xs text-gray-600 tracking-widest uppercase">
-                                                {`> ORIGIN FILE: ${fragment.hintLine} — FIELD AGENTS ONLY`}
-                                            </p>
-                                            <p
-                                                className={`font-mono text-xs ${hasError ? 'text-red-400' : 'text-gray-600'} tracking-widest`}
-                                            >
-                                                {hasError
-                                                    ? '> [AUTHORIZATION FAILED]'
-                                                    : '> ENTER AUTH CODE TO DECRYPT'}
-                                            </p>
-                                            <div className="flex gap-2 items-center font-mono text-sm">
-                                                <span className="text-green-400 shrink-0">
-                                                    {'>'}
-                                                </span>
-                                                <input
-                                                    type="text"
-                                                    maxLength={12}
-                                                    placeholder="_ _ _ _ _ _"
-                                                    value={inputs[fragment.id] ?? ''}
-                                                    onChange={(e) =>
-                                                        setInputs((i) => ({
-                                                            ...i,
-                                                            [fragment.id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter')
-                                                            handleSubmit(
-                                                                fragment.id,
-                                                                fragment.authCode
-                                                            );
-                                                    }}
-                                                    className={`bg-transparent border-b ${hasError ? 'border-red-500 text-red-400' : 'border-gray-600 text-green-400'} outline-none uppercase tracking-widest w-40 placeholder-gray-700 text-sm`}
-                                                    autoComplete="off"
-                                                    spellCheck={false}
-                                                />
-                                                <Button
-                                                    variant="secondary"
-                                                    size="xs"
-                                                    onClick={() =>
-                                                        handleSubmit(fragment.id, fragment.authCode)
-                                                    }
-                                                >
-                                                    SUBMIT
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                <hr className="border-gray-800 mt-4 mb-2" />
 
-                    {/* Final transmission — 4/4 only */}
-                    {allUnlocked && (
-                        <div className="max-w-2xl w-full card backdrop-blur-sm classified-decode space-y-4">
-                            <p className="font-mono text-xs text-red-500 tracking-widest uppercase font-bold">
-                                {'> FINAL TRANSMISSION — DECRYPTED'}
-                            </p>
-                            <p className="text-base font-bold tracking-widest uppercase text-primary">
-                                ARCHIVE COMPLETE
-                            </p>
-                            <div className="text-sm text-gray-400 space-y-3 font-mono">
-                                {FINAL_TRANSMISSION.split('\n\n').map((para, i) => (
-                                    <p key={i}>{para}</p>
-                                ))}
+                                {/* Footer key legend */}
+                                <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
+                                    <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-0.5">
+                                        ↑
+                                    </span>
+                                    <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-2">
+                                        ↓
+                                    </span>
+                                    {'move · '}
+                                    <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mx-1">
+                                        ↵
+                                    </span>
+                                    {'open · '}
+                                    <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mx-1">
+                                        ESC
+                                    </span>
+                                    base
+                                </p>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* Footer nav */}
-                    <div className="max-w-2xl w-full flex justify-center">
-                        <Button variant="secondary" onClick={() => void navigate('/')}>
-                            Return to Base
-                        </Button>
+                        {/* DETAIL SCREEN — implemented in Task 4 */}
+                        {mode === 'detail' && activeFragment && (
+                            <div key={activeFragmentId} className="classified-decode">
+                                <p className="font-mono text-xs text-gray-500">Loading fragment…</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
