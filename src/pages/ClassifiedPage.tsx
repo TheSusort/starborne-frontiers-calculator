@@ -13,7 +13,17 @@ const OPACITY_BY_UNLOCKED: Record<number, string> = {
     4: 'opacity-0',
 };
 
-const FINAL_TRANSMISSION = `[PLACEHOLDER — awaiting dev lore]\n\nThe mechanisms. The Bludgeon. The blockade. The signal.\n\nFour pieces. One answer.\n\nIt came through before the blockade was established.\n\nIt has been here the whole time.\n\nIt is patient.`;
+// Stored as +1 Caesar shift — each letter incremented by one
+const FINAL_TRANSMISSION_ENCODED = `[QMBDFIPMEFS — bxbjujoh efw mpsf]\n\nUif nfdibojtnt. Uif Cmvehfpo. Uif cmpdlbef. Uif tjhobm.\n\nGpvs qjfdft. Pof botxfs.\n\nJu dbnf uispvhi cfgpsf uif cmpdlbef xbt ftubcmjtife.\n\nJu ibt cffo ifsf uif xipmf ujnf.\n\nJu jt qbujfou.`;
+
+function decipherTransmission(text: string): string {
+    return text.replace(/[a-zA-Z]/g, (c) => {
+        const base = c >= 'a' ? 97 : 65;
+        return String.fromCharCode(((c.charCodeAt(0) - base - 1 + 26) % 26) + base);
+    });
+}
+
+const FINAL_TRANSMISSION = decipherTransmission(FINAL_TRANSMISSION_ENCODED);
 
 type Mode = 'index' | 'detail';
 
@@ -26,6 +36,7 @@ export default function ClassifiedPage() {
     const [barProgress, setBarProgress] = useState<Record<string, number>>({});
 
     const intervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+    const flickerRef = useRef<HTMLDivElement>(null);
 
     // New state — two-screen model
     const [mode, setMode] = useState<Mode>('index');
@@ -36,6 +47,30 @@ export default function ClassifiedPage() {
         const intervals = intervalsRef.current;
         return () => {
             Object.values(intervals).forEach(clearInterval);
+        };
+    }, []);
+
+    useEffect(() => {
+        const flicker = flickerRef.current;
+        const triggerBurst = () => {
+            if (!flicker) return;
+            flicker.classList.remove('not-found-burst-active');
+            void flicker.offsetWidth;
+            flicker.classList.add('not-found-burst-active');
+        };
+        const schedule = (): ReturnType<typeof setTimeout> =>
+            setTimeout(
+                () => {
+                    triggerBurst();
+                    timeoutRef = schedule();
+                },
+                3000 + Math.random() * 3000
+            );
+        const initialTimer = setTimeout(triggerBurst, 600);
+        let timeoutRef = schedule();
+        return () => {
+            clearTimeout(initialTimer);
+            clearTimeout(timeoutRef);
         };
     }, []);
 
@@ -140,16 +175,18 @@ export default function ClassifiedPage() {
 
     return (
         <>
-            <Seo
-                title="CLASSIFIED — STARBORNE PLANNER"
-                description="Abyss Incident — Classified Archive"
-                noIndex
-            />
+            <Seo title="CLASSIFIED" description="Abyss Incident — Classified Archive" noIndex />
             <div className="not-found-scanlines fixed inset-0 z-[110] font-secondary overflow-y-auto">
                 {/* Background layers */}
                 <div className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-top" />
                 <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
                 <div className="absolute inset-0 bg-black/60" />
+
+                {/* VHS glitch burst */}
+                <div
+                    ref={flickerRef}
+                    className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken"
+                />
 
                 {/* Corruption static overlay */}
                 <div
@@ -157,7 +194,7 @@ export default function ClassifiedPage() {
                 />
 
                 {/* Content */}
-                <div className="relative z-10 flex flex-col items-center min-h-full p-4 py-12">
+                <div className="relative z-10 flex items-center justify-center min-h-full p-4">
                     <div className="max-w-2xl w-full card backdrop-blur-sm">
                         {/* INDEX SCREEN */}
                         {mode === 'index' && (
@@ -188,11 +225,7 @@ export default function ClassifiedPage() {
                                         return (
                                             <div
                                                 key={fragment.id}
-                                                className={`flex items-center justify-between py-0.5 cursor-pointer ${
-                                                    isFocused
-                                                        ? 'bg-green-950/30 border-l-2 border-green-400 -mx-4 px-[14px]'
-                                                        : 'pl-5'
-                                                }`}
+                                                className={`flex items-center justify-between py-0.5 cursor-pointer ${isFocused ? 'bg-green-950/30' : ''}`}
                                                 onMouseEnter={() => setCursorIndex(i)}
                                                 onClick={() => navigateToFragment(i)}
                                             >
@@ -200,7 +233,7 @@ export default function ClassifiedPage() {
                                                     <span
                                                         className={`w-3 shrink-0 text-green-400 ${isFocused ? '' : 'invisible'}`}
                                                     >
-                                                        ▶
+                                                        {'>'}
                                                     </span>
                                                     <span className={fragment.barColorClass}>
                                                         {fragment.title.toUpperCase()}

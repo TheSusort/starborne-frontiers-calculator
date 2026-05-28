@@ -12,7 +12,7 @@ export const CLASSIFIED_FRAGMENTS: ClassifiedFragment[] = [
     {
         id: 'the-mechanisms',
         title: 'The Doors Were Always There',
-        hintLine: 'GRAVIMETRIC SURVEY — TAU SCORPII REGION — BINDERBURG INTERNAL',
+        hintLine: 'BINDERBURG SURVEY LOG — TAU SCORPII — STRUCTURE CLASS: UNDEFINED',
         authCode: 'DOOR-7A',
         barColorClass: 'text-indigo-400',
         sourceEggSlug: 'the-mechanisms',
@@ -21,7 +21,7 @@ export const CLASSIFIED_FRAGMENTS: ClassifiedFragment[] = [
     {
         id: 'the-bludgeon',
         title: 'First Contact — Field Report',
-        hintLine: 'ANOMALY DESIGNATION: THE_BLUDGEON — GELECEK FIELD INTELLIGENCE',
+        hintLine: 'GELECEK FIELD INTEL — BLUNT-ALPHA CONTACT LOG — PLASMA SHELL',
         authCode: 'HIVE-3X',
         barColorClass: 'text-yellow-400',
         sourceEggSlug: 'the-bludgeon',
@@ -30,7 +30,7 @@ export const CLASSIFIED_FRAGMENTS: ClassifiedFragment[] = [
     {
         id: 'the-abyss',
         title: 'Internal Memo — Blockade Command',
-        hintLine: 'SPIRAL EXPANSE BLOCKADE — JOINT FACTION COMMUNIQUÉ — EYES ONLY',
+        hintLine: 'JOINT FACTION INCIDENT — EXPANSE PERIMETER — DEPTH CLASS: OMEGA',
         authCode: 'KEEP-OUT',
         barColorClass: 'text-purple-400',
         sourceEggSlug: 'the-abyss',
@@ -39,7 +39,7 @@ export const CLASSIFIED_FRAGMENTS: ClassifiedFragment[] = [
     {
         id: 'furnace-of-heaven',
         title: 'Furnace Signal — Decrypted Packet',
-        hintLine: 'ENCRYPTED SIGNAL — ORIGIN: FURNACE OF HEAVEN NEBULA — UNATTRIBUTED',
+        hintLine: 'SIGNAL INTERCEPT — NEBULAR STELLAR FORGE — HEAT SIG: CELESTIAL',
         authCode: 'ALREADY',
         barColorClass: 'text-orange-400',
         sourceEggSlug: 'furnace-of-heaven',

@@ -26,6 +26,37 @@ interface EasterEggConfig {
 
 const _codes = Object.fromEntries(CLASSIFIED_FRAGMENTS.map((f) => [f.sourceEggSlug, f.authCode]));
 
+const SLUG_CIPHERS: Array<(text: string) => string> = [
+    // +1 Caesar
+    (t) =>
+        t.replace(/[a-zA-Z]/g, (c) => {
+            const b = c >= 'a' ? 97 : 65;
+            return String.fromCharCode(((c.charCodeAt(0) - b + 1) % 26) + b);
+        }),
+    // +2 Caesar
+    (t) =>
+        t.replace(/[a-zA-Z]/g, (c) => {
+            const b = c >= 'a' ? 97 : 65;
+            return String.fromCharCode(((c.charCodeAt(0) - b + 2) % 26) + b);
+        }),
+    // Reverse
+    (t) => t.split('').reverse().join(''),
+    // Letters → 1-based position numbers, dot-separated, hyphens preserved
+    (t) =>
+        t
+            .split('-')
+            .map((w) =>
+                w
+                    .split('')
+                    .map((c) => {
+                        const n = c.toLowerCase().charCodeAt(0) - 96;
+                        return n >= 1 && n <= 26 ? String(n) : c;
+                    })
+                    .join('.')
+            )
+            .join('-'),
+];
+
 const EASTER_EGGS: Record<string, EasterEggConfig> = {
     'the-bludgeon': {
         terminalLines: [
@@ -372,6 +403,9 @@ const NotFoundPage: React.FC = () => {
     const [hintSlug] = useState(
         () => EASTER_EGG_SLUGS[Math.floor(Math.random() * EASTER_EGG_SLUGS.length)]
     );
+    const [hintCipher] = useState(
+        () => SLUG_CIPHERS[Math.floor(Math.random() * SLUG_CIPHERS.length)]
+    );
     const terminalLines = easterEgg?.terminalLines ?? DEFAULT_TERMINAL_LINES;
     const barFinalFilled = easterEgg ? BAR_TOTAL : BAR_FINAL_FILLED_DEFAULT;
 
@@ -565,7 +599,7 @@ const NotFoundPage: React.FC = () => {
                                         </div>
 
                                         <p className="text-center text-[0.6rem] text-gray-700 font-mono tracking-widest mt-2">
-                                            {`> TRANSMISSION REF: ${hintSlug}`}
+                                            {`> TRANSMISSION REF: ${hintCipher(hintSlug)}`}
                                         </p>
                                         <div className="flex justify-center gap-3">
                                             <Button
