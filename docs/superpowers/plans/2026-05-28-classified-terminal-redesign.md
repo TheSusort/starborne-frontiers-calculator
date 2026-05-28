@@ -77,30 +77,9 @@ Inside the component, after the existing state declarations (after `const interv
     const [mode, setMode] = useState<Mode>('index');
     const [cursorIndex, setCursorIndex] = useState(0);
     const [activeFragmentId, setActiveFragmentId] = useState<string | null>(null);
-    const hasTransitioned = useRef(false);
 ```
 
-The existing state block (`unlocked`, `inputs`, `errors`, `decrypting`, `barProgress`, `intervalsRef`) is **unchanged** — just append the 4 new declarations after it. The module-level constants (`BAR_TOTAL`, `OPACITY_BY_UNLOCKED`, `FINAL_TRANSMISSION`) are also unchanged.
-
-- [ ] **Step 2: Add navigation helper functions after `handleSubmit`**
-
-Add these two functions directly after `handleSubmit`:
-
-```tsx
-    function navigateToFragment(index: number) {
-        const fragment = CLASSIFIED_FRAGMENTS[index];
-        setCursorIndex(index);
-        setActiveFragmentId(fragment.id);
-        setMode('detail');
-        hasTransitioned.current = true;
-    }
-
-    function navigateToIndex() {
-        setMode('index');
-        setActiveFragmentId(null);
-        hasTransitioned.current = true;
-    }
-```
+The existing state block (`unlocked`, `inputs`, `errors`, `decrypting`, `barProgress`, `intervalsRef`) is **unchanged** — just append the 3 new declarations after it. The module-level constants (`BAR_TOTAL`, `OPACITY_BY_UNLOCKED`, `FINAL_TRANSMISSION`) are also unchanged.
 
 - [ ] **Step 3: Add `activeFragment` derived value before the return statement**
 
@@ -149,14 +128,10 @@ Replace everything from `<div className="relative z-10 flex flex-col items-cente
 ```tsx
                 {/* Content */}
                 <div className="relative z-10 flex flex-col items-center min-h-full p-4 py-12">
-                    <div
-                        className={`max-w-2xl w-full card backdrop-blur-sm ${
-                            hasTransitioned.current ? 'transition-opacity duration-100' : ''
-                        }`}
-                    >
+                    <div className="max-w-2xl w-full card backdrop-blur-sm">
                         {/* INDEX SCREEN */}
                         {mode === 'index' && (
-                            <div>
+                            <div key="index" className="classified-decode">
                                 {/* Header */}
                                 <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
                                     {'// STARBORNE PLANNER'}
@@ -258,7 +233,7 @@ Replace everything from `<div className="relative z-10 flex flex-col items-cente
 
                         {/* DETAIL SCREEN — implemented in Task 4 */}
                         {mode === 'detail' && activeFragment && (
-                            <div>
+                            <div key={activeFragmentId} className="classified-decode">
                                 <p className="font-mono text-xs text-gray-500">Loading fragment…</p>
                             </div>
                         )}
@@ -328,13 +303,11 @@ Replace the two plain `function navigateToFragment` / `function navigateToIndex`
         setCursorIndex(index);
         setActiveFragmentId(fragment.id);
         setMode('detail');
-        hasTransitioned.current = true;
     }, []);
 
     const navigateToIndex = useCallback(() => {
         setMode('index');
         setActiveFragmentId(null);
-        hasTransitioned.current = true;
     }, []);
 ```
 
@@ -370,7 +343,7 @@ Also convert `handleSubmit` to a `useCallback` so it can be safely listed in the
     );
 ```
 
-> **Note on `handleSubmit` refactor:** The original version referenced `unlocked` to compute `next`. The `useCallback` version uses the `setUnlocked` functional update form to avoid capturing `unlocked`, so the dep array only needs `inputs`. This removes the stale closure risk.
+> **Note on `handleSubmit` refactor:** The original version captured `unlocked` via closure in `const next = [...unlocked, fragmentId]` — if `unlocked` was stale, completed decrypts could silently overwrite each other. The `useCallback` version uses the `setUnlocked(prev => [...prev, fragmentId])` functional update form, which always gets the latest state from React. This eliminates the stale closure risk. The dep array only needs `inputs` (for reading the typed value).
 
 Then add the keyboard `useEffect` immediately after these helpers:
 
@@ -674,43 +647,25 @@ Add the opacity fade when switching between index and detail, and verify the fin
 **Files:**
 - Modify: `src/pages/ClassifiedPage.tsx`
 
-- [ ] **Step 1: Replace the card wrapper's mode-fade approach**
+- [ ] **Step 1: Verify mode-transition animation is correctly in place**
 
-The `transition-opacity` class on the card wrapper doesn't produce a visible effect with conditional rendering because React removes the old DOM entirely before mounting the new DOM — there's no opacity state to transition from.
+The plan already wired `classified-decode` onto both mode content wrappers in Tasks 2 and 4. Verify both are present:
 
-Instead, apply the existing `classified-decode` animation to each mode's content wrapper. This CSS animation (`opacity: 0 → 1` with a brief blur) is already defined in the project and fires on mount. Adding a `key` prop forces React to fully remount the content div on mode change, replaying the animation.
-
-Replace both mode content `<div>` wrappers (the ones directly inside the card) with keyed versions:
-
-For the index screen's wrapper:
+Index screen wrapper (Task 2):
 ```tsx
-{/* INDEX SCREEN */}
 {mode === 'index' && (
     <div key="index" className="classified-decode">
-        {/* ... all index content unchanged ... */}
-    </div>
-)}
 ```
 
-For the detail screen's wrapper:
+Detail screen wrapper (Task 4):
 ```tsx
-{/* DETAIL SCREEN */}
 {mode === 'detail' && activeFragment && (
     <div key={activeFragmentId} className="classified-decode">
-        {/* ... all detail content unchanged ... */}
-    </div>
-)}
 ```
 
-> The detail wrapper uses `key={activeFragmentId}` (not `key="detail"`) so that navigating between two different fragments also replays the animation, not just index→detail switches.
+The `classified-decode` CSS animation (`opacity: 0 → 1` with a brief blur) fires on mount, producing the screen-switch fade effect. `key={activeFragmentId}` on the detail wrapper ensures the animation replays when navigating between different fragments (React remounts on key change). The index uses `key="index"` as a stable string since there's only one index screen.
 
-Also remove the now-unneeded `hasTransitioned` ref from the card wrapper's class (the `transition-opacity` approach is replaced). The card wrapper simplifies to:
-
-```tsx
-<div className="max-w-2xl w-full card backdrop-blur-sm">
-```
-
-And remove `const hasTransitioned = useRef(false);` and all `hasTransitioned.current = true;` assignments — they are no longer needed.
+Open `http://localhost:3000/classified` and navigate between index and detail — each transition should show a brief fade-in consistent with the existing decrypt animations on the page.
 
 - [ ] **Step 2: Verify the final transmission block**
 
