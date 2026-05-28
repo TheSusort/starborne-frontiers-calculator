@@ -20,7 +20,7 @@ The page opens in index mode. A single terminal card (same `max-w-2xl` width) co
 ```
 // STARBORNE PLANNER
 > ABYSS INCIDENT — CLASSIFIED ARCHIVE
-[X/4 FRAGMENTS DECRYPTED]
+[X/4 FRAGMENTS DECRYPTED]   ← inside the same header block, not a separate element
 ──────────────────────────────
 USE ↑↓ TO NAVIGATE · ENTER OR CLICK TO ACCESS
 
@@ -30,11 +30,11 @@ USE ↑↓ TO NAVIGATE · ENTER OR CLICK TO ACCESS
   FURNACE SIGNAL — DECRYPTED PKT     [LOCKED]
 
 ──────────────────────────────
-↑↓ move · ↵ open · ESC return to base
+↑↓ move · ↵ open · ESC base
 ```
 
-- The `▶` cursor sits on the currently focused row. It moves with `↑`/`↓`.
-- Each fragment title renders in its accent colour (`text-indigo-400`, `text-yellow-400`, etc.).
+- The `▶` cursor sits on the currently focused row. It moves with `↑`/`↓`. The `▶` glyph is always `text-green-400` (terminal green) regardless of the focused row's accent colour.
+- Each fragment title renders in its accent colour (`text-indigo-400`, `text-yellow-400`, etc.) — use `fragment.barColorClass` from the existing constant, which already holds the Tailwind colour class.
 - Status badge: `[DECRYPTED]` in green, `[LOCKED]` in red.
 - The focused row gets a subtle green-tinted background highlight (`bg-green-950/30` or similar) and a left accent border.
 - **Mouse:** hovering a row focuses it; clicking navigates into it.
@@ -43,24 +43,32 @@ USE ↑↓ TO NAVIGATE · ENTER OR CLICK TO ACCESS
 
 ### Screen 2 — Fragment Detail
 
-Pressing `Enter` (or clicking a row) transitions to detail mode. The same terminal card now shows the selected fragment.
+Pressing `Enter` (or clicking a row) transitions to detail mode. The same terminal card now shows the selected fragment. The `// FRAGMENT ACCESS` line renders in muted gray (`text-gray-500`) — the same dim style as `// STARBORNE PLANNER` in the index.
 
 **Locked state:**
 ```
 // FRAGMENT ACCESS
 FIRST CONTACT — FIELD REPORT
-> ORIGIN FILE: ANOMALY DESIGNATION: THE_BLUDGEON
+> ORIGIN FILE: ANOMALY DESIGNATION: THE_BLUDGEON — GELECEK FIELD INTELLIGENCE — FIELD AGENTS ONLY
 > STATUS: LOCKED — AUTH REQUIRED
 ──────────────────────────────
 > ENTER AUTH CODE TO DECRYPT
-> _
+[<input> field on this line — the > _ is wireframe notation for the cursor inside the input, not a static text element]
 
 ──────────────────────────────
 ↵ submit · ESC back to index
 ```
 
-- Wrong code: the prompt line flashes red and shows `> [AUTHORIZATION FAILED]` for 800 ms, then resets.
-- Correct code: decrypt bar animation plays (same `BAR_TOTAL = 22` bar in accent colour), then lore fades in with `classified-decode` animation.
+The fragment title in the detail header uses the fragment's accent colour (same as the index row). The **SUBMIT button is removed** — submission is via `Enter` key only (input `onKeyDown`) or the window listener when the active element is not an `<input>`. No separate submit button is rendered.
+
+The auth input is a raw `<input type="text">` with custom terminal styling — **deliberate exception** to the `Input` UI component convention (same as the current implementation). The terminal aesthetic requires inline-level styling that the shared `Input` component doesn't support.
+
+The origin file line keeps the existing format verbatim: `> ORIGIN FILE: ${fragment.hintLine} — FIELD AGENTS ONLY`. The `> STATUS: LOCKED — AUTH REQUIRED` line is a new addition below it.
+
+- Wrong code (including empty input): the prompt line flashes red and shows `> [AUTHORIZATION FAILED]` for 800 ms, then resets. Empty input is treated the same as a wrong code — no special handling.
+- Correct code: decrypt bar animation plays (same `BAR_TOTAL = 22` bar in accent colour), then lore fades in with `classified-decode` animation applied to the lore content wrapper `<div>` only (same scope as current code — not the card body). During decryption the input is conditionally unmounted (same as current code), so the window `Enter` listener naturally cannot submit again.
+
+The `classified-decode` animation will replay each time the user enters an already-unlocked fragment from the index (since navigating to detail mode re-mounts the detail content). This is intentional — the replay creates a nice "accessing archive" feel on re-entry.
 
 **Unlocked state (read-only):**
 ```
@@ -82,7 +90,9 @@ ESC back to index
 > STATUS: DECRYPTING...
 > ███████████░░░░░░░░░░ 52%
 ```
-Bar fills left-to-right in the fragment's accent colour. Once complete, the input row disappears and the lore content fades in.
+The `> STATUS: DECRYPTING...` line is the new format for the detail view — replacing the current `> DECRYPTING...` line (the `STATUS:` prefix is added here to match the locked-state format). The percentage label (`52%`) is new; it is rendered alongside the bar characters and is calculated as `Math.round((barProgress[id] / BAR_TOTAL) * 100)`. The bar logic itself (step timing, `BAR_TOTAL = 22`, accent colour fill) is unchanged.
+
+Once complete, the input row disappears and the lore content fades in. When the user later re-enters a fully-decrypted fragment, `isUnlocked` takes priority over any stale `decrypting` / `barProgress` values — the unlocked read-only view is shown, no special cleanup needed.
 
 ---
 
@@ -116,23 +126,35 @@ A single `useEffect` attaches a `keydown` listener on `window`. Logic is mode-de
 - `Escape` — `navigate('/')`
 
 **Detail mode:**
-- `Enter` — submit auth code (only if fragment is locked and not decrypting)
-- `Escape` — return to index
+- `Enter` — submit auth code (only if fragment is locked and not decrypting). When the active element is not an `<input>`, the window listener looks up `activeFragmentId` in `CLASSIFIED_FRAGMENTS`, checks the condition, and calls `handleSubmit(activeFragmentId, inputs[activeFragmentId])`. When the fragment is already unlocked, this condition is false and `Enter` silently does nothing — no navigation or other side effect.
+- `Escape` — return to index (blocked during active decryption — when `decrypting[activeFragmentId]` is true, `Escape` is ignored). Once decryption completes and `decrypting[id]` becomes false via React state, `Escape` automatically becomes available again — no separate re-enable step needed.
 
 The `keydown` listener must `preventDefault()` on `ArrowUp` and `ArrowDown` to prevent page scrolling. When detail mode's input is focused, `Enter` is handled natively by the input's `onKeyDown` (same as current implementation), so the window listener should skip `Enter` when the active element is an `<input>`.
+
+`Escape` in detail mode always returns to index — even when the auth input is focused. The window listener handles `Escape` unconditionally (no `activeElement` check needed).
+
+---
+
+## Edge-Case Behaviours
+
+- **Auto-focus on detail entry:** When navigating into a locked fragment (locked state, not decrypting), the auth input is auto-focused so the user can type immediately without clicking. This applies every time the detail screen is entered (including re-entry after returning from index), handled naturally by the `autoFocus` attribute on the input element. When the fragment is already decrypting or unlocked on entry, no input is rendered and no focus logic is needed.
+- **Cursor retention on ESC:** When returning from detail to index, `cursorIndex` is not reset — it stays on whichever row was last opened, so the user's position is preserved.
+- **Mouse + keyboard coexistence:** `onMouseEnter` sets `cursorIndex` immediately, overriding any keyboard-set position. This is intentional — mouse hover always wins.
 
 ---
 
 ## Layout & Visual
 
 - Single terminal card replaces the multi-card stack. Same background layers, scanlines, and corruption overlay as now.
+- The two screens use **conditional rendering** inside the card body: `{mode === 'index' && <IndexScreen>}` and `{mode === 'detail' && <DetailScreen>}`. This ensures the detail content is fully unmounted when returning to index, so `classified-decode` re-fires naturally on re-entry without any additional logic.
 - Card uses existing `card` class + `backdrop-blur-sm`.
 - No outer container changes — the `not-found-scanlines` wrapper and background layers are untouched.
-- Screen transition: a brief `opacity-0 → opacity-100` fade (100 ms) on the card body content when switching modes, to avoid a jarring hard cut.
+- Screen transition: a brief `opacity-0 → opacity-100` fade (100 ms) on the card body content when switching modes, to avoid a jarring hard cut. Implement via Tailwind `transition-opacity duration-100` — no new `@keyframes` rule needed. The fade triggers only on actual mode changes (index ↔ detail), not on initial page load. Gate it with a `hasTransitioned` boolean ref (a `useRef(false)` that is set to `true` after the first mode change); apply `transition-opacity duration-100` only when `hasTransitioned.current` is true.
 - The `classified-title-glitch` animation stays on the `> ABYSS INCIDENT` heading.
 - The `classified-fragment-noise` overlay on locked fragments is removed (it was applied per-card; the new design has one card).
 - The corruption static overlay (`classified-static`) continues to track `unlockedCount` → opacity steps unchanged.
-- The final transmission block (4/4) appears at the bottom of the index screen once all fragments are unlocked, below the fragment list, inside the same card.
+- The final transmission block (4/4) appears at the bottom of the index screen once all fragments are unlocked, appended below the fragment list rows inside the same outer card `<div>` (not a separate card element). It renders only when `mode === 'index'` — it is not shown in the detail view. Apply `classified-decode` to the wrapper `<div>` of the final transmission content (same as current code) so it animates in when the index screen is rendered.
+- Both hint lines in the index are retained: the header hint ("USE ↑↓ TO NAVIGATE · ENTER OR CLICK TO ACCESS") above the fragment list, and the footer key legend ("↑↓ move · ↵ open · ESC base") below the divider. They serve different purposes — the header is a brief instruction for new visitors; the footer is a compact reference.
 
 ---
 
