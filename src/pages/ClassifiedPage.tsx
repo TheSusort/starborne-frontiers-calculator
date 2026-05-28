@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Seo from '../components/seo/Seo';
 import { Button } from '../components/ui';
@@ -16,6 +16,8 @@ const OPACITY_BY_UNLOCKED: Record<number, string> = {
 
 const FINAL_TRANSMISSION = `[PLACEHOLDER — awaiting dev lore]\n\nThe mechanisms. The Bludgeon. The blockade. The signal.\n\nFour pieces. One answer.\n\nIt came through before the blockade was established.\n\nIt has been here the whole time.\n\nIt is patient.`;
 
+type Mode = 'index' | 'detail';
+
 export default function ClassifiedPage() {
     const navigate = useNavigate();
     const [unlocked, setUnlocked] = useState<string[]>(() => readUnlocked());
@@ -25,6 +27,13 @@ export default function ClassifiedPage() {
     const [barProgress, setBarProgress] = useState<Record<string, number>>({});
 
     const intervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
+
+    // New state — two-screen model (used in Tasks 2–4; suppress until then)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [mode, setMode] = useState<Mode>('index');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [cursorIndex, setCursorIndex] = useState(0);
+    const [activeFragmentId, setActiveFragmentId] = useState<string | null>(null);
 
     useEffect(() => {
         const intervals = intervalsRef.current;
@@ -37,30 +46,61 @@ export default function ClassifiedPage() {
     const allUnlocked = unlockedCount === CLASSIFIED_FRAGMENTS.length;
     const staticOpacity = OPACITY_BY_UNLOCKED[Math.min(unlockedCount, 4)];
 
-    function handleSubmit(fragmentId: string, authCode: string) {
-        const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
-        if (input !== authCode.trim().toUpperCase()) {
-            setErrors((e) => ({ ...e, [fragmentId]: true }));
-            setTimeout(() => setErrors((e) => ({ ...e, [fragmentId]: false })), 800);
-            return;
-        }
-
-        // Start decrypt bar animation
-        setDecrypting((d) => ({ ...d, [fragmentId]: true }));
-        let count = 0;
-        const interval = setInterval(() => {
-            count++;
-            setBarProgress((p) => ({ ...p, [fragmentId]: count }));
-            if (count >= BAR_TOTAL) {
-                clearInterval(interval);
-                const next = [...unlocked, fragmentId];
-                setUnlocked(next);
-                writeUnlocked(next);
-                setDecrypting((d) => ({ ...d, [fragmentId]: false }));
+    const handleSubmit = useCallback(
+        (fragmentId: string, authCode: string) => {
+            const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
+            if (input !== authCode.trim().toUpperCase()) {
+                setErrors((e) => ({ ...e, [fragmentId]: true }));
+                setTimeout(() => setErrors((e) => ({ ...e, [fragmentId]: false })), 800);
+                return;
             }
-        }, 40);
-        intervalsRef.current[fragmentId] = interval;
-    }
+            setDecrypting((d) => ({ ...d, [fragmentId]: true }));
+            let count = 0;
+            const interval = setInterval(() => {
+                count++;
+                setBarProgress((p) => ({ ...p, [fragmentId]: count }));
+                if (count >= BAR_TOTAL) {
+                    clearInterval(interval);
+                    setUnlocked((prev) => {
+                        const next = [...prev, fragmentId];
+                        writeUnlocked(next);
+                        return next;
+                    });
+                    setDecrypting((d) => ({ ...d, [fragmentId]: false }));
+                }
+            }, 40);
+            intervalsRef.current[fragmentId] = interval;
+        },
+        [inputs]
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const navigateToFragment = useCallback((index: number) => {
+        const fragment = CLASSIFIED_FRAGMENTS[index];
+        setCursorIndex(index);
+        setActiveFragmentId(fragment.id);
+        setMode('detail');
+    }, []);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const navigateToIndex = useCallback(() => {
+        setMode('index');
+        setActiveFragmentId(null);
+    }, []);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const activeFragment = activeFragmentId
+        ? (CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId) ?? null)
+        : null;
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const detailIsUnlocked = activeFragmentId ? unlocked.includes(activeFragmentId) : false;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const detailIsDecrypting = activeFragmentId ? (decrypting[activeFragmentId] ?? false) : false;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const detailProgress = activeFragmentId ? (barProgress[activeFragmentId] ?? 0) : 0;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const detailHasError = activeFragmentId ? (errors[activeFragmentId] ?? false) : false;
 
     return (
         <>
