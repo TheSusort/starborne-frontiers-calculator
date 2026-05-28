@@ -281,6 +281,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // Load all batches
             // eslint-disable-next-line no-constant-condition
             while (true) {
+                // Bail if the user signed out while we were awaiting a batch.
+                // activeProfileIdRef.current is set to null synchronously in handleSignOut
+                // (before React re-renders), so this check is reliable mid-loop.
+                if (activeProfileIdRef.current !== activeProfileId) return;
                 const { items, lastId: newLastId } = await loadBatch(lastId);
 
                 if (items.length === 0) break;
@@ -374,12 +378,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const handleSignOut = () => {
             // Only clear data if we're not in the middle of migration
             if (!isMigrating) {
+                // Synchronously null the ref so any in-flight loadInventory loop
+                // sees the sign-out immediately — before React re-renders and updates
+                // the ref in the render body. Without this, the loop guard
+                // (activeProfileIdRef.current !== activeProfileId) sees stale equal
+                // values and writes authed data after the clear below.
+                activeProfileIdRef.current = null;
                 // Wipe the entire IndexedDB store so all profile-keyed inventory
                 // entries are gone regardless of which key is active at sign-out time.
                 // removeFromIndexedDB(inventoryCacheKey) could miss entries if the
                 // active profile changes before the event fires.
                 void clearIndexedDBStorage();
                 setLocalInventory([]);
+                // Also clear tempInventory — it's the display source during a fresh
+                // load (no cache), so partial batches from an in-flight sync would
+                // remain visible until loading flips to false without this clear.
+                setTempInventory([]);
             }
         };
 
