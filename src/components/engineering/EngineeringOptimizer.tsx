@@ -7,9 +7,10 @@ import { Button, Input, StatCard, Checkbox } from '../ui';
 import {
     optimizeEngineering,
     type OptimizationResult,
-    type UpgradeRecommendation,
+    type ShipImprovement,
 } from '../../utils/engineering/engineeringOptimizer';
 import { getBaseRole, type BaseRoleName } from '../../constants/engineeringStats';
+import type { StatName } from '../../types/stats';
 import { STATS } from '../../constants/stats';
 
 const ROLE_LABELS: Record<BaseRoleName, string> = {
@@ -19,13 +20,56 @@ const ROLE_LABELS: Record<BaseRoleName, string> = {
     SUPPORTER: 'Supporter',
 };
 
+interface GroupedRecommendation {
+    role: BaseRoleName;
+    statName: StatName;
+    fromLevel: number;
+    toLevel: number;
+    totalTokenCost: number;
+    totalImprovement: number;
+    /** Ship breakdown from the first level in this group */
+    shipBreakdown: ShipImprovement[];
+}
+
+function groupRecommendations(result: OptimizationResult): GroupedRecommendation[] {
+    const map = new Map<string, GroupedRecommendation>();
+    for (const rec of result.recommendations) {
+        const key = `${rec.role}-${rec.statName}`;
+        const existing = map.get(key);
+        if (existing) {
+            existing.toLevel = rec.nextLevel;
+            existing.totalTokenCost += rec.tokenCost;
+            existing.totalImprovement += rec.percentImprovement;
+            // Accumulate per-ship improvements across all levels in the group
+            for (const shipImp of rec.shipBreakdown) {
+                const entry = existing.shipBreakdown.find((s) => s.shipId === shipImp.shipId);
+                if (entry) entry.improvement += shipImp.improvement;
+            }
+        } else {
+            map.set(key, {
+                role: rec.role,
+                statName: rec.statName,
+                fromLevel: rec.currentLevel,
+                toLevel: rec.nextLevel,
+                totalTokenCost: rec.tokenCost,
+                totalImprovement: rec.percentImprovement,
+                shipBreakdown: rec.shipBreakdown.map((s) => ({ ...s })),
+            });
+        }
+    }
+    return Array.from(map.values()).sort(
+        (a, b) => b.totalImprovement / b.totalTokenCost - a.totalImprovement / a.totalTokenCost
+    );
+}
+
 interface RecommendationRowProps {
-    rec: UpgradeRecommendation;
+    rec: GroupedRecommendation;
     rank: number;
 }
 
 const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, rank }) => {
     const benefiting = rec.shipBreakdown.filter((s) => s.improvement > 0);
+    const levelsUpgraded = rec.toLevel - rec.fromLevel;
     return (
         <div className="card">
             <div className="flex items-start justify-between gap-4">
@@ -39,8 +83,10 @@ const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, rank }) => {
                             {STATS[rec.statName]?.label ?? rec.statName}
                         </div>
                         <div className="text-xs text-theme-text-secondary mt-0.5">
-                            Level {rec.currentLevel} &rarr; {rec.nextLevel} &middot;{' '}
-                            {rec.tokenCost.toLocaleString()} tokens
+                            Level {rec.fromLevel} &rarr; {rec.toLevel}
+                            {levelsUpgraded > 1 && ` (${levelsUpgraded} upgrades)`}
+                            {' · '}
+                            {rec.totalTokenCost.toLocaleString()} tokens
                         </div>
                         {benefiting.length > 0 && (
                             <div className="text-xs text-theme-text-secondary mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
@@ -57,7 +103,7 @@ const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, rank }) => {
                     </div>
                 </div>
                 <span className="text-green-400 font-semibold text-sm shrink-0">
-                    +{rec.percentImprovement.toFixed(2)}%
+                    +{rec.totalImprovement.toFixed(2)}%
                 </span>
             </div>
         </div>
@@ -102,6 +148,8 @@ export const EngineeringOptimizer: React.FC = () => {
         setResult(res);
     }, [tokenBudget, ships, engineeringStats, getGearPiece, getConfig, onlyImprovingUpgrades]);
 
+    const grouped = useMemo(() => (result ? groupRecommendations(result) : []), [result]);
+
     const renderRightColumn = () => {
         if (!result) {
             return (
@@ -111,7 +159,7 @@ export const EngineeringOptimizer: React.FC = () => {
             );
         }
 
-        if (result.recommendations.length === 0) {
+        if (grouped.length === 0) {
             return (
                 <p className="text-theme-text-secondary text-sm">
                     No upgrades fit within this budget, or all tracked stats are already at max
@@ -128,11 +176,11 @@ export const EngineeringOptimizer: React.FC = () => {
         return (
             <div className="space-y-3">
                 <p className="text-xs text-theme-text-secondary">
-                    Recommended spend &mdash; best % improvement / token first
+                    Recommended spend &mdash; best total fleet % improvement / token first
                 </p>
-                {result.recommendations.map((rec, index) => (
+                {grouped.map((rec, index) => (
                     <RecommendationRow
-                        key={`${rec.role}-${rec.statName}-${rec.currentLevel}`}
+                        key={`${rec.role}-${rec.statName}-${rec.fromLevel}`}
                         rec={rec}
                         rank={index + 1}
                     />
@@ -146,7 +194,7 @@ export const EngineeringOptimizer: React.FC = () => {
                     {roleImprovementEntries.map(([role, improvement]) => (
                         <StatCard
                             key={role}
-                            title={`${ROLE_LABELS[role]} Improvement`}
+                            title={`${ROLE_LABELS[role]} Fleet Improvement`}
                             value={`+${improvement.toFixed(2)}%`}
                             color="green"
                         />

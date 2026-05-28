@@ -25,7 +25,7 @@ export interface UpgradeRecommendation {
     currentLevel: number;
     nextLevel: number;
     tokenCost: number;
-    /** Average % improvement across starred ships of this role */
+    /** Sum of % improvements across all starred ships of this role */
     percentImprovement: number;
     /** percentImprovement / tokenCost — used for ranking */
     valueRatio: number;
@@ -99,6 +99,8 @@ export function optimizeEngineering(
     onlyImprovingUpgrades?: boolean
 ): OptimizationResult {
     const candidates: UpgradeRecommendation[] = [];
+    // Tracks the actual starting level for each stat so the greedy can enforce ordering.
+    const statStartLevels = new Map<string, number>();
 
     for (const [role, statNames] of Object.entries(ENGINEERING_STATS_BY_ROLE) as [
         BaseRoleName,
@@ -109,97 +111,114 @@ export function optimizeEngineering(
         if (starredShips.length === 0) continue;
 
         for (const statName of statNames) {
-            // Find current stat value
+            // Find current stat value and derive starting level
             const roleStats = engineeringStats.stats.find((s) => s.shipType === role);
             const existingStat = roleStats?.stats.find((s) => s.name === statName);
             const currentValue = existingStat?.value ?? 0;
+            const startLevel = isEngineeringFlatStat(statName) ? currentValue / 2 : currentValue;
 
-            // Derive current level
-            const currentLevel = isEngineeringFlatStat(statName) ? currentValue / 2 : currentValue;
+            const key = `${role}-${statName}`;
+            statStartLevels.set(key, startLevel);
 
-            if (currentLevel >= 20) continue;
+            if (startLevel >= 20) continue;
 
-            const tokenCost = getUpgradeCost(currentLevel);
-            if (tokenCost <= 0) continue;
+            // Generate a candidate for every possible level transition from startLevel to 19.
+            // Each level's improvement is computed relative to the simulated state after all
+            // previous levels of this stat have been applied, so costs and baselines are exact.
+            let simulatedEngStats = engineeringStats;
 
-            const increment = getStatIncrement(statName);
-            const modifiedEngStats = withStatIncrement(engineeringStats, role, statName, increment);
+            for (let level = startLevel; level < 20; level++) {
+                const tokenCost = getUpgradeCost(level);
+                if (tokenCost <= 0) break;
 
-            // Calculate percent improvement for each starred ship
-            const shipBreakdown: ShipImprovement[] = [];
-            for (const ship of starredShips) {
-                const baseEngStat = getEngStatForShip(engineeringStats, ship);
-                const baseResult = calculateTotalStats(
-                    ship.baseStats,
-                    ship.equipment,
-                    getGearPiece,
-                    ship.refits ?? [],
-                    ship.implants ?? {},
-                    baseEngStat,
-                    ship.id
+                const increment = getStatIncrement(statName);
+                const modifiedEngStats = withStatIncrement(
+                    simulatedEngStats,
+                    role,
+                    statName,
+                    increment
                 );
-                const baseStats = baseResult.final;
 
-                const modifiedEngStat = getEngStatForShip(modifiedEngStats, ship);
-                const modifiedResult = calculateTotalStats(
-                    ship.baseStats,
-                    ship.equipment,
-                    getGearPiece,
-                    ship.refits ?? [],
-                    ship.implants ?? {},
-                    modifiedEngStat,
-                    ship.id
-                );
-                const modifiedStats = modifiedResult.final;
+                // Calculate percent improvement for each starred ship
+                const shipBreakdown: ShipImprovement[] = [];
+                for (const ship of starredShips) {
+                    const baseEngStat = getEngStatForShip(simulatedEngStats, ship);
+                    const baseResult = calculateTotalStats(
+                        ship.baseStats,
+                        ship.equipment,
+                        getGearPiece,
+                        ship.refits ?? [],
+                        ship.implants ?? {},
+                        baseEngStat,
+                        ship.id
+                    );
+                    const baseStats = baseResult.final;
 
-                const scoreRole = getShipRole?.(ship.id) ?? ship.type;
-                const baseScore = calculateRoleScore(scoreRole, baseStats);
-                const newScore = calculateRoleScore(scoreRole, modifiedStats);
-                // Note: DEFENDER_SECURITY and SUPPORTER_SHIELD multiply by `security`.
-                // If security is 0 (typical for gear-less ships), baseScore is 0 and pct
-                // falls through to 0 — the security track will appear valueless. In practice,
-                // real ships have gear that provides security, so this rarely matters.
-                const pct = baseScore > 0 ? ((newScore - baseScore) / baseScore) * 100 : 0;
-                shipBreakdown.push({ shipId: ship.id, shipName: ship.name, improvement: pct });
+                    const modifiedEngStat = getEngStatForShip(modifiedEngStats, ship);
+                    const modifiedResult = calculateTotalStats(
+                        ship.baseStats,
+                        ship.equipment,
+                        getGearPiece,
+                        ship.refits ?? [],
+                        ship.implants ?? {},
+                        modifiedEngStat,
+                        ship.id
+                    );
+                    const modifiedStats = modifiedResult.final;
+
+                    const scoreRole = getShipRole?.(ship.id) ?? ship.type;
+                    const baseScore = calculateRoleScore(scoreRole, baseStats);
+                    const newScore = calculateRoleScore(scoreRole, modifiedStats);
+                    // Note: DEFENDER_SECURITY and SUPPORTER_SHIELD multiply by `security`.
+                    // If security is 0 (typical for gear-less ships), baseScore is 0 and pct
+                    // falls through to 0 — the security track will appear valueless. In practice,
+                    // real ships have gear that provides security, so this rarely matters.
+                    const pct = baseScore > 0 ? ((newScore - baseScore) / baseScore) * 100 : 0;
+                    shipBreakdown.push({ shipId: ship.id, shipName: ship.name, improvement: pct });
+                }
+
+                const percentImprovement = shipBreakdown.reduce((sum, s) => sum + s.improvement, 0);
+
+                if (!onlyImprovingUpgrades || percentImprovement > 0) {
+                    const valueRatio = percentImprovement / tokenCost;
+                    candidates.push({
+                        role,
+                        statName,
+                        currentLevel: level,
+                        nextLevel: level + 1,
+                        tokenCost,
+                        percentImprovement,
+                        valueRatio,
+                        shipBreakdown,
+                    });
+                }
+
+                // Always advance the simulated state so the next level's baseline is correct.
+                simulatedEngStats = modifiedEngStats;
             }
-
-            const percentImprovement =
-                shipBreakdown.length > 0
-                    ? shipBreakdown.reduce((sum, s) => sum + s.improvement, 0) /
-                      shipBreakdown.length
-                    : 0;
-
-            if (onlyImprovingUpgrades && percentImprovement <= 0) continue;
-
-            const valueRatio = percentImprovement / tokenCost;
-
-            candidates.push({
-                role,
-                statName,
-                currentLevel,
-                nextLevel: currentLevel + 1,
-                tokenCost,
-                percentImprovement,
-                valueRatio,
-                shipBreakdown,
-            });
         }
     }
 
     // Sort by value ratio descending
     candidates.sort((a, b) => b.valueRatio - a.valueRatio);
 
-    // Greedy budget allocation
+    // Greedy budget allocation.
+    // pickedNextLevel tracks the next level that must be picked for each stat, enforcing
+    // that levels are bought in order (can't buy level 3→4 without first buying 2→3).
+    const pickedNextLevel = new Map(statStartLevels);
     let remaining = budget;
     const recommendations: UpgradeRecommendation[] = [];
     let tokensUsed = 0;
 
     for (const candidate of candidates) {
-        if (candidate.tokenCost <= remaining) {
-            recommendations.push(candidate);
-            remaining -= candidate.tokenCost;
-            tokensUsed += candidate.tokenCost;
-        }
+        const key = `${candidate.role}-${candidate.statName}`;
+        if (candidate.currentLevel !== pickedNextLevel.get(key)) continue;
+        if (candidate.tokenCost > remaining) continue;
+
+        recommendations.push(candidate);
+        remaining -= candidate.tokenCost;
+        tokensUsed += candidate.tokenCost;
+        pickedNextLevel.set(key, candidate.nextLevel);
     }
 
     // Compute roleImprovements

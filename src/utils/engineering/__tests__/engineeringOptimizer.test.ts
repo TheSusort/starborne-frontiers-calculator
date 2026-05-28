@@ -120,4 +120,35 @@ describe('optimizeEngineering', () => {
             expect(result.roleImprovements['ATTACKER']).toBeCloseTo(expectedTotal, 5);
         }
     });
+
+    it('can recommend multiple level upgrades for the same stat when budget allows', () => {
+        // Budget of 1000 covers multiple levels of attack (0→1=100, 1→2=150, 2→3=200, 3→4=250)
+        // which has the highest value ratio for an ATTACKER ship.
+        const result = optimizeEngineering(1000, [makeShip()], emptyEngineering, mockGetGearPiece);
+
+        const countByKey = new Map<string, number>();
+        for (const rec of result.recommendations) {
+            const key = `${rec.role}-${rec.statName}`;
+            countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
+        }
+        const maxCount = Math.max(0, ...countByKey.values());
+        expect(maxCount).toBeGreaterThanOrEqual(2);
+    });
+
+    it('enforces level ordering — never recommends a higher level without the lower', () => {
+        const result = optimizeEngineering(50000, [makeShip()], emptyEngineering, mockGetGearPiece);
+        // For every (role, stat), the picked levels must form a contiguous ascending sequence
+        // starting from 0 (the actual start level for all stats in emptyEngineering).
+        const byKey = new Map<string, number[]>();
+        for (const rec of result.recommendations) {
+            const key = `${rec.role}-${rec.statName}`;
+            if (!byKey.has(key)) byKey.set(key, []);
+            byKey.get(key)!.push(rec.currentLevel);
+        }
+        for (const [, levels] of byKey) {
+            for (let i = 1; i < levels.length; i++) {
+                expect(levels[i]).toBe(levels[i - 1] + 1);
+            }
+        }
+    });
 });
