@@ -8,12 +8,6 @@ import { CLASSIFIED_FRAGMENTS } from '../constants/classifiedArchive';
 const BAR_TOTAL = 22;
 const BAR_FINAL_FILLED_DEFAULT = 13;
 
-const DEFAULT_TERMINAL_LINES = [
-    '> INITIALIZING NAV SYSTEMS... [OK]',
-    '> SCANNING SECTOR_404...',
-    '> ERROR: NULL_SECTOR_REFERENCE',
-];
-
 interface EasterEggConfig {
     terminalLines: [string, string, string];
     barLabel: string;
@@ -406,7 +400,13 @@ const NotFoundPage: React.FC = () => {
     const [hintCipher] = useState(
         () => SLUG_CIPHERS[Math.floor(Math.random() * SLUG_CIPHERS.length)]
     );
-    const terminalLines = easterEgg?.terminalLines ?? DEFAULT_TERMINAL_LINES;
+    const slugLabel = slug ? slug.toUpperCase().replace(/-/g, '_') : 'UNKNOWN';
+    const defaultTerminalLines: [string, string, string] = [
+        '> INITIALIZING NAV SYSTEMS... [OK]',
+        `> SCANNING SECTOR: ${slugLabel}...`,
+        '> ERROR: NULL_SECTOR_REFERENCE',
+    ];
+    const terminalLines = easterEgg?.terminalLines ?? defaultTerminalLines;
     const barFinalFilled = easterEgg ? BAR_TOTAL : BAR_FINAL_FILLED_DEFAULT;
 
     // Sequence: wait for terminal lines → fill bar → resolve/corrupt → reveal content
@@ -518,7 +518,7 @@ const NotFoundPage: React.FC = () => {
                 <div className="relative z-10 flex items-start justify-center h-full overflow-y-auto p-4">
                     <div className="card max-w-lg w-full space-y-6 backdrop-blur-sm my-auto">
                         {/* // label */}
-                        <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em] [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]">
+                        <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em]">
                             {'// STARBORNE PLANNER'}
                         </div>
 
@@ -581,24 +581,20 @@ const NotFoundPage: React.FC = () => {
                                     </>
                                 ) : (
                                     <>
-                                        <div
-                                            ref={glitchRef}
-                                            className="text-center text-8xl font-bold text-primary tracking-widest"
-                                        >
-                                            404
-                                        </div>
-
-                                        <div className="text-center space-y-2">
-                                            <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                        <div className="space-y-2">
+                                            <p
+                                                ref={glitchRef}
+                                                className="text-base font-bold tracking-widest uppercase text-primary"
+                                            >
                                                 SECTOR_404: SIGNAL LOST
                                             </p>
-                                            <p className="text-sm text-gray-400">
+                                            <p className="text-sm text-gray-400 space-y-3 font-mono">
                                                 The route you&apos;re looking for has been redacted
                                                 from our navigation charts.
                                             </p>
                                         </div>
 
-                                        <p className="text-center text-[0.6rem] text-gray-700 font-mono tracking-widest mt-2">
+                                        <p className="text-xs text-gray-700 font-mono tracking-widest mt-2">
                                             {`> TRANSMISSION REF: ${hintCipher(hintSlug)}`}
                                         </p>
                                         <div className="flex justify-center gap-3">

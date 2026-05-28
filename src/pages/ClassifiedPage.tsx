@@ -5,6 +5,12 @@ import { CLASSIFIED_FRAGMENTS, readUnlocked, writeUnlocked } from '../constants/
 
 const BAR_TOTAL = 22;
 
+const BOOT_LINES: [string, string, string] = [
+    '> ROUTING THROUGH ANSIBLE RELAY — ORIGIN MASKED...',
+    '> BYPASSING SOVA WATCHDOG PROTOCOL...',
+    '> PULLING CLASSIFIED FILE: ABYSS INCIDENT...',
+];
+
 const OPACITY_BY_UNLOCKED: Record<number, string> = {
     0: 'opacity-60',
     1: 'opacity-40',
@@ -35,6 +41,10 @@ export default function ClassifiedPage() {
     const [decrypting, setDecrypting] = useState<Record<string, boolean>>({});
     const [barProgress, setBarProgress] = useState<Record<string, number>>({});
 
+    const [bootComplete, setBootComplete] = useState(false);
+    const [bootBarProgress, setBootBarProgress] = useState<number | null>(null);
+    const [bootBarFilled, setBootBarFilled] = useState(false);
+
     const intervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
     const flickerRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +57,36 @@ export default function ClassifiedPage() {
         const intervals = intervalsRef.current;
         return () => {
             Object.values(intervals).forEach(clearInterval);
+        };
+    }, []);
+
+    useEffect(() => {
+        const timers: ReturnType<typeof setTimeout>[] = [];
+        let fillInterval: ReturnType<typeof setInterval> | null = null;
+
+        timers.push(
+            setTimeout(() => {
+                setBootBarProgress(0);
+                let count = 0;
+                fillInterval = setInterval(() => {
+                    count++;
+                    setBootBarProgress(count);
+                    if (count >= BAR_TOTAL) {
+                        if (fillInterval) clearInterval(fillInterval);
+                        timers.push(
+                            setTimeout(() => {
+                                setBootBarFilled(true);
+                                timers.push(setTimeout(() => setBootComplete(true), 500));
+                            }, 200)
+                        );
+                    }
+                }, 40);
+            }, 1800)
+        );
+
+        return () => {
+            timers.forEach(clearTimeout);
+            if (fillInterval) clearInterval(fillInterval);
         };
     }, []);
 
@@ -182,12 +222,6 @@ export default function ClassifiedPage() {
                 <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
                 <div className="absolute inset-0 bg-black/60" />
 
-                {/* VHS glitch burst */}
-                <div
-                    ref={flickerRef}
-                    className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken"
-                />
-
                 {/* Corruption static overlay */}
                 <div
                     className={`classified-static absolute inset-0 mix-blend-overlay ${staticOpacity}`}
@@ -195,12 +229,46 @@ export default function ClassifiedPage() {
 
                 {/* Content */}
                 <div className="relative z-10 flex items-center justify-center min-h-full p-4">
-                    <div className="max-w-2xl w-full card backdrop-blur-sm">
+                    <div className="relative overflow-hidden max-w-2xl w-full card backdrop-blur-sm">
+                        {/* VHS glitch burst — card-scoped */}
+                        <div
+                            ref={flickerRef}
+                            className="not-found-burst absolute inset-0 pointer-events-none bg-[url('/images/transition.webp')] bg-cover mix-blend-darken z-10"
+                        />
+                        {/* BOOT SEQUENCE */}
+                        {!bootComplete && (
+                            <div className="space-y-1 font-mono text-sm">
+                                {BOOT_LINES.map((line, i) => (
+                                    <div
+                                        key={i}
+                                        className="not-found-line text-green-400"
+                                        style={{ animationDelay: `${0.2 + i * 0.35}s` }}
+                                    >
+                                        {line}
+                                    </div>
+                                ))}
+                                <div
+                                    className="not-found-line"
+                                    style={{ animationDelay: `${0.2 + 3 * 0.35}s` }}
+                                >
+                                    <span
+                                        className={
+                                            bootBarFilled ? 'text-red-400' : 'text-green-400'
+                                        }
+                                    >
+                                        {bootBarFilled
+                                            ? `> ${'█'.repeat(BAR_TOTAL)} [BREACH CONFIRMED]`
+                                            : `> ${'█'.repeat(bootBarProgress ?? 0)}${'░'.repeat(BAR_TOTAL - (bootBarProgress ?? 0))}`}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
                         {/* INDEX SCREEN */}
-                        {mode === 'index' && (
-                            <div key="index" className="classified-decode">
+                        {bootComplete && mode === 'index' && (
+                            <div key="index" className="not-found-reveal classified-decode">
                                 {/* Header */}
-                                <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
+                                <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em]">
                                     {'// STARBORNE PLANNER'}
                                 </div>
                                 <p className="classified-title-glitch font-mono text-sm font-bold tracking-[0.3em] uppercase text-primary mt-1">
@@ -291,12 +359,24 @@ export default function ClassifiedPage() {
                                     </span>
                                     base
                                 </p>
+
+                                {/* Warning — presence detected */}
+                                <div className="mt-3 space-y-0.5">
+                                    <p className="font-mono text-[0.65rem] text-red-400 tracking-widest">
+                                        {
+                                            'UNAUTHORIZED ACCESS DETECTED — COUNTER MEASURES ACTIVATED'
+                                        }
+                                    </p>
+                                </div>
                             </div>
                         )}
 
                         {/* DETAIL SCREEN */}
-                        {mode === 'detail' && activeFragment && (
-                            <div key={activeFragmentId} className="classified-decode">
+                        {bootComplete && mode === 'detail' && activeFragment && (
+                            <div
+                                key={activeFragmentId}
+                                className="not-found-reveal classified-decode"
+                            >
                                 <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
                                     {'// FRAGMENT ACCESS'}
                                 </div>
