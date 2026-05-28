@@ -18,7 +18,6 @@ const FINAL_TRANSMISSION = `[PLACEHOLDER — awaiting dev lore]\n\nThe mechanism
 type Mode = 'index' | 'detail';
 
 export default function ClassifiedPage() {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const navigate = useNavigate();
     const [unlocked, setUnlocked] = useState<string[]>(() => readUnlocked());
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -45,7 +44,6 @@ export default function ClassifiedPage() {
     const allUnlocked = unlockedCount === CLASSIFIED_FRAGMENTS.length;
     const staticOpacity = OPACITY_BY_UNLOCKED[Math.min(unlockedCount, 4)];
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const handleSubmit = useCallback(
         (fragmentId: string, authCode: string) => {
             const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
@@ -81,11 +79,56 @@ export default function ClassifiedPage() {
         setMode('detail');
     }, []);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const navigateToIndex = useCallback(() => {
         setMode('index');
         setActiveFragmentId(null);
     }, []);
+
+    useEffect(() => {
+        function onKeyDown(e: KeyboardEvent) {
+            if (mode === 'index') {
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setCursorIndex(
+                        (i) => (i - 1 + CLASSIFIED_FRAGMENTS.length) % CLASSIFIED_FRAGMENTS.length
+                    );
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setCursorIndex((i) => (i + 1) % CLASSIFIED_FRAGMENTS.length);
+                } else if (e.key === 'Enter') {
+                    navigateToFragment(cursorIndex);
+                } else if (e.key === 'Escape') {
+                    void navigate('/');
+                }
+            } else if (mode === 'detail' && activeFragmentId) {
+                if (e.key === 'Escape') {
+                    if (decrypting[activeFragmentId]) return;
+                    navigateToIndex();
+                } else if (e.key === 'Enter' && document.activeElement?.tagName !== 'INPUT') {
+                    const fragment = CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId);
+                    if (
+                        fragment &&
+                        !unlocked.includes(activeFragmentId) &&
+                        !decrypting[activeFragmentId]
+                    ) {
+                        handleSubmit(activeFragmentId, fragment.authCode);
+                    }
+                }
+            }
+        }
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [
+        mode,
+        cursorIndex,
+        activeFragmentId,
+        decrypting,
+        unlocked,
+        navigate,
+        navigateToFragment,
+        navigateToIndex,
+        handleSubmit,
+    ]);
 
     const activeFragment = activeFragmentId
         ? (CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId) ?? null)
