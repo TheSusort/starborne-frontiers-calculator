@@ -120,6 +120,7 @@ export default function ClassifiedPage() {
 
     const handleSubmit = useCallback(
         (fragmentId: string, authCode: string) => {
+            if (decrypting[fragmentId] || unlocked.includes(fragmentId)) return;
             const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
             if (input !== authCode.trim().toUpperCase()) {
                 setErrors((e) => ({ ...e, [fragmentId]: true }));
@@ -134,16 +135,17 @@ export default function ClassifiedPage() {
                 if (count >= BAR_TOTAL) {
                     clearInterval(interval);
                     setUnlocked((prev) => {
-                        const next = [...prev, fragmentId];
+                        const next = prev.includes(fragmentId) ? prev : [...prev, fragmentId];
                         writeUnlocked(next);
                         return next;
                     });
                     setDecrypting((d) => ({ ...d, [fragmentId]: false }));
+                    delete intervalsRef.current[fragmentId];
                 }
             }, 40);
             intervalsRef.current[fragmentId] = interval;
         },
-        [inputs]
+        [inputs, decrypting, unlocked]
     );
 
     const navigateToFragment = useCallback((index: number) => {

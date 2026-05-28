@@ -27,8 +27,24 @@ describe('readUnlocked', () => {
     it('filters out non-string entries', () => {
         localStorage.setItem(
             'classified_unlocked',
-            JSON.stringify(['valid', 42, null, 'also-valid'])
+            JSON.stringify(['the-mechanisms', 42, null, 'the-bludgeon'])
         );
-        expect(readUnlocked()).toEqual(['valid', 'also-valid']);
+        expect(readUnlocked()).toEqual(['the-mechanisms', 'the-bludgeon']);
+    });
+
+    it('filters out unknown fragment IDs', () => {
+        localStorage.setItem(
+            'classified_unlocked',
+            JSON.stringify(['the-mechanisms', 'unknown-id', 'the-bludgeon'])
+        );
+        expect(readUnlocked()).toEqual(['the-mechanisms', 'the-bludgeon']);
+    });
+
+    it('deduplicates repeated fragment IDs', () => {
+        localStorage.setItem(
+            'classified_unlocked',
+            JSON.stringify(['the-mechanisms', 'the-mechanisms', 'the-bludgeon'])
+        );
+        expect(readUnlocked()).toEqual(['the-mechanisms', 'the-bludgeon']);
     });
 });

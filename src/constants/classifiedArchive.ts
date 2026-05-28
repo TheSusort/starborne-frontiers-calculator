@@ -51,7 +51,14 @@ export function readUnlocked(): string[] {
     try {
         const raw = localStorage.getItem('classified_unlocked');
         const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+        if (!Array.isArray(parsed)) return [];
+        const validIds = new Set(CLASSIFIED_FRAGMENTS.map((f) => f.id));
+        const seen = new Set<string>();
+        return parsed.filter((x) => {
+            if (typeof x !== 'string' || !validIds.has(x) || seen.has(x)) return false;
+            seen.add(x);
+            return true;
+        });
     } catch {
         return [];
     }

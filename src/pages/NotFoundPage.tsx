@@ -564,7 +564,10 @@ const NotFoundPage: React.FC = () => {
                                             <p className="text-xs text-gray-600 font-mono mt-2">
                                                 {'> SIGNAL ID: '}
                                                 <span className="group inline-block cursor-pointer">
-                                                    <span className="blur-sm group-hover:blur-none transition-[filter] duration-300 select-all text-gray-400">
+                                                    <span
+                                                        tabIndex={0}
+                                                        className="blur-sm group-hover:blur-none focus:blur-none transition-[filter] duration-300 select-all text-gray-400 outline-none"
+                                                    >
                                                         {easterEgg.authCode}
                                                     </span>
                                                 </span>
