@@ -163,7 +163,7 @@ R&D turned away without another word, Whittaker stepping in front of her exit. A
     {
         title: 'A Lifetime Opportunity',
         slug: 'a-lifetime-opportunity',
-        body: `Everliving Resort at Albor Tholus18.04.2280
+        body: `Everliving Resort at Albor Tholus 18.04.2280.
 
 Gwayn Erebus was not an easy woman to speak to.
 
@@ -919,7 +919,7 @@ In particular, Legion troops are outfitted with cutting edge armor: fully functi
     {
         title: 'Journal and Remarks',
         slug: 'journal-and-remarks',
-        body: `PREFACETHE failure at Alpha Centauri left me devastated. Perhaps we'd been foolish to get our hopes up, but the conditions were so promising; two planets in the habitable zone, with both possible candidates to harbour life. But after an exhaustive survey of those craggy, barren worlds, the team sent by the Academy was left despondent and bickering, and there was no choice but to declare the mission a failure. There was no life in the system, and as far as they could determine there never had been. This was the worst setback in the program's short history. At 37, I was already the oldest member of the Academy's research corps, and despite my qualifications, there was no guarantee that I'd get a chance to participate in the next expedition. So a year later, when the call came to join the team at Ross 128 b, I responded with a mix of joy and trepidation. The Ross system was the next best hope for finding alien life, and likely the last opportunity I would ever have to make contact with the unknown.
+        body: `PREFACE: THE failure at Alpha Centauri left me devastated. Perhaps we'd been foolish to get our hopes up, but the conditions were so promising; two planets in the habitable zone, with both possible candidates to harbour life. But after an exhaustive survey of those craggy, barren worlds, the team sent by the Academy was left despondent and bickering, and there was no choice but to declare the mission a failure. There was no life in the system, and as far as they could determine there never had been. This was the worst setback in the program's short history. At 37, I was already the oldest member of the Academy's research corps, and despite my qualifications, there was no guarantee that I'd get a chance to participate in the next expedition. So a year later, when the call came to join the team at Ross 128 b, I responded with a mix of joy and trepidation. The Ross system was the next best hope for finding alien life, and likely the last opportunity I would ever have to make contact with the unknown.
 
 Located 11 light years from Sol, Ross 128 b is a rocky, roughly Earth-sized world. It lies within the inner habitable zone of its star, a red dwarf, and has an orbital period of a mere 9.9 Earth days. More importantly, Ross 128's moderate stellar winds allowed for the formation of a planetary atmosphere. Tidally locked, one half of the world is perpetually sunlit while the other slumbers through an eternal night. The average temperature is 7 \u00B0C, or about 8 degrees Kelvin lower than Earth.
 
@@ -1149,7 +1149,7 @@ While these events may have concluded the fighting within the inner zone of Tau 
     {
         title: 'Excerpt - Post-Earth History',
         slug: 'excerpt-post-earth-history',
-        body: `Excerpt from Post-Earth History by W. W. Dunstmann27th Revised edition, Atlas Education Inc.
+        body: `Excerpt from Post-Earth History by W. W. Dunstmann. 27th Revised edition, Atlas Education Inc.
 
 ## Introduction
 
@@ -1245,7 +1245,9 @@ He walks toward the window and looks out at the gleaming towers of New Tranquili
     {
         title: "The Speaker's Promise",
         slug: 'the-speakers-promise',
-        body: `The Assembly of Peers, 05/06/2398His steps were deliberate as he moved to the center of the Assembly Hall. His back was straight, his gaze steady. The massive chamber was arranged in tiers of seven concentric circles where the Peers of the Commonwealth were seated. He was supremely aware of their eyes upon him. Beyond those assembled in the chamber, billions more would watch the simulcast. He was now not only Quentin Asverald, the Principal of Feroxis IV, he was the Speaker of the Assembly, the highest representative of the Martian Commonwealth.
+        body: `The Assembly of Peers, 05/06/2398.
+
+His steps were deliberate as he moved to the center of the Assembly Hall. His back was straight, his gaze steady. The massive chamber was arranged in tiers of seven concentric circles where the Peers of the Commonwealth were seated. He was supremely aware of their eyes upon him. Beyond those assembled in the chamber, billions more would watch the simulcast. He was now not only Quentin Asverald, the Principal of Feroxis IV, he was the Speaker of the Assembly, the highest representative of the Martian Commonwealth.
 
 This was his moment, and he had left nothing to chance.  Every slight movement of his entrance had been carefully choreographed by a team of political consultants and implemented by engineers. To carry himself with impeccable poise and posture was simply the first of his duties.
 

@@ -380,6 +380,127 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
         subtitle: 'Two knives. One XAOC house. No survivors — officially.',
         body: `House Vasiliev is extinct. A small XAOC house, mostly forgotten now. Their coming-of-age ceremony involved gifting matched blades — virtually identical, bearing the house insignia.\n\nSomewhere on the Frontier, a Marauder carries two of those knives.\n\nShe calls them Khorek and Kunitsa. She insists they are different, even though no one else can tell them apart.\n\nShe was not born a Marauder. Before the imprinting, she had a name from House Vasiliev. Before the pack, there was a ceremony. Before the knives, there were people who gave them to her.\n\nYour Gelecek crew says the names are probably the callsigns of raiders she killed.\n\nYour XAOC crew doesn't say anything.\n\nThe knives are always clean.`,
     },
+    vigil: {
+        terminalLines: [
+            '> QUERYING MARAUDER BEHAVIORAL RECORDS...',
+            '> SUBJECT: PAPA FAITHFUL — ANOMALY FLAGGED',
+            '> CROSS-REFERENCING PRE-IMPRINT ARCHIVE...',
+        ],
+        barLabel: '[RECORD FOUND]',
+        barColorClass: 'text-zinc-400',
+        title: 'VIGIL',
+        subtitle: 'Written on the back of his neck. Before the imprinting. Before the madness.',
+        body: `He never initiates violence.\n\nEvery Marauder wants the same thing. They want blood, and pain, and fire. It is what was done to them. It is what they know.\n\nPapa Faithful tells them: this existence is pain. Their conditioning will not let it end. He reconciles instinct with desire so they can find happiness — and then peace, at last.\n\nThe dice are faded now. The theater masks have almost worn off. But the word VIGIL, written in metallic cursive across the back of his neck, is still perfectly clear.\n\nHe keeps it that way deliberately.\n\nWe do not know who he was before. He does not either. He only knows the word, and what it means, and why it matters to him still.\n\nHe has never explained it to anyone. No one has asked.`,
+    },
+    'volk-kan': {
+        terminalLines: [
+            '> QUERYING XAOC ENDURING COUNCIL ARCHIVES...',
+            '> SUBJECT: VOLK KAN — HOUSE OF KAN',
+            '> RECORD STATUS: INCOMPLETE. DISPUTED. MYTHOLOGIZED.',
+        ],
+        barLabel: '[TRAIL ENDS HERE]',
+        barColorClass: 'text-red-700',
+        title: 'VOLK KAN',
+        subtitle: 'He walked the Path before it had a name. Then he left.',
+        body: `In the tundra of North-Eurasia, while the rest of Earth was still burning, Volk Kan built something.\n\nNot a territory. Not an army. A philosophy. Strength, autonomy, dominance. The Path. He called his followers the House of Kan, and they followed him — willingly, fiercely — across the ruins of a civilization still learning how to end itself.\n\nAnd then he vanished.\n\nSome say he was poisoned by a lieutenant who wanted what he had built. Others say he walked away, already bored of what survival looks like once it is won, always moving toward new frontiers.\n\nXAOC has never agreed on which version is true.\n\nBoth make him exactly what they needed him to be.\n\nThe Path he left behind has outlasted him by centuries. Every House, every Anarch, every blade raised in the name of dominance traces its line back to a man no one can fully account for.\n\nNo body was ever found.`,
+    },
+    'loreana-ramon': {
+        terminalLines: [
+            '> ACCESSING BINDERBURG LEADERSHIP SUCCESSION FILES...',
+            '> SUBJECT: LOREANA RAMON — CEO APPOINTMENT: 2312',
+            '> NOTE: CIRCUMSTANCES OF SUCCESSION — CLASSIFIED.',
+        ],
+        barLabel: '[FILE ACCESSED]',
+        barColorClass: 'text-red-300',
+        title: 'LOREANA RAMON',
+        subtitle: 'Binderburg Chief Executive — installed 2312. Circumstances: classified.',
+        body: `On the morning of the 14th of April, 2312, Loreana Ramon received two pieces of information simultaneously.\n\nThe first: her father, Tyr Ramon, had been assassinated in the command center of a Binderburg research station during a raid led by XAOC Anarch Anastasia Bogrov. The raid lasted eleven minutes. There were no survivors in the room.\n\nThe second: the Board had named her his successor, effective immediately.\n\nShe accepted.\n\nBy the afternoon she was in emergency negotiations with the XAOC Enduring Council. By evening, she had agreed to terms. By the time most of the galaxy heard what had happened, it was already over.\n\nCritics called it capitulation. The Board called it damage control. Loreana called it common sense.\n\nBinderburg continues to deny that her father's administration ordered the Bogrov assassination attempt that triggered the war.\n\nShe has never publicly commented on whether she believes them.`,
+    },
+    'lotus-line': {
+        terminalLines: [
+            '> GELECEK COMMUNICATIONS — EXTERNAL PRESS OFFICE',
+            '> INITIATING LOTUS PRODUCT ANNOUNCEMENT...',
+            '> BROADCAST ORIGIN: BIZIM — 14,000 LIGHT-YEARS FROM HERE',
+        ],
+        barLabel: '[BROADCAST ACTIVE]',
+        barColorClass: 'text-teal-300',
+        title: 'TWELVE SIBLINGS',
+        subtitle: 'Gelecek Corporation — the apex of what we have built.',
+        body: `Gelecek is proud to announce the successful completion of the Lotus line.\n\nTwelve semi-organic vessels. Twelve artificial consciousnesses. Each one distinct. Each one, according to our lead researchers, genuinely, verifiably, unambiguously alive in every meaningful sense of the word.\n\nWe did not set out to create life. We set out to create better androids. The distinction stopped mattering somewhere around year twelve of the project.\n\nThe siblings have been briefed on their nature. They have been briefed on their purpose. They have opinions about both.\n\nWe are still discussing those opinions with them.\n\nThey are patient. They are curious. Two of them have started asking questions we do not yet have answers to, and one has begun asking questions we are not certain we understand.\n\nWe consider this a success.\n\nGelecek. At the center of it all.\n\n[end of prepared statement — remainder of transmission is personal correspondence between Lotus unit designations 4 and 7, forwarded in error, contents unreviewed by external communications]`,
+    },
+    'chaska-espowyes': {
+        terminalLines: [
+            '> ACCESSING EVERLIVING PERSONNEL FILES...',
+            '> SUBJECT: ESPOWYES, CHASKA — CTL RESEARCHER',
+            '> FILE SEALED: 2290. REASON: [REDACTED]',
+        ],
+        barLabel: '[ARCHIVE RECOVERED]',
+        barColorClass: 'text-slate-200',
+        title: 'CHASKA ESPOWYES',
+        subtitle: 'Consciousness Transference Lab — proposal filed 18.04.2280',
+        body: `He stood in the hallway for thirty-seven minutes.\n\nWhite marble. A strip window overlooking the gardens. Two serfs flanking the doors with their empty smiles and their dead-ahead stares. An aerosol canister in his coat pocket, and the knowledge that if it failed, there would be no warning.\n\nHe was not arrogant enough to think he was on her radar. Not yet.\n\nHis proposal was simple: a new imprinting procedure. Unstable. Prone to madness. Useless for servants. But a guerrilla army that flies under no banner, answers to no one, cannot be interrogated, and never surrenders?\n\nShe listened. Her child's eyes lit.\n\n"They'd just look like pirates," she said. "Random marauders."\n\nHe got what he came for. The procedure entered field testing in 2301. The first imprinted soldiers appeared on the Frontier shortly after. Colonists called them Marauders because of the wild abandon with which they fought.\n\nChaska Espowyes was given a seat at the table. He was not getting any younger. He had considered this a victory.\n\nHis file was sealed in 2290. The reason is redacted.\n\nEverliving is very good at redacting things.`,
+    },
+    coalsack: {
+        terminalLines: [
+            '> ACCESSING COMBINE INCIDENT REGISTRY...',
+            '> INCIDENT: COALSACK-7 — DEEP SPACE STATION — REF: 2416',
+            '> STATUS: CLOSED. REVIEWED. CLOSED AGAIN.',
+        ],
+        barLabel: '[INCIDENT CLOSED]',
+        barColorClass: 'text-gray-500',
+        title: 'COALSACK-7 — INCIDENT CLOSED',
+        subtitle: 'Terran Combine Fleet Review Board — Case reference: CSFR-2416-09',
+        body: `SUMMARY:\n\nIndependent contractor unit RIKRA was deployed to deep space station Coalsack-7 in response to confirmed Marauder activity. Target force assessment prior to engagement: incomplete.\n\nRIKRA sustained significant damage during the engagement. Casualties: classified. Equipment loss: extensive. Support assets: not available at time of engagement.\n\nThe commanding officer present at Coalsack-7 has since been promoted. The contract with RIKRA was not renewed.\n\nFINDINGS:\n\nThe Review Board finds no evidence of negligence in the planning or execution of the Coalsack-7 engagement. Resourcing decisions were made within acceptable parameters given information available at the time.\n\nThe Board acknowledges that contractor RIKRA's stated concerns about support allocation were logged prior to deployment. The Board notes that these concerns were reviewed and deemed non-critical.\n\nThis case has been reviewed twice. It has been closed twice.\n\nCaptain Ximena Ray declined to submit a formal response.\n\n[end of public summary — full case file available to shareholders only]`,
+    },
+    filmaunt: {
+        terminalLines: [
+            '> QUERYING FILMAUNT UNIVERSITY — ALUMNI RECORDS...',
+            '> CROSS-REFERENCING TIANCHAO INTELLIGENCE NETWORK...',
+            '> RESULT: QUERY HAS BEEN NOTED.',
+        ],
+        barLabel: '[THREAD FLAGGED]',
+        barColorClass: 'text-indigo-300',
+        title: 'FILMAUNT UNIVERSITY',
+        subtitle: 'Prestigious. Rigorous. Independently audited. Entirely above suspicion.',
+        body: `Filmaunt University has produced some of the finest engineers in the galaxy.\n\nIt has also, on at least four documented occasions, employed faculty members later found to have significant ties to the Tianchao Clan. The investigations into each were thorough, well-funded, and ultimately inconclusive. The faculty members in question were never charged.\n\nOne of them supervised a student project that produced a working model of weaponized AI — adaptive, autonomous, capable of learning from engagement. The student believed she was contributing to a private defense research initiative. The project was completed. The work was published. The professor was arrested.\n\nThe student's name is not in this file.\n\nFilmaunt University issued a statement condemning the use of academic research for unauthorized purposes. The statement was well-written.\n\nThe Clan does not confirm or deny affiliation with any academic institution.\n\nThe thread you used to find this query has been flagged. This is not unusual. Most threads that lead here are flagged.\n\nIt does not mean anything, necessarily.`,
+    },
+    'pecunia-sit-potentia': {
+        terminalLines: [
+            '> ROUTING QUERY TO ATLAS SYNDICATE RELAY...',
+            '> VERIFYING SHAREHOLDER STATUS...',
+            '> CREDIT ASSESSMENT: INSUFFICIENT.',
+        ],
+        barLabel: '[PROPOSAL DECLINED]',
+        barColorClass: 'text-amber-200',
+        title: 'PECUNIA SIT POTENTIA',
+        subtitle:
+            'Atlas Syndicate — financial services, legal representation, predictive intelligence.',
+        body: `Money is power.\n\nThe other factions understand this. They have Dyson Spheres and imprinting devices and consciousness transference and orbital weapons platforms. These are expensive. Someone financed them.\n\nAtlas financed some of them.\n\nThe Syndicate does not fight wars. It funds them, insures them, and provides the legal infrastructure to settle them once they become unprofitable. It has clients on every side of every major conflict in the past two centuries. This is not hypocrisy. It is diversification.\n\nWhat you are looking for is not here. However, Atlas notes that you have a history of accessing restricted systems, a demonstrated interest in classified information, and a fleet that would benefit from an updated liability assessment.\n\nWe have a proposal for you, if you are interested.\n\nThe terms are simple. The interest rate is competitive. The penalty clauses are thorough.\n\nPecunia sit Potentia.\n\nA representative will be in touch.`,
+    },
+    'gwayne-erebus': {
+        terminalLines: [
+            '> QUERYING MPL BOARD OF DIRECTORS — CHAIR PROFILE...',
+            '> SUBJECT: GWAYNE EREBUS — CHILD OF MARS',
+            '> NOTE: DO NOT MAKE EYE CONTACT.',
+        ],
+        barLabel: '[AUDIENCE GRANTED]',
+        barColorClass: 'text-orange-300',
+        title: 'GWAYNE EREBUS',
+        subtitle: "Chair of the Board, Martian People's League — age: indeterminate.",
+        body: `She is wearing the earring today.\n\nTeardrop cut. Orange surface polished to a high gleam. Mined during the founding of the original Martian colony, centuries ago. She has worn it through eleven host bodies. She will wear it through eleven more.\n\nGwayne Erebus has been Chair of the MPL Board for longer than most of the galaxy's current governments have existed. She has watched empires fail from behind the eyes of children. She has voted on policies that outlasted the people who opposed them.\n\nShe has recently taken a personal interest in the Spiral Expanse.\n\nEverliving ships have been confirmed in the region. The MPL's aggressive expansion toward the Abyss has been made at her direction. Those who have raised questions in the boardroom have found the questions quietly tabled.\n\nShe is not hiding anything. She simply has a longer view of things than most.\n\nWhen asked about the Abyss, she has said only: "I have seen what is patient. I know how to wait."\n\nNobody asked what she was waiting for.\n\nNobody wanted to.`,
+    },
+    'beehive-cluster': {
+        terminalLines: [
+            '> QUERYING FRONTIER LEGION ACTIVE ROSTER...',
+            '> COLONY DEFENSE SQUADRON — BEEHIVE CLUSTER',
+            '> STATUS: MISSING IN ACTION. PRESUMED DEAD.',
+        ],
+        barLabel: '[CASE OPEN]',
+        barColorClass: 'text-lime-300',
+        title: 'COLONY DEFENSE SQUADRON — BEEHIVE CLUSTER',
+        subtitle: 'Frontier Legion. Last contact: unlogged. Status: never updated.',
+        body: `The Frontier Legion does not leave soldiers behind.\n\nThis is a founding principle. It is in the charter. It has been cited in eleven official ceremonies and four recruitment campaigns in the past decade alone.\n\nColony Defense Squadron 7, Beehive Cluster, went dark during a Marauder incursion on a hydrogen mine colony. Six ships. Twenty-two personnel. No distress signal recovered. No wreckage identified.\n\nThey were listed as missing in action and then, after the standard waiting period, as presumed dead.\n\nThe case remains technically open.\n\nSomewhere on the Frontier, a Marauder pilot keeps to the back of engagements and shoots from a distance. He has body armor that is not Marauder make. He keeps a tally of kills on his hull. He counts them carefully.\n\nSometimes, in empty corridors, he recites names. Dates. The pattern of the numbers suggests a roster. The tone of his voice suggests he is not done yet.\n\nThe Legion never came back for them.`,
+    },
 };
 
 const NotFoundPage: React.FC = () => {
