@@ -54,23 +54,23 @@ This task adds the new state variables and helper functions without changing any
 
 - [ ] **Step 1: Update the React import and add the `Mode` type at module level**
 
-First, update the import at line 1 to include `useCallback`:
+Update the import at line 1:
 
 ```tsx
 import { useCallback, useEffect, useRef, useState } from 'react';
 ```
 
-Then add the `Mode` type declaration at **module level** (outside the component, after the `FINAL_TRANSMISSION` constant and before `export default function ClassifiedPage()`):
+Add the `Mode` type at **module level** — after the `FINAL_TRANSMISSION` constant and before `export default function ClassifiedPage()`:
 
 ```tsx
 type Mode = 'index' | 'detail';
 ```
 
-> **Important:** `type Mode` must be at module level, not inside the component function body.
+> `type Mode` must be outside the component function.
 
 - [ ] **Step 2: Add new state variables inside the component**
 
-Inside the component, after the existing state declarations (after `const intervalsRef = ...`), add:
+Inside the component, after the existing state block (after `const intervalsRef = ...`), add:
 
 ```tsx
     // New state — two-screen model
@@ -79,33 +79,86 @@ Inside the component, after the existing state declarations (after `const interv
     const [activeFragmentId, setActiveFragmentId] = useState<string | null>(null);
 ```
 
-The existing state block (`unlocked`, `inputs`, `errors`, `decrypting`, `barProgress`, `intervalsRef`) is **unchanged** — just append the 3 new declarations after it. The module-level constants (`BAR_TOTAL`, `OPACITY_BY_UNLOCKED`, `FINAL_TRANSMISSION`) are also unchanged.
+The existing state (`unlocked`, `inputs`, `errors`, `decrypting`, `barProgress`, `intervalsRef`) is unchanged. Module-level constants (`BAR_TOTAL`, `OPACITY_BY_UNLOCKED`, `FINAL_TRANSMISSION`) are unchanged.
 
-- [ ] **Step 3: Add `activeFragment` derived value before the return statement**
+- [ ] **Step 3: Replace `handleSubmit` and add navigation helpers (all as `useCallback`)**
+
+Replace the existing `function handleSubmit(...)` with the `useCallback` version, and add the two navigation helpers immediately after it. All three go in the same location:
+
+```tsx
+    const handleSubmit = useCallback(
+        (fragmentId: string, authCode: string) => {
+            const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
+            if (input !== authCode.trim().toUpperCase()) {
+                setErrors((e) => ({ ...e, [fragmentId]: true }));
+                setTimeout(() => setErrors((e) => ({ ...e, [fragmentId]: false })), 800);
+                return;
+            }
+            setDecrypting((d) => ({ ...d, [fragmentId]: true }));
+            let count = 0;
+            const interval = setInterval(() => {
+                count++;
+                setBarProgress((p) => ({ ...p, [fragmentId]: count }));
+                if (count >= BAR_TOTAL) {
+                    clearInterval(interval);
+                    setUnlocked((prev) => {
+                        const next = [...prev, fragmentId];
+                        writeUnlocked(next);
+                        return next;
+                    });
+                    setDecrypting((d) => ({ ...d, [fragmentId]: false }));
+                }
+            }, 40);
+            intervalsRef.current[fragmentId] = interval;
+        },
+        [inputs],
+    );
+
+    const navigateToFragment = useCallback((index: number) => {
+        const fragment = CLASSIFIED_FRAGMENTS[index];
+        setCursorIndex(index);
+        setActiveFragmentId(fragment.id);
+        setMode('detail');
+    }, []);
+
+    const navigateToIndex = useCallback(() => {
+        setMode('index');
+        setActiveFragmentId(null);
+    }, []);
+```
+
+> `handleSubmit` uses the `setUnlocked(prev => ...)` functional update form to avoid a stale closure over `unlocked` state — the original `[...unlocked, fragmentId]` form would silently drop concurrent unlocks if `unlocked` was stale.
+
+- [ ] **Step 4: Add `activeFragment` derived value before the return statement**
 
 ```tsx
     const activeFragment = activeFragmentId
         ? (CLASSIFIED_FRAGMENTS.find((f) => f.id === activeFragmentId) ?? null)
         : null;
+
+    const detailIsUnlocked = activeFragmentId ? unlocked.includes(activeFragmentId) : false;
+    const detailIsDecrypting = activeFragmentId ? (decrypting[activeFragmentId] ?? false) : false;
+    const detailProgress = activeFragmentId ? (barProgress[activeFragmentId] ?? 0) : 0;
+    const detailHasError = activeFragmentId ? (errors[activeFragmentId] ?? false) : false;
 ```
 
-- [ ] **Step 4: Run lint to confirm no errors**
+- [ ] **Step 5: Run lint to confirm no errors**
 
 ```bash
 npm run lint
 ```
 
-Expected: 0 warnings, 0 errors. Fix any TypeScript issues before continuing.
+Expected: 0 warnings, 0 errors.
 
-- [ ] **Step 5: Run tests to confirm baseline**
+- [ ] **Step 6: Run tests to confirm baseline**
 
 ```bash
 npm test
 ```
 
-Expected: all tests pass (647+). The classifiedArchive.test.ts tests should be green since we haven't touched that file.
+Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/pages/ClassifiedPage.tsx
@@ -288,64 +341,14 @@ git commit -m "feat: implement index screen for classified terminal redesign"
 
 ## Task 3: Add window keyboard handler
 
-Attach the full `keydown` listener that handles both index and detail modes.
+Attach the full `keydown` listener. Task 1 already introduced all helpers as `useCallback` — this task only adds the `useEffect`.
 
 **Files:**
 - Modify: `src/pages/ClassifiedPage.tsx`
 
-- [ ] **Step 1: Convert navigation helpers to `useCallback` and add the keyboard `useEffect`**
+- [ ] **Step 1: Add the keyboard `useEffect` after the three `useCallback` helpers from Task 1**
 
-Replace the two plain `function navigateToFragment` / `function navigateToIndex` helpers (added in Task 1) with `useCallback` versions:
-
-```tsx
-    const navigateToFragment = useCallback((index: number) => {
-        const fragment = CLASSIFIED_FRAGMENTS[index];
-        setCursorIndex(index);
-        setActiveFragmentId(fragment.id);
-        setMode('detail');
-    }, []);
-
-    const navigateToIndex = useCallback(() => {
-        setMode('index');
-        setActiveFragmentId(null);
-    }, []);
-```
-
-Also convert `handleSubmit` to a `useCallback` so it can be safely listed in the keyboard effect's dependency array:
-
-```tsx
-    const handleSubmit = useCallback(
-        (fragmentId: string, authCode: string) => {
-            const input = (inputs[fragmentId] ?? '').trim().toUpperCase();
-            if (input !== authCode.trim().toUpperCase()) {
-                setErrors((e) => ({ ...e, [fragmentId]: true }));
-                setTimeout(() => setErrors((e) => ({ ...e, [fragmentId]: false })), 800);
-                return;
-            }
-            setDecrypting((d) => ({ ...d, [fragmentId]: true }));
-            let count = 0;
-            const interval = setInterval(() => {
-                count++;
-                setBarProgress((p) => ({ ...p, [fragmentId]: count }));
-                if (count >= BAR_TOTAL) {
-                    clearInterval(interval);
-                    setUnlocked((prev) => {
-                        const next = [...prev, fragmentId];
-                        writeUnlocked(next);
-                        return next;
-                    });
-                    setDecrypting((d) => ({ ...d, [fragmentId]: false }));
-                }
-            }, 40);
-            intervalsRef.current[fragmentId] = interval;
-        },
-        [inputs],
-    );
-```
-
-> **Note on `handleSubmit` refactor:** The original version captured `unlocked` via closure in `const next = [...unlocked, fragmentId]` — if `unlocked` was stale, completed decrypts could silently overwrite each other. The `useCallback` version uses the `setUnlocked(prev => [...prev, fragmentId])` functional update form, which always gets the latest state from React. This eliminates the stale closure risk. The dep array only needs `inputs` (for reading the typed value).
-
-Then add the keyboard `useEffect` immediately after these helpers:
+Add this immediately after `navigateToIndex`:
 
 ```tsx
     useEffect(() => {
@@ -432,12 +435,12 @@ Replace the "Loading fragment…" stub with the full three-state detail view (lo
 
 - [ ] **Step 1: Replace the detail screen stub with the full implementation**
 
-Find this block in the JSX:
+Find this block in the JSX (written by Task 2):
 
 ```tsx
                         {/* DETAIL SCREEN — implemented in Task 4 */}
                         {mode === 'detail' && activeFragment && (
-                            <div>
+                            <div key={activeFragmentId} className="classified-decode">
                                 <p className="font-mono text-xs text-gray-500">Loading fragment…</p>
                             </div>
                         )}
@@ -445,159 +448,126 @@ Find this block in the JSX:
 
 Replace it with:
 
+The `detail*` variables (`detailIsUnlocked`, `detailIsDecrypting`, `detailProgress`, `detailHasError`) were pre-declared in Task 1 Step 4 and are available here.
+
 ```tsx
                         {/* DETAIL SCREEN */}
-                        {mode === 'detail' && activeFragment && (() => {
-                            const detailIsUnlocked = unlocked.includes(activeFragment.id);
-                            const detailIsDecrypting = decrypting[activeFragment.id] ?? false;
-                            const detailProgress = barProgress[activeFragment.id] ?? 0;
-                            const detailHasError = errors[activeFragment.id] ?? false;
-                            return (
-                                <div>
-                                    {/* Comment + title */}
-                                    <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
-                                        {'// FRAGMENT ACCESS'}
-                                    </div>
-                                    <p
-                                        className={`font-mono text-sm font-bold tracking-[0.3em] uppercase ${activeFragment.barColorClass} mt-1 mb-3`}
-                                    >
-                                        {activeFragment.title.toUpperCase()}
-                                    </p>
-
-                                    {/* DECRYPTING STATE */}
-                                    {detailIsDecrypting && (
-                                        <div className="space-y-1 font-mono text-xs">
-                                            <p className="text-gray-500 tracking-widest">
-                                                {'> STATUS: '}
-                                                <span className="text-green-400">DECRYPTING...</span>
-                                            </p>
-                                            <hr className="border-gray-800 my-2" />
-                                            <p className={activeFragment.barColorClass}>
-                                                {`> ${'█'.repeat(detailProgress)}${'░'.repeat(BAR_TOTAL - detailProgress)} ${Math.round((detailProgress / BAR_TOTAL) * 100)}%`}
-                                            </p>
-                                            <hr className="border-gray-800 mt-3 mb-2" />
-                                            <p className="text-gray-600 tracking-widest">{'— — —'}</p>
-                                        </div>
-                                    )}
-
-                                    {/* UNLOCKED STATE */}
-                                    {!detailIsDecrypting && detailIsUnlocked && (
-                                        <div>
-                                            <p
-                                                className={`font-mono text-xs tracking-widest ${activeFragment.barColorClass} mb-3`}
-                                            >
-                                                {`> ${'█'.repeat(BAR_TOTAL)} [DECRYPTED]`}
-                                            </p>
-                                            <hr className="border-gray-800 mb-3" />
-                                            <div className="classified-decode text-sm text-gray-400 space-y-3 font-mono">
-                                                {activeFragment.body.split('\n\n').map((para, i) => (
-                                                    <p key={i}>{para}</p>
-                                                ))}
-                                            </div>
-                                            <hr className="border-gray-800 mt-3 mb-2" />
-                                            <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
-                                                <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-1">
-                                                    ESC
-                                                </span>
-                                                back to index
-                                            </p>
-                                        </div>
-                                    )}
-
-                                    {/* LOCKED STATE */}
-                                    {!detailIsDecrypting && !detailIsUnlocked && (
-                                        <div>
-                                            <p className="font-mono text-xs text-gray-600 tracking-widest">
-                                                {`> ORIGIN FILE: ${activeFragment.hintLine} — FIELD AGENTS ONLY`}
-                                            </p>
-                                            <p className="font-mono text-xs text-gray-600 tracking-widest mt-1">
-                                                {'> STATUS: '}
-                                                <span className="text-red-400">
-                                                    LOCKED — AUTH REQUIRED
-                                                </span>
-                                            </p>
-                                            <hr className="border-gray-800 my-3" />
-                                            <p
-                                                className={`font-mono text-xs tracking-widest ${
-                                                    detailHasError ? 'text-red-400' : 'text-gray-500'
-                                                }`}
-                                            >
-                                                {detailHasError
-                                                    ? '> [AUTHORIZATION FAILED]'
-                                                    : '> ENTER AUTH CODE TO DECRYPT'}
-                                            </p>
-                                            <div className="flex items-center gap-2 font-mono text-sm mt-2">
-                                                <span className="text-green-400">{'>'}</span>
-                                                <input
-                                                    type="text"
-                                                    maxLength={12}
-                                                    placeholder="_ _ _ _ _ _"
-                                                    value={inputs[activeFragment.id] ?? ''}
-                                                    onChange={(e) =>
-                                                        setInputs((p) => ({
-                                                            ...p,
-                                                            [activeFragment.id]: e.target.value,
-                                                        }))
-                                                    }
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter')
-                                                            handleSubmit(
-                                                                activeFragment.id,
-                                                                activeFragment.authCode,
-                                                            );
-                                                    }}
-                                                    className={`bg-transparent border-b ${
-                                                        detailHasError
-                                                            ? 'border-red-500 text-red-400'
-                                                            : 'border-gray-600 text-green-400'
-                                                    } outline-none uppercase tracking-widest w-40 placeholder-gray-700 text-sm`}
-                                                    autoComplete="off"
-                                                    spellCheck={false}
-                                                    autoFocus
-                                                />
-                                            </div>
-                                            <hr className="border-gray-800 mt-3 mb-2" />
-                                            <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
-                                                <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-0.5">
-                                                    ↵
-                                                </span>
-                                                {'submit · '}
-                                                <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mx-1">
-                                                    ESC
-                                                </span>
-                                                back to index
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })()}
-```
-
-> **Note on IIFE pattern:** The `(() => { ... })()` pattern is used to scope `detailIsUnlocked`, `detailIsDecrypting` etc. without polluting the component body. If the linter or team style guide disallows this, extract those four variable declarations to the component body (before the return) and replace the IIFE with a plain `<div>`.
-
-- [ ] **Step 2: Run lint**
-
-```bash
-npm run lint
-```
-
-If the IIFE pattern triggers lint rules, switch to pre-declared variables:
-
-```tsx
-// Add these immediately before the return statement (after activeFragment definition):
-const detailIsUnlocked = activeFragmentId ? unlocked.includes(activeFragmentId) : false;
-const detailIsDecrypting = activeFragmentId ? (decrypting[activeFragmentId] ?? false) : false;
-const detailProgress = activeFragmentId ? (barProgress[activeFragmentId] ?? 0) : 0;
-const detailHasError = activeFragmentId ? (errors[activeFragmentId] ?? false) : false;
-```
-
-Then simplify the detail screen JSX to:
-
-```tsx
                         {mode === 'detail' && activeFragment && (
-                            <div>
-                                {/* same content, replace detailIsUnlocked etc. — same variable names */}
+                            <div key={activeFragmentId} className="classified-decode">
+                                <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
+                                    {'// FRAGMENT ACCESS'}
+                                </div>
+                                <p
+                                    className={`font-mono text-sm font-bold tracking-[0.3em] uppercase ${activeFragment.barColorClass} mt-1 mb-3`}
+                                >
+                                    {activeFragment.title.toUpperCase()}
+                                </p>
+
+                                {/* DECRYPTING STATE */}
+                                {detailIsDecrypting && (
+                                    <div className="space-y-1 font-mono text-xs">
+                                        <p className="text-gray-500 tracking-widest">
+                                            {'> STATUS: '}
+                                            <span className="text-green-400">DECRYPTING...</span>
+                                        </p>
+                                        <hr className="border-gray-800 my-2" />
+                                        <p className={activeFragment.barColorClass}>
+                                            {`> ${'█'.repeat(detailProgress)}${'░'.repeat(BAR_TOTAL - detailProgress)} ${Math.round((detailProgress / BAR_TOTAL) * 100)}%`}
+                                        </p>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="text-gray-600 tracking-widest">{'— — —'}</p>
+                                    </div>
+                                )}
+
+                                {/* UNLOCKED STATE */}
+                                {!detailIsDecrypting && detailIsUnlocked && (
+                                    <div>
+                                        <p
+                                            className={`font-mono text-xs tracking-widest ${activeFragment.barColorClass} mb-3`}
+                                        >
+                                            {`> ${'█'.repeat(BAR_TOTAL)} [DECRYPTED]`}
+                                        </p>
+                                        <hr className="border-gray-800 mb-3" />
+                                        <div className="classified-decode text-sm text-gray-400 space-y-3 font-mono">
+                                            {activeFragment.body.split('\n\n').map((para, i) => (
+                                                <p key={i}>{para}</p>
+                                            ))}
+                                        </div>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-1">
+                                                ESC
+                                            </span>
+                                            back to index
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* LOCKED STATE */}
+                                {!detailIsDecrypting && !detailIsUnlocked && (
+                                    <div>
+                                        <p className="font-mono text-xs text-gray-600 tracking-widest">
+                                            {`> ORIGIN FILE: ${activeFragment.hintLine} — FIELD AGENTS ONLY`}
+                                        </p>
+                                        <p className="font-mono text-xs text-gray-600 tracking-widest mt-1">
+                                            {'> STATUS: '}
+                                            <span className="text-red-400">
+                                                LOCKED — AUTH REQUIRED
+                                            </span>
+                                        </p>
+                                        <hr className="border-gray-800 my-3" />
+                                        <p
+                                            className={`font-mono text-xs tracking-widest ${
+                                                detailHasError ? 'text-red-400' : 'text-gray-500'
+                                            }`}
+                                        >
+                                            {detailHasError
+                                                ? '> [AUTHORIZATION FAILED]'
+                                                : '> ENTER AUTH CODE TO DECRYPT'}
+                                        </p>
+                                        <div className="flex items-center gap-2 font-mono text-sm mt-2">
+                                            <span className="text-green-400">{'>'}</span>
+                                            <input
+                                                type="text"
+                                                maxLength={12}
+                                                placeholder="_ _ _ _ _ _"
+                                                value={inputs[activeFragment.id] ?? ''}
+                                                onChange={(e) =>
+                                                    setInputs((p) => ({
+                                                        ...p,
+                                                        [activeFragment.id]: e.target.value,
+                                                    }))
+                                                }
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter')
+                                                        handleSubmit(
+                                                            activeFragment.id,
+                                                            activeFragment.authCode,
+                                                        );
+                                                }}
+                                                className={`bg-transparent border-b ${
+                                                    detailHasError
+                                                        ? 'border-red-500 text-red-400'
+                                                        : 'border-gray-600 text-green-400'
+                                                } outline-none uppercase tracking-widest w-40 placeholder-gray-700 text-sm`}
+                                                autoComplete="off"
+                                                spellCheck={false}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <hr className="border-gray-800 mt-3 mb-2" />
+                                        <p className="font-mono text-[0.65rem] text-gray-600 tracking-widest">
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mr-0.5">
+                                                ↵
+                                            </span>
+                                            {'submit · '}
+                                            <span className="inline-block bg-black border border-gray-700 text-gray-500 text-[0.6rem] px-1 mx-1">
+                                                ESC
+                                            </span>
+                                            back to index
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         )}
 ```
