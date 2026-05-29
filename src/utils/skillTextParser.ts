@@ -152,15 +152,16 @@ export function parseSkillDamage(text: string): number {
  * "additional damage equal to <unit-damage>80%</unit-damage> of its Defense".
  * Captures only the BASE percentage — conditional extras
  * ("an extra 30% per enemy buff") are ignored. Supports Defense and max HP.
+ * The percentage may be a decimal (e.g. Selenite's charged "17.5% of max HP").
  * Returns null if none found.
  */
 export function parseSecondaryDamage(text: string | null | undefined): SecondaryDamage | null {
     if (!text) return null;
     const pattern =
-        /<unit-damage>(\d+)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
+        /<unit-damage>(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
     const match = pattern.exec(text);
     if (!match) return null;
-    const pct = parseInt(match[1], 10);
+    const pct = parseFloat(match[1]);
     if (isNaN(pct)) return null;
     const stat: SecondaryDamageStat = match[2].toLowerCase().includes('hp') ? 'hp' : 'defense';
     return { stat, pct };

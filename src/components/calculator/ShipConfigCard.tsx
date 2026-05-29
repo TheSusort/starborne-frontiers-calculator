@@ -312,7 +312,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 onChange={(e) =>
                                     onSecondaryChange('activeSecondary', {
                                         stat: config.activeSecondary?.stat ?? 'defense',
-                                        pct: parseInt(e.target.value) || 0,
+                                        pct: parseFloat(e.target.value) || 0,
                                     })
                                 }
                             />
@@ -350,7 +350,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 onChange={(e) =>
                                     onSecondaryChange('chargedSecondary', {
                                         stat: config.chargedSecondary?.stat ?? 'defense',
-                                        pct: parseInt(e.target.value) || 0,
+                                        pct: parseFloat(e.target.value) || 0,
                                     })
                                 }
                             />

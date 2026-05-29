@@ -368,6 +368,16 @@ describe('parseSecondaryDamage', () => {
     it('returns null for empty input', () => {
         expect(parseSecondaryDamage('')).toBeNull();
     });
+    it('parses a decimal secondary percentage (Selenite charged: 17.5% of max HP)', () => {
+        const seleniteCharged =
+            "This Unit deals <unit-damage>300% damage</unit-damage> with additional damage equal to <unit-damage>17.5%</unit-damage> of this Unit's max HP. This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+        expect(parseSecondaryDamage(seleniteCharged)).toEqual({ stat: 'hp', pct: 17.5 });
+    });
+    it('parses a decimal Defense secondary percentage', () => {
+        const text =
+            'deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>2.5%</unit-damage> of its Defense.';
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 2.5 });
+    });
     it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
         expect(parseSkillDamage(chakara)).toBe(180);
         expect(parseSkillDamage(lodolite)).toBe(240);
