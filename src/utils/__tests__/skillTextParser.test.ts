@@ -5,6 +5,7 @@ import {
     detectFullyCharged,
     parseSkillEffects,
     parseAllSkillEffects,
+    parseSecondaryDamage,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -339,6 +340,37 @@ describe('parseSkillEffects', () => {
             duration: 2,
             source: 'active',
         });
+    });
+});
+
+describe('parseSecondaryDamage', () => {
+    const chakara =
+        'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense.';
+    const lodolite =
+        'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.';
+
+    it('parses Defense-based secondary damage', () => {
+        expect(parseSecondaryDamage(chakara)).toEqual({ stat: 'defense', pct: 80 });
+    });
+    it('parses max-HP-based secondary damage', () => {
+        expect(parseSecondaryDamage(lodolite)).toEqual({ stat: 'hp', pct: 10 });
+    });
+    it('parses the "this Unit\'s max HP" phrasing', () => {
+        const text =
+            "deals <unit-damage>200% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP.";
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'hp', pct: 10 });
+    });
+    it('returns null when there is no secondary damage', () => {
+        expect(
+            parseSecondaryDamage('This Unit deals <unit-damage>180% damage</unit-damage>.')
+        ).toBeNull();
+    });
+    it('returns null for empty input', () => {
+        expect(parseSecondaryDamage('')).toBeNull();
+    });
+    it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
+        expect(parseSkillDamage(chakara)).toBe(180);
+        expect(parseSkillDamage(lodolite)).toBe(240);
     });
 });
 

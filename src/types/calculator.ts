@@ -2,9 +2,16 @@ import { AffinityName } from './ship';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
+export type SecondaryDamageStat = 'defense' | 'hp';
+
+export interface SecondaryDamage {
+    stat: SecondaryDamageStat;
+    pct: number; // e.g. 80 for "80% of Defense"
+}
+
 export interface Buff {
     id: string;
-    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
+    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage' | 'defence' | 'hp';
     value: number;
 }
 
@@ -32,6 +39,7 @@ export interface ParsedBuffEffects {
     defensePenetration?: number; // additive with per-ship defPen value
     dotDamage?: number; // from Out. DoT buffs; multiplicative on corrosion+inferno
     outgoingHeal?: number; // multiplicative on outgoing healing (like outgoingDamage for DPS)
+    hp?: number; // multiplicative on max HP (for secondary HP-based damage); future-proofing
 
     // Receiver-side (healer targets)
     incomingHeal?: number; // additive on incoming repair received
@@ -78,9 +86,19 @@ export interface DPSShipConfig {
     affinity?: AffinityName;
     activeMultiplier: number;
     chargedMultiplier: number;
+    defence: number; // source stat for Defense-based secondary damage
+    hp: number; // source stat for HP-based secondary damage
+    activeSecondary?: SecondaryDamage;
+    chargedSecondary?: SecondaryDamage;
     chargeCount: number;
     startCharged: boolean;
-    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier' | 'hacking'>;
+    autoFilledFields?: Set<
+        | 'activeMultiplier'
+        | 'chargedMultiplier'
+        | 'hacking'
+        | 'activeSecondary'
+        | 'chargedSecondary'
+    >;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
     buffs: SelectedGameBuff[];

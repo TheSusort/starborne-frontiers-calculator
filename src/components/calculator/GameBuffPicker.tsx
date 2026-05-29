@@ -28,6 +28,7 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     defensePenetration: 'Pen',
     dotDamage: 'DoT',
     outgoingHeal: 'Out.Repair',
+    hp: 'HP',
     incomingHeal: 'Inc.Repair',
     defense: 'Def',
     incomingDamage: 'Inc',

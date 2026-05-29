@@ -1,6 +1,6 @@
 import { BUFFS } from '../constants/buffs';
 import { Ship } from '../types/ship';
-import { StackTrigger } from '../types/calculator';
+import { SecondaryDamage, SecondaryDamageStat, StackTrigger } from '../types/calculator';
 
 /**
  * Represents a parsed segment of skill text
@@ -145,6 +145,25 @@ export function parseSkillDamage(text: string): number {
         if (!isNaN(numeric)) return numeric;
     }
     return 0;
+}
+
+/**
+ * Returns the secondary stat-based damage from a skill, e.g.
+ * "additional damage equal to <unit-damage>80%</unit-damage> of its Defense".
+ * Captures only the BASE percentage — conditional extras
+ * ("an extra 30% per enemy buff") are ignored. Supports Defense and max HP.
+ * Returns null if none found.
+ */
+export function parseSecondaryDamage(text: string | null | undefined): SecondaryDamage | null {
+    if (!text) return null;
+    const pattern =
+        /<unit-damage>(\d+)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
+    const match = pattern.exec(text);
+    if (!match) return null;
+    const pct = parseInt(match[1], 10);
+    if (isNaN(pct)) return null;
+    const stat: SecondaryDamageStat = match[2].toLowerCase().includes('hp') ? 'hp' : 'defense';
+    return { stat, pct };
 }
 
 /**
