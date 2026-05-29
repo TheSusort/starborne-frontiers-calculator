@@ -3,6 +3,7 @@ import {
     Buff,
     DoTApplicationConfig,
     DoTApplicationEntry,
+    SecondaryDamage,
     SelectedGameBuff,
 } from '../../types/calculator';
 import {
@@ -39,6 +40,14 @@ export interface DPSSimulationInput {
     hacking?: number;
     /** Defender security stat. Default 100. */
     enemySecurity?: number;
+    /** Source stat for Defense-based secondary damage. */
+    defence?: number;
+    /** Source stat for HP-based secondary damage. */
+    hp?: number;
+    /** Secondary damage applied on active-skill rounds. */
+    activeSecondary?: SecondaryDamage;
+    /** Secondary damage applied on charged-skill rounds. */
+    chargedSecondary?: SecondaryDamage;
 }
 
 export interface RoundData {
@@ -69,6 +78,7 @@ export interface DPSSimulationSummary {
     totalCorrosionDamage: number;
     totalInfernoDamage: number;
     totalBombDamage: number;
+    totalSecondaryDamage: number;
 }
 
 export interface DPSSimulationResult {
@@ -107,7 +117,11 @@ function calculateBuffTotals(buffs: Buff[]) {
     const outgoingDamageBuff = buffs
         .filter((b) => b.stat === 'outgoingDamage')
         .reduce((sum, b) => sum + b.value, 0);
-    return { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff };
+    const defenceBuff = buffs
+        .filter((b) => b.stat === 'defence')
+        .reduce((sum, b) => sum + b.value, 0);
+    const hpBuff = buffs.filter((b) => b.stat === 'hp').reduce((sum, b) => sum + b.value, 0);
+    return { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff };
 }
 
 function tickDoTStacks(entries: ActiveDoTStack[], baseValue: number): number {
@@ -151,6 +165,10 @@ function runSinglePass(params: {
     affinityDamageModifier: number;
     affinityCritCap: number;
     affinityCritPenalty: number;
+    defence: number;
+    hp: number;
+    activeSecondary?: SecondaryDamage;
+    chargedSecondary?: SecondaryDamage;
 }): {
     rounds: RoundData[];
     rawTotals: {
@@ -159,6 +177,7 @@ function runSinglePass(params: {
         inferno: number;
         bomb: number;
         cumulative: number;
+        totalSecondary: number;
     };
 } {
     const {
@@ -185,6 +204,10 @@ function runSinglePass(params: {
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
+        defence,
+        hp,
+        activeSecondary,
+        chargedSecondary,
     } = params;
 
     // All mutable state declared fresh on every call
@@ -194,6 +217,7 @@ function runSinglePass(params: {
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
     let totalBombRaw = 0;
+    let totalSecondaryRaw = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
@@ -219,6 +243,8 @@ function runSinglePass(params: {
             }
         }
 
+        const secondary = action === 'charged' ? chargedSecondary : activeSecondary;
+
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
 
@@ -230,9 +256,8 @@ function runSinglePass(params: {
             }
             return bufs;
         });
-        const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff } = calculateBuffTotals(
-            toSimBuffs(roundSelfBuffs)
-        );
+        const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
+            calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 
         const roundDebuffLanded = Math.random() < debuffLandingChance;
         const landedEnemyDebuffs: ActiveBuff[] = [];
@@ -279,13 +304,23 @@ function runSinglePass(params: {
         const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
         const dotMult = 1 + (selfDotModifier + enemyDotMod) / 100;
         const affinityMult = 1 + affinityDamageModifier / 100;
-        const baseDamage = effectiveAttack * critMultiplier * (1 - damageReduction / 100);
-        const directDamage =
-            baseDamage *
-            (multiplier / 100) *
+        const effectiveDefence = defence * (1 + defenceBuff / 100);
+        const effectiveHp = hp * (1 + hpBuff / 100);
+        let secondaryStatValue = 0;
+        if (secondary) {
+            const source = secondary.stat === 'defense' ? effectiveDefence : effectiveHp;
+            secondaryStatValue = source * (secondary.pct / 100);
+        }
+
+        const preCritDamage = effectiveAttack * (multiplier / 100) + secondaryStatValue;
+        const postDefenseFactor =
+            critMultiplier *
+            (1 - damageReduction / 100) *
             (1 + outgoingDamageBuff / 100) *
             (1 + incomingDamageModifier / 100) *
             affinityMult;
+        const directDamage = preCritDamage * postDefenseFactor;
+        const secondaryDamage = secondaryStatValue * postDefenseFactor;
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;
@@ -342,6 +377,7 @@ function runSinglePass(params: {
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
         cumulativeDamage += totalRoundDamage;
         totalDirectRaw += directDamage;
+        totalSecondaryRaw += secondaryDamage;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
         totalBombRaw += bombDamage;
@@ -396,6 +432,7 @@ function runSinglePass(params: {
             inferno: totalInfernoRaw,
             bomb: totalBombRaw,
             cumulative: cumulativeDamage,
+            totalSecondary: totalSecondaryRaw,
         },
     };
 }
@@ -416,6 +453,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         rounds: numRounds,
         selfBuffs,
         enemyDebuffs,
+        defence = 0,
+        hp = 0,
+        activeSecondary,
+        chargedSecondary,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -477,6 +518,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
+        defence,
+        hp,
+        activeSecondary,
+        chargedSecondary,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
@@ -490,6 +535,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
             totalBombDamage: Math.round(rawTotals.bomb),
+            totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
         },
     };
 }

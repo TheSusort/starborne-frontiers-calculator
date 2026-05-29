@@ -722,4 +722,77 @@ describe('simulateDPS', () => {
             expect(result.rounds[0].action).toBe('active');
         });
     });
+
+    describe('secondary stat-based damage', () => {
+        const exactInput = {
+            ...baseInput,
+            attack: 1000,
+            crit: 100,
+            critDamage: 0,
+            enemyDefense: 0,
+            rounds: 1,
+        };
+
+        it('adds Defense-based secondary damage to the direct hit', () => {
+            // preCrit = 1000*1.0 + 500*0.80 = 1400
+            const result = simulateDPS({
+                ...exactInput,
+                defence: 500,
+                hp: 0,
+                activeSecondary: { stat: 'defense', pct: 80 },
+            });
+            expect(result.rounds[0].directDamage).toBe(1400);
+            expect(result.summary.totalSecondaryDamage).toBe(400);
+            expect(result.summary.totalDirectDamage).toBe(1400);
+        });
+
+        it('adds max-HP-based secondary damage', () => {
+            // preCrit = 1000 + 20000*0.10 = 3000
+            const result = simulateDPS({
+                ...exactInput,
+                defence: 0,
+                hp: 20000,
+                activeSecondary: { stat: 'hp', pct: 10 },
+            });
+            expect(result.rounds[0].directDamage).toBe(3000);
+            expect(result.summary.totalSecondaryDamage).toBe(2000);
+        });
+
+        it('scales secondary damage with a Defense Up self-buff', () => {
+            // effectiveDefence = 500 * 1.5 = 750; secondary = 750*0.8 = 600; preCrit = 1600
+            const result = simulateDPS({
+                ...exactInput,
+                defence: 500,
+                hp: 0,
+                activeSecondary: { stat: 'defense', pct: 80 },
+                selfBuffs: [makeAlwaysBuff('defup', { defense: 50 })],
+            });
+            expect(result.rounds[0].directDamage).toBe(1600);
+            expect(result.summary.totalSecondaryDamage).toBe(600);
+        });
+
+        it('reports zero secondary damage when none configured', () => {
+            const result = simulateDPS({ ...exactInput });
+            expect(result.summary.totalSecondaryDamage).toBe(0);
+            expect(result.rounds[0].directDamage).toBe(1000);
+        });
+
+        it('uses chargedSecondary (not activeSecondary) on a charged round', () => {
+            // startCharged → round 1 is charged. preCrit = 1000 + 1000*0.50 = 1500.
+            // activeSecondary (80%) must NOT be applied on the charged round.
+            const result = simulateDPS({
+                ...exactInput,
+                defence: 1000,
+                hp: 0,
+                chargedMultiplier: 100,
+                chargeCount: 1,
+                startCharged: true,
+                activeSecondary: { stat: 'defense', pct: 80 },
+                chargedSecondary: { stat: 'defense', pct: 50 },
+            });
+            expect(result.rounds[0].action).toBe('charged');
+            expect(result.rounds[0].directDamage).toBe(1500);
+            expect(result.summary.totalSecondaryDamage).toBe(500);
+        });
+    });
 });
