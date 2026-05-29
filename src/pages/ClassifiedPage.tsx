@@ -220,7 +220,7 @@ export default function ClassifiedPage() {
             <Seo title="CLASSIFIED" description="Abyss Incident — Classified Archive" noIndex />
             <div className="not-found-scanlines fixed inset-0 z-[110] font-secondary overflow-y-auto">
                 {/* Background layers */}
-                <div className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-top" />
+                <div className="absolute inset-0 bg-[url('/images/Broken_Derelict_01.webp')] bg-cover bg-center" />
                 <div className="absolute inset-0 bg-[url('/images/BG2.png')] bg-cover opacity-[0.15] mix-blend-screen" />
                 <div className="absolute inset-0 bg-black/60" />
 
@@ -270,10 +270,10 @@ export default function ClassifiedPage() {
                         {bootComplete && mode === 'index' && (
                             <div key="index" className="not-found-reveal classified-decode">
                                 {/* Header */}
-                                <div className="text-[0.65rem] text-primary uppercase tracking-[0.3em]">
+                                <div className="text-[0.65rem] text-green-400 uppercase tracking-[0.3em]">
                                     {'// STARBORNE PLANNER'}
                                 </div>
-                                <p className="classified-title-glitch font-mono text-sm font-bold tracking-[0.3em] uppercase text-primary mt-1">
+                                <p className="classified-title-glitch font-mono text-sm font-bold tracking-[0.3em] uppercase text-green-400 mt-1">
                                     {'> ABYSS INCIDENT — CLASSIFIED ARCHIVE'}
                                 </p>
                                 <p className="font-mono text-xs text-gray-500 tracking-widest mt-1 mb-3">
@@ -305,7 +305,13 @@ export default function ClassifiedPage() {
                                                     >
                                                         {'>'}
                                                     </span>
-                                                    <span className={fragment.barColorClass}>
+                                                    <span
+                                                        className={
+                                                            isRowUnlocked
+                                                                ? 'text-green-400'
+                                                                : 'text-green-600'
+                                                        }
+                                                    >
                                                         {fragment.title.toUpperCase()}
                                                     </span>
                                                 </span>
@@ -330,7 +336,7 @@ export default function ClassifiedPage() {
                                         <p className="font-mono text-xs text-red-500 tracking-widest uppercase font-bold">
                                             {'> FINAL TRANSMISSION — DECRYPTED'}
                                         </p>
-                                        <p className="text-base font-bold tracking-widest uppercase text-primary">
+                                        <p className="text-base font-bold tracking-widest uppercase text-green-400">
                                             ARCHIVE COMPLETE
                                         </p>
                                         <div className="text-sm text-gray-400 space-y-3 font-mono">
@@ -382,9 +388,7 @@ export default function ClassifiedPage() {
                                 <div className="text-[0.65rem] text-gray-500 uppercase tracking-[0.3em]">
                                     {'// FRAGMENT ACCESS'}
                                 </div>
-                                <p
-                                    className={`font-mono text-sm font-bold tracking-[0.3em] uppercase ${activeFragment.barColorClass} mt-1 mb-3`}
-                                >
+                                <p className="font-mono text-sm font-bold tracking-[0.3em] uppercase text-green-400 mt-1 mb-3">
                                     {activeFragment.title.toUpperCase()}
                                 </p>
 
@@ -396,7 +400,7 @@ export default function ClassifiedPage() {
                                             <span className="text-green-400">DECRYPTING...</span>
                                         </p>
                                         <hr className="border-gray-800 my-2" />
-                                        <p className={activeFragment.barColorClass}>
+                                        <p className="text-green-400">
                                             {`> ${'█'.repeat(detailProgress)}${'░'.repeat(BAR_TOTAL - detailProgress)} ${Math.round((detailProgress / BAR_TOTAL) * 100)}%`}
                                         </p>
                                         <hr className="border-gray-800 mt-3 mb-2" />
@@ -407,9 +411,7 @@ export default function ClassifiedPage() {
                                 {/* UNLOCKED STATE */}
                                 {!detailIsDecrypting && detailIsUnlocked && (
                                     <div>
-                                        <p
-                                            className={`font-mono text-xs tracking-widest ${activeFragment.barColorClass} mb-3`}
-                                        >
+                                        <p className="font-mono text-xs tracking-widest text-green-400 mb-3">
                                             {`> ${'█'.repeat(BAR_TOTAL)} [DECRYPTED]`}
                                         </p>
                                         <hr className="border-gray-800 mb-3" />
@@ -431,10 +433,10 @@ export default function ClassifiedPage() {
                                 {/* LOCKED STATE */}
                                 {!detailIsDecrypting && !detailIsUnlocked && (
                                     <div>
-                                        <p className="font-mono text-xs text-gray-600 tracking-widest">
+                                        <p className="font-mono text-xs text-gray-400 tracking-widest">
                                             {`> ORIGIN FILE: ${activeFragment.hintLine} — FIELD AGENTS ONLY`}
                                         </p>
-                                        <p className="font-mono text-xs text-gray-600 tracking-widest mt-1">
+                                        <p className="font-mono text-xs text-gray-400 tracking-widest mt-1">
                                             {'> STATUS: '}
                                             <span className="text-red-400">
                                                 LOCKED — AUTH REQUIRED
