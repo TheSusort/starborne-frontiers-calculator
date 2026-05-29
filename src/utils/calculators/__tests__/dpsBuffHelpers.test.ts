@@ -44,6 +44,17 @@ describe('toSimBuffs', () => {
         const result = toSimBuffs([makeBuff({ attack: 15 })]);
         expect(result.every((b) => b.stat === 'attack')).toBe(true);
     });
+
+    it('maps defence self-buff', () => {
+        expect(toSimBuffs([makeBuff({ defense: 50 })])).toEqual([
+            { id: 'b1-def', stat: 'defence', value: 50 },
+        ]);
+    });
+    it('maps hp self-buff', () => {
+        expect(toSimBuffs([makeBuff({ hp: 20 })])).toEqual([
+            { id: 'b1-hp', stat: 'hp', value: 20 },
+        ]);
+    });
 });
 
 describe('toEnemyModifiers', () => {
