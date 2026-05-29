@@ -46,7 +46,7 @@ interface ShipConfigCardProps {
     ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
-    onSecondaryChange?: (
+    onSecondaryChange: (
         field: 'activeSecondary' | 'chargedSecondary',
         value: SecondaryDamage | undefined
     ) => void;
@@ -72,11 +72,15 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onUpdateDoT,
     onBuffsChange,
     onEnemyDebuffsChange,
+    onSecondaryChange,
     enemyAffinity,
     enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
+    const [openSecondary, setOpenSecondary] = useState(
+        Boolean(config.activeSecondary || config.chargedSecondary)
+    );
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
@@ -245,6 +249,113 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             vs enemy
                         </p>
                     </div>
+
+                    <Button
+                        variant="link"
+                        onClick={() => setOpenSecondary((v) => !v)}
+                        className="w-full flex justify-between items-center mt-4"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openSecondary ? 'rotate-180' : ''}`}
+                            />
+                            Secondary Damage
+                        </span>
+                    </Button>
+                    <CollapsibleForm isVisible={openSecondary}>
+                        <div className="flex gap-4 mb-4">
+                            <Input
+                                label="Defense (source)"
+                                type="number"
+                                min="0"
+                                value={config.defence}
+                                onChange={(e) => onUpdate('defence', parseInt(e.target.value) || 0)}
+                            />
+                            <Input
+                                label="HP (source)"
+                                type="number"
+                                min="0"
+                                value={config.hp}
+                                onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                            />
+                        </div>
+                        <div className="flex gap-4 mb-4 items-end">
+                            <Select
+                                label="Active Secondary Stat"
+                                value={config.activeSecondary?.stat ?? ''}
+                                onChange={(v) =>
+                                    v === ''
+                                        ? onSecondaryChange('activeSecondary', undefined)
+                                        : onSecondaryChange('activeSecondary', {
+                                              stat: v as 'defense' | 'hp',
+                                              pct: config.activeSecondary?.pct ?? 0,
+                                          })
+                                }
+                                helpLabel={
+                                    config.autoFilledFields?.has('activeSecondary')
+                                        ? 'auto-filled'
+                                        : undefined
+                                }
+                                options={[
+                                    { value: '', label: 'None' },
+                                    { value: 'defense', label: 'Defense' },
+                                    { value: 'hp', label: 'Max HP' },
+                                ]}
+                                className="flex-1"
+                            />
+                            <Input
+                                label="Active %"
+                                type="number"
+                                min="0"
+                                value={config.activeSecondary?.pct ?? 0}
+                                disabled={!config.activeSecondary}
+                                onChange={(e) =>
+                                    onSecondaryChange('activeSecondary', {
+                                        stat: config.activeSecondary?.stat ?? 'defense',
+                                        pct: parseInt(e.target.value) || 0,
+                                    })
+                                }
+                            />
+                        </div>
+                        <div className="flex gap-4 mb-4 items-end">
+                            <Select
+                                label="Charged Secondary Stat"
+                                value={config.chargedSecondary?.stat ?? ''}
+                                onChange={(v) =>
+                                    v === ''
+                                        ? onSecondaryChange('chargedSecondary', undefined)
+                                        : onSecondaryChange('chargedSecondary', {
+                                              stat: v as 'defense' | 'hp',
+                                              pct: config.chargedSecondary?.pct ?? 0,
+                                          })
+                                }
+                                helpLabel={
+                                    config.autoFilledFields?.has('chargedSecondary')
+                                        ? 'auto-filled'
+                                        : undefined
+                                }
+                                options={[
+                                    { value: '', label: 'None' },
+                                    { value: 'defense', label: 'Defense' },
+                                    { value: 'hp', label: 'Max HP' },
+                                ]}
+                                className="flex-1"
+                            />
+                            <Input
+                                label="Charged %"
+                                type="number"
+                                min="0"
+                                value={config.chargedSecondary?.pct ?? 0}
+                                disabled={!config.chargedSecondary}
+                                onChange={(e) =>
+                                    onSecondaryChange('chargedSecondary', {
+                                        stat: config.chargedSecondary?.stat ?? 'defense',
+                                        pct: parseInt(e.target.value) || 0,
+                                    })
+                                }
+                            />
+                        </div>
+                    </CollapsibleForm>
 
                     {selectedShip && (
                         <>
