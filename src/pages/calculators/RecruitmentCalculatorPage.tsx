@@ -623,6 +623,15 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                 </p>
                                             )}
 
+                                            <div className="flex justify-between">
+                                                <span className="text-theme-text-secondary">
+                                                    Target Ship(s):
+                                                </span>
+                                                <span className="font-semibold">
+                                                    {selectedShips.map((s) => s.name).join(', ')}
+                                                </span>
+                                            </div>
+
                                             <div className="space-y-2">
                                                 <div className="flex justify-between">
                                                     <span className="text-theme-text-secondary">
