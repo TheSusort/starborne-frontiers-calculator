@@ -3,7 +3,7 @@ import { Position, ShipPosition, SharedShipPosition } from '../../types/encounte
 import { useShips } from '../../contexts/ShipsContext';
 import { HexButton } from '../ui/HexButton';
 import { Ship } from '../../types/ship';
-import { SHIPS } from '../../constants/ships';
+import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 
 interface FormationGridProps {
@@ -22,6 +22,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onSetSortOrder,
 }) => {
     const { ships } = useShips();
+    const { ships: templateShips } = useShipsData();
     const [hoveredPosition, setHoveredPosition] = useState<Position | null>(null);
 
     const handleKeyDown = useCallback(
@@ -58,12 +59,12 @@ const FormationGrid: React.FC<FormationGridProps> = ({
 
     // Lookup map: ship name -> template data (for imageKey/affinity when not on imported ship)
     const templateByName = useMemo(() => {
-        const map = new Map<string, (typeof SHIPS)[string]>();
-        for (const template of Object.values(SHIPS)) {
+        const map = new Map<string, Ship>();
+        for (const template of templateShips) {
             map.set(template.name.toLowerCase(), template);
         }
         return map;
-    }, []);
+    }, [templateShips]);
 
     const getTemplateData = (shipName: string) => {
         return templateByName.get(shipName.toLowerCase());
@@ -108,7 +109,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                             fullShip?.affinity ||
                             (template?.affinity?.toLowerCase() as Ship['affinity']);
                         const rarity = fullShip?.rarity || template?.rarity?.toLowerCase();
-                        const shipType = fullShip?.type || template?.role;
+                        const shipType = fullShip?.type || template?.type;
                         const roleIconUrl = shipType && SHIP_TYPES[shipType]?.iconUrl;
                         return (
                             <div

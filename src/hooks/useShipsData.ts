@@ -71,35 +71,70 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
     quoteAuthor: template.quote_author,
 });
 
+// Module-level cache so every consumer of this hook shares a single
+// ship_templates fetch per session. Templates rarely change mid-session.
+let cachedShips: Ship[] | null = null;
+let inflightFetch: Promise<Ship[]> | null = null;
+
+const fetchShipTemplates = async (): Promise<Ship[]> => {
+    if (cachedShips) {
+        return cachedShips;
+    }
+    if (!inflightFetch) {
+        inflightFetch = (async () => {
+            const { data, error: fetchError } = await supabase.from('ship_templates').select('*');
+
+            if (fetchError) {
+                inflightFetch = null; // allow a later retry
+                throw fetchError;
+            }
+
+            cachedShips = (data as ShipTemplate[]).map(transformShipTemplate);
+            return cachedShips;
+        })();
+    }
+    return inflightFetch;
+};
+
 export const useShipsData = () => {
-    const [ships, setShips] = useState<Ship[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [ships, setShips] = useState<Ship[]>(() => cachedShips ?? []);
+    const [loading, setLoading] = useState(() => cachedShips === null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const fetchShips = async () => {
+        let mounted = true;
+
+        const loadShips = async () => {
             try {
-                const { data, error: fetchError } = await supabase
-                    .from('ship_templates')
-                    .select('*');
-
-                if (fetchError) {
-                    throw fetchError;
+                const result = await fetchShipTemplates();
+                if (mounted) {
+                    setShips(result);
                 }
-
-                const transformedShips = data.map(transformShipTemplate);
-                setShips(transformedShips);
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Failed to fetch ships data');
+                if (mounted) {
+                    setError(err instanceof Error ? err.message : 'Failed to fetch ships data');
+                }
             } finally {
-                setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                }
             }
         };
 
-        void fetchShips();
+        void loadShips();
+
+        return () => {
+            mounted = false;
+        };
     }, []);
 
     const fetchSingleShip = async (shipName: string): Promise<Ship | null> => {
+        if (cachedShips) {
+            const found = cachedShips.find((ship) => ship.name === shipName);
+            if (found) {
+                return found;
+            }
+        }
         try {
             const { data, error: fetchError } = await supabase
                 .from('ship_templates')
