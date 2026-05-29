@@ -42,6 +42,7 @@ const RecruitmentCalculatorPage: React.FC = () => {
     const [calculationMode, setCalculationMode] = useState<'or' | 'and'>('or');
     const [eventMode, setEventMode] = useState<'individual' | 'faction'>('individual');
     const [factionEventFaction, setFactionEventFaction] = useState<FactionName | ''>('');
+    const [factionEventMultiplier, setFactionEventMultiplier] = useState<number>(10);
 
     // Get recruitable ships
     const recruitableShips = useMemo(() => {
@@ -88,8 +89,8 @@ const RecruitmentCalculatorPage: React.FC = () => {
         if (eventMode !== 'faction' || !factionEventFaction) {
             return undefined;
         }
-        return { faction: factionEventFaction };
-    }, [eventMode, factionEventFaction]);
+        return { faction: factionEventFaction, multiplier: factionEventMultiplier };
+    }, [eventMode, factionEventFaction, factionEventMultiplier]);
 
     // Calculate results
     const results = useMemo(() => {
@@ -235,6 +236,13 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                 <strong>Elite Beacon:</strong> 100% Legendary
                             </li>
                             <li className="mt-2">
+                                <strong>Affinity weighting:</strong> Within a rarity, every
+                                non-antimatter ship (Thermal/Chemical/Electric, treated as one
+                                combined pool) has 10x the pull weight of an antimatter ship, so a
+                                specific antimatter ship is rarer. The antimatter vs non-antimatter
+                                split depends on how many ships of each are in the pool.
+                            </li>
+                            <li className="mt-2">
                                 <strong>Note:</strong> Some ships (
                                 {getNonRecruitableShips().join(', ')}) cannot be recruited through
                                 beacons and are excluded from calculations.
@@ -365,10 +373,10 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             Faction Event
                                         </h3>
                                         <p className="text-sm text-theme-text-secondary mb-4">
-                                            Ships from the selected faction have 20x the pull weight
-                                            in the specialist beacon pool.
+                                            Ships from the selected faction have their pull weight
+                                            multiplied in the specialist beacon pool.
                                         </p>
-                                        <div className="max-w-xs">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
                                             <Select
                                                 label="Select Faction"
                                                 value={factionEventFaction}
@@ -382,11 +390,23 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                                 noDefaultSelection
                                                 defaultOption="-- Select Faction --"
                                             />
+                                            <Select
+                                                label="Weight Multiplier"
+                                                value={String(factionEventMultiplier)}
+                                                onChange={(value) =>
+                                                    setFactionEventMultiplier(Number(value))
+                                                }
+                                                options={[
+                                                    { value: '10', label: '10x' },
+                                                    { value: '20', label: '20x' },
+                                                ]}
+                                            />
                                         </div>
                                         {factionEventFaction && (
                                             <p className="text-sm text-primary mt-4">
                                                 {FACTIONS[factionEventFaction]?.name} ships will
-                                                have 20x weight in specialist beacon pulls.
+                                                have {factionEventMultiplier}x weight in specialist
+                                                beacon pulls.
                                             </p>
                                         )}
                                     </div>
@@ -598,8 +618,8 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             {result.beaconType === 'specialist' && factionEvent && (
                                                 <p className="text-sm text-primary mb-2">
                                                     Faction Event Active:{' '}
-                                                    {FACTIONS[factionEvent.faction]?.name} (20x
-                                                    boost)
+                                                    {FACTIONS[factionEvent.faction]?.name} (
+                                                    {factionEvent.multiplier ?? 20}x boost)
                                                 </p>
                                             )}
 

@@ -5,7 +5,10 @@ export const CURRENT_VERSION = '1.63.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Recruitment calculator: corrected the affinity weighting to match the game — Thermal/Chemical/Electric are now a single combined pool where each ship has 10x the pull weight of an antimatter ship (instead of a fixed per-affinity split).',
+    'Recruitment calculator: faction event weighting now stacks on top of the affinity weighting, and you can choose a 10x or 20x faction multiplier.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

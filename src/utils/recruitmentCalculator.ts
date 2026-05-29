@@ -128,23 +128,19 @@ export const getShipsByRarity = (ships: Ship[], rarity: RarityName): Ship[] => {
 };
 
 /**
- * Get ships by rarity AND affinity from recruitable ships
+ * Get the affinity ticket weight for a ship.
+ *
+ * Recruitment uses a two-category affinity weighting: antimatter vs non-antimatter.
+ * Thermal/chemical/electric are a single combined pool, each unit carrying 10x the
+ * weight of an antimatter unit. A ship's pull probability within its rarity is its
+ * ticket share, so the antimatter/non-antimatter split floats with the pool counts
+ * rather than being a fixed percentage.
  */
-export const getShipsByRarityAndAffinity = (
-    ships: Ship[],
-    rarity: RarityName,
-    affinity: AffinityName
-): Ship[] => {
-    const recruitable = getRecruitableShips(ships);
-    return recruitable.filter((ship) => ship.rarity === rarity && ship.affinity === affinity);
+export const getAffinityTickets = (affinity: AffinityName): number => {
+    return affinity === 'antimatter' ? 1 : 10;
 };
 
-/**
- * Get the affinity split rate (10% for antimatter, 30% for others)
- */
-export const getAffinityRate = (affinity: AffinityName): number => {
-    return affinity === 'antimatter' ? 0.1 : 0.3;
-};
+export const DEFAULT_FACTION_EVENT_MULTIPLIER = 20;
 
 /**
  * Group ships by rarity for display
@@ -220,32 +216,26 @@ export interface EventShip {
 
 export interface FactionEvent {
     faction: FactionName;
-    multiplier?: number; // Defaults to 20 if not specified
+    multiplier?: number; // Defaults to DEFAULT_FACTION_EVENT_MULTIPLIER if not specified
 }
 
 /**
- * Calculate weighted pool for faction events
- * Faction ships get multiplier weight (default 20), non-faction ships get 1
+ * Total ticket weight for a ship, combining affinity tickets with the faction-event
+ * multiplier. During a faction event, ships of the featured faction have their tickets
+ * multiplied (default 20x), stacking on top of the affinity weighting — e.g. an
+ * antimatter unit of the featured faction goes from 1 to 1 * multiplier, a non-antimatter
+ * unit from 10 to 10 * multiplier.
  */
-const calculateFactionEventPool = (
-    ships: Ship[],
-    rarity: RarityName,
-    factionEvent: FactionEvent
-): { totalWeight: number; getShipWeight: (ship: Ship) => number } => {
-    const multiplier = factionEvent.multiplier ?? 20;
-    const shipsOfRarity = ships.filter((s) => s.rarity === rarity);
-
-    let totalWeight = 0;
-    for (const ship of shipsOfRarity) {
-        const weight = ship.faction === factionEvent.faction ? multiplier : 1;
-        totalWeight += weight;
+const getShipTickets = (ship: Ship, factionEvent?: FactionEvent): number => {
+    if (!ship.affinity) {
+        return 0;
     }
-
-    const getShipWeight = (ship: Ship): number => {
-        return ship.faction === factionEvent.faction ? multiplier : 1;
-    };
-
-    return { totalWeight, getShipWeight };
+    const affinityTickets = getAffinityTickets(ship.affinity);
+    const factionMultiplier =
+        factionEvent && ship.faction === factionEvent.faction
+            ? (factionEvent.multiplier ?? DEFAULT_FACTION_EVENT_MULTIPLIER)
+            : 1;
+    return affinityTickets * factionMultiplier;
 };
 
 /**
@@ -291,71 +281,32 @@ export const calculateShipProbability = (
         return 0;
     }
 
-    // Handle faction event for specialist beacons
-    if (factionEvent && beaconType === 'specialist') {
-        // Use general pool ships (excludes non-recruitable and event-only ships)
-        const generalPoolShips = getGeneralPoolShips(ships);
-        const shipsOfRarity = generalPoolShips.filter((s) => s.rarity === ship.rarity);
-
-        if (shipsOfRarity.length === 0) {
-            return 0;
-        }
-
-        const { totalWeight, getShipWeight } = calculateFactionEventPool(
-            generalPoolShips,
-            ship.rarity,
-            factionEvent
-        );
-
-        if (totalWeight === 0) {
-            return 0;
-        }
-
-        // Probability = rarityRate * shipWeight / totalWeight
-        const shipWeight = getShipWeight(ship);
-        return (rarityRate * shipWeight) / totalWeight;
-    }
-
     // Get ship's affinity (all ships have affinity)
     if (!ship.affinity) {
         return 0; // Safety check, though all ships should have affinity
     }
 
-    // Get affinity rate (10% for antimatter, 30% for others)
-    const affinityRate = getAffinityRate(ship.affinity);
+    // Faction events only apply to specialist beacons.
+    const activeFactionEvent = beaconType === 'specialist' ? factionEvent : undefined;
 
-    // Count ships of the same rarity AND affinity from general pool
-    const shipsOfRarityAndAffinity = getShipsByRarityAndAffinity(
-        generalPoolShips,
-        ship.rarity,
-        ship.affinity
-    );
-    const totalShipsOfRarityAndAffinity = shipsOfRarityAndAffinity.length;
-
-    if (totalShipsOfRarityAndAffinity === 0) {
+    // All general-pool ships of this rarity form the ticket-weighted denominator.
+    const shipsOfRarity = generalPoolShips.filter((s) => s.rarity === ship.rarity);
+    if (shipsOfRarity.length === 0) {
         return 0;
     }
 
-    // Handle event ship logic for specialist beacons (epic and legendary ships)
-    if (beaconType === 'specialist' && eventShips.length > 0) {
-        // Check if this specific ship is an event ship
+    // Handle per-ship event rates for specialist beacons. Event rates and faction events
+    // are mutually exclusive (the UI enforces one event mode at a time).
+    if (beaconType === 'specialist' && eventShips.length > 0 && !activeFactionEvent) {
+        // An event ship with an explicit rate bypasses ticket weighting entirely.
         const eventShipForThisShip = eventShips.find((es) => es.name === ship.name);
-
-        if (eventShipForThisShip) {
-            // If it has a threshold (guaranteed), it still has a probability before the threshold
-            // For guaranteed ships, we still calculate the base probability
-            if (eventShipForThisShip.rate !== undefined) {
-                // Event ship with rate: probability = rarity rate * event ship rate
-                // Event rates are per-ship, so they bypass affinity splitting
-                return rarityRate * eventShipForThisShip.rate;
-            }
-            // If it's guaranteed (has threshold), we still need to calculate the probability
-            // before the threshold for expected pulls calculation
-            // Use base probability with affinity split
+        if (eventShipForThisShip?.rate !== undefined) {
+            // Event ship with rate: probability = rarity rate * event ship rate
+            return rarityRate * eventShipForThisShip.rate;
         }
 
-        // This is not an event ship, or it's a guaranteed ship (no rate), but there might be event ships of the same rarity
-        // For pool calculations, exclude event-only ships that are in the event
+        // Other ships of this rarity share the probability remaining after explicit
+        // event rates, distributed by ticket weight.
         const eventShipsOfThisRarity = eventShips.filter((es) => {
             const eventShip = generalPoolShips.find((s: Ship) => s.name === es.name);
             // Also include event-only ships that are in the event
@@ -367,29 +318,37 @@ export const calculateShipProbability = (
         });
 
         if (eventShipsOfThisRarity.length > 0) {
-            // Calculate total event rate for this rarity (only ships with rate, not threshold)
+            // Total explicit event rate for this rarity (only ships with rate, not threshold)
             const totalEventRate = eventShipsOfThisRarity.reduce(
                 (sum, es) => sum + (es.rate || 0),
                 0
             );
 
-            // Get all non-event ships of this rarity and affinity
-            const nonEventShipsOfRarityAndAffinity = shipsOfRarityAndAffinity.filter(
+            const nonEventShips = shipsOfRarity.filter(
                 (s) => !eventShipsOfThisRarity.some((es) => es.name === s.name)
             );
-            const nonEventCount = nonEventShipsOfRarityAndAffinity.length;
-
-            if (nonEventCount === 0) {
+            const nonEventTickets = nonEventShips.reduce((sum, s) => sum + getShipTickets(s), 0);
+            if (nonEventTickets === 0) {
                 return 0;
             }
 
-            // Non-event ships: probability = (rarity rate * affinity rate * (1 - total event rate)) / (number of non-event ships of this rarity+affinity)
-            return (rarityRate * affinityRate * (1 - totalEventRate)) / nonEventCount;
+            // Non-event ships split the remaining probability by ticket weight.
+            return (rarityRate * (1 - totalEventRate) * getShipTickets(ship)) / nonEventTickets;
         }
     }
 
-    // Base probability: (rarity rate * affinity rate) / number of ships of that rarity AND affinity
-    return (rarityRate * affinityRate) / totalShipsOfRarityAndAffinity;
+    // Base probability: ticket share within the rarity pool.
+    // tickets(ship) = affinity tickets (1 antimatter / 10 non-antimatter), times the
+    // faction-event multiplier when active.
+    const totalTickets = shipsOfRarity.reduce(
+        (sum, s) => sum + getShipTickets(s, activeFactionEvent),
+        0
+    );
+    if (totalTickets === 0) {
+        return 0;
+    }
+
+    return (rarityRate * getShipTickets(ship, activeFactionEvent)) / totalTickets;
 };
 
 /**

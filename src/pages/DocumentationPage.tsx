@@ -2294,9 +2294,12 @@ const DocumentationPage: React.FC = () => {
                                     </h4>
                                     <p className="text-theme-text">
                                         During faction events, ships from the selected faction have
-                                        20x the pull weight in specialist beacons. This bypasses the
-                                        normal affinity split - all ships of the same rarity compete
-                                        in a single weighted pool.
+                                        their pull weight multiplied (selectable 10x or 20x) in
+                                        specialist beacons. This multiplier stacks on top of the
+                                        affinity weighting: within a rarity, every non-antimatter
+                                        ship already carries 10x the weight of an antimatter ship,
+                                        and a featured-faction ship is multiplied again on top of
+                                        that.
                                     </p>
                                 </div>
 
