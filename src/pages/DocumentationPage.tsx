@@ -2140,9 +2140,19 @@ const DocumentationPage: React.FC = () => {
                                         </span>{' '}
                                         If your ship has skills that deal damage based on specific
                                         stats (e.g., ATTACK, DEFENCE, HACKING), those multipliers
-                                        are auto-filled. Skills with HP or DEFENCE-based damage may
-                                        need to be added as buffs manually in the appropriate
-                                        section.
+                                        are auto-filled.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Secondary Stat-Based Damage:
+                                        </span>{' '}
+                                        Ships like Chakara (&quot;+80% of Defense&quot;) and
+                                        Lodolite (&quot;+10% of max HP&quot;) deal extra damage
+                                        equal to a percentage of their Defense or max HP stat. This
+                                        is auto-detected from the skill text and shown as an
+                                        editable field in each skill row. The secondary damage is
+                                        added to the base hit before crit and defense reduction, and
+                                        scales with Defense Up / HP buffs.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Start Charged:</span> Some

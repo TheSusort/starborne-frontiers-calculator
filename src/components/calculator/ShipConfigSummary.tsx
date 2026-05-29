@@ -66,7 +66,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
             </div>
             {simResult.summary.totalSecondaryDamage > 0 && (
                 <div className="flex justify-between mb-2">
-                    <span className="text-theme-text-secondary">Secondary (stat-based):</span>
+                    <span className="text-theme-text-secondary">
+                        Secondary (stat-based, incl. in Direct):
+                    </span>
                     <span>{simResult.summary.totalSecondaryDamage.toLocaleString()}</span>
                 </div>
             )}

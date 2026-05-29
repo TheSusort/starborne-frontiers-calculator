@@ -718,8 +718,16 @@ const DPSCalculatorPage: React.FC = () => {
                             as:
                         </p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2 text-sm">
-                            Direct = Attack × CritMultiplier × (1 - DamageReduction%) ×
-                            SkillMultiplier% × (1 + OutgoingDmg%) × (1 + IncomingDmg%)
+                            Direct = (Attack × SkillMultiplier% + SourceStat × Secondary%) ×
+                            CritMultiplier × (1 - DamageReduction%) × (1 + OutgoingDmg%) × (1 +
+                            IncomingDmg%)
+                        </p>
+                        <p className="mb-2">
+                            Some ships deal additional damage equal to a percentage of their Defense
+                            or max HP (e.g. Chakara, Lodolite). This secondary term is added to the
+                            base hit before crit and defense reduction are applied, and it scales
+                            with Defense Up / HP buffs. It is auto-detected from skill text and
+                            editable in each skill row.
                         </p>
                         <p className="mb-2">
                             DoT effects (corrosion, inferno, bombs) bypass enemy defense entirely.

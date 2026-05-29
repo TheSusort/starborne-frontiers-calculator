@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.63.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Recruitment calculator: corrected the affinity weighting to match the game — Thermal/Chemical/Electric are now a single combined pool where each ship has 10x the pull weight of an antimatter ship (instead of a fixed per-affinity split).',
     'Recruitment calculator: faction event weighting now stacks on top of the affinity weighting, and you can choose a 10x or 20x faction multiplier.',
+    'DPS Calculator now models secondary damage that scales off Defense or max HP (e.g. Chakara, Lodolite) — auto-detected from skill text, editable, and scaling with Defense Up / HP buffs.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
