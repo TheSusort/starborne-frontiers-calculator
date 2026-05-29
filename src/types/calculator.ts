@@ -115,7 +115,9 @@ export type DPSShipConfigUpdateableField =
     | 'affinity'
     | 'activeMultiplier'
     | 'chargedMultiplier'
-    | 'chargeCount';
+    | 'chargeCount'
+    | 'defence'
+    | 'hp';
 
 export interface AttackerBuffTotals {
     attackBuff: number;

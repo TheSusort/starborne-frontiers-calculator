@@ -8,6 +8,7 @@ import {
     DoTApplicationEntry,
     AttackerBuffTotals,
     SelectedGameBuff,
+    SecondaryDamage,
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -45,6 +46,10 @@ interface ShipConfigCardProps {
     ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
+    onSecondaryChange?: (
+        field: 'activeSecondary' | 'chargedSecondary',
+        value: SecondaryDamage | undefined
+    ) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
 }

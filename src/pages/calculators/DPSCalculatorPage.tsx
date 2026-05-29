@@ -10,8 +10,13 @@ import {
     DEFAULT_DOT_CONFIG,
     SelectedGameBuff,
     TeamShipConfig,
+    SecondaryDamage,
 } from '../../types/calculator';
-import { parseSkillDamage, detectFullyCharged } from '../../utils/skillTextParser';
+import {
+    parseSkillDamage,
+    parseSecondaryDamage,
+    detectFullyCharged,
+} from '../../utils/skillTextParser';
 import {
     buildSkillBuffAutoFill,
     buildDoTAutoFill,
@@ -36,10 +41,20 @@ import { SEO_CONFIG } from '../../constants/seo';
 function buildSkillAutoFill(ship: Ship) {
     const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
     const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
-    const autoFilledFields = new Set<'activeMultiplier' | 'chargedMultiplier' | 'hacking'>();
+    const activeSecondary = parseSecondaryDamage(ship.activeSkillText) ?? undefined;
+    const chargedSecondary = parseSecondaryDamage(ship.chargeSkillText) ?? undefined;
+    const autoFilledFields = new Set<
+        | 'activeMultiplier'
+        | 'chargedMultiplier'
+        | 'hacking'
+        | 'activeSecondary'
+        | 'chargedSecondary'
+    >();
     if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
     if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
-    return { activeParsed, chargedParsed, autoFilledFields };
+    if (activeSecondary) autoFilledFields.add('activeSecondary');
+    if (chargedSecondary) autoFilledFields.add('chargedSecondary');
+    return { activeParsed, chargedParsed, activeSecondary, chargedSecondary, autoFilledFields };
 }
 
 const DPSCalculatorPage: React.FC = () => {
@@ -69,7 +84,13 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+                const {
+                    activeParsed,
+                    chargedParsed,
+                    activeSecondary,
+                    chargedSecondary,
+                    autoFilledFields,
+                } = buildSkillAutoFill(ship);
                 autoFilledFields.add('hacking');
                 return {
                     configs: [
@@ -84,6 +105,8 @@ const DPSCalculatorPage: React.FC = () => {
                             hacking: Math.round(final.hacking ?? 200),
                             defence: Math.round(final.defence ?? 0),
                             hp: Math.round(final.hp ?? 0),
+                            activeSecondary,
+                            chargedSecondary,
                             activeMultiplier: activeParsed > 0 ? activeParsed : 100,
                             chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
@@ -227,6 +250,10 @@ const DPSCalculatorPage: React.FC = () => {
                     critDamage: config.critDamage,
                     defensePenetration: config.defensePenetration,
                     hacking: config.hacking ?? 200,
+                    defence: config.defence,
+                    hp: config.hp,
+                    activeSecondary: config.activeSecondary,
+                    chargedSecondary: config.chargedSecondary,
                     activeMultiplier: config.activeMultiplier,
                     chargedMultiplier: config.chargedMultiplier,
                     chargeCount: config.chargeCount,
@@ -350,7 +377,8 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const { activeParsed, chargedParsed, autoFilledFields } = buildSkillAutoFill(ship);
+        const { activeParsed, chargedParsed, activeSecondary, chargedSecondary, autoFilledFields } =
+            buildSkillAutoFill(ship);
         autoFilledFields.add('hacking');
         const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
@@ -369,6 +397,10 @@ const DPSCalculatorPage: React.FC = () => {
                     critDamage: Math.round(final.critDamage),
                     defensePenetration: Math.round(final.defensePenetration || 0),
                     hacking: Math.round(final.hacking ?? 200),
+                    defence: Math.round(final.defence ?? 0),
+                    hp: Math.round(final.hp ?? 0),
+                    activeSecondary,
+                    chargedSecondary,
                     activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
                     chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
@@ -450,6 +482,21 @@ const DPSCalculatorPage: React.FC = () => {
 
     const updateConfigBuffs = (id: string, buffs: SelectedGameBuff[]) => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
+    };
+
+    const updateConfigSecondary = (
+        id: string,
+        field: 'activeSecondary' | 'chargedSecondary',
+        value: SecondaryDamage | undefined
+    ) => {
+        setConfigs((prev) =>
+            prev.map((c) => {
+                if (c.id !== id) return c;
+                const next = new Set(c.autoFilledFields);
+                next.delete(field);
+                return { ...c, [field]: value, autoFilledFields: next };
+            })
+        );
     };
 
     const updateConfigEnemyDebuffs = (id: string, enemyDebuffs: SelectedGameBuff[]) => {
@@ -595,6 +642,9 @@ const DPSCalculatorPage: React.FC = () => {
                                 onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
                                 onEnemyDebuffsChange={(debuffs) =>
                                     updateConfigEnemyDebuffs(config.id, debuffs)
+                                }
+                                onSecondaryChange={(field, value) =>
+                                    updateConfigSecondary(config.id, field, value)
                                 }
                             />
                         ))}
