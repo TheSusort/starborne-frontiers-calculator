@@ -11,10 +11,12 @@ import {
     SelectedGameBuff,
     TeamShipConfig,
     SecondaryDamage,
+    ConditionalDamage,
 } from '../../types/calculator';
 import {
     parseSkillDamage,
     parseSecondaryDamage,
+    parseConditionalDamage,
     detectFullyCharged,
 } from '../../utils/skillTextParser';
 import {
@@ -43,18 +45,36 @@ function buildSkillAutoFill(ship: Ship) {
     const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
     const activeSecondary = parseSecondaryDamage(ship.activeSkillText) ?? undefined;
     const chargedSecondary = parseSecondaryDamage(ship.chargeSkillText) ?? undefined;
+    const seedManual = (c: ConditionalDamage | null): ConditionalDamage | undefined => {
+        if (!c) return undefined;
+        return !c.derivable && c.manualCount === undefined ? { ...c, manualCount: 1 } : c;
+    };
+    const activeConditional = seedManual(parseConditionalDamage(ship.activeSkillText));
+    const chargedConditional = seedManual(parseConditionalDamage(ship.chargeSkillText));
     const autoFilledFields = new Set<
         | 'activeMultiplier'
         | 'chargedMultiplier'
         | 'hacking'
         | 'activeSecondary'
         | 'chargedSecondary'
+        | 'activeConditional'
+        | 'chargedConditional'
     >();
     if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
     if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
     if (activeSecondary) autoFilledFields.add('activeSecondary');
     if (chargedSecondary) autoFilledFields.add('chargedSecondary');
-    return { activeParsed, chargedParsed, activeSecondary, chargedSecondary, autoFilledFields };
+    if (activeConditional) autoFilledFields.add('activeConditional');
+    if (chargedConditional) autoFilledFields.add('chargedConditional');
+    return {
+        activeParsed,
+        chargedParsed,
+        activeSecondary,
+        chargedSecondary,
+        activeConditional,
+        chargedConditional,
+        autoFilledFields,
+    };
 }
 
 const DPSCalculatorPage: React.FC = () => {
@@ -89,6 +109,8 @@ const DPSCalculatorPage: React.FC = () => {
                     chargedParsed,
                     activeSecondary,
                     chargedSecondary,
+                    activeConditional,
+                    chargedConditional,
                     autoFilledFields,
                 } = buildSkillAutoFill(ship);
                 autoFilledFields.add('hacking');
@@ -107,6 +129,8 @@ const DPSCalculatorPage: React.FC = () => {
                             hp: Math.round(final.hp ?? 0),
                             activeSecondary,
                             chargedSecondary,
+                            activeConditional,
+                            chargedConditional,
                             activeMultiplier: activeParsed > 0 ? activeParsed : 100,
                             chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
@@ -254,6 +278,8 @@ const DPSCalculatorPage: React.FC = () => {
                     hp: config.hp,
                     activeSecondary: config.activeSecondary,
                     chargedSecondary: config.chargedSecondary,
+                    activeConditional: config.activeConditional,
+                    chargedConditional: config.chargedConditional,
                     activeMultiplier: config.activeMultiplier,
                     chargedMultiplier: config.chargedMultiplier,
                     chargeCount: config.chargeCount,
@@ -377,8 +403,15 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const { activeParsed, chargedParsed, activeSecondary, chargedSecondary, autoFilledFields } =
-            buildSkillAutoFill(ship);
+        const {
+            activeParsed,
+            chargedParsed,
+            activeSecondary,
+            chargedSecondary,
+            activeConditional,
+            chargedConditional,
+            autoFilledFields,
+        } = buildSkillAutoFill(ship);
         autoFilledFields.add('hacking');
         const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
@@ -401,6 +434,8 @@ const DPSCalculatorPage: React.FC = () => {
                     hp: Math.round(final.hp ?? 0),
                     activeSecondary,
                     chargedSecondary,
+                    activeConditional,
+                    chargedConditional,
                     activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
                     chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
@@ -488,6 +523,21 @@ const DPSCalculatorPage: React.FC = () => {
         id: string,
         field: 'activeSecondary' | 'chargedSecondary',
         value: SecondaryDamage | undefined
+    ) => {
+        setConfigs((prev) =>
+            prev.map((c) => {
+                if (c.id !== id) return c;
+                const next = new Set(c.autoFilledFields);
+                next.delete(field);
+                return { ...c, [field]: value, autoFilledFields: next };
+            })
+        );
+    };
+
+    const updateConfigConditional = (
+        id: string,
+        field: 'activeConditional' | 'chargedConditional',
+        value: ConditionalDamage | undefined
     ) => {
         setConfigs((prev) =>
             prev.map((c) => {
@@ -645,6 +695,9 @@ const DPSCalculatorPage: React.FC = () => {
                                 }
                                 onSecondaryChange={(field, value) =>
                                     updateConfigSecondary(config.id, field, value)
+                                }
+                                onConditionalChange={(field, value) =>
+                                    updateConfigConditional(config.id, field, value)
                                 }
                             />
                         ))}
