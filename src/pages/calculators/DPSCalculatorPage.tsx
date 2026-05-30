@@ -783,6 +783,14 @@ const DPSCalculatorPage: React.FC = () => {
                             editable in each skill row.
                         </p>
                         <p className="mb-2">
+                            Some attackers gain bonus damage that scales with a count — e.g. +20%
+                            per adjacent ally, or +15% per debuff on the enemy. This bonus is added
+                            to the skill multiplier. When the count is something the simulator
+                            tracks (your own buffs, or debuffs on the enemy) it is counted
+                            automatically each round; otherwise you set the count manually. It is
+                            auto-detected from skill text and editable per skill row.
+                        </p>
+                        <p className="mb-2">
                             DoT effects (corrosion, inferno, bombs) bypass enemy defense entirely.
                             Corrosion deals a percentage of the target&apos;s HP per stack. Inferno
                             and bombs deal a percentage of the attacker&apos;s attack stat. Bombs
