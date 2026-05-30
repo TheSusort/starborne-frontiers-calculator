@@ -219,7 +219,9 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
         if (before.includes('repair')) continue;
         const mapped = mapConditionPhrase(m[2]);
         if (!mapped) continue;
-        const cap = parseConditionalCap(text);
+        // Scope the cap search to the conditional clause onward so an earlier,
+        // unrelated "up to X%" elsewhere in the skill text isn't picked up.
+        const cap = parseConditionalCap(text.slice(idx));
         return {
             pct,
             condition: mapped.condition,
