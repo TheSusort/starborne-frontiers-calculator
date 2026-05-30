@@ -9,6 +9,8 @@ import {
     AttackerBuffTotals,
     SelectedGameBuff,
     SecondaryDamage,
+    ConditionalDamage,
+    CONDITIONAL_CONDITION_LABELS,
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -50,6 +52,10 @@ interface ShipConfigCardProps {
         field: 'activeSecondary' | 'chargedSecondary',
         value: SecondaryDamage | undefined
     ) => void;
+    onConditionalChange: (
+        field: 'activeConditional' | 'chargedConditional',
+        value: ConditionalDamage | undefined
+    ) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
 }
@@ -73,6 +79,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onBuffsChange,
     onEnemyDebuffsChange,
     onSecondaryChange,
+    onConditionalChange,
     enemyAffinity,
     enemySecurity,
 }) => {
@@ -80,6 +87,9 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     const [skillRefOpen, setSkillRefOpen] = useState(false);
     const [openSecondary, setOpenSecondary] = useState(
         Boolean(config.activeSecondary || config.chargedSecondary)
+    );
+    const [openConditional, setOpenConditional] = useState(
+        Boolean(config.activeConditional || config.chargedConditional)
     );
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
@@ -355,6 +365,74 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 }
                             />
                         </div>
+                    </CollapsibleForm>
+
+                    <Button
+                        variant="link"
+                        onClick={() => setOpenConditional((v) => !v)}
+                        className="w-full flex justify-between items-center mt-4"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openConditional ? 'rotate-180' : ''}`}
+                            />
+                            Conditional Damage
+                        </span>
+                    </Button>
+                    <CollapsibleForm isVisible={openConditional}>
+                        {(
+                            [
+                                ['activeConditional', 'Active', config.activeConditional],
+                                ['chargedConditional', 'Charged', config.chargedConditional],
+                            ] as const
+                        ).map(([field, label, cond]) => {
+                            if (!cond) {
+                                return (
+                                    <p
+                                        key={field}
+                                        className="text-xs text-theme-text-secondary mb-2"
+                                    >
+                                        {label}: no conditional bonus detected.
+                                    </p>
+                                );
+                            }
+                            return (
+                                <div key={field} className="mb-4">
+                                    <div className="text-sm font-semibold mb-1">
+                                        {label}: +{cond.pct}%{' '}
+                                        {CONDITIONAL_CONDITION_LABELS[cond.condition]}
+                                        {cond.cap !== undefined ? ` (max +${cond.cap}%)` : ''}
+                                    </div>
+                                    {cond.derivable ? (
+                                        <p className="text-xs text-theme-text-secondary">
+                                            Auto-counted each round from your active{' '}
+                                            {cond.condition === 'self-buff'
+                                                ? 'buffs'
+                                                : 'enemy debuffs'}
+                                            .
+                                        </p>
+                                    ) : (
+                                        <Input
+                                            label="Count"
+                                            type="number"
+                                            min="0"
+                                            value={cond.manualCount ?? 1}
+                                            helpLabel={
+                                                config.autoFilledFields?.has(field)
+                                                    ? 'auto-filled'
+                                                    : undefined
+                                            }
+                                            onChange={(e) =>
+                                                onConditionalChange(field, {
+                                                    ...cond,
+                                                    manualCount: parseInt(e.target.value) || 0,
+                                                })
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
                     </CollapsibleForm>
 
                     {selectedShip && (
