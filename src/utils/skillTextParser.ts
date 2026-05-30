@@ -1,6 +1,12 @@
 import { BUFFS } from '../constants/buffs';
 import { Ship } from '../types/ship';
-import { SecondaryDamage, SecondaryDamageStat, StackTrigger } from '../types/calculator';
+import {
+    SecondaryDamage,
+    SecondaryDamageStat,
+    StackTrigger,
+    ConditionalDamage,
+    ConditionalCondition,
+} from '../types/calculator';
 
 /**
  * Represents a parsed segment of skill text
@@ -165,6 +171,63 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     if (isNaN(pct)) return null;
     const stat: SecondaryDamageStat = match[2].toLowerCase().includes('hp') ? 'hp' : 'defense';
     return { stat, pct };
+}
+
+// Matches "X% ... for each <phrase>" where no other % sits between the number and
+// "for each". Global so we can skip repair/heal contexts and unknown phrases.
+const CONDITIONAL_RE = /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+([^.,;<]+)/gi;
+
+function mapConditionPhrase(
+    raw: string
+): { condition: ConditionalCondition; derivable: boolean } | null {
+    const p = raw.trim().toLowerCase();
+    // Order matters: "debuff" contains "buff"; "buff on this unit" before "buff on the enemy".
+    if (p.includes('debuff on the enemy') || p.includes('debuff on enemy'))
+        return { condition: 'enemy-debuff', derivable: true };
+    if (p.includes('buff on this unit')) return { condition: 'self-buff', derivable: true };
+    if (p.includes('buff on the enemy') || p.includes('buff on enemy'))
+        return { condition: 'enemy-buff', derivable: false };
+    if (p.includes('adjacent to the enemy'))
+        return { condition: 'enemy-adjacent', derivable: false };
+    if (p.includes('adjacent all')) return { condition: 'adjacent-ally', derivable: false };
+    if (p.includes('destroyed enem')) return { condition: 'enemy-destroyed', derivable: false };
+    return null;
+}
+
+function parseConditionalCap(text: string): number | null {
+    const m = /up to[^%]*?(\d+(?:\.\d+)?)\s*%/i.exec(text);
+    return m ? parseFloat(m[1]) : null;
+}
+
+/**
+ * Returns the conditional scaling bonus from a skill, e.g.
+ * "an additional <unit-damage>20%</unit-damage> for each adjacent ally" or the
+ * untagged "plus an extra 30% for each buff on the enemy" (Nuqtu). The bonus is
+ * a per-unit % added to the skill multiplier; `derivable` is true when the sim
+ * can count the condition itself (self buffs / enemy debuffs). Repair/heal
+ * scaling ("repairs X% ... for each enemy destroyed") is ignored. Returns null
+ * when no recognized "for each" conditional is present.
+ */
+export function parseConditionalDamage(text: string | null | undefined): ConditionalDamage | null {
+    if (!text) return null;
+    for (const m of text.matchAll(CONDITIONAL_RE)) {
+        const pct = parseFloat(m[1]);
+        if (isNaN(pct)) continue;
+        // Skip repair/heal scaling — look just before the matched number.
+        const idx = m.index ?? 0;
+        const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
+        if (before.includes('repair')) continue;
+        const mapped = mapConditionPhrase(m[2]);
+        if (!mapped) continue;
+        const cap = parseConditionalCap(text);
+        return {
+            pct,
+            condition: mapped.condition,
+            derivable: mapped.derivable,
+            ...(cap !== null ? { cap } : {}),
+        };
+    }
+    return null;
 }
 
 /**
