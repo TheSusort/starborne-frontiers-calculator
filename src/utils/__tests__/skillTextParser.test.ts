@@ -404,6 +404,7 @@ describe('parseConditionalDamage', () => {
             condition: 'enemy-buff',
             derivable: false,
         });
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 80 });
     });
 
     it('marks "for each debuff on the enemy" as derivable', () => {

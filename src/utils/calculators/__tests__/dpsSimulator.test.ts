@@ -888,5 +888,23 @@ describe('simulateDPS', () => {
             expect(result.summary.totalConditionalDamage).toBe(0);
             expect(result.rounds[0].directDamage).toBe(1000);
         });
+
+        it('derives the enemy-debuff count from prior-round DoT entries (ramps over rounds)', () => {
+            // A corrosion DoT is applied each active round, but this round's DoT is pushed
+            // AFTER damage is computed — so the enemy-debuff count is the number of PRIOR-round
+            // DoT entries: 0, then 1, then 2. bonus = 20% * count.
+            const result = simulateDPS({
+                ...exactInput,
+                rounds: 3,
+                activeDoTs: [{ id: 'c', type: 'corrosion', tier: 3, stacks: 1, duration: 10 }],
+                activeConditional: { pct: 20, condition: 'enemy-debuff', derivable: true },
+            });
+            // round 1: count 0 → preCrit 1000; round 2: count 1 → 1200; round 3: count 2 → 1400
+            expect(result.rounds[0].directDamage).toBe(1000);
+            expect(result.rounds[1].directDamage).toBe(1200);
+            expect(result.rounds[2].directDamage).toBe(1400);
+            // conditional slice: 0 + 200 + 400 = 600
+            expect(result.summary.totalConditionalDamage).toBe(600);
+        });
     });
 });
