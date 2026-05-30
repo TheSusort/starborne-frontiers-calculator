@@ -1,6 +1,7 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
 import {
     Buff,
+    ConditionalDamage,
     DoTApplicationConfig,
     DoTApplicationEntry,
     SecondaryDamage,
@@ -48,6 +49,10 @@ export interface DPSSimulationInput {
     activeSecondary?: SecondaryDamage;
     /** Secondary damage applied on charged-skill rounds. */
     chargedSecondary?: SecondaryDamage;
+    /** Conditional scaling bonus applied on active-skill rounds. */
+    activeConditional?: ConditionalDamage;
+    /** Conditional scaling bonus applied on charged-skill rounds. */
+    chargedConditional?: ConditionalDamage;
 }
 
 export interface RoundData {
@@ -79,6 +84,7 @@ export interface DPSSimulationSummary {
     totalInfernoDamage: number;
     totalBombDamage: number;
     totalSecondaryDamage: number;
+    totalConditionalDamage: number;
 }
 
 export interface DPSSimulationResult {
@@ -169,6 +175,8 @@ function runSinglePass(params: {
     hp: number;
     activeSecondary?: SecondaryDamage;
     chargedSecondary?: SecondaryDamage;
+    activeConditional?: ConditionalDamage;
+    chargedConditional?: ConditionalDamage;
 }): {
     rounds: RoundData[];
     rawTotals: {
@@ -178,6 +186,7 @@ function runSinglePass(params: {
         bomb: number;
         cumulative: number;
         totalSecondary: number;
+        totalConditional: number;
     };
 } {
     const {
@@ -208,6 +217,8 @@ function runSinglePass(params: {
         hp,
         activeSecondary,
         chargedSecondary,
+        activeConditional,
+        chargedConditional,
     } = params;
 
     // All mutable state declared fresh on every call
@@ -218,6 +229,7 @@ function runSinglePass(params: {
     let totalInfernoRaw = 0;
     let totalBombRaw = 0;
     let totalSecondaryRaw = 0;
+    let totalConditionalRaw = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
@@ -244,6 +256,7 @@ function runSinglePass(params: {
         }
 
         const secondary = action === 'charged' ? chargedSecondary : activeSecondary;
+        const conditional = action === 'charged' ? chargedConditional : activeConditional;
 
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
@@ -312,7 +325,34 @@ function runSinglePass(params: {
             secondaryStatValue = source * (secondary.pct / 100);
         }
 
-        const preCritDamage = effectiveAttack * (multiplier / 100) + secondaryStatValue;
+        // Conditional scaling bonus, folded additively into the skill multiplier.
+        // Derivable conditions read this round's sim state (pre-Step-3 DoT arrays,
+        // so this round's freshly-applied DoTs are not yet counted); manual
+        // conditions use a static count.
+        let conditionalBonusPct = 0;
+        if (conditional) {
+            let count: number;
+            if (conditional.condition === 'self-buff') {
+                count = entry.activeSelfBuffs.filter(
+                    (ab) => ab.stacks === undefined || ab.stacks > 0
+                ).length;
+            } else if (conditional.condition === 'enemy-debuff') {
+                count =
+                    landedEnemyDebuffs.length +
+                    corrosionEntries.length +
+                    infernoEntries.length +
+                    pendingBombs.length;
+            } else {
+                count = conditional.manualCount ?? 1;
+            }
+            conditionalBonusPct = conditional.pct * count;
+            if (conditional.cap !== undefined) {
+                conditionalBonusPct = Math.min(conditionalBonusPct, conditional.cap);
+            }
+        }
+
+        const preCritDamage =
+            effectiveAttack * ((multiplier + conditionalBonusPct) / 100) + secondaryStatValue;
         const postDefenseFactor =
             critMultiplier *
             (1 - damageReduction / 100) *
@@ -321,6 +361,7 @@ function runSinglePass(params: {
             affinityMult;
         const directDamage = preCritDamage * postDefenseFactor;
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
+        const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;
@@ -378,6 +419,7 @@ function runSinglePass(params: {
         cumulativeDamage += totalRoundDamage;
         totalDirectRaw += directDamage;
         totalSecondaryRaw += secondaryDamage;
+        totalConditionalRaw += conditionalDamage;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
         totalBombRaw += bombDamage;
@@ -433,6 +475,7 @@ function runSinglePass(params: {
             bomb: totalBombRaw,
             cumulative: cumulativeDamage,
             totalSecondary: totalSecondaryRaw,
+            totalConditional: totalConditionalRaw,
         },
     };
 }
@@ -457,6 +500,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp = 0,
         activeSecondary,
         chargedSecondary,
+        activeConditional,
+        chargedConditional,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -522,6 +567,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp,
         activeSecondary,
         chargedSecondary,
+        activeConditional,
+        chargedConditional,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
@@ -536,6 +583,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalInfernoDamage: Math.round(rawTotals.inferno),
             totalBombDamage: Math.round(rawTotals.bomb),
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
+            totalConditionalDamage: Math.round(rawTotals.totalConditional),
         },
     };
 }
