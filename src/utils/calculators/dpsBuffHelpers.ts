@@ -24,6 +24,14 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'outgoingDamage',
                 value: parsedEffects.outgoingDamage * stacks,
             });
+        if (parsedEffects.defense !== undefined)
+            entries.push({
+                id: `${s.id}-def`,
+                stat: 'defence',
+                value: parsedEffects.defense * stacks,
+            });
+        if (parsedEffects.hp !== undefined)
+            entries.push({ id: `${s.id}-hp`, stat: 'hp', value: parsedEffects.hp * stacks });
         return entries;
     });
 }

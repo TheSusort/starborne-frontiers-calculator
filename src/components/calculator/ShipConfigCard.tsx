@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { Select } from '../ui/Select';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
@@ -8,6 +8,9 @@ import {
     DoTApplicationEntry,
     AttackerBuffTotals,
     SelectedGameBuff,
+    SecondaryDamage,
+    ConditionalDamage,
+    CONDITIONAL_CONDITION_LABELS,
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -45,6 +48,14 @@ interface ShipConfigCardProps {
     ) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
+    onSecondaryChange: (
+        field: 'activeSecondary' | 'chargedSecondary',
+        value: SecondaryDamage | undefined
+    ) => void;
+    onConditionalChange: (
+        field: 'activeConditional' | 'chargedConditional',
+        value: ConditionalDamage | undefined
+    ) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
 }
@@ -67,11 +78,31 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onUpdateDoT,
     onBuffsChange,
     onEnemyDebuffsChange,
+    onSecondaryChange,
+    onConditionalChange,
     enemyAffinity,
     enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
+    const [openSecondary, setOpenSecondary] = useState(
+        Boolean(config.activeSecondary || config.chargedSecondary)
+    );
+    const [openConditional, setOpenConditional] = useState(
+        Boolean(config.activeConditional || config.chargedConditional)
+    );
+    // Re-sync the collapsible sections when parsed values change (e.g. after
+    // selectShipForConfig auto-fills a newly selected ship) so freshly detected
+    // secondary/conditional data is revealed rather than hidden in a closed section.
+    useEffect(() => {
+        setOpenSecondary(Boolean(config.activeSecondary || config.chargedSecondary));
+        setOpenConditional(Boolean(config.activeConditional || config.chargedConditional));
+    }, [
+        config.activeSecondary,
+        config.chargedSecondary,
+        config.activeConditional,
+        config.chargedConditional,
+    ]);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
@@ -240,6 +271,181 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             vs enemy
                         </p>
                     </div>
+
+                    <Button
+                        variant="link"
+                        onClick={() => setOpenSecondary((v) => !v)}
+                        className="w-full flex justify-between items-center mt-4"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openSecondary ? 'rotate-180' : ''}`}
+                            />
+                            Secondary Damage
+                        </span>
+                    </Button>
+                    <CollapsibleForm isVisible={openSecondary}>
+                        <div className="flex gap-4 mb-4">
+                            <Input
+                                label="Defense (source)"
+                                type="number"
+                                min="0"
+                                value={config.defence}
+                                onChange={(e) => onUpdate('defence', parseInt(e.target.value) || 0)}
+                            />
+                            <Input
+                                label="HP (source)"
+                                type="number"
+                                min="0"
+                                value={config.hp}
+                                onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                            />
+                        </div>
+                        <div className="flex gap-4 mb-4 items-end">
+                            <Select
+                                label="Active Secondary Stat"
+                                value={config.activeSecondary?.stat ?? ''}
+                                onChange={(v) =>
+                                    v === ''
+                                        ? onSecondaryChange('activeSecondary', undefined)
+                                        : onSecondaryChange('activeSecondary', {
+                                              stat: v as 'defense' | 'hp',
+                                              pct: config.activeSecondary?.pct ?? 0,
+                                          })
+                                }
+                                helpLabel={
+                                    config.autoFilledFields?.has('activeSecondary')
+                                        ? 'auto-filled'
+                                        : undefined
+                                }
+                                options={[
+                                    { value: '', label: 'None' },
+                                    { value: 'defense', label: 'Defense' },
+                                    { value: 'hp', label: 'Max HP' },
+                                ]}
+                                className="flex-1"
+                            />
+                            <Input
+                                label="Active %"
+                                type="number"
+                                min="0"
+                                value={config.activeSecondary?.pct ?? 0}
+                                disabled={!config.activeSecondary}
+                                onChange={(e) =>
+                                    onSecondaryChange('activeSecondary', {
+                                        stat: config.activeSecondary?.stat ?? 'defense',
+                                        pct: parseFloat(e.target.value) || 0,
+                                    })
+                                }
+                            />
+                        </div>
+                        <div className="flex gap-4 mb-4 items-end">
+                            <Select
+                                label="Charged Secondary Stat"
+                                value={config.chargedSecondary?.stat ?? ''}
+                                onChange={(v) =>
+                                    v === ''
+                                        ? onSecondaryChange('chargedSecondary', undefined)
+                                        : onSecondaryChange('chargedSecondary', {
+                                              stat: v as 'defense' | 'hp',
+                                              pct: config.chargedSecondary?.pct ?? 0,
+                                          })
+                                }
+                                helpLabel={
+                                    config.autoFilledFields?.has('chargedSecondary')
+                                        ? 'auto-filled'
+                                        : undefined
+                                }
+                                options={[
+                                    { value: '', label: 'None' },
+                                    { value: 'defense', label: 'Defense' },
+                                    { value: 'hp', label: 'Max HP' },
+                                ]}
+                                className="flex-1"
+                            />
+                            <Input
+                                label="Charged %"
+                                type="number"
+                                min="0"
+                                value={config.chargedSecondary?.pct ?? 0}
+                                disabled={!config.chargedSecondary}
+                                onChange={(e) =>
+                                    onSecondaryChange('chargedSecondary', {
+                                        stat: config.chargedSecondary?.stat ?? 'defense',
+                                        pct: parseFloat(e.target.value) || 0,
+                                    })
+                                }
+                            />
+                        </div>
+                    </CollapsibleForm>
+
+                    <Button
+                        variant="link"
+                        onClick={() => setOpenConditional((v) => !v)}
+                        className="w-full flex justify-between items-center mt-4"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openConditional ? 'rotate-180' : ''}`}
+                            />
+                            Conditional Damage
+                        </span>
+                    </Button>
+                    <CollapsibleForm isVisible={openConditional}>
+                        {(
+                            [
+                                ['activeConditional', 'Active', config.activeConditional],
+                                ['chargedConditional', 'Charged', config.chargedConditional],
+                            ] as const
+                        ).map(([field, label, cond]) => {
+                            if (!cond) {
+                                return (
+                                    <p
+                                        key={field}
+                                        className="text-xs text-theme-text-secondary mb-2"
+                                    >
+                                        {label}: no conditional bonus detected.
+                                    </p>
+                                );
+                            }
+                            return (
+                                <div key={field} className="mb-4">
+                                    <div className="text-sm font-semibold mb-1">
+                                        {label}: +{cond.pct}%{' '}
+                                        {CONDITIONAL_CONDITION_LABELS[cond.condition]}
+                                        {cond.cap !== undefined ? ` (max +${cond.cap}%)` : ''}
+                                    </div>
+                                    {cond.derivable ? (
+                                        <p className="text-xs text-theme-text-secondary">
+                                            Auto-counted each round from your active{' '}
+                                            {cond.condition === 'self-buff'
+                                                ? 'buffs'
+                                                : 'enemy debuffs'}
+                                            .
+                                        </p>
+                                    ) : (
+                                        <Input
+                                            label="Count"
+                                            type="number"
+                                            min="0"
+                                            value={cond.manualCount ?? 1}
+                                            helpLabel={
+                                                config.autoFilledFields?.has(field)
+                                                    ? 'auto-filled'
+                                                    : undefined
+                                            }
+                                            onChange={(e) =>
+                                                onConditionalChange(field, {
+                                                    ...cond,
+                                                    manualCount: parseInt(e.target.value) || 0,
+                                                })
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </CollapsibleForm>
 
                     {selectedShip && (
                         <>

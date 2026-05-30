@@ -2,9 +2,41 @@ import { AffinityName } from './ship';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
+export type SecondaryDamageStat = 'defense' | 'hp';
+
+export interface SecondaryDamage {
+    stat: SecondaryDamageStat;
+    pct: number; // e.g. 80 for "80% of Defense"
+}
+
+export type ConditionalCondition =
+    | 'self-buff' // derivable
+    | 'enemy-debuff' // derivable
+    | 'enemy-buff' // manual
+    | 'adjacent-ally' // manual
+    | 'enemy-adjacent' // manual
+    | 'enemy-destroyed'; // manual
+
+export interface ConditionalDamage {
+    pct: number; // per-unit bonus % added to the skill multiplier
+    condition: ConditionalCondition;
+    derivable: boolean; // true → count from sim state; false → manual
+    manualCount?: number; // used when !derivable (default 1)
+    cap?: number; // optional total-bonus ceiling ("up to 100%")
+}
+
+export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {
+    'self-buff': 'per buff on this unit',
+    'enemy-debuff': 'per debuff on the enemy',
+    'enemy-buff': 'per buff on the enemy',
+    'adjacent-ally': 'per adjacent ally',
+    'enemy-adjacent': 'per unit adjacent to the enemy',
+    'enemy-destroyed': 'per destroyed enemy',
+};
+
 export interface Buff {
     id: string;
-    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage';
+    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage' | 'defence' | 'hp';
     value: number;
 }
 
@@ -32,6 +64,7 @@ export interface ParsedBuffEffects {
     defensePenetration?: number; // additive with per-ship defPen value
     dotDamage?: number; // from Out. DoT buffs; multiplicative on corrosion+inferno
     outgoingHeal?: number; // multiplicative on outgoing healing (like outgoingDamage for DPS)
+    hp?: number; // multiplicative on max HP (for secondary HP-based damage); future-proofing
 
     // Receiver-side (healer targets)
     incomingHeal?: number; // additive on incoming repair received
@@ -78,9 +111,23 @@ export interface DPSShipConfig {
     affinity?: AffinityName;
     activeMultiplier: number;
     chargedMultiplier: number;
+    defence: number; // source stat for Defense-based secondary damage
+    hp: number; // source stat for HP-based secondary damage
+    activeSecondary?: SecondaryDamage;
+    chargedSecondary?: SecondaryDamage;
+    activeConditional?: ConditionalDamage;
+    chargedConditional?: ConditionalDamage;
     chargeCount: number;
     startCharged: boolean;
-    autoFilledFields?: Set<'activeMultiplier' | 'chargedMultiplier' | 'hacking'>;
+    autoFilledFields?: Set<
+        | 'activeMultiplier'
+        | 'chargedMultiplier'
+        | 'hacking'
+        | 'activeSecondary'
+        | 'chargedSecondary'
+        | 'activeConditional'
+        | 'chargedConditional'
+    >;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
     buffs: SelectedGameBuff[];
@@ -97,7 +144,9 @@ export type DPSShipConfigUpdateableField =
     | 'affinity'
     | 'activeMultiplier'
     | 'chargedMultiplier'
-    | 'chargeCount';
+    | 'chargeCount'
+    | 'defence'
+    | 'hp';
 
 export interface AttackerBuffTotals {
     attackBuff: number;

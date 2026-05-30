@@ -130,6 +130,15 @@ describe('parseBuffEffects', () => {
         });
     });
 
+    describe('hp', () => {
+        it('parses Max HP percentage', () => {
+            expect(parseBuffEffects('Hull Up I', '+20% Max HP')).toEqual({ hp: 20 });
+        });
+        it('parses bare HP percentage', () => {
+            expect(parseBuffEffects('Hull Up I', '+10% HP')).toEqual({ hp: 10 });
+        });
+    });
+
     describe('speed', () => {
         it('parses positive Speed', () => {
             expect(parseBuffEffects('Speed Up II', '+30% Speed')).toEqual({ speed: 30 });

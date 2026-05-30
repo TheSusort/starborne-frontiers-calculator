@@ -64,6 +64,22 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
             </div>
+            {simResult.summary.totalSecondaryDamage > 0 && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">
+                        Secondary (stat-based, incl. in Direct):
+                    </span>
+                    <span>{simResult.summary.totalSecondaryDamage.toLocaleString()}</span>
+                </div>
+            )}
+            {simResult.summary.totalConditionalDamage > 0 && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">
+                        Conditional (scaling, incl. in Direct):
+                    </span>
+                    <span>{simResult.summary.totalConditionalDamage.toLocaleString()}</span>
+                </div>
+            )}
             {hasDoTs && (
                 <div className="grid grid-cols-4 gap-1 mt-2">
                     <div className="text-center p-1 bg-dark-lighter rounded">

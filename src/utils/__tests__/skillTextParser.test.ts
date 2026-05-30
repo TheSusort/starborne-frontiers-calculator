@@ -5,6 +5,8 @@ import {
     detectFullyCharged,
     parseSkillEffects,
     parseAllSkillEffects,
+    parseSecondaryDamage,
+    parseConditionalDamage,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -339,6 +341,128 @@ describe('parseSkillEffects', () => {
             duration: 2,
             source: 'active',
         });
+    });
+});
+
+describe('parseSecondaryDamage', () => {
+    const chakara =
+        'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense.';
+    const lodolite =
+        'This Unit deals <unit-damage>240% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of its max HP.';
+
+    it('parses Defense-based secondary damage', () => {
+        expect(parseSecondaryDamage(chakara)).toEqual({ stat: 'defense', pct: 80 });
+    });
+    it('parses max-HP-based secondary damage', () => {
+        expect(parseSecondaryDamage(lodolite)).toEqual({ stat: 'hp', pct: 10 });
+    });
+    it('parses the "this Unit\'s max HP" phrasing', () => {
+        const text =
+            "deals <unit-damage>200% damage</unit-damage> with additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP.";
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'hp', pct: 10 });
+    });
+    it('returns null when there is no secondary damage', () => {
+        expect(
+            parseSecondaryDamage('This Unit deals <unit-damage>180% damage</unit-damage>.')
+        ).toBeNull();
+    });
+    it('returns null for empty input', () => {
+        expect(parseSecondaryDamage('')).toBeNull();
+    });
+    it('parses a decimal secondary percentage (Selenite charged: 17.5% of max HP)', () => {
+        const seleniteCharged =
+            "This Unit deals <unit-damage>300% damage</unit-damage> with additional damage equal to <unit-damage>17.5%</unit-damage> of this Unit's max HP. This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+        expect(parseSecondaryDamage(seleniteCharged)).toEqual({ stat: 'hp', pct: 17.5 });
+    });
+    it('parses a decimal Defense secondary percentage', () => {
+        const text =
+            'deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>2.5%</unit-damage> of its Defense.';
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 2.5 });
+    });
+    it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
+        expect(parseSkillDamage(chakara)).toBe(180);
+        expect(parseSkillDamage(lodolite)).toBe(240);
+    });
+});
+
+describe('parseConditionalDamage', () => {
+    it('parses a tagged "additional X% ... for each adjacent ally" (Centurion)', () => {
+        const text =
+            'This Unit deals <unit-damage>100% damage</unit-damage> with an additional <unit-damage>20%</unit-damage> for each adjacent ally.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 20,
+            condition: 'adjacent-ally',
+            derivable: false,
+        });
+    });
+
+    it('parses an untagged "plus an extra X% for each buff on the enemy" (Nuqtu)', () => {
+        const text =
+            'This Unit Deals <unit-damage>140% damage</unit-damage>, with additional damage equal to <unit-damage>80%</unit-damage> of its Defense plus an extra 30% for each buff on the enemy.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 30,
+            condition: 'enemy-buff',
+            derivable: false,
+        });
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 80 });
+    });
+
+    it('marks "for each debuff on the enemy" as derivable', () => {
+        const text =
+            'This Unit deals <unit-damage>180% damage</unit-damage> with an additional <unit-damage>15%</unit-damage> for each debuff on the enemy.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 15,
+            condition: 'enemy-debuff',
+            derivable: true,
+        });
+    });
+
+    it('marks "for each buff on this Unit" as derivable', () => {
+        const text =
+            'This Unit deals <unit-damage>100% damage</unit-damage>, increasing by an additional <unit-damage>25%</unit-damage> for each buff on this Unit.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 25,
+            condition: 'self-buff',
+            derivable: true,
+        });
+    });
+
+    it('maps "Unit adjacent to the enemy" to enemy-adjacent', () => {
+        const text =
+            'This Unit deals <unit-damage>145% damage</unit-damage>, increasing by <unit-damage>30%</unit-damage> for each Unit adjacent to the enemy.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 30,
+            condition: 'enemy-adjacent',
+            derivable: false,
+        });
+    });
+
+    it('captures a cap from "up to max of N%"', () => {
+        const text =
+            'This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 20,
+            condition: 'enemy-destroyed',
+            derivable: false,
+            cap: 100,
+        });
+    });
+
+    it('ignores repair/heal scaling ("repairs X% ... for each enemy destroyed")', () => {
+        const text =
+            'This Unit <unit-damage>repairs 60%</unit-damage> of its Max HP for each enemy Unit destroyed by the attack upon killing them.';
+        expect(parseConditionalDamage(text)).toBeNull();
+    });
+
+    it('returns null when there is no "for each" conditional', () => {
+        expect(
+            parseConditionalDamage('This Unit deals <unit-damage>180% damage</unit-damage>.')
+        ).toBeNull();
+    });
+
+    it('returns null for empty input', () => {
+        expect(parseConditionalDamage('')).toBeNull();
+        expect(parseConditionalDamage(null)).toBeNull();
     });
 });
 

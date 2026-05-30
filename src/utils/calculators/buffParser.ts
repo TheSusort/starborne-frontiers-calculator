@@ -53,6 +53,10 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const speed = extract(/([+-]\d+(?:\.\d+)?)%\s*Speed/);
     if (speed !== undefined) effects.speed = speed;
 
+    // HP: percentage of max HP (no current buff matches; future-proofing for HP-scaled secondary damage)
+    const hp = extract(/([+-]\d+(?:\.\d+)?)%\s*(?:Max\s*)?HP/);
+    if (hp !== undefined) effects.hp = hp;
+
     return effects;
 }
 
