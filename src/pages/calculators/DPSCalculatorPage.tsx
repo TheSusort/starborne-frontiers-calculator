@@ -773,7 +773,7 @@ const DPSCalculatorPage: React.FC = () => {
                         <p className="mb-2 font-mono bg-dark-lighter p-2 text-sm">
                             Direct = (Attack × (SkillMultiplier% + ConditionalBonus%) + SourceStat ×
                             Secondary%) × CritMultiplier × (1 - DamageReduction%) × (1 +
-                            OutgoingDmg%) × (1 + IncomingDmg%)
+                            OutgoingDmg%) × (1 + IncomingDmg%) × (1 + Affinity%)
                         </p>
                         <p className="mb-2">
                             Some ships deal additional damage equal to a percentage of their Defense

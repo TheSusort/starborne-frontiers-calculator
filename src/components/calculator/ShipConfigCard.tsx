@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { Select } from '../ui/Select';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
@@ -91,6 +91,18 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     const [openConditional, setOpenConditional] = useState(
         Boolean(config.activeConditional || config.chargedConditional)
     );
+    // Re-sync the collapsible sections when parsed values change (e.g. after
+    // selectShipForConfig auto-fills a newly selected ship) so freshly detected
+    // secondary/conditional data is revealed rather than hidden in a closed section.
+    useEffect(() => {
+        setOpenSecondary(Boolean(config.activeSecondary || config.chargedSecondary));
+        setOpenConditional(Boolean(config.activeConditional || config.chargedConditional));
+    }, [
+        config.activeSecondary,
+        config.chargedSecondary,
+        config.activeConditional,
+        config.chargedConditional,
+    ]);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
