@@ -2155,6 +2155,18 @@ const DocumentationPage: React.FC = () => {
                                         scales with Defense Up / HP buffs.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Conditional Scaling Damage:
+                                        </span>{' '}
+                                        Some attackers gain bonus damage that scales with a count,
+                                        such as &quot;+20% per adjacent ally&quot; or &quot;+15% per
+                                        debuff on the enemy&quot;. When the count derives from your
+                                        buffs or the enemy&apos;s debuffs, it is tallied
+                                        automatically each round; other conditions take a manual
+                                        count. Auto-detected from skill text and editable per skill
+                                        row.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Start Charged:</span> Some
                                         ships have skills that begin combat already charged. When
                                         detected from your ship&apos;s skill data, this checkbox

@@ -795,4 +795,116 @@ describe('simulateDPS', () => {
             expect(result.summary.totalSecondaryDamage).toBe(500);
         });
     });
+
+    describe('conditional scaling damage', () => {
+        const exactInput = {
+            ...baseInput,
+            attack: 1000,
+            crit: 100,
+            critDamage: 0, // critMultiplier = 1
+            enemyDefense: 0, // no reduction
+            activeMultiplier: 100,
+            rounds: 1,
+        };
+
+        it('applies a manual count to a non-derivable condition', () => {
+            // bonus = 30 * 3 = 90 → preCrit = 1000 * (100 + 90)/100 = 1900
+            const result = simulateDPS({
+                ...exactInput,
+                activeConditional: {
+                    pct: 30,
+                    condition: 'enemy-buff',
+                    derivable: false,
+                    manualCount: 3,
+                },
+            });
+            expect(result.rounds[0].directDamage).toBe(1900);
+            expect(result.summary.totalConditionalDamage).toBe(900);
+        });
+
+        it('defaults manual count to 1 when omitted', () => {
+            // bonus = 30 * 1 = 30 → preCrit = 1300
+            const result = simulateDPS({
+                ...exactInput,
+                activeConditional: { pct: 30, condition: 'enemy-buff', derivable: false },
+            });
+            expect(result.rounds[0].directDamage).toBe(1300);
+            expect(result.summary.totalConditionalDamage).toBe(300);
+        });
+
+        it('derives the count from active self buffs', () => {
+            // 2 self buffs → count 2 → bonus = 25*2 = 50 → preCrit = 1500
+            const result = simulateDPS({
+                ...exactInput,
+                selfBuffs: [makeAlwaysBuff('b1', {}), makeAlwaysBuff('b2', {})],
+                activeConditional: { pct: 25, condition: 'self-buff', derivable: true },
+            });
+            expect(result.rounds[0].directDamage).toBe(1500);
+            expect(result.summary.totalConditionalDamage).toBe(500);
+        });
+
+        it('respects the cap', () => {
+            // raw bonus = 20*10 = 200, capped at 100 → preCrit = 2000
+            const result = simulateDPS({
+                ...exactInput,
+                activeConditional: {
+                    pct: 20,
+                    condition: 'enemy-destroyed',
+                    derivable: false,
+                    manualCount: 10,
+                    cap: 100,
+                },
+            });
+            expect(result.rounds[0].directDamage).toBe(2000);
+        });
+
+        it('uses chargedConditional (not activeConditional) on a charged round', () => {
+            const result = simulateDPS({
+                ...exactInput,
+                chargedMultiplier: 100,
+                chargeCount: 1,
+                startCharged: true,
+                activeConditional: {
+                    pct: 30,
+                    condition: 'enemy-buff',
+                    derivable: false,
+                    manualCount: 3,
+                },
+                chargedConditional: {
+                    pct: 10,
+                    condition: 'enemy-buff',
+                    derivable: false,
+                    manualCount: 2,
+                },
+            });
+            // charged round: bonus = 10*2 = 20 → preCrit = 1200
+            expect(result.rounds[0].action).toBe('charged');
+            expect(result.rounds[0].directDamage).toBe(1200);
+            expect(result.summary.totalConditionalDamage).toBe(200);
+        });
+
+        it('reports zero conditional damage when none configured', () => {
+            const result = simulateDPS({ ...exactInput });
+            expect(result.summary.totalConditionalDamage).toBe(0);
+            expect(result.rounds[0].directDamage).toBe(1000);
+        });
+
+        it('derives the enemy-debuff count from prior-round DoT entries (ramps over rounds)', () => {
+            // A corrosion DoT is applied each active round, but this round's DoT is pushed
+            // AFTER damage is computed — so the enemy-debuff count is the number of PRIOR-round
+            // DoT entries: 0, then 1, then 2. bonus = 20% * count.
+            const result = simulateDPS({
+                ...exactInput,
+                rounds: 3,
+                activeDoTs: [{ id: 'c', type: 'corrosion', tier: 3, stacks: 1, duration: 10 }],
+                activeConditional: { pct: 20, condition: 'enemy-debuff', derivable: true },
+            });
+            // round 1: count 0 → preCrit 1000; round 2: count 1 → 1200; round 3: count 2 → 1400
+            expect(result.rounds[0].directDamage).toBe(1000);
+            expect(result.rounds[1].directDamage).toBe(1200);
+            expect(result.rounds[2].directDamage).toBe(1400);
+            // conditional slice: 0 + 200 + 400 = 600
+            expect(result.summary.totalConditionalDamage).toBe(600);
+        });
+    });
 });
