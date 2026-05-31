@@ -1,9 +1,11 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
 import {
     Buff,
+    ChargeGain,
     ConditionalDamage,
     DoTApplicationConfig,
     DoTApplicationEntry,
+    EnemyBaseClass,
     SecondaryDamage,
     SelectedGameBuff,
 } from '../../types/calculator';
@@ -53,6 +55,12 @@ export interface DPSSimulationInput {
     activeConditional?: ConditionalDamage;
     /** Conditional scaling bonus applied on charged-skill rounds. */
     chargedConditional?: ConditionalDamage;
+    /** Per-round self charge gain parsed from the attacker's skill text. */
+    selfChargeGain?: ChargeGain;
+    /** Flat extra charges per round contributed by allies/supporters. */
+    allyChargePerRound?: number;
+    /** Enemy base class, for the 'enemy-type' charge-gain condition. */
+    enemyType?: EnemyBaseClass;
 }
 
 export interface RoundData {
@@ -177,6 +185,9 @@ function runSinglePass(params: {
     chargedSecondary?: SecondaryDamage;
     activeConditional?: ConditionalDamage;
     chargedConditional?: ConditionalDamage;
+    selfChargeGain?: ChargeGain;
+    allyChargePerRound?: number;
+    enemyType?: EnemyBaseClass;
 }): {
     rounds: RoundData[];
     rawTotals: {
@@ -219,6 +230,9 @@ function runSinglePass(params: {
         chargedSecondary,
         activeConditional,
         chargedConditional,
+        selfChargeGain,
+        allyChargePerRound,
+        enemyType,
     } = params;
 
     // All mutable state declared fresh on every call
@@ -351,6 +365,44 @@ function runSinglePass(params: {
             }
         }
 
+        // Charge manipulation: bonus charges accumulate every round (active and
+        // charged). Charged round already reset charges to 0 at the top, so
+        // post-fire rounds still bank bonus/ally charges. Gated on hasChargedSkill.
+        if (hasChargedSkill) {
+            let chargeGainCount = 0;
+            if (selfChargeGain) {
+                switch (selfChargeGain.condition) {
+                    case 'always':
+                        chargeGainCount = 1;
+                        break;
+                    case 'self-crit':
+                        chargeGainCount = effectiveCrit / 100;
+                        break;
+                    case 'self-buff':
+                        chargeGainCount = entry.activeSelfBuffs.filter(
+                            (ab) => ab.stacks === undefined || ab.stacks > 0
+                        ).length;
+                        break;
+                    case 'enemy-debuff':
+                        chargeGainCount =
+                            landedEnemyDebuffs.length +
+                            corrosionEntries.length +
+                            infernoEntries.length +
+                            pendingBombs.length;
+                        break;
+                    case 'enemy-type':
+                        chargeGainCount = enemyType === selfChargeGain.requiredEnemyType ? 1 : 0;
+                        break;
+                    default:
+                        // enemy-buff, enemy-adjacent, adjacent-ally, enemy-destroyed
+                        chargeGainCount = selfChargeGain.manualCount ?? 1;
+                        break;
+                }
+            }
+            const bonusCharges = selfChargeGain ? chargeGainCount * selfChargeGain.amount : 0;
+            charges += bonusCharges + (allyChargePerRound ?? 0);
+        }
+
         const preCritDamage =
             effectiveAttack * ((multiplier + conditionalBonusPct) / 100) + secondaryStatValue;
         const postDefenseFactor =
@@ -428,7 +480,7 @@ function runSinglePass(params: {
         roundData.push({
             round: r,
             action,
-            charges,
+            charges: Math.round(charges),
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),
@@ -502,6 +554,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         chargedSecondary,
         activeConditional,
         chargedConditional,
+        selfChargeGain,
+        allyChargePerRound,
+        enemyType,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -569,6 +624,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         chargedSecondary,
         activeConditional,
         chargedConditional,
+        selfChargeGain,
+        allyChargePerRound,
+        enemyType,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);

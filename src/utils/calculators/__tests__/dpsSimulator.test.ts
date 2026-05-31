@@ -907,4 +907,75 @@ describe('simulateDPS', () => {
             expect(result.summary.totalConditionalDamage).toBe(600);
         });
     });
+
+    describe('charge manipulation', () => {
+        // Helper: 1-based round numbers where the charged skill fired.
+        const chargedRounds = (result: ReturnType<typeof simulateDPS>) =>
+            result.rounds.filter((r) => r.action === 'charged').map((r) => r.round);
+
+        const base = {
+            attack: 1000,
+            crit: 100,
+            critDamage: 0,
+            defensePenetration: 0,
+            activeMultiplier: 100,
+            chargedMultiplier: 200,
+            chargeCount: 3,
+            activeDoTs: [],
+            chargedDoTs: [],
+            enemyDefense: 0,
+            enemyHp: 500000,
+            rounds: 12,
+            selfBuffs: [],
+            enemyDebuffs: [],
+        };
+
+        it('baseline: charged fires once charges reach chargeCount (every 4th round for 3 charges)', () => {
+            const result = simulateDPS({ ...base });
+            expect(chargedRounds(result)).toEqual([4, 8, 12]);
+        });
+
+        it('allyChargePerRound speeds up cadence', () => {
+            const result = simulateDPS({ ...base, allyChargePerRound: 1 });
+            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+        });
+
+        it('always-true self gain speeds up cadence', () => {
+            const result = simulateDPS({
+                ...base,
+                selfChargeGain: { amount: 1, condition: 'always', derivable: true },
+            });
+            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+        });
+
+        it('self-crit at 100% crit contributes +1/round', () => {
+            const result = simulateDPS({
+                ...base,
+                selfChargeGain: { amount: 1, condition: 'self-crit', derivable: true },
+            });
+            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+        });
+
+        it('enemy-type gain only applies when enemy type matches', () => {
+            const gain = {
+                amount: 1,
+                condition: 'enemy-type' as const,
+                derivable: true,
+                requiredEnemyType: 'Defender' as const,
+            };
+            const matched = simulateDPS({ ...base, selfChargeGain: gain, enemyType: 'Defender' });
+            const unmatched = simulateDPS({ ...base, selfChargeGain: gain, enemyType: 'Attacker' });
+            expect(chargedRounds(matched)).toEqual([3, 5, 7, 9, 11]);
+            expect(chargedRounds(unmatched)).toEqual([4, 8, 12]);
+        });
+
+        it('does nothing when there is no charged skill', () => {
+            const result = simulateDPS({
+                ...base,
+                chargedMultiplier: 0,
+                allyChargePerRound: 5,
+            });
+            expect(chargedRounds(result)).toEqual([]);
+        });
+    });
 });
