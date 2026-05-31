@@ -64,6 +64,21 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
             </div>
+            {config.chargedMultiplier > 0 && config.chargeCount > 0 && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">Charged skill fires:</span>
+                    <span>
+                        {(() => {
+                            const fires = simResult.rounds.filter(
+                                (r) => r.action === 'charged'
+                            ).length;
+                            return fires > 0
+                                ? `every ${(simResult.rounds.length / fires).toFixed(1)} rounds`
+                                : '—';
+                        })()}
+                    </span>
+                </div>
+            )}
             {simResult.summary.totalSecondaryDamage > 0 && (
                 <div className="flex justify-between mb-2">
                     <span className="text-theme-text-secondary">

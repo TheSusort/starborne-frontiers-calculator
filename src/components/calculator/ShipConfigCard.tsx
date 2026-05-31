@@ -10,6 +10,7 @@ import {
     SelectedGameBuff,
     SecondaryDamage,
     ConditionalDamage,
+    ChargeGain,
     CONDITIONAL_CONDITION_LABELS,
 } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
@@ -56,6 +57,8 @@ interface ShipConfigCardProps {
         field: 'activeConditional' | 'chargedConditional',
         value: ConditionalDamage | undefined
     ) => void;
+    onChargeGainChange: (value: ChargeGain | undefined) => void;
+    onAllyChargeChange: (value: number) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
 }
@@ -80,6 +83,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onEnemyDebuffsChange,
     onSecondaryChange,
     onConditionalChange,
+    onChargeGainChange,
+    onAllyChargeChange,
     enemyAffinity,
     enemySecurity,
 }) => {
@@ -91,17 +96,23 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     const [openConditional, setOpenConditional] = useState(
         Boolean(config.activeConditional || config.chargedConditional)
     );
+    const [openCharge, setOpenCharge] = useState(
+        Boolean(config.selfChargeGain || config.allyChargePerRound)
+    );
     // Re-sync the collapsible sections when parsed values change (e.g. after
     // selectShipForConfig auto-fills a newly selected ship) so freshly detected
     // secondary/conditional data is revealed rather than hidden in a closed section.
     useEffect(() => {
         setOpenSecondary(Boolean(config.activeSecondary || config.chargedSecondary));
         setOpenConditional(Boolean(config.activeConditional || config.chargedConditional));
+        setOpenCharge(Boolean(config.selfChargeGain || config.allyChargePerRound));
     }, [
         config.activeSecondary,
         config.chargedSecondary,
         config.activeConditional,
         config.chargedConditional,
+        config.selfChargeGain,
+        config.allyChargePerRound,
     ]);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
@@ -445,6 +456,69 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 </div>
                             );
                         })}
+                    </CollapsibleForm>
+
+                    <Button
+                        variant="link"
+                        onClick={() => setOpenCharge((v) => !v)}
+                        className="w-full flex justify-between items-center mt-4"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ChevronDownIcon
+                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openCharge ? 'rotate-180' : ''}`}
+                            />
+                            Charge Manipulation
+                        </span>
+                    </Button>
+                    <CollapsibleForm isVisible={openCharge}>
+                        {config.selfChargeGain ? (
+                            <div className="mb-4">
+                                <div className="text-sm font-semibold mb-1">
+                                    Self: +{config.selfChargeGain.amount} charge
+                                    {config.selfChargeGain.amount !== 1 ? 's' : ''}/round{' '}
+                                    {CONDITIONAL_CONDITION_LABELS[config.selfChargeGain.condition]}
+                                </div>
+                                {config.selfChargeGain.derivable ? (
+                                    <p className="text-xs text-theme-text-secondary">
+                                        Auto-counted each round from sim state.
+                                    </p>
+                                ) : (
+                                    <Input
+                                        label="Trigger count / round"
+                                        type="number"
+                                        min="0"
+                                        value={config.selfChargeGain.manualCount ?? 1}
+                                        helpLabel={
+                                            config.autoFilledFields?.has('selfChargeGain')
+                                                ? 'auto-filled'
+                                                : undefined
+                                        }
+                                        onChange={(e) => {
+                                            const gain = config.selfChargeGain;
+                                            if (gain) {
+                                                onChargeGainChange({
+                                                    ...gain,
+                                                    manualCount: parseInt(e.target.value) || 0,
+                                                });
+                                            }
+                                        }}
+                                    />
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-theme-text-secondary mb-2">
+                                No self charge gain detected.
+                            </p>
+                        )}
+                        <Input
+                            label="Ally charges / round"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={config.allyChargePerRound ?? 0}
+                            helpLabel="from supporters (e.g. Castor, Liberator)"
+                            onChange={(e) => onAllyChargeChange(parseFloat(e.target.value) || 0)}
+                        />
                     </CollapsibleForm>
 
                     {selectedShip && (

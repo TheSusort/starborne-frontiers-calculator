@@ -12,12 +12,15 @@ import {
     TeamShipConfig,
     SecondaryDamage,
     ConditionalDamage,
+    ChargeGain,
+    EnemyBaseClass,
 } from '../../types/calculator';
 import {
     parseSkillDamage,
     parseSecondaryDamage,
     parseConditionalDamage,
     detectFullyCharged,
+    parseChargeGain,
 } from '../../utils/skillTextParser';
 import {
     buildSkillBuffAutoFill,
@@ -51,6 +54,16 @@ function buildSkillAutoFill(ship: Ship) {
     };
     const activeConditional = seedManual(parseConditionalDamage(ship.activeSkillText));
     const chargedConditional = seedManual(parseConditionalDamage(ship.chargeSkillText));
+    const seedChargeManual = (c: ChargeGain | null): ChargeGain | undefined => {
+        if (!c) return undefined;
+        return !c.derivable && c.manualCount === undefined ? { ...c, manualCount: 1 } : c;
+    };
+    const selfChargeGain = seedChargeManual(
+        parseChargeGain(ship.activeSkillText) ??
+            parseChargeGain(ship.firstPassiveSkillText) ??
+            parseChargeGain(ship.secondPassiveSkillText) ??
+            parseChargeGain(ship.thirdPassiveSkillText)
+    );
     const autoFilledFields = new Set<
         | 'activeMultiplier'
         | 'chargedMultiplier'
@@ -59,6 +72,7 @@ function buildSkillAutoFill(ship: Ship) {
         | 'chargedSecondary'
         | 'activeConditional'
         | 'chargedConditional'
+        | 'selfChargeGain'
     >();
     if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
     if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
@@ -66,6 +80,7 @@ function buildSkillAutoFill(ship: Ship) {
     if (chargedSecondary) autoFilledFields.add('chargedSecondary');
     if (activeConditional) autoFilledFields.add('activeConditional');
     if (chargedConditional) autoFilledFields.add('chargedConditional');
+    if (selfChargeGain) autoFilledFields.add('selfChargeGain');
     return {
         activeParsed,
         chargedParsed,
@@ -73,6 +88,7 @@ function buildSkillAutoFill(ship: Ship) {
         chargedSecondary,
         activeConditional,
         chargedConditional,
+        selfChargeGain,
         autoFilledFields,
     };
 }
@@ -111,6 +127,7 @@ const DPSCalculatorPage: React.FC = () => {
                     chargedSecondary,
                     activeConditional,
                     chargedConditional,
+                    selfChargeGain,
                     autoFilledFields,
                 } = buildSkillAutoFill(ship);
                 autoFilledFields.add('hacking');
@@ -131,6 +148,8 @@ const DPSCalculatorPage: React.FC = () => {
                             chargedSecondary,
                             activeConditional,
                             chargedConditional,
+                            selfChargeGain,
+                            allyChargePerRound: 0,
                             activeMultiplier: activeParsed > 0 ? activeParsed : 100,
                             chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
@@ -168,6 +187,7 @@ const DPSCalculatorPage: React.FC = () => {
                     chargedMultiplier: 0,
                     chargeCount: 0,
                     startCharged: false,
+                    allyChargePerRound: 0,
                     activeDoTs: [...DEFAULT_DOT_CONFIG],
                     chargedDoTs: [...DEFAULT_DOT_CONFIG],
                     buffs: [],
@@ -184,6 +204,7 @@ const DPSCalculatorPage: React.FC = () => {
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
     const [enemySecurity, setEnemySecurity] = useState(100);
+    const [enemyType, setEnemyType] = useState<EnemyBaseClass | undefined>(undefined);
     const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
@@ -295,6 +316,9 @@ const DPSCalculatorPage: React.FC = () => {
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
+                    selfChargeGain: config.selfChargeGain,
+                    allyChargePerRound: config.allyChargePerRound,
+                    enemyType,
                 })
             );
         });
@@ -304,6 +328,7 @@ const DPSCalculatorPage: React.FC = () => {
         enemyDefense,
         enemyHp,
         enemySecurity,
+        enemyType,
         rounds,
         attackerBuffs,
         enemyBuffs,
@@ -410,6 +435,7 @@ const DPSCalculatorPage: React.FC = () => {
             chargedSecondary,
             activeConditional,
             chargedConditional,
+            selfChargeGain,
             autoFilledFields,
         } = buildSkillAutoFill(ship);
         autoFilledFields.add('hacking');
@@ -436,6 +462,8 @@ const DPSCalculatorPage: React.FC = () => {
                     chargedSecondary,
                     activeConditional,
                     chargedConditional,
+                    selfChargeGain,
+                    allyChargePerRound: c.allyChargePerRound ?? 0,
                     activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
                     chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
@@ -549,6 +577,23 @@ const DPSCalculatorPage: React.FC = () => {
         );
     };
 
+    const updateConfigChargeGain = (id: string, value: ChargeGain | undefined) => {
+        setConfigs((prev) =>
+            prev.map((c) => {
+                if (c.id !== id) return c;
+                const next = new Set(c.autoFilledFields);
+                next.delete('selfChargeGain');
+                return { ...c, selfChargeGain: value, autoFilledFields: next };
+            })
+        );
+    };
+
+    const updateConfigAllyCharge = (id: string, value: number) => {
+        setConfigs((prev) =>
+            prev.map((c) => (c.id === id ? { ...c, allyChargePerRound: value } : c))
+        );
+    };
+
     const updateConfigEnemyDebuffs = (id: string, enemyDebuffs: SelectedGameBuff[]) => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, enemyDebuffs } : c)));
     };
@@ -654,6 +699,8 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipEnemyDebuffsChange={(id, debuffs) =>
                             updateTeamShip(id, { enemyDebuffs: debuffs })
                         }
+                        enemyType={enemyType}
+                        onEnemyTypeChange={setEnemyType}
                     />
 
                     <div
@@ -698,6 +745,12 @@ const DPSCalculatorPage: React.FC = () => {
                                 }
                                 onConditionalChange={(field, value) =>
                                     updateConfigConditional(config.id, field, value)
+                                }
+                                onChargeGainChange={(value) =>
+                                    updateConfigChargeGain(config.id, value)
+                                }
+                                onAllyChargeChange={(value) =>
+                                    updateConfigAllyCharge(config.id, value)
                                 }
                             />
                         ))}
