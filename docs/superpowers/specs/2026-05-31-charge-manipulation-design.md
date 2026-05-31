@@ -191,7 +191,10 @@ tag — `<unit-aid>adds 1 charge</unit-aid>`, `<unit-aid>gains 2 charges</unit-a
 wrapping: match the amount inside `<unit-aid>…</unit-aid>` (also handle the
 `<unit-skill>` wrapping used by Castor-style ally lines for the negative case),
 and read the condition from the surrounding plain text. Match the number word too
-("gains a charge" → 1).
+("gains a charge" → amount 1). (Note: the only CSV instance of "gains a charge"
+is Zosimos, whose enemy-repair condition makes it an excluded → null case via the
+clause precedence below; the number-word handling is illustrative for
+amount extraction.)
 
 Match self-targeted charge gains:
 
