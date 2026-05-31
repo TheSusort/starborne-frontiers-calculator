@@ -15,7 +15,10 @@ export type ConditionalCondition =
     | 'enemy-buff' // manual
     | 'adjacent-ally' // manual
     | 'enemy-adjacent' // manual
-    | 'enemy-destroyed'; // manual
+    | 'enemy-destroyed' // manual
+    | 'always' // unconditional / always-true under sim assumptions (charge gains)
+    | 'self-crit' // derivable from crit rate (charge gains)
+    | 'enemy-type'; // derivable from the global enemy-type input (charge gains)
 
 export interface ConditionalDamage {
     pct: number; // per-unit bonus % added to the skill multiplier
@@ -25,6 +28,16 @@ export interface ConditionalDamage {
     cap?: number; // optional total-bonus ceiling ("up to 100%")
 }
 
+export type EnemyBaseClass = 'Attacker' | 'Defender' | 'Debuffer' | 'Supporter';
+
+export interface ChargeGain {
+    amount: number; // charges per trigger (e.g. 1, 2)
+    condition: ConditionalCondition;
+    derivable: boolean; // true → read sim state; false → use manualCount
+    manualCount?: number; // used when !derivable (default 1)
+    requiredEnemyType?: EnemyBaseClass; // only for condition 'enemy-type'
+}
+
 export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {
     'self-buff': 'per buff on this unit',
     'enemy-debuff': 'per debuff on the enemy',
@@ -32,6 +45,9 @@ export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> 
     'adjacent-ally': 'per adjacent ally',
     'enemy-adjacent': 'per unit adjacent to the enemy',
     'enemy-destroyed': 'per destroyed enemy',
+    always: 'every round',
+    'self-crit': 'on critical hit',
+    'enemy-type': 'when enemy matches type',
 };
 
 export interface Buff {
@@ -119,6 +135,8 @@ export interface DPSShipConfig {
     chargedConditional?: ConditionalDamage;
     chargeCount: number;
     startCharged: boolean;
+    selfChargeGain?: ChargeGain;
+    allyChargePerRound?: number;
     autoFilledFields?: Set<
         | 'activeMultiplier'
         | 'chargedMultiplier'
@@ -127,6 +145,7 @@ export interface DPSShipConfig {
         | 'chargedSecondary'
         | 'activeConditional'
         | 'chargedConditional'
+        | 'selfChargeGain'
     >;
     activeDoTs: DoTApplicationConfig;
     chargedDoTs: DoTApplicationConfig;
