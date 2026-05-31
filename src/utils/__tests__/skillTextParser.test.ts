@@ -7,6 +7,7 @@ import {
     parseAllSkillEffects,
     parseSecondaryDamage,
     parseConditionalDamage,
+    parseChargeGain,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -463,6 +464,125 @@ describe('parseConditionalDamage', () => {
     it('returns null for empty input', () => {
         expect(parseConditionalDamage('')).toBeNull();
         expect(parseConditionalDamage(null)).toBeNull();
+    });
+});
+
+describe('parseChargeGain', () => {
+    it('parses always-true (speed) self gain — Chakara', () => {
+        const text =
+            'This Unit deals <unit-damage>180% damage</unit-damage>. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+        });
+    });
+
+    it('parses full-HP self gain as always-true — Cobalt', () => {
+        const text =
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+        });
+    });
+
+    it('parses enemy-buff threshold gain (manual) — Nuqtu', () => {
+        const text =
+            'If the target has 3 or more buffs, the Unit <unit-aid>gains 2 charges</unit-aid> to its Charged Skill.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 2,
+            condition: 'enemy-buff',
+            derivable: false,
+        });
+    });
+
+    it('parses "equal to the number of buffs" per-buff gain — Rhodium', () => {
+        const text =
+            'Unit adds charges to the <unit-aid>Charged Skill</unit-aid> equal to the number of <unit-aid>Buffs</unit-aid> on the target.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'enemy-buff',
+            derivable: false,
+        });
+    });
+
+    it('parses enemy-type (Defender) gain and ignores the removal clause — Thresh', () => {
+        const text =
+            "If the target is a Defender, this Unit <unit-aid>removes 1 charge</unit-aid> from the enemy and <unit-aid>adds 1 charge</unit-aid> to this Unit's Charged Skill.";
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
+    });
+
+    it('parses stealth condition as enemy-buff (manual) — Selenite', () => {
+        const text =
+            "If any target is <unit-aid>Stealthed</unit-aid>, it <unit-aid>adds 1 charge</unit-aid> to this Unit's Charged Skill.";
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'enemy-buff',
+            derivable: false,
+        });
+    });
+
+    it('parses "2 or more enemies" as enemy-adjacent (manual) — Tygr', () => {
+        const text =
+            'If it damages 2 or more enemies, it adds <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'enemy-adjacent',
+            derivable: false,
+        });
+    });
+
+    it('parses debuff-infliction as enemy-debuff (derivable) — Hemlock', () => {
+        const text =
+            'This Unit <unit-aid>gains 1 charge</unit-aid> to its charged skill after it inflicts a <unit-aid>debuff</unit-aid>.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'enemy-debuff',
+            derivable: true,
+        });
+    });
+
+    it('parses crit-based self gain as self-crit (derivable) — Asphodel', () => {
+        const text =
+            "This Unit's attacks are always critical and <unit-aid>adds 1 charge</unit-aid> to its Charged Skill after critically damaging an enemy.";
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'self-crit',
+            derivable: true,
+        });
+    });
+
+    it('returns null for enemy charge removal — Demolisher', () => {
+        const text =
+            "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill.";
+        expect(parseChargeGain(text)).toBeNull();
+    });
+
+    it('returns null for on-kill gain — Valiant', () => {
+        const text =
+            'This Unit <unit-aid>gains 1 charge</unit-aid> for its Charged Skill upon killing an enemy.';
+        expect(parseChargeGain(text)).toBeNull();
+    });
+
+    it('returns null for ally-grant — Liberator', () => {
+        const text =
+            'When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.';
+        expect(parseChargeGain(text)).toBeNull();
+    });
+
+    it('returns null when there is no charge phrase', () => {
+        expect(
+            parseChargeGain('This Unit deals <unit-damage>140% damage</unit-damage>.')
+        ).toBeNull();
+        expect(parseChargeGain('')).toBeNull();
+        expect(parseChargeGain(null)).toBeNull();
     });
 });
 

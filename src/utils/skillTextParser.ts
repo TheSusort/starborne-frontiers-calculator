@@ -6,6 +6,8 @@ import {
     StackTrigger,
     ConditionalDamage,
     ConditionalCondition,
+    ChargeGain,
+    EnemyBaseClass,
 } from '../types/calculator';
 
 /**
@@ -230,6 +232,85 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
         };
     }
     return null;
+}
+
+function stripUnitTags(text: string): string {
+    return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '');
+}
+
+// Phrases that disqualify a charge phrase from being a self-gain we model:
+// ally-grant to others, on-kill (enemy never dies), enemy-repair (never repairs).
+const CHARGE_DISQUALIFY_RE =
+    /all allies|their charged skill|charged skill of all allies|upon killing|killing an enemy|when an enemy dies|when an enemy repairs|enemy performs a repair|enemy repairs/i;
+
+// "adds/gains N charge(s)" (self-add). "removes" is excluded by the verb set, so
+// Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
+const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
+
+// Rhodium-style form: "adds charges to the Charged Skill equal to the number of
+// buffs on the target" (amount is per-buff = 1). Runs on tag-stripped text.
+const PER_BUFF_CHARGE_RE =
+    /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
+
+function classifyChargeCondition(
+    text: string // already tag-stripped, any case
+): { condition: ConditionalCondition; derivable: boolean; requiredEnemyType?: EnemyBaseClass } {
+    const p = text.toLowerCase();
+    if (p.includes('is a defender'))
+        return { condition: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' };
+    if (p.includes('critically damag') || p.includes('critically hit'))
+        return { condition: 'self-crit', derivable: true };
+    if (p.includes('inflict') && p.includes('debuff'))
+        return { condition: 'enemy-debuff', derivable: true };
+    if (p.includes('stealth')) return { condition: 'enemy-buff', derivable: false };
+    if (
+        p.includes('buffs on the target') ||
+        p.includes('buff on the target') ||
+        p.includes('or more buffs') ||
+        p.includes('buffs on the enemy') ||
+        p.includes('number of buffs')
+    )
+        return { condition: 'enemy-buff', derivable: false };
+    if (
+        p.includes('2 or more enemies') ||
+        p.includes('two or more enemies') ||
+        p.includes('damages 2')
+    )
+        return { condition: 'enemy-adjacent', derivable: false };
+    // speed / full-HP / lowest-speed and anything else → always-true under sim assumptions
+    return { condition: 'always', derivable: true };
+}
+
+/**
+ * Parses a self-targeted Charged-Skill charge gain from skill text. Returns null
+ * for ally-grant, enemy-removal, on-kill, and enemy-repair phrasings (out of
+ * scope or never-fire under the sim assumptions). Conditions are classified into
+ * the (shared) ConditionalCondition set; `derivable` follows the same meaning as
+ * ConditionalDamage. Reference data: docs/ship-skills.csv.
+ */
+export function parseChargeGain(text: string | null | undefined): ChargeGain | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    if (CHARGE_DISQUALIFY_RE.test(plain)) return null;
+
+    // Rhodium "equal to the number of buffs" form (amount is per-buff = 1).
+    if (PER_BUFF_CHARGE_RE.test(plain)) {
+        return { amount: 1, condition: 'enemy-buff', derivable: false };
+    }
+
+    const m = SELF_CHARGE_ADD_RE.exec(plain);
+    if (!m) return null;
+    const raw = m[1].toLowerCase();
+    const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+    if (!amount || isNaN(amount)) return null;
+
+    const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);
+    return {
+        amount,
+        condition,
+        derivable,
+        ...(requiredEnemyType ? { requiredEnemyType } : {}),
+    };
 }
 
 /**
