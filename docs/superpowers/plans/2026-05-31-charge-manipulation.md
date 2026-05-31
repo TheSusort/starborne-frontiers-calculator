@@ -236,40 +236,55 @@ Expected: FAIL with "parseChargeGain is not a function" (or import error).
 
 - [ ] **Step 3: Implement `parseChargeGain`**
 
-Add to `src/utils/skillTextParser.ts` (import `ChargeGain`, `EnemyBaseClass` from `../types/calculator` alongside the existing `ConditionalDamage`, `ConditionalCondition` imports). Place after `parseConditionalDamage`:
+Add to `src/utils/skillTextParser.ts` (import `ChargeGain`, `EnemyBaseClass` from `../types/calculator` alongside the existing `ConditionalDamage`, `ConditionalCondition` imports). Place after `parseConditionalDamage`.
+
+**Key approach:** strip the `<unit-aid>` / `<unit-skill>` / `<unit-damage>` tags first, then match plain text. The tags wrap the amount in some skills (Chakara: `<unit-aid>adds 1 charge</unit-aid>`) but wrap the *nouns* in others (Rhodium: `<unit-aid>Charged Skill</unit-aid>` … `<unit-aid>Buffs</unit-aid>`), so tag-spanning regexes are brittle. Stripping tags makes both forms plain. Self-vs-removal is distinguished by the verb (`adds`/`gains` vs `removes`), not the tag.
+
+> First check whether the file already has a tag-stripping helper near line 40 (there is a tag-matching comment there). If one exists, reuse it; otherwise add `stripUnitTags` below.
 
 ```ts
+function stripUnitTags(text: string): string {
+    return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '');
+}
+
 // Phrases that disqualify a charge phrase from being a self-gain we model:
 // ally-grant to others, on-kill (enemy never dies), enemy-repair (never repairs).
 const CHARGE_DISQUALIFY_RE =
     /all allies|their charged skill|charged skill of all allies|upon killing|killing an enemy|when an enemy dies|when an enemy repairs|enemy performs a repair|enemy repairs/i;
 
-// "adds/gains N charge(s)" inside a <unit-aid> tag (self-add; "removes" is excluded
-// because the verb is constrained to adds/gains).
-const SELF_CHARGE_ADD_RE =
-    /<unit-aid>\s*(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\s*<\/unit-aid>/i;
+// "adds/gains N charge(s)" (self-add). "removes" is excluded by the verb set, so
+// Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
+const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
 
-// Rhodium-style untagged form: "adds charges to the Charged Skill equal to the
-// number of buffs on the target".
-const PER_BUFF_CHARGE_RE = /adds?\s+charges?\s+to\s+the\s+<?[^>]*charged skill[^.]*equal to the number of/i;
+// Rhodium-style form: "adds charges to the Charged Skill equal to the number of
+// buffs on the target" (amount is per-buff = 1). Runs on tag-stripped text.
+const PER_BUFF_CHARGE_RE =
+    /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
 
 function classifyChargeCondition(
-    text: string
+    text: string // already tag-stripped, any case
 ): { condition: ConditionalCondition; derivable: boolean; requiredEnemyType?: EnemyBaseClass } {
     const p = text.toLowerCase();
     if (p.includes('is a defender'))
         return { condition: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' };
-    if (p.includes('critically damag') || p.includes('critically hit') || p.includes('critical'))
+    if (p.includes('critically damag') || p.includes('critically hit'))
         return { condition: 'self-crit', derivable: true };
     if (p.includes('inflict') && p.includes('debuff'))
         return { condition: 'enemy-debuff', derivable: true };
     if (p.includes('stealth')) return { condition: 'enemy-buff', derivable: false };
-    if (p.includes('buffs on the target') || p.includes('buff on the target') ||
-        p.includes('or more buffs') || p.includes('buffs on the enemy') ||
-        p.includes('number of buffs'))
+    if (
+        p.includes('buffs on the target') ||
+        p.includes('buff on the target') ||
+        p.includes('or more buffs') ||
+        p.includes('buffs on the enemy') ||
+        p.includes('number of buffs')
+    )
         return { condition: 'enemy-buff', derivable: false };
-    if (p.includes('2 or more enemies') || p.includes('two or more enemies') ||
-        p.includes('damages 2'))
+    if (
+        p.includes('2 or more enemies') ||
+        p.includes('two or more enemies') ||
+        p.includes('damages 2')
+    )
         return { condition: 'enemy-adjacent', derivable: false };
     // speed / full-HP / lowest-speed and anything else → always-true under sim assumptions
     return { condition: 'always', derivable: true };
@@ -284,20 +299,21 @@ function classifyChargeCondition(
  */
 export function parseChargeGain(text: string | null | undefined): ChargeGain | null {
     if (!text) return null;
-    if (CHARGE_DISQUALIFY_RE.test(text)) return null;
+    const plain = stripUnitTags(text);
+    if (CHARGE_DISQUALIFY_RE.test(plain)) return null;
 
     // Rhodium "equal to the number of buffs" form (amount is per-buff = 1).
-    if (PER_BUFF_CHARGE_RE.test(text)) {
+    if (PER_BUFF_CHARGE_RE.test(plain)) {
         return { amount: 1, condition: 'enemy-buff', derivable: false };
     }
 
-    const m = SELF_CHARGE_ADD_RE.exec(text);
+    const m = SELF_CHARGE_ADD_RE.exec(plain);
     if (!m) return null;
     const raw = m[1].toLowerCase();
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    const { condition, derivable, requiredEnemyType } = classifyChargeCondition(text);
+    const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);
     return {
         amount,
         condition,
@@ -306,6 +322,8 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     };
 }
 ```
+
+> Note for the test in Step 1: the Rhodium fixture's `<unit-aid>` tags around "Charged Skill"/"Buffs" are stripped before matching, so `PER_BUFF_CHARGE_RE` and the `number of buffs` classifier both hit. Verify mentally: stripped Rhodium = "Unit adds charges to the Charged Skill equal to the number of Buffs on the target." → matches `PER_BUFF_CHARGE_RE` → returns `{ amount: 1, condition: 'enemy-buff', derivable: false }`. ✓
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -465,10 +483,7 @@ In the round loop, immediately **after** the conditional-bonus block (the `condi
                         break;
                     case 'enemy-type':
                         chargeGainCount =
-                            enemyType !== undefined &&
-                            enemyType === selfChargeGain.requiredEnemyType
-                                ? 1
-                                : 0;
+                            enemyType === selfChargeGain.requiredEnemyType ? 1 : 0;
                         break;
                     default:
                         // enemy-buff, enemy-adjacent, adjacent-ally, enemy-destroyed
