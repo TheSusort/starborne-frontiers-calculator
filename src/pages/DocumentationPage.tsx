@@ -2167,6 +2167,24 @@ const DocumentationPage: React.FC = () => {
                                         row.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Charge Manipulation:</span>{' '}
+                                        Ships that add charges to their own Charged Skill each round
+                                        (e.g. &quot;+1 charge if you crit&quot;) make the charged
+                                        skill fire sooner. These self-gain conditions are
+                                        auto-detected from skill text and tallied automatically each
+                                        round from sim state (crits, enemy debuffs, active self
+                                        buffs); you can also set a manual trigger count per
+                                        condition. The{' '}
+                                        <span className="text-primary">Ally charges / round</span>{' '}
+                                        field models supporter ships that feed charges to the
+                                        attacker. The{' '}
+                                        <span className="text-primary">Enemy Type</span> selector
+                                        enables type-conditional charge gains (e.g. gains that only
+                                        trigger against a Defender). The simulation summary shows a
+                                        &quot;Charged skill fires: every N rounds&quot; line
+                                        reflecting the effective cadence.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Start Charged:</span> Some
                                         ships have skills that begin combat already charged. When
                                         detected from your ship&apos;s skill data, this checkbox

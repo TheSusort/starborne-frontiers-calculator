@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Recruitment calculator: faction event weighting now stacks on top of the affinity weighting, and you can choose a 10x or 20x faction multiplier.',
     'DPS Calculator now models secondary damage that scales off Defense or max HP (e.g. Chakara, Lodolite) — auto-detected from skill text, editable, and scaling with Defense Up / HP buffs.',
     "DPS Calculator now models conditional damage bonuses that scale with a count (e.g. +20% per adjacent ally, +15% per debuff on the enemy). Counts derived from your buffs or the enemy's debuffs are tallied automatically each round; other conditions take a manual count. Auto-detected from skill text and editable per skill.",
+    'DPS Calculator now models charge manipulation: ships that add charges to their Charged Skill (and supporter ships that feed charges to allies) make the charged skill fire sooner. Added an enemy-type selector for type-conditional charge gains.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
