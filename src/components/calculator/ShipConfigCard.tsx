@@ -473,11 +473,19 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     <CollapsibleForm isVisible={openCharge}>
                         {config.selfChargeGain ? (
                             <div className="mb-4">
-                                <div className="text-sm font-semibold mb-1">
-                                    Self: +{config.selfChargeGain.amount} charge
-                                    {config.selfChargeGain.amount !== 1 ? 's' : ''}/round{' '}
-                                    {CONDITIONAL_CONDITION_LABELS[config.selfChargeGain.condition]}
-                                </div>
+                                {(() => {
+                                    const cg = config.selfChargeGain;
+                                    const conditionLabel =
+                                        cg.condition === 'enemy-type' && cg.requiredEnemyType
+                                            ? `when enemy is a ${cg.requiredEnemyType}`
+                                            : CONDITIONAL_CONDITION_LABELS[cg.condition];
+                                    return (
+                                        <div className="text-sm font-semibold mb-1">
+                                            Self: +{cg.amount} charge
+                                            {cg.amount !== 1 ? 's' : ''}/round {conditionLabel}
+                                        </div>
+                                    );
+                                })()}
                                 {config.selfChargeGain.derivable ? (
                                     <p className="text-xs text-theme-text-secondary">
                                         Auto-counted each round from sim state.
