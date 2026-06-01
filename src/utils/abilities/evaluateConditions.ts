@@ -29,6 +29,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'enemy-buff':
             return countNames(ctx.enemyBuffNames, cond.buffName);
         case 'enemy-debuff':
+            // Name-agnostic by design (mirrors dpsSimulator): counts ALL landed enemy
+            // debuffs + DoTs, ignoring cond.buffName. A buffName on an enemy-debuff
+            // condition is not a filter here — unlike self-buff/enemy-buff above.
             return ctx.enemyDebuffCount;
         case 'enemy-type':
             return ctx.enemyType && ctx.enemyType === cond.requiredEnemyType ? 1 : 0;
