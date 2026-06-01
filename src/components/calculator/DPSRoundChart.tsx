@@ -59,6 +59,14 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                                 <span className="ml-1 text-yellow-400 text-xs">Charged</span>
                             )}
                         </p>
+                        {roundData && roundData.chargeCount > 0 && (
+                            <p className="text-xs text-yellow-400 pl-2">
+                                ⚡{' '}
+                                {roundData.action === 'charged'
+                                    ? `Consumed ${roundData.chargeCount} charges`
+                                    : `${roundData.charges} / ${roundData.chargeCount} charges`}
+                            </p>
+                        )}
                         {roundData && (
                             <div className="text-xs text-theme-text-secondary pl-2">
                                 <span>Direct: {roundData.directDamage.toLocaleString()}</span>

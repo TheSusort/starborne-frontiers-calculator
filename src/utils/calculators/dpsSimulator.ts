@@ -67,6 +67,8 @@ export interface RoundData {
     round: number;
     action: 'active' | 'charged';
     charges: number;
+    /** Charges required to fire the charged skill; 0 when the ship has no charged skill. */
+    chargeCount: number;
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
@@ -481,6 +483,7 @@ function runSinglePass(params: {
             round: r,
             action,
             charges: Math.round(charges),
+            chargeCount: hasChargedSkill ? chargeCount : 0,
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),

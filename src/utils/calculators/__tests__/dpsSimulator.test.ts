@@ -74,6 +74,30 @@ describe('simulateDPS', () => {
             expect(result.rounds[7].action).toBe('charged');
         });
 
+        it('exposes chargeCount on every round for charge-progress display', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                activeMultiplier: 150,
+                chargedMultiplier: 350,
+                chargeCount: 3,
+                rounds: 5,
+            });
+            expect(result.rounds.every((r) => r.chargeCount === 3)).toBe(true);
+            // Active rounds bank charges toward the threshold
+            expect(result.rounds[0].charges).toBe(1);
+            expect(result.rounds[2].charges).toBe(3);
+        });
+
+        it('reports chargeCount 0 when the ship has no charged skill', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                chargedMultiplier: 0,
+                chargeCount: 0,
+                rounds: 3,
+            });
+            expect(result.rounds.every((r) => r.chargeCount === 0)).toBe(true);
+        });
+
         it('charged damage is higher when chargedMultiplier > activeMultiplier', () => {
             const result = simulateDPS({
                 ...baseInput,
