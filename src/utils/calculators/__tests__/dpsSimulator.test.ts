@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
+import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
@@ -1020,6 +1021,55 @@ describe('simulateDPS', () => {
                 allyChargePerRound: 5,
             });
             expect(chargedRounds(result)).toEqual([]);
+        });
+    });
+
+    describe('ShipSkills adapter equivalence', () => {
+        it('flat input and its flatInputToAbilities form produce identical results', () => {
+            const flat = {
+                ...baseInput,
+                attack: 22000,
+                crit: 60,
+                critDamage: 180,
+                defensePenetration: 10,
+                activeMultiplier: 140,
+                chargedMultiplier: 320,
+                chargeCount: 3,
+                rounds: 12,
+                enemyDefense: 12000,
+                enemyHp: 400000,
+                defence: 9000,
+                hp: 80000,
+                activeSecondary: { stat: 'defense' as const, pct: 80 },
+                activeConditional: {
+                    pct: 20,
+                    condition: 'enemy-debuff' as const,
+                    derivable: true,
+                    cap: 100,
+                },
+                selfChargeGain: {
+                    amount: 1,
+                    condition: 'always' as const,
+                    derivable: true,
+                },
+                activeDoTs: [
+                    {
+                        id: 'dot-1',
+                        type: 'corrosion' as const,
+                        tier: 6,
+                        stacks: 2,
+                        duration: 3,
+                    },
+                ],
+                selfBuffs: [makeAlwaysBuff('atkBuff', { attack: 25 } as ParsedBuffEffects)],
+                enemyDebuffs: [makeAlwaysBuff('defDown', { defense: -30 } as ParsedBuffEffects)],
+            };
+
+            const fromFlat = simulateDPS(flat);
+            const fromSkills = simulateDPS({ ...flat, shipSkills: flatInputToAbilities(flat) });
+
+            expect(fromSkills.rounds).toEqual(fromFlat.rounds);
+            expect(fromSkills.summary).toEqual(fromFlat.summary);
         });
     });
 });

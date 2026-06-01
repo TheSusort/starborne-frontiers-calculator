@@ -11,7 +11,15 @@ import {
     SecondaryDamage,
     SelectedGameBuff,
 } from '../../types/calculator';
-import { Ability } from '../../types/abilities';
+import { ShipSkills } from '../../types/abilities';
+import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
+import {
+    selectFiringSkill,
+    damageInputsFromSkill,
+    secondaryFromSkill,
+    dotsFromSkill,
+    chargeAbilitiesFromSkill,
+} from '../abilities/applyAbilities';
 import {
     toSimBuffs,
     toEnemyModifiers,
@@ -64,6 +72,8 @@ export interface DPSSimulationInput {
     allyChargePerRound?: number;
     /** Enemy base class, for the 'enemy-type' charge-gain condition. */
     enemyType?: EnemyBaseClass;
+    /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
+    shipSkills?: ShipSkills;
 }
 
 export interface RoundData {
@@ -165,11 +175,8 @@ function runSinglePass(params: {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    activeMultiplier: number;
-    chargedMultiplier: number;
     chargeCount: number;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
+    shipSkills: ShipSkills;
     enemyDefense: number;
     enemyHp: number;
     numRounds: number;
@@ -186,11 +193,6 @@ function runSinglePass(params: {
     affinityCritPenalty: number;
     defence: number;
     hp: number;
-    activeSecondary?: SecondaryDamage;
-    chargedSecondary?: SecondaryDamage;
-    activeConditional?: ConditionalDamage;
-    chargedConditional?: ConditionalDamage;
-    selfChargeGain?: ChargeGain;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
 }): {
@@ -210,11 +212,8 @@ function runSinglePass(params: {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
+        shipSkills,
         enemyDefense,
         enemyHp,
         numRounds,
@@ -231,11 +230,6 @@ function runSinglePass(params: {
         affinityCritPenalty,
         defence,
         hp,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
-        selfChargeGain,
         allyChargePerRound,
         enemyType,
     } = params;
@@ -257,25 +251,27 @@ function runSinglePass(params: {
 
     for (let r = 1; r <= numRounds; r++) {
         let action: 'active' | 'charged';
-        let multiplier: number;
-        let dotsConfig: DoTApplicationConfig;
 
         if (hasChargedSkill && charges >= chargeCount) {
             action = 'charged';
-            multiplier = chargedMultiplier;
-            dotsConfig = chargedDoTs;
             charges = 0;
         } else {
             action = 'active';
-            multiplier = activeMultiplier;
-            dotsConfig = activeDoTs;
             if (hasChargedSkill) {
                 charges += 1;
             }
         }
 
-        const secondary = action === 'charged' ? chargedSecondary : activeSecondary;
-        const conditional = action === 'charged' ? chargedConditional : activeConditional;
+        // Read this round's damage shape from the firing skill's abilities.
+        const firingSkill = selectFiringSkill(shipSkills, action);
+        const {
+            multiplier: rawMultiplier,
+            hits,
+            scalingAbility,
+        } = damageInputsFromSkill(firingSkill);
+        const effectiveMultiplier = rawMultiplier * hits;
+        const secondary = secondaryFromSkill(firingSkill);
+        const dotsConfig = dotsFromSkill(firingSkill);
 
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
@@ -361,34 +357,11 @@ function runSinglePass(params: {
         });
 
         // Conditional scaling bonus, folded additively into the skill multiplier.
-        // Derivable conditions read this round's sim state (pre-Step-3 DoT arrays,
-        // so this round's freshly-applied DoTs are not yet counted); manual
-        // conditions use a static count.
-        let conditionalBonusPct = 0;
-        if (conditional) {
-            const scalingAbility: Ability = {
-                id: 'cond',
-                type: 'damage',
-                target: 'enemy',
-                trigger: 'on-cast',
-                conditions: [
-                    {
-                        subject: conditional.condition,
-                        derivable: conditional.derivable,
-                        ...(conditional.manualCount !== undefined
-                            ? { manualCount: conditional.manualCount }
-                            : {}),
-                    },
-                ],
-                scaling: {
-                    conditionIndex: 0,
-                    perUnit: conditional.pct,
-                    ...(conditional.cap !== undefined ? { cap: conditional.cap } : {}),
-                },
-                config: { type: 'damage', multiplier: 0 },
-            };
-            conditionalBonusPct = scaledBonus(scalingAbility, ctx);
-        }
+        // Read from the firing skill's damage ability's own scaling rule. Derivable
+        // conditions read this round's sim state (pre-Step-3 DoT arrays, so this
+        // round's freshly-applied DoTs are not yet counted); manual conditions use
+        // a static count.
+        const conditionalBonusPct = scalingAbility ? scaledBonus(scalingAbility, ctx) : 0;
 
         // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
         // round fires the charged skill, which consumes all charges (reset to 0 at
@@ -397,24 +370,21 @@ function runSinglePass(params: {
         // since charges never exceed what the charged skill requires.
         if (hasChargedSkill && action === 'active') {
             let bonusCharges = 0;
-            if (selfChargeGain) {
-                const chargeCond = {
-                    subject: selfChargeGain.condition,
-                    derivable: selfChargeGain.derivable,
-                    ...(selfChargeGain.manualCount !== undefined
-                        ? { manualCount: selfChargeGain.manualCount }
-                        : {}),
-                    ...(selfChargeGain.requiredEnemyType
-                        ? { requiredEnemyType: selfChargeGain.requiredEnemyType }
-                        : {}),
-                };
-                bonusCharges = evaluateCondition(chargeCond, ctx) * selfChargeGain.amount;
+            const chargeAbilities = chargeAbilitiesFromSkill(
+                selectFiringSkill(shipSkills, 'active')
+            );
+            for (const ability of chargeAbilities) {
+                if (ability.config.type !== 'charge') continue;
+                const cond = ability.conditions[0];
+                if (!cond) continue;
+                bonusCharges += evaluateCondition(cond, ctx) * ability.config.amount;
             }
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
 
         const preCritDamage =
-            effectiveAttack * ((multiplier + conditionalBonusPct) / 100) + secondaryStatValue;
+            effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) +
+            secondaryStatValue;
         const postDefenseFactor =
             critMultiplier *
             (1 - damageReduction / 100) *
@@ -549,11 +519,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
         enemyDefense,
         enemyHp,
         rounds: numRounds,
@@ -561,11 +527,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyDebuffs,
         defence = 0,
         hp = 0,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
-        selfChargeGain,
         allyChargePerRound,
         enemyType,
     } = input;
@@ -582,7 +543,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         selfBuffs,
         []
     );
-    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
+    const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
+    const hasChargedSkill =
+        chargeCount >= 1 &&
+        (selectFiringSkill(shipSkills, 'charged')?.abilities.some((a) => a.type === 'damage') ??
+            false);
 
     // Pre-compute deterministic buff timeline
     const timeline = computeBuffTimeline(
@@ -610,11 +575,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
+        shipSkills,
         enemyDefense,
         enemyHp,
         numRounds,
@@ -631,11 +593,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinityCritPenalty,
         defence,
         hp,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
-        selfChargeGain,
         allyChargePerRound,
         enemyType,
     });

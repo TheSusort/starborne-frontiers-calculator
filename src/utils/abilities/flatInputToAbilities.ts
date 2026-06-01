@@ -6,7 +6,7 @@ import {
     ConditionalDamage,
 } from '../../types/calculator';
 import { Ability, Condition, ShipSkills, Skill } from '../../types/abilities';
-import { DPSSimulationInput } from '../calculators/dpsSimulator';
+import type { DPSSimulationInput } from '../calculators/dpsSimulator';
 
 /**
  * Adapter-local condition mapper. Unlike buildShipAbilities's 5-arg version, this
