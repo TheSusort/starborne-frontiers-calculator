@@ -56,6 +56,10 @@ export interface ScalingRule {
     cap?: number;
 }
 
+// NOTE: spelling mirrors the existing codebase intentionally — ModifierChannel /
+// additional-damage.stat use American 'defense' (like SecondaryDamageStat), while
+// BuffStat / Buff.stat use British 'defence'. Phase 2's applyAbility must map both
+// to the same underlying defence stat.
 export type ModifierChannel =
     | 'attack'
     | 'defense'
