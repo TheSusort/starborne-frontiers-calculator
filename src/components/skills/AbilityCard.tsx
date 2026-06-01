@@ -46,6 +46,7 @@ const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
 const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [
     { value: 'attack', label: 'Attack' },
     { value: 'defense', label: 'Defense' },
+    { value: 'defensePenetration', label: 'Defense Penetration' },
     { value: 'hp', label: 'HP' },
     { value: 'crit', label: 'Crit' },
     { value: 'critDamage', label: 'Crit Damage' },
@@ -101,6 +102,53 @@ const toDuration = (raw: string): number | 'recurring' => {
 export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) => {
     const updateConfig = (config: AbilityConfig) => onChange({ ...ability, config });
 
+    // "Scales per condition": per-unit bonus × the count from conditions[conditionIndex],
+    // capped. Shared by damage and modifier abilities (e.g. "7.5% defPen per buff, up to 45%").
+    const scalingEditor = (
+        <>
+            <Checkbox
+                label="Scales per condition"
+                checked={!!ability.scaling}
+                onChange={(checked) =>
+                    onChange({
+                        ...ability,
+                        scaling: checked ? { conditionIndex: 0, perUnit: 0 } : undefined,
+                    })
+                }
+            />
+            {ability.scaling && (
+                <div className="flex gap-2">
+                    <Input
+                        label="Per unit"
+                        type="number"
+                        step="0.01"
+                        value={ability.scaling.perUnit}
+                        onChange={(e) =>
+                            onChange({
+                                ...ability,
+                                scaling: { ...ability.scaling!, perUnit: toNumber(e.target.value) },
+                            })
+                        }
+                    />
+                    <Input
+                        label="Cap (optional)"
+                        type="number"
+                        value={ability.scaling.cap ?? ''}
+                        onChange={(e) =>
+                            onChange({
+                                ...ability,
+                                scaling: {
+                                    ...ability.scaling!,
+                                    cap: e.target.value ? toNumber(e.target.value) : undefined,
+                                },
+                            })
+                        }
+                    />
+                </div>
+            )}
+        </>
+    );
+
     const renderBody = () => {
         const config = ability.config;
         switch (config.type) {
@@ -135,53 +183,7 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                                 }
                             />
                         </div>
-                        <Checkbox
-                            label="Scales per condition"
-                            checked={!!ability.scaling}
-                            onChange={(checked) =>
-                                onChange({
-                                    ...ability,
-                                    scaling: checked
-                                        ? { conditionIndex: 0, perUnit: 0 }
-                                        : undefined,
-                                })
-                            }
-                        />
-                        {ability.scaling && (
-                            <div className="flex gap-2">
-                                <Input
-                                    label="Per unit"
-                                    type="number"
-                                    step="0.01"
-                                    value={ability.scaling.perUnit}
-                                    onChange={(e) =>
-                                        onChange({
-                                            ...ability,
-                                            scaling: {
-                                                ...ability.scaling!,
-                                                perUnit: toNumber(e.target.value),
-                                            },
-                                        })
-                                    }
-                                />
-                                <Input
-                                    label="Cap (optional)"
-                                    type="number"
-                                    value={ability.scaling.cap ?? ''}
-                                    onChange={(e) =>
-                                        onChange({
-                                            ...ability,
-                                            scaling: {
-                                                ...ability.scaling!,
-                                                cap: e.target.value
-                                                    ? toNumber(e.target.value)
-                                                    : undefined,
-                                            },
-                                        })
-                                    }
-                                />
-                            </div>
-                        )}
+                        {scalingEditor}
                     </div>
                 );
 
@@ -220,7 +222,7 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                                 }
                             />
                             <Input
-                                label="Value"
+                                label="Value (flat %)"
                                 type="number"
                                 value={config.value}
                                 onChange={(e) =>
@@ -228,8 +230,10 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                                 }
                             />
                         </div>
+                        {scalingEditor}
                         <p className="text-xs text-theme-text-secondary">
-                            % modifiers apply additively (multiplicative flag not yet simulated)
+                            Applied additively (flat value + per-condition scaling). Multiplicative
+                            flag not yet simulated.
                         </p>
                     </div>
                 );

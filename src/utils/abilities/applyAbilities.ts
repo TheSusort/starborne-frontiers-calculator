@@ -38,10 +38,11 @@ export function modifierTotalsFromAbilities(
         // `isMultiplicative` is intentionally ignored: these deltas are summed into the
         // same additive-percentage buff totals as the buff path (calculateBuffTotals).
         // Revisit if a flat or true-multiplicative modifier is ever introduced.
-        // A modifier with a scaling rule (e.g. "7.5% defPen per buff, up to 45%") uses
-        // the per-count scaled amount; otherwise the flat config value.
+        // Additive: flat config value + per-condition scaled bonus (capped). A pure
+        // scaling modifier (e.g. "7.5% defPen per buff, up to 45%") has value 0 and a
+        // scaling rule; a flat modifier has no scaling.
         const { channel } = ability.config;
-        const amount = ability.scaling ? scaledBonus(ability, ctx) : ability.config.value;
+        const amount = ability.config.value + (ability.scaling ? scaledBonus(ability, ctx) : 0);
         switch (channel) {
             case 'attack':
                 totals.attack += amount;
