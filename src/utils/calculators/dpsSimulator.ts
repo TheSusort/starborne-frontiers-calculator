@@ -367,10 +367,12 @@ function runSinglePass(params: {
             }
         }
 
-        // Charge manipulation: bonus charges accumulate every round (active and
-        // charged). Charged round already reset charges to 0 at the top, so
-        // post-fire rounds still bank bonus/ally charges. Gated on hasChargedSkill.
-        if (hasChargedSkill) {
+        // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
+        // round fires the charged skill, which consumes all charges (reset to 0 at
+        // the top of the loop) — nothing banks toward the next charge on that round.
+        // Self + ally gains are added here and the total is capped at chargeCount,
+        // since charges never exceed what the charged skill requires.
+        if (hasChargedSkill && action === 'active') {
             let chargeGainCount = 0;
             if (selfChargeGain) {
                 switch (selfChargeGain.condition) {
@@ -402,7 +404,7 @@ function runSinglePass(params: {
                 }
             }
             const bonusCharges = selfChargeGain ? chargeGainCount * selfChargeGain.amount : 0;
-            charges += bonusCharges + (allyChargePerRound ?? 0);
+            charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
 
         const preCritDamage =

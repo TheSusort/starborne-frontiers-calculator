@@ -961,7 +961,7 @@ describe('simulateDPS', () => {
 
         it('allyChargePerRound speeds up cadence', () => {
             const result = simulateDPS({ ...base, allyChargePerRound: 1 });
-            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+            expect(chargedRounds(result)).toEqual([3, 6, 9, 12]);
         });
 
         it('always-true self gain speeds up cadence', () => {
@@ -969,7 +969,7 @@ describe('simulateDPS', () => {
                 ...base,
                 selfChargeGain: { amount: 1, condition: 'always', derivable: true },
             });
-            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+            expect(chargedRounds(result)).toEqual([3, 6, 9, 12]);
         });
 
         it('self-crit at 100% crit contributes +1/round', () => {
@@ -977,7 +977,7 @@ describe('simulateDPS', () => {
                 ...base,
                 selfChargeGain: { amount: 1, condition: 'self-crit', derivable: true },
             });
-            expect(chargedRounds(result)).toEqual([3, 5, 7, 9, 11]);
+            expect(chargedRounds(result)).toEqual([3, 6, 9, 12]);
         });
 
         it('enemy-type gain only applies when enemy type matches', () => {
@@ -989,8 +989,28 @@ describe('simulateDPS', () => {
             };
             const matched = simulateDPS({ ...base, selfChargeGain: gain, enemyType: 'Defender' });
             const unmatched = simulateDPS({ ...base, selfChargeGain: gain, enemyType: 'Attacker' });
-            expect(chargedRounds(matched)).toEqual([3, 5, 7, 9, 11]);
+            expect(chargedRounds(matched)).toEqual([3, 6, 9, 12]);
             expect(chargedRounds(unmatched)).toEqual([4, 8, 12]);
+        });
+
+        it('only gains on active rounds and caps charges at chargeCount (e.g. Selenite)', () => {
+            // Conditional +1 on active rounds (enemy stealthed → manual count 1),
+            // on top of the base +1. Charges must never exceed chargeCount, and the
+            // charged round must bank nothing (it consumes all charges).
+            const result = simulateDPS({
+                ...base,
+                selfChargeGain: {
+                    amount: 1,
+                    condition: 'enemy-buff',
+                    derivable: false,
+                    manualCount: 1,
+                },
+            });
+            expect(chargedRounds(result)).toEqual([3, 6, 9, 12]);
+            expect(result.rounds.every((r) => r.charges <= base.chargeCount)).toBe(true);
+            result.rounds
+                .filter((r) => r.action === 'charged')
+                .forEach((r) => expect(r.charges).toBe(0));
         });
 
         it('does nothing when there is no charged skill', () => {
