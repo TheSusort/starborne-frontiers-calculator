@@ -1,0 +1,207 @@
+import { describe, it, expect } from 'vitest';
+import { Ability, ShipSkills } from '../../../types/abilities';
+import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
+import {
+    abilityToSelectedBuff,
+    selectedBuffToAbility,
+    buildStaticBuffContext,
+    buffAbilitiesToSelectedBuffs,
+    selectedBuffsToBuffAbilities,
+} from '../buffAbilityConverters';
+
+const effects: ParsedBuffEffects = { attack: 30 };
+
+const buffAbility = (overrides: Partial<Ability> = {}): Ability => ({
+    id: 'a1',
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName: 'Power Up',
+        parsedEffects: effects,
+        stacks: 2,
+        isStackable: true,
+        maxStacks: 5,
+        stackTrigger: 'per-round',
+    },
+    ...overrides,
+});
+
+const debuffAbility = (overrides: Partial<Ability> = {}): Ability => ({
+    id: 'd1',
+    type: 'debuff',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName: 'Weaken',
+        parsedEffects: { defense: -30 },
+        stacks: 1,
+        isStackable: false,
+        application: 'apply',
+    },
+    ...overrides,
+});
+
+const damageAbility = (): Ability => ({
+    id: 'dmg1',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 1.5 },
+});
+
+const gameBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+    id: 'gb1',
+    buffName: 'Power Up',
+    stacks: 2,
+    parsedEffects: effects,
+    isStackable: true,
+    ...overrides,
+});
+
+describe('abilityToSelectedBuff', () => {
+    it('converts a buff ability to a SelectedGameBuff copying core fields', () => {
+        const sb = abilityToSelectedBuff(buffAbility());
+        expect(sb).not.toBeNull();
+        expect(sb!.buffName).toBe('Power Up');
+        expect(sb!.stacks).toBe(2);
+        expect(sb!.parsedEffects).toEqual(effects);
+        expect(sb!.isStackable).toBe(true);
+        expect(sb!.maxStacks).toBe(5);
+        expect(sb!.stackTrigger).toBe('per-round');
+    });
+
+    it('returns null for a non-buff ability', () => {
+        expect(abilityToSelectedBuff(damageAbility())).toBeNull();
+    });
+});
+
+describe('selectedBuffToAbility', () => {
+    it('produces a buff ability for a self target', () => {
+        const ab = selectedBuffToAbility(gameBuff(), 'self');
+        expect(ab.type).toBe('buff');
+        expect(ab.target).toBe('self');
+        expect(ab.config.type).toBe('buff');
+        if (ab.config.type === 'buff') {
+            expect(ab.config.buffName).toBe('Power Up');
+            expect(ab.config.stacks).toBe(2);
+            expect(ab.config.parsedEffects).toEqual(effects);
+        }
+    });
+
+    it('produces a debuff ability with application apply for an enemy target', () => {
+        const ab = selectedBuffToAbility(gameBuff({ buffName: 'Weaken' }), 'enemy');
+        expect(ab.type).toBe('debuff');
+        expect(ab.target).toBe('enemy');
+        expect(ab.config.type).toBe('debuff');
+        if (ab.config.type === 'debuff') {
+            expect(ab.config.buffName).toBe('Weaken');
+            expect(ab.config.application).toBe('apply');
+        }
+    });
+});
+
+describe('buildStaticBuffContext', () => {
+    it('sets enemyType and satisfiable defaults across all 11 fields', () => {
+        const ctx = buildStaticBuffContext({ enemyType: 'Defender' });
+        expect(ctx.enemyType).toBe('Defender');
+        expect(ctx.effectiveCritRate).toBe(100);
+        expect(ctx.selfBuffNames).toEqual([]);
+        expect(ctx.selfDebuffNames).toEqual([]);
+        expect(ctx.enemyBuffNames).toEqual([]);
+        expect(ctx.enemyDebuffCount).toBe(1);
+        expect(ctx.adjacentAllyCount).toBe(1);
+        expect(ctx.enemyAdjacentCount).toBe(1);
+        expect(ctx.enemyDestroyedCount).toBe(1);
+        expect(ctx.selfHpPct).toBe(100);
+        expect(ctx.enemyHpPct).toBe(100);
+    });
+});
+
+describe('buffAbilitiesToSelectedBuffs', () => {
+    const skills = (abilities: Ability[]): ShipSkills => ({
+        slots: [{ slot: 'active', abilities }],
+    });
+
+    it('includes a condition-less buff in selfBuffs', () => {
+        const ctx = buildStaticBuffContext({});
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([buffAbility()]),
+            ctx
+        );
+        expect(selfBuffs).toHaveLength(1);
+        expect(selfBuffs[0].buffName).toBe('Power Up');
+        expect(enemyDebuffs).toHaveLength(0);
+    });
+
+    it('gates an enemy-type condition by ctx.enemyType', () => {
+        const gated = buffAbility({
+            conditions: [{ subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' }],
+        });
+        const excluded = buffAbilitiesToSelectedBuffs(
+            skills([gated]),
+            buildStaticBuffContext({ enemyType: 'Attacker' })
+        );
+        expect(excluded.selfBuffs).toHaveLength(0);
+
+        const included = buffAbilitiesToSelectedBuffs(
+            skills([gated]),
+            buildStaticBuffContext({ enemyType: 'Defender' })
+        );
+        expect(included.selfBuffs).toHaveLength(1);
+    });
+
+    it('gates a non-derivable condition by its manualCount', () => {
+        const ctx = buildStaticBuffContext({});
+        const excluded = buffAbilitiesToSelectedBuffs(
+            skills([
+                buffAbility({
+                    conditions: [{ subject: 'always', derivable: false, manualCount: 0 }],
+                }),
+            ]),
+            ctx
+        );
+        expect(excluded.selfBuffs).toHaveLength(0);
+
+        const included = buffAbilitiesToSelectedBuffs(
+            skills([
+                buffAbility({
+                    conditions: [{ subject: 'always', derivable: false, manualCount: 1 }],
+                }),
+            ]),
+            ctx
+        );
+        expect(included.selfBuffs).toHaveLength(1);
+    });
+
+    it('routes an enemy-target debuff into enemyDebuffs', () => {
+        const ctx = buildStaticBuffContext({});
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([debuffAbility()]),
+            ctx
+        );
+        expect(selfBuffs).toHaveLength(0);
+        expect(enemyDebuffs).toHaveLength(1);
+        expect(enemyDebuffs[0].buffName).toBe('Weaken');
+    });
+});
+
+describe('selectedBuffsToBuffAbilities', () => {
+    it('maps selfBuffs to buff abilities and enemyDebuffs to debuff abilities', () => {
+        const abilities = selectedBuffsToBuffAbilities(
+            [gameBuff({ id: 'b1' }), gameBuff({ id: 'b2' })],
+            [gameBuff({ id: 'e1', buffName: 'Weaken' })]
+        );
+        const buffs = abilities.filter((a) => a.type === 'buff');
+        const debuffs = abilities.filter((a) => a.type === 'debuff');
+        expect(buffs).toHaveLength(2);
+        expect(buffs.every((a) => a.target === 'self')).toBe(true);
+        expect(debuffs).toHaveLength(1);
+        expect(debuffs[0].target).toBe('enemy');
+    });
+});
