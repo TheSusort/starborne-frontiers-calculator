@@ -95,6 +95,19 @@ function slotFor(label: string): SkillSlot | null {
 }
 
 /**
+ * Helper to append abilities to a slot in the abilities map, creating the entry if needed.
+ */
+function pushToSlot(
+    bySlot: Map<SkillSlot, Ability[]>,
+    slot: SkillSlot,
+    abilities: Ability[]
+): void {
+    const existing = bySlot.get(slot);
+    if (existing) existing.push(...abilities);
+    else bySlot.set(slot, [...abilities]);
+}
+
+/**
  * Maps an existing-detector ConditionalCondition into a model Condition. The
  * subject strings are identical between the two unions, so this is mostly a
  * passthrough carrying derivable / manualCount / requiredEnemyType. Neither
@@ -278,18 +291,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const slot = slotFor(row.label);
         if (!slot) continue;
         const abilities = abilitiesFromText(row.text);
-        const existing = bySlot.get(slot);
-        if (existing) existing.push(...abilities);
-        else bySlot.set(slot, abilities);
+        pushToSlot(bySlot, slot, abilities);
     }
 
     // Merge ship-level DoTs into their slots (creating the slot entry if needed).
     for (const slot of ['active', 'charged'] as const) {
         const dots = dotsForSlot(slot).map(dotAbility);
         if (!dots.length) continue;
-        const existing = bySlot.get(slot);
-        if (existing) existing.push(...dots);
-        else bySlot.set(slot, dots);
+        pushToSlot(bySlot, slot, dots);
     }
 
     // Merge ship-level buffs/debuffs into their slots (DoTs are already excluded
@@ -297,11 +306,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     const { selfBuffs, enemyDebuffs } = buildSkillBuffAutoFill(ship);
     const mergeBuff = (buff: SelectedGameBuff, target: AbilityTarget) => {
         const ability = selectedBuffToAbility(buff, target);
+        // defensive: round-trip buffs may lack the flag; parser buffs already set it
         if (ability.autoFilled === undefined) ability.autoFilled = true;
         const slot = slotForBuffSource(buff.skillSource);
-        const existing = bySlot.get(slot);
-        if (existing) existing.push(ability);
-        else bySlot.set(slot, [ability]);
+        pushToSlot(bySlot, slot, [ability]);
     };
     for (const buff of selfBuffs) mergeBuff(buff, 'self');
     for (const buff of enemyDebuffs) mergeBuff(buff, 'enemy');
