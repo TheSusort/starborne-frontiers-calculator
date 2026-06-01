@@ -1,4 +1,4 @@
-import { EnemyBaseClass, DoTType, StackTrigger } from './calculator';
+import { EnemyBaseClass, DoTType, StackTrigger, ParsedBuffEffects } from './calculator';
 
 export type SkillSlot = 'active' | 'charged' | 'passive';
 
@@ -58,7 +58,7 @@ export interface ScalingRule {
 
 // NOTE: spelling mirrors the existing codebase intentionally — ModifierChannel /
 // additional-damage.stat use American 'defense' (like SecondaryDamageStat), while
-// BuffStat / Buff.stat use British 'defence'. Phase 2's applyAbility must map both
+// ParsedBuffEffects use British 'defence'. Phase 2's applyAbility must map both
 // to the same underlying defence stat.
 export type ModifierChannel =
     | 'attack'
@@ -70,28 +70,30 @@ export type ModifierChannel =
     | 'outgoingHeal'
     | 'incomingDamage';
 
-export type BuffStat = 'attack' | 'crit' | 'critDamage' | 'outgoingDamage' | 'defence' | 'hp';
-
 export type AbilityConfig =
     | { type: 'damage'; multiplier: number; hits?: number }
     | { type: 'additional-damage'; stat: 'hp' | 'defense'; pct: number }
     | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
     | {
           type: 'buff';
-          stat: BuffStat;
-          value: number;
-          isMultiplicative: boolean;
-          duration: number | 'recurring';
-          stackable: boolean;
+          buffName: string;
+          parsedEffects: ParsedBuffEffects;
+          stacks: number;
+          isStackable: boolean;
           maxStacks?: number;
           stackTrigger?: StackTrigger;
+          duration?: number | 'recurring';
       }
     | {
           type: 'debuff';
-          stat: BuffStat;
-          value: number;
-          duration: number | 'recurring';
+          buffName: string;
+          parsedEffects: ParsedBuffEffects;
+          stacks: number;
+          isStackable: boolean;
+          maxStacks?: number;
+          stackTrigger?: StackTrigger;
           application: 'inflict' | 'apply';
+          duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
     | { type: 'charge'; amount: number }
