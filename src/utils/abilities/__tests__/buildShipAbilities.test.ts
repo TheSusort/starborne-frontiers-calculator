@@ -262,6 +262,33 @@ describe('buildShipAbilities', () => {
         expect(defPen.conditions[0]).toMatchObject({ subject: 'self-buff', derivable: true });
     });
 
+    it('parses Judge-style passive: flat defPen modifier + capped "% more damage for each destroyed" scaling', () => {
+        const s = ship({
+            secondPassiveSkillText:
+                'This Unit ignores Taunt and Provoke effects and has 20% defense penetration. This Unit deals 20% more direct damage for each destroyed enemy, up to max of 100%.',
+        });
+        const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+        const mods = passive!.abilities.filter((a) => a.type === 'modifier');
+
+        const defPen = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'defensePenetration'
+        )!;
+        expect(defPen.config).toMatchObject({ channel: 'defensePenetration', value: 20 });
+        expect(defPen.scaling).toBeUndefined();
+        expect(defPen.conditions).toEqual([]);
+
+        const outgoing = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
+        )!;
+        // Scaling, not a flat +20% bonus — defaults to 0 until the destroyed count is set.
+        expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 0 });
+        expect(outgoing.scaling).toMatchObject({ conditionIndex: 0, perUnit: 20, cap: 100 });
+        expect(outgoing.conditions[0]).toMatchObject({
+            subject: 'enemy-destroyed',
+            derivable: false,
+        });
+    });
+
     it('attaches an enemy-type condition to a conditionally-granted buff (Thresh-style)', () => {
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
@@ -277,5 +304,34 @@ describe('buildShipAbilities', () => {
             derivable: true,
             requiredEnemyType: 'Defender',
         });
+    });
+
+    it('attaches a self-crit condition to a crit-gated granted buff (Lionheart-style)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals 170% damage. If this critically hits, this Unit gains <unit-skill>Attack Up II</unit-skill> for 1 turn.',
+        });
+        const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+        const buff = abilityOfType(active!.abilities, 'buff');
+        expect(buff?.config).toMatchObject({ type: 'buff', buffName: 'Attack Up II' });
+        expect(buff?.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+    });
+
+    it('attaches anyOf Taunt/Provoke conditions to a status-gated granted buff (Panon-style)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals 80% damage. If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill> for 2 turns.',
+        });
+        const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+        const buff = active!.abilities.find(
+            (a) =>
+                a.type === 'buff' &&
+                a.config.type === 'buff' &&
+                a.config.buffName === 'Terran Guard III'
+        );
+        expect(buff?.conditions).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: false, anyOf: true },
+            { subject: 'self-buff', buffName: 'Provoke', derivable: false, anyOf: true },
+        ]);
     });
 });

@@ -9,6 +9,7 @@ import {
     ChargeGain,
     EnemyBaseClass,
 } from '../types/calculator';
+import { Condition } from '../types/abilities';
 
 /**
  * Represents a parsed segment of skill text
@@ -289,38 +290,74 @@ function classifyChargeCondition(
     return { condition: 'always', derivable: true };
 }
 
-// "targeting a Defender", "target is an Attacker", "against a Supporter", "is a Debuffer".
-const GRANT_ENEMY_TYPE_RE =
-    /(?:targeting|target is|against|enemy is|it is|is)\s+an?\s+(defender|attacker|debuffer|supporter)/i;
+const ENEMY_TYPE_WORD = /defender|attacker|debuffer|supporter/i;
+// Enemy-class lead-ins: "targeting a Defender", "damaging an Attacker",
+// "target is a Supporter", "against a Debuffer". Followed by a type (optionally "X or Y").
+const GRANT_ENEMY_TYPE_RE = new RegExp(
+    `(?:targeting|damaging|against|target is|enemy is)\\s+an?\\s+(${ENEMY_TYPE_WORD.source})(?:\\s+or\\s+(?:an?\\s+)?(${ENEMY_TYPE_WORD.source}))?`,
+    'i'
+);
+
+const capType = (s: string): EnemyBaseClass =>
+    (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as EnemyBaseClass;
 
 /**
- * Detects a condition gating a granted/inflicted buff or debuff, scoped to the
- * sentence that mentions `buffName` (so an unconditional buff in the same skill
- * isn't wrongly gated). Currently recognises enemy-type conditions
- * ("When targeting a Defender, … gains Crit Power Up II"). Returns null when the
- * buff's clause carries no recognised condition. Reference data: docs/ship-skills.csv.
+ * Detects the condition(s) gating a granted/inflicted buff or debuff, scoped to the
+ * sentence that mentions `buffName` (so an unconditional buff in the same skill isn't
+ * wrongly gated). Returns model `Condition[]` (empty when no recognised condition).
+ *
+ * Recognised (the unambiguous, sim-meaningful cases):
+ *  - enemy-type: "When damaging a Defender …", "if the target is an Attacker" (incl. "X or Y")
+ *  - self-crit: "if this critically hits/damages …"
+ *  - Taunt/Provoke self-status: "if this Unit is Provoked or Taunted …"
+ *
+ * Genuinely reactive/threshold conditions (when-attacked, below-X%-HP, debuff counts)
+ * are intentionally NOT auto-classified — the user adds them in the editor. Reference
+ * data: docs/ship-skills.csv.
  */
-export function detectGrantCondition(
+export function detectGrantConditions(
     skillText: string | null | undefined,
     buffName: string
-): {
-    condition: ConditionalCondition;
-    derivable: boolean;
-    requiredEnemyType?: EnemyBaseClass;
-} | null {
-    if (!skillText || !buffName) return null;
+): Condition[] {
+    if (!skillText || !buffName) return [];
     const plain = stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. ');
     const sentences = plain.split(/(?<=[.;])\s+/);
-    const target = buffName.toLowerCase();
-    const clause = sentences.find((s) => s.toLowerCase().includes(target)) ?? plain;
+    const clause = sentences.find((s) => s.toLowerCase().includes(buffName.toLowerCase())) ?? plain;
+    const low = clause.toLowerCase();
+    // Only conditional clauses produce conditions.
+    if (!/\b(when|if|while)\b|affected by|targeting|damaging|against/.test(low)) return [];
 
-    const m = GRANT_ENEMY_TYPE_RE.exec(clause);
-    if (m) {
-        const t = m[1].toLowerCase();
-        const requiredEnemyType = (t.charAt(0).toUpperCase() + t.slice(1)) as EnemyBaseClass;
-        return { condition: 'enemy-type', derivable: true, requiredEnemyType };
+    // 1. enemy-type (single or "X or Y")
+    const et = GRANT_ENEMY_TYPE_RE.exec(clause);
+    if (et) {
+        const types = [...new Set([et[1], et[2]].filter(Boolean).map((t) => capType(t)))];
+        return types.map((requiredEnemyType) => ({
+            subject: 'enemy-type' as const,
+            derivable: true,
+            requiredEnemyType,
+            ...(types.length > 1 ? { anyOf: true } : {}),
+        }));
     }
-    return null;
+
+    // 2. self-crit (active voice: this unit critically hits/damages — NOT "is critically hit")
+    if (/critically (?:hits|damag)/i.test(low)) {
+        return [{ subject: 'self-crit', derivable: true }];
+    }
+
+    // 3. Taunt / Provoke self-status (reactive → manual "assume active")
+    const statuses: string[] = [];
+    if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
+    if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');
+    if (statuses.length) {
+        return statuses.map((s) => ({
+            subject: 'self-buff' as const,
+            buffName: s,
+            derivable: false,
+            ...(statuses.length > 1 ? { anyOf: true } : {}),
+        }));
+    }
+
+    return [];
 }
 
 /**

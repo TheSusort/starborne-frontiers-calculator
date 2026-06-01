@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS Calculator now models charge manipulation: ships that add charges to their Charged Skill (and supporter ships that feed charges to allies) make the charged skill fire sooner. Added an enemy-type selector for type-conditional charge gains.',
     'DPS Calculator damage-over-time chart now shows charge progress per round in the hover tooltip (e.g. "2 / 3 charges"), and flags the round the charged skill fires and consumes its charges.',
     "DPS Calculator skills are now edited through the new ability editor: each ship has Active / Charged / Passive skill slots whose abilities (damage, secondary damage, conditional scaling, charge gain, DoTs, buffs, debuffs) are auto-filled from skill text and fully editable in one place, replacing the old separate damage/secondary/conditional/charge/DoT/buff sections. Re-selecting a different ship into a slot rebuilds that ship's abilities from its skill text, replacing any manual edits.",
+    'DPS Calculator skill auto-fill now recognises more conditions on granted buffs/debuffs: enemy-class gates ("when damaging a Defender", including "X or Y"), crit gates ("if this critically hits"), and Taunt/Provoke self-status gates. It also captures flat defense penetration from passives, and correctly treats "X% more damage for each destroyed enemy" as a capped scaling bonus instead of a flat one.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

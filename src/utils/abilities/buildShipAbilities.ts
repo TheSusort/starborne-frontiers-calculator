@@ -21,7 +21,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
-    detectGrantCondition,
+    detectGrantConditions,
 } from '../skillTextParser';
 import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
 import { selectedBuffToAbility } from './buffAbilityConverters';
@@ -107,12 +107,43 @@ function affectedByConditions(sentence: string): Condition[] {
         }));
 }
 
+/** Extracts a "up to (a max of) Y%" cap from a clause, if present. */
+function capFromSentence(sentence: string): number | undefined {
+    const m = sentence.match(/up to\s+(?:a\s+)?(?:max(?:imum)?\s+of\s+)?(\d+(?:\.\d+)?)%/i);
+    return m ? parseFloat(m[1]) : undefined;
+}
+
+/**
+ * Classifies a "for each <thing>" scaling count into a model Condition. Count
+ * subjects that the sim can't derive on its own (destroyed enemies, adjacent
+ * allies, enemy buff/debuff counts) are non-derivable so they default to 0 —
+ * the user supplies the count in the editor. Returns null when unrecognised, so
+ * the caller can skip rather than emit a wrong flat bonus.
+ */
+function forEachCondition(sentence: string): Condition | null {
+    const m = sentence.match(/for each\s+([^.,;]*)/i);
+    if (!m) return null;
+    const what = m[1].toLowerCase();
+    if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
+    if (/debuff/.test(what) && /enem|target/.test(what))
+        return { subject: 'enemy-debuff', derivable: false };
+    if (/buff/.test(what) && /enem|target/.test(what))
+        return { subject: 'enemy-buff', derivable: false };
+    if (/adjacent all/.test(what)) return { subject: 'adjacent-ally', derivable: false };
+    if (/debuff/.test(what)) return { subject: 'self-debuff', derivable: true };
+    if (/buff/.test(what)) return { subject: 'self-buff', derivable: true };
+    return null;
+}
+
 /**
  * Detects passive output/stat modifiers in a skill's text. Handles:
  *  - "X% more (direct) damage" → outgoing-damage modifier (self, or all-allies when
  *    "friendly/allies" scoped), gated by a Stealth or "affected by …" condition.
+ *    When scoped "for each <thing>" (e.g. Judge "for each destroyed enemy") it becomes
+ *    a capped scaling modifier instead of a flat bonus.
  *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
  *    scaling defense-penetration modifier (capped).
+ *  - flat "has X% defense penetration" → a flat defense-penetration modifier (Judge).
  */
 function parseModifiers(text: string): ParsedModifier[] {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -123,26 +154,47 @@ function parseModifiers(text: string): ParsedModifier[] {
         const sentence = sentenceContaining(plain, moreM.index!);
         const isAllyScoped = /friendly|all allies|allies/i.test(sentence);
         const target: AbilityTarget = isAllyScoped ? 'all-allies' : 'self';
-        const conditions: Condition[] = [];
-        if (/stealth/i.test(sentence)) {
-            const subject =
-                target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
-            conditions.push({ subject, buffName: 'Stealth', derivable: false });
+        const value = parseFloat(moreM[1]);
+        if (/for each/i.test(sentence)) {
+            // "X% more damage for each <thing>" → scaling modifier (skip if uncountable).
+            const countCond = forEachCondition(sentence);
+            if (countCond) {
+                out.push({
+                    channel: 'outgoingDamage',
+                    value: 0,
+                    isMultiplicative: true,
+                    target,
+                    conditions: [countCond],
+                    scaling: {
+                        conditionIndex: 0,
+                        perUnit: value,
+                        ...(capFromSentence(sentence) !== undefined
+                            ? { cap: capFromSentence(sentence) }
+                            : {}),
+                    },
+                });
+            }
+        } else {
+            const conditions: Condition[] = [];
+            if (/stealth/i.test(sentence)) {
+                const subject =
+                    target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
+                conditions.push({ subject, buffName: 'Stealth', derivable: false });
+            }
+            conditions.push(...affectedByConditions(sentence));
+            out.push({
+                channel: 'outgoingDamage',
+                value,
+                isMultiplicative: true,
+                target,
+                conditions,
+            });
         }
-        conditions.push(...affectedByConditions(sentence));
-        out.push({
-            channel: 'outgoingDamage',
-            value: parseFloat(moreM[1]),
-            isMultiplicative: true,
-            target,
-            conditions,
-        });
     }
 
     const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);
     if (penM) {
         const sentence = sentenceContaining(plain, penM.index!);
-        const capM = sentence.match(/up to\s+(?:a\s+max(?:imum)?\s+of\s+)?(\d+(?:\.\d+)?)%/i);
         out.push({
             channel: 'defensePenetration',
             value: 0,
@@ -152,9 +204,23 @@ function parseModifiers(text: string): ParsedModifier[] {
             scaling: {
                 conditionIndex: 0,
                 perUnit: parseFloat(penM[1]),
-                ...(capM ? { cap: parseFloat(capM[1]) } : {}),
+                ...(capFromSentence(sentence) !== undefined
+                    ? { cap: capFromSentence(sentence) }
+                    : {}),
             },
         });
+    } else {
+        // flat "has X% defense penetration" (no per-buff scaling) — e.g. Judge passives.
+        const flatPenM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration(?!\s+for each)/i);
+        if (flatPenM) {
+            out.push({
+                channel: 'defensePenetration',
+                value: parseFloat(flatPenM[1]),
+                isMultiplicative: false,
+                target: 'self',
+                conditions: [],
+            });
+        }
     }
 
     return out;
@@ -371,17 +437,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // Attach a gating condition parsed from the buff's clause (e.g. Thresh's
         // "When targeting a Defender, … gains Crit Power Up II" → enemy-type Defender).
         const rowText = getSkillRowForSlot(ship, slot)?.text;
-        const cond = rowText ? detectGrantCondition(rowText, buff.buffName) : null;
-        if (cond) {
-            ability.conditions = [
-                toCondition(
-                    cond.condition,
-                    cond.derivable,
-                    undefined,
-                    cond.requiredEnemyType,
-                    rowText!
-                ),
-            ];
+        const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
+        if (conditions.length) {
+            ability.conditions = conditions;
         }
         pushToSlot(bySlot, slot, [ability]);
     };

@@ -8,7 +8,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
-    detectGrantCondition,
+    detectGrantConditions,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -616,36 +616,67 @@ describe('parseAllSkillEffects', () => {
     });
 });
 
-describe('detectGrantCondition', () => {
+describe('detectGrantConditions', () => {
     it('detects an enemy-type condition on a granted buff (Thresh charged)', () => {
         const text =
             'When targeting a <unit-skill>Defender</unit-skill>, this Unit gains <unit-skill>Crit Power Up II</unit-skill> for 1 turn.';
-        expect(detectGrantCondition(text, 'Crit Power Up II')).toEqual({
-            condition: 'enemy-type',
-            derivable: true,
-            requiredEnemyType: 'Defender',
-        });
+        expect(detectGrantConditions(text, 'Crit Power Up II')).toEqual([
+            {
+                subject: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: 'Defender',
+            },
+        ]);
     });
 
     it('recognises "target is an Attacker" phrasing', () => {
         const text = 'If the target is an Attacker, this Unit gains Attack Up II for 2 turns.';
-        expect(detectGrantCondition(text, 'Attack Up II')).toMatchObject({
-            condition: 'enemy-type',
-            requiredEnemyType: 'Attacker',
-        });
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Attacker' },
+        ]);
     });
 
-    it('returns null for an unconditional grant', () => {
+    it('recognises "when damaging a Debuffer or Supporter" as two anyOf enemy-types', () => {
+        const text =
+            'When damaging a Debuffer or Supporter, this Unit gains <unit-skill>Stealth</unit-skill>.';
+        expect(detectGrantConditions(text, 'Stealth')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Debuffer', anyOf: true },
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Supporter', anyOf: true },
+        ]);
+    });
+
+    it('recognises a self-crit condition ("if this critically hits")', () => {
+        const text = 'If this Unit critically hits, adjacent allies gain Attack Up II.';
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
+            { subject: 'self-crit', derivable: true },
+        ]);
+    });
+
+    it('recognises Taunt/Provoke self-status as anyOf self-buff conditions', () => {
+        const text =
+            'If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill>.';
+        expect(detectGrantConditions(text, 'Terran Guard III')).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: false, anyOf: true },
+            { subject: 'self-buff', buffName: 'Provoke', derivable: false, anyOf: true },
+        ]);
+    });
+
+    it('returns [] for an unconditional grant', () => {
         const text = 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.';
-        expect(detectGrantCondition(text, 'Attack Up III')).toBeNull();
+        expect(detectGrantConditions(text, 'Attack Up III')).toEqual([]);
+    });
+
+    it('does not classify a reactive "when critically hit" clause', () => {
+        const text = 'When this Unit is critically hit, it gains Attack Up II.';
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([]);
     });
 
     it('is clause-scoped: only the conditional buff gets the condition', () => {
         const text =
             'This Unit gains Attack Up II for 2 turns. When targeting a Defender, this Unit gains Crit Power Up II for 1 turn.';
-        expect(detectGrantCondition(text, 'Attack Up II')).toBeNull();
-        expect(detectGrantCondition(text, 'Crit Power Up II')).toMatchObject({
-            requiredEnemyType: 'Defender',
-        });
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([]);
+        expect(detectGrantConditions(text, 'Crit Power Up II')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
     });
 });
