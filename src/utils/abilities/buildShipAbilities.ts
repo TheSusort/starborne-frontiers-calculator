@@ -41,7 +41,10 @@ function parseHitCount(text: string): number | undefined {
     const plain = stripTags(text);
     // "attacks three times" / "attacks twice" / "attacks 3 times"
     const wordMatch = plain.match(/attacks?\s+(once|twice|three|four|five)(?:\s+times)?/i);
-    if (wordMatch) return WORD_HIT_COUNT[wordMatch[1].toLowerCase()];
+    if (wordMatch) {
+        const count = WORD_HIT_COUNT[wordMatch[1].toLowerCase()];
+        if (count > 1) return count;
+    }
     const numMatch = plain.match(/attacks?\s+(\d+)\s+times/i);
     if (numMatch) {
         const n = parseInt(numMatch[1], 10);
@@ -219,6 +222,7 @@ function abilitiesFromText(text: string): Ability[] {
 
 function dotAbility(entry: DoTApplicationEntry): Ability {
     return {
+        // entry.id is intentionally discarded; abilities are rebuilt wholesale per ship (not carried from autofill dedup).
         id: nextId(),
         type: 'dot',
         target: 'enemy',

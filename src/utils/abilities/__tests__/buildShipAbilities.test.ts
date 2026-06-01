@@ -189,5 +189,6 @@ describe('buildShipAbilities', () => {
             },
             autoFilled: true,
         });
+        expect(mod!.conditions[0]).toMatchObject({ subject: 'self-buff', buffName: 'Stealth' });
     });
 });
