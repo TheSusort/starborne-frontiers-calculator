@@ -62,6 +62,24 @@ const BUFF_NAME_SUBJECTS: ConditionSubject[] = [
     'enemy-debuff',
 ];
 
+// Subjects whose value is a count, so a threshold comparator is meaningful.
+const COUNT_SUBJECTS: ConditionSubject[] = [
+    'self-buff',
+    'self-debuff',
+    'enemy-buff',
+    'enemy-debuff',
+    'adjacent-ally',
+    'enemy-adjacent',
+    'enemy-destroyed',
+];
+
+const COUNT_COMPARATOR_OPTIONS = [
+    { value: 'none', label: 'present (any count)' },
+    { value: 'gte', label: 'at least' },
+    { value: 'lte', label: 'at most' },
+    { value: 'eq', label: 'exactly' },
+];
+
 export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove }) => {
     return (
         <div className="card space-y-2">
@@ -155,6 +173,46 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
                             });
                         }}
                     />
+                </div>
+            )}
+
+            {COUNT_SUBJECTS.includes(condition.subject) && (
+                <div className="flex items-end gap-2">
+                    <Select
+                        label="Count is"
+                        value={condition.countComparator ?? 'none'}
+                        options={COUNT_COMPARATOR_OPTIONS}
+                        onChange={(value) => {
+                            if (value === 'none') {
+                                // drop both threshold fields → back to the presence rule
+                                const rest = { ...condition };
+                                delete rest.countComparator;
+                                delete rest.countThreshold;
+                                onChange(rest);
+                            } else {
+                                onChange({
+                                    ...condition,
+                                    countComparator: value as 'gte' | 'lte' | 'eq',
+                                    countThreshold: condition.countThreshold ?? 0,
+                                });
+                            }
+                        }}
+                    />
+                    {condition.countComparator && (
+                        <Input
+                            label="Threshold"
+                            type="number"
+                            min={0}
+                            value={condition.countThreshold ?? 0}
+                            onChange={(e) => {
+                                const n = parseInt(e.target.value, 10);
+                                onChange({
+                                    ...condition,
+                                    countThreshold: Number.isNaN(n) ? 0 : n,
+                                });
+                            }}
+                        />
+                    )}
                 </div>
             )}
 

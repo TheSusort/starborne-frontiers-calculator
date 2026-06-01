@@ -2181,6 +2181,17 @@ const DocumentationPage: React.FC = () => {
                                         row.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Condition Thresholds:</span>{' '}
+                                        Effects gated on a count — &quot;if the target has 3 or more
+                                        debuffs&quot;, &quot;if this unit has no debuffs&quot; —
+                                        fire only when the count actually meets the threshold,
+                                        rather than on the first buff or debuff. Auto-detected from
+                                        skill text and editable per condition (at least / at most /
+                                        exactly N). Self buff and enemy debuff counts are tallied
+                                        from sim state; enemy buff and self debuff counts default to
+                                        zero under the single-target DPS assumptions.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Charge Manipulation:</span>{' '}
                                         Ships that add charges to their own Charged Skill each round
                                         (e.g. &quot;+1 charge if you crit&quot;) make the charged

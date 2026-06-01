@@ -1,4 +1,4 @@
-import { Ability, ShipSkills, AbilityTarget, SkillSlot } from '../../types/abilities';
+import { Ability, Condition, ShipSkills, AbilityTarget, SkillSlot } from '../../types/abilities';
 import { SelectedGameBuff, EnemyBaseClass } from '../../types/calculator';
 import { conditionsMet, ConditionContext } from './evaluateConditions';
 
@@ -88,6 +88,20 @@ export function buildStaticBuffContext(opts: { enemyType?: EnemyBaseClass }): Co
     };
 }
 
+// For the schedule-time include/exclude gate, a DERIVABLE count-threshold gate is
+// satisfiable in principle (some real per-round count meets it), so it shouldn't be
+// excluded by the placeholder sentinel counts in buildStaticBuffContext. Neutralize
+// it to an "always" condition for this check; the real per-round threshold still
+// applies wherever the ability is re-evaluated dynamically (e.g. modifiers in
+// applyAbilities). Manual (non-derivable) thresholds keep literal gating.
+function staticGateConditions(conditions: Condition[]): Condition[] {
+    return conditions.map((c) =>
+        c.derivable && c.countComparator != null
+            ? { subject: 'always' as const, derivable: true, ...(c.anyOf ? { anyOf: true } : {}) }
+            : c
+    );
+}
+
 export function buffAbilitiesToSelectedBuffs(
     shipSkills: ShipSkills,
     staticCtx: ConditionContext
@@ -97,7 +111,7 @@ export function buffAbilitiesToSelectedBuffs(
     for (const slot of shipSkills.slots) {
         for (const ability of slot.abilities) {
             if (ability.config.type !== 'buff' && ability.config.type !== 'debuff') continue;
-            if (!conditionsMet(ability.conditions, staticCtx)) continue;
+            if (!conditionsMet(staticGateConditions(ability.conditions), staticCtx)) continue;
             const sb = abilityToSelectedBuff(ability, slot.slot);
             if (!sb) continue;
             if (ability.target === 'enemy' || ability.target === 'all-enemies') {

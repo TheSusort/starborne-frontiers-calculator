@@ -59,4 +59,58 @@ describe('ConditionRow', () => {
         fireEvent.click(screen.getByLabelText('Remove condition'));
         expect(onRemove).toHaveBeenCalled();
     });
+
+    it('shows the count comparator for count subjects and sets it on change', () => {
+        const onChange = vi.fn();
+        render(
+            <ConditionRow
+                condition={{ subject: 'enemy-debuff', derivable: true }}
+                onChange={onChange}
+                onRemove={vi.fn()}
+            />
+        );
+        expect(screen.getByLabelText('Count is')).toBeInTheDocument();
+        // Threshold input is hidden until a comparator is chosen.
+        expect(screen.queryByLabelText('Threshold')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByLabelText('Count is'));
+        fireEvent.click(screen.getByText('at least'));
+        expect(onChange).toHaveBeenCalledWith(
+            expect.objectContaining({ countComparator: 'gte', countThreshold: 0 })
+        );
+    });
+
+    it('reveals the threshold input once a comparator is set and clears both on "present"', () => {
+        const onChange = vi.fn();
+        const { rerender } = render(
+            <ConditionRow
+                condition={{
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 3,
+                }}
+                onChange={onChange}
+                onRemove={vi.fn()}
+            />
+        );
+        expect(screen.getByLabelText('Threshold')).toBeInTheDocument();
+
+        // Choosing "present (any count)" drops both threshold fields.
+        fireEvent.click(screen.getByLabelText('Count is'));
+        fireEvent.click(screen.getByText('present (any count)'));
+        const updated = onChange.mock.calls[0][0];
+        expect(updated.countComparator).toBeUndefined();
+        expect(updated.countThreshold).toBeUndefined();
+
+        rerender(
+            <ConditionRow
+                condition={{ subject: 'enemy-type', derivable: true }}
+                onChange={onChange}
+                onRemove={vi.fn()}
+            />
+        );
+        // Non-count subject → no comparator UI.
+        expect(screen.queryByLabelText('Count is')).not.toBeInTheDocument();
+    });
 });

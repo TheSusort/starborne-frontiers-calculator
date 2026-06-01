@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     ConditionContext,
     evaluateCondition,
+    conditionMet,
     conditionsMet,
     scaledBonus,
 } from '../evaluateConditions';
@@ -169,6 +170,60 @@ describe('conditionsMet (AND of OR-groups)', () => {
         expect(conditionsMet(conds, ctx({ enemyType: 'Defender', effectiveCritRate: 100 }))).toBe(
             true
         );
+    });
+});
+
+describe('conditionMet (count comparator gating)', () => {
+    it('no comparator → presence rule (count > 0)', () => {
+        expect(conditionMet(cond({ subject: 'enemy-debuff' }), ctx({ enemyDebuffCount: 1 }))).toBe(
+            true
+        );
+        expect(conditionMet(cond({ subject: 'enemy-debuff' }), ctx({ enemyDebuffCount: 0 }))).toBe(
+            false
+        );
+    });
+
+    it('gte threshold: met only at/above the count (Crocus "more than 3" → gte 4)', () => {
+        const c = cond({ subject: 'enemy-debuff', countComparator: 'gte', countThreshold: 4 });
+        expect(conditionMet(c, ctx({ enemyDebuffCount: 3 }))).toBe(false);
+        expect(conditionMet(c, ctx({ enemyDebuffCount: 4 }))).toBe(true);
+        expect(conditionMet(c, ctx({ enemyDebuffCount: 9 }))).toBe(true);
+    });
+
+    it('eq 0: met only when the count is exactly zero (Sustainer "no debuffs")', () => {
+        const c = cond({ subject: 'self-debuff', countComparator: 'eq', countThreshold: 0 });
+        expect(conditionMet(c, ctx({ selfDebuffNames: [] }))).toBe(true);
+        expect(conditionMet(c, ctx({ selfDebuffNames: ['Burn'] }))).toBe(false);
+    });
+
+    it('lte threshold: met at/below the count', () => {
+        const c = cond({ subject: 'enemy-debuff', countComparator: 'lte', countThreshold: 2 });
+        expect(conditionMet(c, ctx({ enemyDebuffCount: 2 }))).toBe(true);
+        expect(conditionMet(c, ctx({ enemyDebuffCount: 3 }))).toBe(false);
+    });
+
+    it('comparator flows through conditionsMet as a gate', () => {
+        const conds = [
+            cond({ subject: 'enemy-debuff', countComparator: 'gte', countThreshold: 3 }),
+        ];
+        expect(conditionsMet(conds, ctx({ enemyDebuffCount: 3 }))).toBe(true);
+        expect(conditionsMet(conds, ctx({ enemyDebuffCount: 2 }))).toBe(false);
+    });
+
+    it('comparator does NOT affect scaledBonus (scaling always uses the raw count)', () => {
+        const a: Ability = {
+            id: 'x',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [
+                cond({ subject: 'enemy-debuff', countComparator: 'gte', countThreshold: 4 }),
+            ],
+            scaling: { conditionIndex: 0, perUnit: 10 },
+            config: { type: 'damage', multiplier: 200 },
+        };
+        // count 2 < threshold 4 (gate would fail), but scaling still uses raw count 2 → 20.
+        expect(scaledBonus(a, ctx({ enemyDebuffCount: 2 }))).toBe(20);
     });
 });
 

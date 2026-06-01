@@ -48,6 +48,13 @@ export interface Condition {
     buffName?: string;
     hpComparator?: 'below' | 'above';
     hpPercent?: number;
+    // Threshold gating for count subjects (buff/debuff/adjacency/destroyed counts).
+    // When set, the condition is "met" only when the derived/manual count satisfies
+    // the comparator against `countThreshold` (e.g. enemy has ≥3 debuffs, self has 0
+    // debuffs). Absent → the default presence rule (count > 0) applies. This gates
+    // (conditionsMet) only; per-count scaling (scaledBonus) always uses the raw count.
+    countComparator?: 'gte' | 'lte' | 'eq';
+    countThreshold?: number;
 }
 
 export interface ScalingRule {

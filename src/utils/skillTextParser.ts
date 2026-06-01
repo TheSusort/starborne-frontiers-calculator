@@ -9,7 +9,7 @@ import {
     ChargeGain,
     EnemyBaseClass,
 } from '../types/calculator';
-import { Condition } from '../types/abilities';
+import { Condition, ConditionSubject } from '../types/abilities';
 
 /**
  * Represents a parsed segment of skill text
@@ -302,6 +302,58 @@ const capType = (s: string): EnemyBaseClass =>
     (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as EnemyBaseClass;
 
 /**
+ * Classifies a buff/debuff COUNT-threshold gate from a clause into a count
+ * condition with a comparator (e.g. "more than 3 Debuffs" → enemy-debuff gte 4,
+ * "no debuffs" → self-debuff eq 0). Returns null when no count-threshold phrasing
+ * is present. The count subjects are derivable — the sim derives self-buff and
+ * enemy-debuff counts from the timeline; self-debuff/enemy-buff default to 0
+ * (no enemy-buff/self-debuff modelling), a safe DPS baseline.
+ */
+function countGateCondition(clause: string): Condition | null {
+    const low = clause.toLowerCase();
+    let comparator: 'gte' | 'lte' | 'eq' | null = null;
+    let threshold = 0;
+    let kind: string | null = null;
+    let m: RegExpMatchArray | null;
+    if ((m = low.match(/(?:more than|over)\s+(\d+)\s+(buffs?|debuffs?)/))) {
+        comparator = 'gte';
+        threshold = parseInt(m[1], 10) + 1;
+        kind = m[2];
+    } else if ((m = low.match(/(?:(\d+)\s+or\s+more|at least\s+(\d+))\s+(buffs?|debuffs?)/))) {
+        comparator = 'gte';
+        threshold = parseInt(m[1] ?? m[2], 10);
+        kind = m[3];
+    } else if ((m = low.match(/(?:fewer|less)\s+than\s+(\d+)\s+(buffs?|debuffs?)/))) {
+        comparator = 'lte';
+        threshold = Math.max(0, parseInt(m[1], 10) - 1);
+        kind = m[2];
+    } else if (
+        (m = low.match(/(?:(\d+)\s+or\s+(?:fewer|less)|at most\s+(\d+))\s+(buffs?|debuffs?)/))
+    ) {
+        comparator = 'lte';
+        threshold = parseInt(m[1] ?? m[2], 10);
+        kind = m[3];
+    } else if ((m = low.match(/(?:has\s+no|without(?:\s+any)?|\bno)\s+(buffs?|debuffs?)/))) {
+        comparator = 'eq';
+        threshold = 0;
+        kind = m[1];
+    }
+    if (!comparator || !kind) return null;
+
+    const isDebuff = /debuff/.test(kind);
+    // Whose count: enemy when the enemy/target is referenced and "this Unit" is not.
+    const isEnemy = /\b(enem(?:y|ies)|target|targeted)\b/.test(low) && !/\bthis unit\b/.test(low);
+    const subject: ConditionSubject = isDebuff
+        ? isEnemy
+            ? 'enemy-debuff'
+            : 'self-debuff'
+        : isEnemy
+          ? 'enemy-buff'
+          : 'self-buff';
+    return { subject, derivable: true, countComparator: comparator, countThreshold: threshold };
+}
+
+/**
  * Detects the condition(s) gating a granted/inflicted buff or debuff, scoped to the
  * sentence that mentions `buffName` (so an unconditional buff in the same skill isn't
  * wrongly gated). Returns model `Condition[]` (empty when no recognised condition).
@@ -344,7 +396,11 @@ export function detectGrantConditions(
         return [{ subject: 'self-crit', derivable: true }];
     }
 
-    // 3. Taunt / Provoke self-status (reactive → manual "assume active")
+    // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
+    const countGate = countGateCondition(clause);
+    if (countGate) return [countGate];
+
+    // 4. Taunt / Provoke self-status (reactive → manual "assume active")
     const statuses: string[] = [];
     if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
     if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');

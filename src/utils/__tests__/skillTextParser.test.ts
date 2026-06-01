@@ -661,6 +661,30 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('classifies "more than 3 Debuffs" as enemy-debuff gte 4 (Crocus)', () => {
+        const text =
+            'This Unit deals 150% Damage. If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.';
+        expect(detectGrantConditions(text, 'Stasis')).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 4 },
+        ]);
+    });
+
+    it('classifies "3 or more buffs" on the target as enemy-buff gte 3 (Nuqtu)', () => {
+        const text =
+            'If the target has 3 or more buffs, the Unit gains <unit-skill>Core Charge I</unit-skill>.';
+        expect(detectGrantConditions(text, 'Core Charge I')).toEqual([
+            { subject: 'enemy-buff', derivable: true, countComparator: 'gte', countThreshold: 3 },
+        ]);
+    });
+
+    it('classifies "this Unit has no debuffs" as self-debuff eq 0 (Sustainer)', () => {
+        const text =
+            'At the start of the round, if this Unit has no debuffs, it gains <unit-skill>Out</unit-skill>.';
+        expect(detectGrantConditions(text, 'Out')).toEqual([
+            { subject: 'self-debuff', derivable: true, countComparator: 'eq', countThreshold: 0 },
+        ]);
+    });
+
     it('returns [] for an unconditional grant', () => {
         const text = 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.';
         expect(detectGrantConditions(text, 'Attack Up III')).toEqual([]);

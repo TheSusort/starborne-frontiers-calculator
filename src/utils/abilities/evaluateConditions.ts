@@ -64,11 +64,31 @@ function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
     return cond.hpComparator === 'above' ? hp > t : hp < t;
 }
 
+/**
+ * Whether a single condition is satisfied (as a gate). With a `countComparator`,
+ * the derived/manual count is compared against `countThreshold` (e.g. ≥3 debuffs,
+ * exactly 0 debuffs); otherwise the default presence rule (count > 0) applies.
+ */
+export function conditionMet(cond: Condition, ctx: ConditionContext): boolean {
+    const count = evaluateCondition(cond, ctx);
+    if (cond.countComparator != null && cond.countThreshold != null) {
+        switch (cond.countComparator) {
+            case 'gte':
+                return count >= cond.countThreshold;
+            case 'lte':
+                return count <= cond.countThreshold;
+            case 'eq':
+                return count === cond.countThreshold;
+        }
+    }
+    return count > 0;
+}
+
 /** AND across OR-groups. Consecutive `anyOf` conditions form one OR-group. Empty → true. */
 export function conditionsMet(conditions: Condition[], ctx: ConditionContext): boolean {
     if (conditions.length === 0) return true;
     const groups = groupConditions(conditions);
-    return groups.every((group) => group.some((c) => evaluateCondition(c, ctx) > 0));
+    return groups.every((group) => group.some((c) => conditionMet(c, ctx)));
 }
 
 /** Group runs of `anyOf` together; non-anyOf conditions are their own singleton groups. */

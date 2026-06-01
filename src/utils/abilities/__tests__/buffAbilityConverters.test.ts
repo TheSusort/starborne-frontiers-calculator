@@ -215,6 +215,45 @@ describe('buffAbilitiesToSelectedBuffs', () => {
         expect(included.selfBuffs).toHaveLength(1);
     });
 
+    it('schedules a derivable count-threshold debuff (gte 4 not dropped by the sentinel count)', () => {
+        // staticCtx.enemyDebuffCount is a sentinel (1); a literal gte 4 would wrongly
+        // exclude this debuff. A derivable threshold is satisfiable in principle → included.
+        const gated = debuffAbility({
+            conditions: [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 4,
+                },
+            ],
+        });
+        const { enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([gated]),
+            buildStaticBuffContext({})
+        );
+        expect(enemyDebuffs).toHaveLength(1);
+    });
+
+    it('still excludes a MANUAL count-threshold gate that the manual count fails (gte 4 vs 1)', () => {
+        const gated = debuffAbility({
+            conditions: [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: false,
+                    manualCount: 1,
+                    countComparator: 'gte',
+                    countThreshold: 4,
+                },
+            ],
+        });
+        const { enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([gated]),
+            buildStaticBuffContext({})
+        );
+        expect(enemyDebuffs).toHaveLength(0);
+    });
+
     it('reconstructs skillSource=charge for a buff placed on the charged slot', () => {
         const ctx = buildStaticBuffContext({});
         const chargedSkills: ShipSkills = {

@@ -306,6 +306,23 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('attaches an enemy-debuff count gate to a threshold-gated inflicted debuff (Crocus-style)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals 150% Damage and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns. If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.',
+        });
+        const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+        const stasis = active!.abilities.find(
+            (a) =>
+                a.type === 'debuff' && a.config.type === 'debuff' && a.config.buffName === 'Stasis'
+        );
+        expect(stasis?.conditions).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 4 },
+        ]);
+        // The unconditional Corrosion II DoT in the same skill stays ungated.
+        expect(abilityOfType(active!.abilities, 'dot')?.conditions).toEqual([]);
+    });
+
     it('attaches a self-crit condition to a crit-gated granted buff (Lionheart-style)', () => {
         const s = ship({
             activeSkillText:
