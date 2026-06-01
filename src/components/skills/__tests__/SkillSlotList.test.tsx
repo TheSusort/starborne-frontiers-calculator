@@ -52,7 +52,7 @@ describe('SkillSlotList', () => {
         fireEvent.click(editButtons[0]);
 
         // edit the multiplier inside the modal's AbilityCard
-        fireEvent.change(screen.getByLabelText('Multiplier'), { target: { value: '250' } });
+        fireEvent.change(screen.getByLabelText('Skill multiplier'), { target: { value: '250' } });
 
         expect(onChange).toHaveBeenCalledTimes(1);
         const updated: ShipSkills = onChange.mock.calls[0][0];

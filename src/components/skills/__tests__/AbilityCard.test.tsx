@@ -31,7 +31,7 @@ describe('AbilityCard', () => {
     it('renders a multiplier input for a damage ability and fires onChange on edit', () => {
         const onChange = vi.fn();
         render(<AbilityCard ability={damageAbility} onChange={onChange} onRemove={vi.fn()} />);
-        const input = screen.getByLabelText('Multiplier');
+        const input = screen.getByLabelText('Skill multiplier');
         fireEvent.change(input, { target: { value: '2' } });
         expect(onChange).toHaveBeenCalledWith(
             expect.objectContaining({

@@ -119,10 +119,11 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
             {ability.scaling && (
                 <div className="flex gap-2">
                     <Input
-                        label="Per unit"
+                        label="Per condition count"
                         type="number"
                         step="0.01"
                         value={ability.scaling.perUnit}
+                        helpLabel="added × the count of the first condition below"
                         onChange={(e) =>
                             onChange({
                                 ...ability,
@@ -157,7 +158,7 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                     <div className="space-y-2">
                         <div className="flex gap-2">
                             <Input
-                                label="Multiplier"
+                                label="Skill multiplier"
                                 type="number"
                                 step="0.01"
                                 value={config.multiplier}

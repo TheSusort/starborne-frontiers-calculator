@@ -92,7 +92,7 @@ describe('SkillEditorModal', () => {
             />
         );
         // AbilityCard for a damage ability exposes a Multiplier input.
-        expect(screen.getByLabelText('Multiplier')).toBeInTheDocument();
+        expect(screen.getByLabelText('Skill multiplier')).toBeInTheDocument();
     });
 
     it('appends a default ability when adding via the picker', () => {
@@ -126,7 +126,7 @@ describe('SkillEditorModal', () => {
                 onClose={vi.fn()}
             />
         );
-        fireEvent.change(screen.getByLabelText('Multiplier'), { target: { value: '200' } });
+        fireEvent.change(screen.getByLabelText('Skill multiplier'), { target: { value: '200' } });
         const updated: Skill = onChange.mock.calls[0][0];
         expect(updated.abilities[0].config).toMatchObject({ type: 'damage', multiplier: 200 });
         // original skill untouched
