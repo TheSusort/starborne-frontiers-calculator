@@ -34,11 +34,13 @@ export interface DPSSimulationInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    activeMultiplier: number;
-    chargedMultiplier: number;
+    // Flat damage fields are only read by the flatInputToAbilities fallback (when
+    // `shipSkills` is omitted). Callers that pass `shipSkills` (the DPS page) skip them.
+    activeMultiplier?: number;
+    chargedMultiplier?: number;
     chargeCount: number;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
+    activeDoTs?: DoTApplicationConfig;
+    chargedDoTs?: DoTApplicationConfig;
     enemyDefense: number;
     enemyHp: number;
     rounds: number;

@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS Calculator now models conditional damage bonuses that scale with a count (e.g. +20% per adjacent ally, +15% per debuff on the enemy). Counts derived from your buffs or the enemy's debuffs are tallied automatically each round; other conditions take a manual count. Auto-detected from skill text and editable per skill.",
     'DPS Calculator now models charge manipulation: ships that add charges to their Charged Skill (and supporter ships that feed charges to allies) make the charged skill fire sooner. Added an enemy-type selector for type-conditional charge gains.',
     'DPS Calculator damage-over-time chart now shows charge progress per round in the hover tooltip (e.g. "2 / 3 charges"), and flags the round the charged skill fires and consumes its charges.',
+    'DPS Calculator skills are now edited through the new ability editor: each ship has Active / Charged / Passive skill slots whose abilities (damage, secondary damage, conditional scaling, charge gain, DoTs, buffs, debuffs) are auto-filled from skill text and fully editable in one place, replacing the old separate damage/secondary/conditional/charge/DoT/buff sections.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

@@ -6,28 +6,18 @@ import { computeAffinityModifiers } from '../../utils/calculators/affinityUtils'
 import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
-    DoTApplicationEntry,
-    DEFAULT_DOT_CONFIG,
     SelectedGameBuff,
     TeamShipConfig,
-    SecondaryDamage,
-    ConditionalDamage,
-    ChargeGain,
     EnemyBaseClass,
 } from '../../types/calculator';
+import { ShipSkills } from '../../types/abilities';
+import { detectFullyCharged } from '../../utils/skillTextParser';
+import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
+import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
 import {
-    parseSkillDamage,
-    parseSecondaryDamage,
-    parseConditionalDamage,
-    detectFullyCharged,
-    parseChargeGain,
-} from '../../utils/skillTextParser';
-import {
-    buildSkillBuffAutoFill,
-    buildDoTAutoFill,
-    mergeAutoFill,
-    mergeAutoFillDoTs,
-} from '../../utils/calculators/skillBuffAutoFill';
+    buildDefaultShipSkills,
+    configShipSkillsToSimInputs,
+} from '../../utils/abilities/configToSimInputs';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { useShips } from '../../contexts/ShipsContext';
@@ -43,63 +33,12 @@ import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
-function buildSkillAutoFill(ship: Ship) {
-    const activeParsed = parseSkillDamage(ship.activeSkillText ?? '');
-    const chargedParsed = parseSkillDamage(ship.chargeSkillText ?? '');
-    const activeSecondary = parseSecondaryDamage(ship.activeSkillText) ?? undefined;
-    const chargedSecondary = parseSecondaryDamage(ship.chargeSkillText) ?? undefined;
-    const seedManual = (c: ConditionalDamage | null): ConditionalDamage | undefined => {
-        if (!c) return undefined;
-        return !c.derivable && c.manualCount === undefined ? { ...c, manualCount: 1 } : c;
-    };
-    const activeConditional = seedManual(parseConditionalDamage(ship.activeSkillText));
-    const chargedConditional = seedManual(parseConditionalDamage(ship.chargeSkillText));
-    const seedChargeManual = (c: ChargeGain | null): ChargeGain | undefined => {
-        if (!c) return undefined;
-        return !c.derivable && c.manualCount === undefined ? { ...c, manualCount: 1 } : c;
-    };
-    const selfChargeGain = seedChargeManual(
-        parseChargeGain(ship.activeSkillText) ??
-            parseChargeGain(ship.firstPassiveSkillText) ??
-            parseChargeGain(ship.secondPassiveSkillText) ??
-            parseChargeGain(ship.thirdPassiveSkillText)
-    );
-    const autoFilledFields = new Set<
-        | 'activeMultiplier'
-        | 'chargedMultiplier'
-        | 'hacking'
-        | 'activeSecondary'
-        | 'chargedSecondary'
-        | 'activeConditional'
-        | 'chargedConditional'
-        | 'selfChargeGain'
-    >();
-    if (activeParsed > 0) autoFilledFields.add('activeMultiplier');
-    if (chargedParsed > 0) autoFilledFields.add('chargedMultiplier');
-    if (activeSecondary) autoFilledFields.add('activeSecondary');
-    if (chargedSecondary) autoFilledFields.add('chargedSecondary');
-    if (activeConditional) autoFilledFields.add('activeConditional');
-    if (chargedConditional) autoFilledFields.add('chargedConditional');
-    if (selfChargeGain) autoFilledFields.add('selfChargeGain');
-    return {
-        activeParsed,
-        chargedParsed,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
-        selfChargeGain,
-        autoFilledFields,
-    };
-}
-
 const DPSCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { getShipById } = useShips();
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
-    const nextDoTIdRef = useRef(1);
     const nextTeamIdRef = useRef(2);
 
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
@@ -120,17 +59,6 @@ const DPSCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const {
-                    activeParsed,
-                    chargedParsed,
-                    activeSecondary,
-                    chargedSecondary,
-                    activeConditional,
-                    chargedConditional,
-                    selfChargeGain,
-                    autoFilledFields,
-                } = buildSkillAutoFill(ship);
-                autoFilledFields.add('hacking');
                 return {
                     configs: [
                         {
@@ -144,14 +72,7 @@ const DPSCalculatorPage: React.FC = () => {
                             hacking: Math.round(final.hacking ?? 200),
                             defence: Math.round(final.defence ?? 0),
                             hp: Math.round(final.hp ?? 0),
-                            activeSecondary,
-                            chargedSecondary,
-                            activeConditional,
-                            chargedConditional,
-                            selfChargeGain,
                             allyChargePerRound: 0,
-                            activeMultiplier: activeParsed > 0 ? activeParsed : 100,
-                            chargedMultiplier: chargedParsed > 0 ? chargedParsed : 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             startCharged: detectFullyCharged([
                                 ship.activeSkillText,
@@ -160,11 +81,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 ship.secondPassiveSkillText,
                                 ship.thirdPassiveSkillText,
                             ]),
-                            autoFilledFields,
-                            activeDoTs: [...DEFAULT_DOT_CONFIG],
-                            chargedDoTs: [...DEFAULT_DOT_CONFIG],
-                            buffs: [],
-                            enemyDebuffs: [],
+                            shipSkills: buildShipAbilities(ship),
                         },
                     ],
                     nextId: 2,
@@ -183,15 +100,10 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: 200,
                     defence: 0,
                     hp: 0,
-                    activeMultiplier: 100,
-                    chargedMultiplier: 0,
                     chargeCount: 0,
                     startCharged: false,
                     allyChargePerRound: 0,
-                    activeDoTs: [...DEFAULT_DOT_CONFIG],
-                    chargedDoTs: [...DEFAULT_DOT_CONFIG],
-                    buffs: [],
-                    enemyDebuffs: [],
+                    shipSkills: buildDefaultShipSkills(),
                 },
             ],
             nextId: 2,
@@ -249,40 +161,53 @@ const DPSCalculatorPage: React.FC = () => {
         };
     }, [attackerBuffs, teamAttackerBuffs]);
 
+    // Convert each config's editor abilities (buff/debuff) into the sim's selfBuffs /
+    // enemyDebuffs. Memoized off configs + enemyType so it never runs in render.
+    const convertedMap = useMemo(
+        () =>
+            new Map(
+                configs.map((c) => [c.id, configShipSkillsToSimInputs(c.shipSkills, enemyType)])
+            ),
+        [configs, enemyType]
+    );
+
     const mergedAttackerBuffTotals = useMemo(
         () =>
             new Map(
-                configs.map((c) => [
-                    c.id,
-                    {
-                        attackBuff:
-                            globalAttackerBuffTotals.attackBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.attack ?? 0) * b.stacks,
-                                0
-                            ),
-                        critBuff:
-                            globalAttackerBuffTotals.critBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.crit ?? 0) * b.stacks,
-                                0
-                            ),
-                        critDamageBuff:
-                            globalAttackerBuffTotals.critDamageBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
-                                0
-                            ),
-                    },
-                ])
+                configs.map((c) => {
+                    const selfBuffs = convertedMap.get(c.id)?.selfBuffs ?? [];
+                    return [
+                        c.id,
+                        {
+                            attackBuff:
+                                globalAttackerBuffTotals.attackBuff +
+                                selfBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.attack ?? 0) * b.stacks,
+                                    0
+                                ),
+                            critBuff:
+                                globalAttackerBuffTotals.critBuff +
+                                selfBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.crit ?? 0) * b.stacks,
+                                    0
+                                ),
+                            critDamageBuff:
+                                globalAttackerBuffTotals.critDamageBuff +
+                                selfBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.critDamage ?? 0) * b.stacks,
+                                    0
+                                ),
+                        },
+                    ];
+                })
             ),
-        [configs, globalAttackerBuffTotals]
+        [configs, convertedMap, globalAttackerBuffTotals]
     );
 
     const simResults = useMemo(() => {
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
-            const allAttackerBuffs = [...attackerBuffs, ...config.buffs];
+            const converted = convertedMap.get(config.id)!;
             const { damageModifier, critCap, critPenalty } = computeAffinityModifiers(
                 config.affinity,
                 enemyAffinity
@@ -297,26 +222,18 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: config.hacking ?? 200,
                     defence: config.defence,
                     hp: config.hp,
-                    activeSecondary: config.activeSecondary,
-                    chargedSecondary: config.chargedSecondary,
-                    activeConditional: config.activeConditional,
-                    chargedConditional: config.chargedConditional,
-                    activeMultiplier: config.activeMultiplier,
-                    chargedMultiplier: config.chargedMultiplier,
                     chargeCount: config.chargeCount,
-                    activeDoTs: config.activeDoTs,
-                    chargedDoTs: config.chargedDoTs,
+                    shipSkills: config.shipSkills,
                     enemyDefense,
                     enemyHp,
                     enemySecurity,
                     rounds,
-                    selfBuffs: [...allAttackerBuffs, ...teamAttackerBuffs],
-                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs, ...config.enemyDebuffs],
+                    selfBuffs: [...attackerBuffs, ...teamAttackerBuffs, ...converted.selfBuffs],
+                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs, ...converted.enemyDebuffs],
                     startCharged: config.startCharged,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
                     affinityCritPenalty: critPenalty,
-                    selfChargeGain: config.selfChargeGain,
                     allyChargePerRound: config.allyChargePerRound,
                     enemyType,
                 })
@@ -325,6 +242,7 @@ const DPSCalculatorPage: React.FC = () => {
         return map;
     }, [
         configs,
+        convertedMap,
         enemyDefense,
         enemyHp,
         enemySecurity,
@@ -351,14 +269,10 @@ const DPSCalculatorPage: React.FC = () => {
                 hacking: 200,
                 defence: 0,
                 hp: 0,
-                activeMultiplier: 100,
-                chargedMultiplier: 0,
                 chargeCount: 0,
                 startCharged: false,
-                activeDoTs: [...DEFAULT_DOT_CONFIG],
-                chargedDoTs: [...DEFAULT_DOT_CONFIG],
-                buffs: [],
-                enemyDebuffs: [],
+                allyChargePerRound: 0,
+                shipSkills: buildDefaultShipSkills(),
             },
         ]);
         setNextId(nextId + 1);
@@ -378,14 +292,10 @@ const DPSCalculatorPage: React.FC = () => {
                         hacking: 200,
                         defence: 0,
                         hp: 0,
-                        activeMultiplier: 100,
-                        chargedMultiplier: 0,
                         chargeCount: 0,
                         startCharged: false,
-                        activeDoTs: [...DEFAULT_DOT_CONFIG],
-                        chargedDoTs: [...DEFAULT_DOT_CONFIG],
-                        buffs: [],
-                        enemyDebuffs: [],
+                        allyChargePerRound: 0,
+                        shipSkills: buildDefaultShipSkills(),
                     },
                 ];
             return prev.filter((config) => config.id !== id);
@@ -401,19 +311,13 @@ const DPSCalculatorPage: React.FC = () => {
             prev.map((config) => {
                 if (config.id !== id) return config;
                 const normalizedValue = field === 'affinity' && value === '' ? undefined : value;
-                const updated = { ...config, [field]: normalizedValue };
-                if (
-                    field === 'activeMultiplier' ||
-                    field === 'chargedMultiplier' ||
-                    field === 'hacking'
-                ) {
-                    const next = new Set(config.autoFilledFields);
-                    next.delete(field);
-                    updated.autoFilledFields = next;
-                }
-                return updated;
+                return { ...config, [field]: normalizedValue };
             })
         );
+    };
+
+    const updateConfigShipSkills = (id: string, shipSkills: ShipSkills) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, shipSkills } : c)));
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
@@ -428,25 +332,10 @@ const DPSCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const {
-            activeParsed,
-            chargedParsed,
-            activeSecondary,
-            chargedSecondary,
-            activeConditional,
-            chargedConditional,
-            selfChargeGain,
-            autoFilledFields,
-        } = buildSkillAutoFill(ship);
-        autoFilledFields.add('hacking');
-        const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
-        const { activeDoTs: newActiveDoTs, chargedDoTs: newChargedDoTs } = buildDoTAutoFill(ship);
 
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
-                // Keep manually-added enemy debuffs; replace auto-filled ones with the new ship's
-                const manualEnemyDebuffs = c.enemyDebuffs.filter((b) => !b.autoFilled);
                 return {
                     ...c,
                     shipId: ship.id,
@@ -458,14 +347,7 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: Math.round(final.hacking ?? 200),
                     defence: Math.round(final.defence ?? 0),
                     hp: Math.round(final.hp ?? 0),
-                    activeSecondary,
-                    chargedSecondary,
-                    activeConditional,
-                    chargedConditional,
-                    selfChargeGain,
                     allyChargePerRound: c.allyChargePerRound ?? 0,
-                    activeMultiplier: activeParsed > 0 ? activeParsed : c.activeMultiplier,
-                    chargedMultiplier: chargedParsed > 0 ? chargedParsed : c.chargedMultiplier,
                     chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
                     startCharged: detectFullyCharged([
                         ship.activeSkillText,
@@ -474,116 +356,9 @@ const DPSCalculatorPage: React.FC = () => {
                         ship.secondPassiveSkillText,
                         ship.thirdPassiveSkillText,
                     ]),
-                    autoFilledFields,
                     affinity: ship.affinity,
-                    buffs: mergeAutoFill(c.buffs, selfBuffs),
-                    enemyDebuffs: mergeAutoFill(manualEnemyDebuffs, newEnemyDebuffs),
-                    activeDoTs: mergeAutoFillDoTs(c.activeDoTs, newActiveDoTs),
-                    chargedDoTs: mergeAutoFillDoTs(c.chargedDoTs, newChargedDoTs),
+                    shipSkills: buildShipAbilities(ship),
                 };
-            })
-        );
-    };
-
-    const addDoTEntry = (configId: string, dotField: 'activeDoTs' | 'chargedDoTs') => {
-        const id = nextDoTIdRef.current;
-        nextDoTIdRef.current += 1;
-        setConfigs((prev) =>
-            prev.map((c) =>
-                c.id === configId
-                    ? {
-                          ...c,
-                          [dotField]: [
-                              ...c[dotField],
-                              {
-                                  id: id.toString(),
-                                  type: 'inferno' as const,
-                                  tier: 15,
-                                  stacks: 1,
-                                  duration: 2,
-                              },
-                          ],
-                      }
-                    : c
-            )
-        );
-    };
-
-    const removeDoTEntry = (
-        configId: string,
-        dotField: 'activeDoTs' | 'chargedDoTs',
-        dotId: string
-    ) => {
-        setConfigs((prev) =>
-            prev.map((c) =>
-                c.id === configId
-                    ? { ...c, [dotField]: c[dotField].filter((d) => d.id !== dotId) }
-                    : c
-            )
-        );
-    };
-
-    const updateDoTEntry = (
-        configId: string,
-        dotField: 'activeDoTs' | 'chargedDoTs',
-        dotId: string,
-        updates: Partial<DoTApplicationEntry>
-    ) => {
-        setConfigs((prev) =>
-            prev.map((c) =>
-                c.id === configId
-                    ? {
-                          ...c,
-                          [dotField]: c[dotField].map((d) =>
-                              d.id === dotId ? { ...d, ...updates } : d
-                          ),
-                      }
-                    : c
-            )
-        );
-    };
-
-    const updateConfigBuffs = (id: string, buffs: SelectedGameBuff[]) => {
-        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
-    };
-
-    const updateConfigSecondary = (
-        id: string,
-        field: 'activeSecondary' | 'chargedSecondary',
-        value: SecondaryDamage | undefined
-    ) => {
-        setConfigs((prev) =>
-            prev.map((c) => {
-                if (c.id !== id) return c;
-                const next = new Set(c.autoFilledFields);
-                next.delete(field);
-                return { ...c, [field]: value, autoFilledFields: next };
-            })
-        );
-    };
-
-    const updateConfigConditional = (
-        id: string,
-        field: 'activeConditional' | 'chargedConditional',
-        value: ConditionalDamage | undefined
-    ) => {
-        setConfigs((prev) =>
-            prev.map((c) => {
-                if (c.id !== id) return c;
-                const next = new Set(c.autoFilledFields);
-                next.delete(field);
-                return { ...c, [field]: value, autoFilledFields: next };
-            })
-        );
-    };
-
-    const updateConfigChargeGain = (id: string, value: ChargeGain | undefined) => {
-        setConfigs((prev) =>
-            prev.map((c) => {
-                if (c.id !== id) return c;
-                const next = new Set(c.autoFilledFields);
-                next.delete('selfChargeGain');
-                return { ...c, selfChargeGain: value, autoFilledFields: next };
             })
         );
     };
@@ -592,10 +367,6 @@ const DPSCalculatorPage: React.FC = () => {
         setConfigs((prev) =>
             prev.map((c) => (c.id === id ? { ...c, allyChargePerRound: value } : c))
         );
-    };
-
-    const updateConfigEnemyDebuffs = (id: string, enemyDebuffs: SelectedGameBuff[]) => {
-        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, enemyDebuffs } : c)));
     };
 
     const addTeamShip = () => {
@@ -729,25 +500,8 @@ const DPSCalculatorPage: React.FC = () => {
                                         )
                                     )
                                 }
-                                onAddDoT={(dotField) => addDoTEntry(config.id, dotField)}
-                                onRemoveDoT={(dotField, dotId) =>
-                                    removeDoTEntry(config.id, dotField, dotId)
-                                }
-                                onUpdateDoT={(dotField, dotId, updates) =>
-                                    updateDoTEntry(config.id, dotField, dotId, updates)
-                                }
-                                onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
-                                onEnemyDebuffsChange={(debuffs) =>
-                                    updateConfigEnemyDebuffs(config.id, debuffs)
-                                }
-                                onSecondaryChange={(field, value) =>
-                                    updateConfigSecondary(config.id, field, value)
-                                }
-                                onConditionalChange={(field, value) =>
-                                    updateConfigConditional(config.id, field, value)
-                                }
-                                onChargeGainChange={(value) =>
-                                    updateConfigChargeGain(config.id, value)
+                                onShipSkillsChange={(shipSkills) =>
+                                    updateConfigShipSkills(config.id, shipSkills)
                                 }
                                 onAllyChargeChange={(value) =>
                                     updateConfigAllyCharge(config.id, value)

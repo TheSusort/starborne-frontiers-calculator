@@ -2,6 +2,7 @@ import React from 'react';
 import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
+import { damageInputsFromSkill, selectFiringSkill } from '../../utils/abilities/applyAbilities';
 
 interface ShipConfigSummaryProps {
     config: DPSShipConfig;
@@ -41,6 +42,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
         healModifier: 0,
     });
 
+    const chargedDmg = damageInputsFromSkill(selectFiringSkill(config.shipSkills, 'charged'));
+
     const comparedToBestPercentage =
         bestTotalDamage !== undefined && bestTotalDamage !== 0 && !isBest
             ? ((simResult.summary.totalDamage - bestTotalDamage) / bestTotalDamage) * 100
@@ -64,7 +67,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
             </div>
-            {config.chargedMultiplier > 0 && config.chargeCount > 0 && (
+            {chargedDmg.multiplier > 0 && config.chargeCount > 0 && (
                 <div className="flex justify-between mb-2">
                     <span className="text-theme-text-secondary">Charged skill fires:</span>
                     <span>

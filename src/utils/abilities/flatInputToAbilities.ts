@@ -97,9 +97,16 @@ function applyConditional(damage: Ability, conditional: ConditionalDamage): void
 export function flatInputToAbilities(input: DPSSimulationInput): ShipSkills {
     const slots: Skill[] = [];
 
+    // The flat damage fields are optional on the input type (callers that pass a
+    // shipSkills model omit them); default them to their prior implicit values.
+    const activeMultiplier = input.activeMultiplier ?? 0;
+    const chargedMultiplier = input.chargedMultiplier ?? 0;
+    const activeDoTs = input.activeDoTs ?? [];
+    const chargedDoTs = input.chargedDoTs ?? [];
+
     // --- Active skill (always present) ---
     const activeAbilities: Ability[] = [];
-    const activeDamage = damageAbility('adapter-active-damage', input.activeMultiplier);
+    const activeDamage = damageAbility('adapter-active-damage', activeMultiplier);
     activeAbilities.push(activeDamage);
 
     if (input.activeSecondary) {
@@ -108,7 +115,7 @@ export function flatInputToAbilities(input: DPSSimulationInput): ShipSkills {
         );
     }
 
-    input.activeDoTs.forEach((entry, i) => {
+    activeDoTs.forEach((entry, i) => {
         activeAbilities.push(dotAbility(`adapter-active-dot-${i}`, entry));
     });
 
@@ -138,9 +145,9 @@ export function flatInputToAbilities(input: DPSSimulationInput): ShipSkills {
     slots.push({ slot: 'active', abilities: activeAbilities });
 
     // --- Charged skill (only when present) ---
-    if (input.chargedMultiplier > 0) {
+    if (chargedMultiplier > 0) {
         const chargedAbilities: Ability[] = [];
-        const chargedDamage = damageAbility('adapter-charged-damage', input.chargedMultiplier);
+        const chargedDamage = damageAbility('adapter-charged-damage', chargedMultiplier);
         chargedAbilities.push(chargedDamage);
 
         if (input.chargedSecondary) {
@@ -149,7 +156,7 @@ export function flatInputToAbilities(input: DPSSimulationInput): ShipSkills {
             );
         }
 
-        input.chargedDoTs.forEach((entry, i) => {
+        chargedDoTs.forEach((entry, i) => {
             chargedAbilities.push(dotAbility(`adapter-charged-dot-${i}`, entry));
         });
 

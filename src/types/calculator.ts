@@ -1,4 +1,5 @@
 import { AffinityName } from './ship';
+import type { ShipSkills } from './abilities';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
@@ -125,32 +126,12 @@ export interface DPSShipConfig {
     defensePenetration: number;
     hacking?: number;
     affinity?: AffinityName;
-    activeMultiplier: number;
-    chargedMultiplier: number;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
-    activeSecondary?: SecondaryDamage;
-    chargedSecondary?: SecondaryDamage;
-    activeConditional?: ConditionalDamage;
-    chargedConditional?: ConditionalDamage;
     chargeCount: number;
     startCharged: boolean;
-    selfChargeGain?: ChargeGain;
     allyChargePerRound?: number;
-    autoFilledFields?: Set<
-        | 'activeMultiplier'
-        | 'chargedMultiplier'
-        | 'hacking'
-        | 'activeSecondary'
-        | 'chargedSecondary'
-        | 'activeConditional'
-        | 'chargedConditional'
-        | 'selfChargeGain'
-    >;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
-    buffs: SelectedGameBuff[];
-    enemyDebuffs: SelectedGameBuff[];
+    shipSkills: ShipSkills;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -161,8 +142,6 @@ export type DPSShipConfigUpdateableField =
     | 'defensePenetration'
     | 'hacking'
     | 'affinity'
-    | 'activeMultiplier'
-    | 'chargedMultiplier'
     | 'chargeCount'
     | 'defence'
     | 'hp';

@@ -1,18 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { Select } from '../ui/Select';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
-    DoTApplicationEntry,
     AttackerBuffTotals,
-    SelectedGameBuff,
-    SecondaryDamage,
-    ConditionalDamage,
-    ChargeGain,
-    CONDITIONAL_CONDITION_LABELS,
 } from '../../types/calculator';
+import { ShipSkills } from '../../types/abilities';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
 import { ShipSkillList } from '../ship/ShipSkillList';
@@ -23,8 +18,7 @@ import { Checkbox } from '../ui/Checkbox';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
-import { DoTEditor } from './DoTEditor';
-import { GameBuffPicker } from './GameBuffPicker';
+import { SkillSlotList } from '../skills/SkillSlotList';
 import { ShipConfigSummary } from './ShipConfigSummary';
 
 interface ShipConfigCardProps {
@@ -40,24 +34,7 @@ interface ShipConfigCardProps {
     onUpdate: (field: DPSShipConfigUpdateableField, value: string | number | undefined) => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
-    onAddDoT: (dotField: 'activeDoTs' | 'chargedDoTs') => void;
-    onRemoveDoT: (dotField: 'activeDoTs' | 'chargedDoTs', dotId: string) => void;
-    onUpdateDoT: (
-        dotField: 'activeDoTs' | 'chargedDoTs',
-        dotId: string,
-        updates: Partial<DoTApplicationEntry>
-    ) => void;
-    onBuffsChange: (buffs: SelectedGameBuff[]) => void;
-    onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
-    onSecondaryChange: (
-        field: 'activeSecondary' | 'chargedSecondary',
-        value: SecondaryDamage | undefined
-    ) => void;
-    onConditionalChange: (
-        field: 'activeConditional' | 'chargedConditional',
-        value: ConditionalDamage | undefined
-    ) => void;
-    onChargeGainChange: (value: ChargeGain | undefined) => void;
+    onShipSkillsChange: (shipSkills: ShipSkills) => void;
     onAllyChargeChange: (value: number) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
@@ -76,44 +53,14 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onUpdate,
     onSelectShip,
     onStartChargedChange,
-    onAddDoT,
-    onRemoveDoT,
-    onUpdateDoT,
-    onBuffsChange,
-    onEnemyDebuffsChange,
-    onSecondaryChange,
-    onConditionalChange,
-    onChargeGainChange,
+    onShipSkillsChange,
     onAllyChargeChange,
     enemyAffinity,
     enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const [skillRefOpen, setSkillRefOpen] = useState(false);
-    const [openSecondary, setOpenSecondary] = useState(
-        Boolean(config.activeSecondary || config.chargedSecondary)
-    );
-    const [openConditional, setOpenConditional] = useState(
-        Boolean(config.activeConditional || config.chargedConditional)
-    );
-    const [openCharge, setOpenCharge] = useState(
-        Boolean(config.selfChargeGain || config.allyChargePerRound)
-    );
-    // Re-sync the collapsible sections when parsed values change (e.g. after
-    // selectShipForConfig auto-fills a newly selected ship) so freshly detected
-    // secondary/conditional data is revealed rather than hidden in a closed section.
-    useEffect(() => {
-        setOpenSecondary(Boolean(config.activeSecondary || config.chargedSecondary));
-        setOpenConditional(Boolean(config.activeConditional || config.chargedConditional));
-        setOpenCharge(Boolean(config.selfChargeGain || config.allyChargePerRound));
-    }, [
-        config.activeSecondary,
-        config.chargedSecondary,
-        config.activeConditional,
-        config.chargedConditional,
-        config.selfChargeGain,
-        config.allyChargePerRound,
-    ]);
+    const hasPassive = config.shipSkills.slots.some((s) => s.slot === 'passive');
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
@@ -216,38 +163,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         <div className="absolute left-[43px] top-[-2px]">{affinityBadge}</div>
                     </div>
 
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
-                        Skills
-                    </div>
-                    <div className="grid grid-cols-4 lg:grid-cols-2 gap-4 mb-4 items-end">
-                        <Input
-                            label="Active (%)"
-                            type="number"
-                            min="0"
-                            value={config.activeMultiplier}
-                            helpLabel={
-                                config.autoFilledFields?.has('activeMultiplier')
-                                    ? 'auto-filled'
-                                    : undefined
-                            }
-                            onChange={(e) =>
-                                onUpdate('activeMultiplier', parseInt(e.target.value) || 0)
-                            }
-                        />
-                        <Input
-                            label="Charged (%)"
-                            type="number"
-                            min="0"
-                            value={config.chargedMultiplier}
-                            helpLabel={
-                                config.autoFilledFields?.has('chargedMultiplier')
-                                    ? 'auto-filled'
-                                    : undefined
-                            }
-                            onChange={(e) =>
-                                onUpdate('chargedMultiplier', parseInt(e.target.value) || 0)
-                            }
-                        />
+                    <div className="grid grid-cols-2 gap-4 mb-4 items-end">
                         <Input
                             label="Charge Count"
                             type="number"
@@ -271,9 +187,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             type="number"
                             min="0"
                             value={config.hacking ?? 200}
-                            helpLabel={
-                                config.autoFilledFields?.has('hacking') ? 'auto-filled' : undefined
-                            }
                             onChange={(e) => onUpdate('hacking', parseInt(e.target.value) || 0)}
                         />
                         <p className="text-xs text-theme-text-secondary mt-1">
@@ -283,251 +196,44 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         </p>
                     </div>
 
-                    <Button
-                        variant="link"
-                        onClick={() => setOpenSecondary((v) => !v)}
-                        className="w-full flex justify-between items-center mt-4"
-                    >
-                        <span className="flex items-center gap-2">
-                            <ChevronDownIcon
-                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openSecondary ? 'rotate-180' : ''}`}
-                            />
-                            Secondary Damage
-                        </span>
-                    </Button>
-                    <CollapsibleForm isVisible={openSecondary}>
-                        <div className="flex gap-4 mb-4">
-                            <Input
-                                label="Defense (source)"
-                                type="number"
-                                min="0"
-                                value={config.defence}
-                                onChange={(e) => onUpdate('defence', parseInt(e.target.value) || 0)}
-                            />
-                            <Input
-                                label="HP (source)"
-                                type="number"
-                                min="0"
-                                value={config.hp}
-                                onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
-                            />
-                        </div>
-                        <div className="flex gap-4 mb-4 items-end">
-                            <Select
-                                label="Active Secondary Stat"
-                                value={config.activeSecondary?.stat ?? ''}
-                                onChange={(v) =>
-                                    v === ''
-                                        ? onSecondaryChange('activeSecondary', undefined)
-                                        : onSecondaryChange('activeSecondary', {
-                                              stat: v as 'defense' | 'hp',
-                                              pct: config.activeSecondary?.pct ?? 0,
-                                          })
-                                }
-                                helpLabel={
-                                    config.autoFilledFields?.has('activeSecondary')
-                                        ? 'auto-filled'
-                                        : undefined
-                                }
-                                options={[
-                                    { value: '', label: 'None' },
-                                    { value: 'defense', label: 'Defense' },
-                                    { value: 'hp', label: 'Max HP' },
-                                ]}
-                                className="flex-1"
-                            />
-                            <Input
-                                label="Active %"
-                                type="number"
-                                min="0"
-                                value={config.activeSecondary?.pct ?? 0}
-                                disabled={!config.activeSecondary}
-                                onChange={(e) =>
-                                    onSecondaryChange('activeSecondary', {
-                                        stat: config.activeSecondary?.stat ?? 'defense',
-                                        pct: parseFloat(e.target.value) || 0,
-                                    })
-                                }
-                            />
-                        </div>
-                        <div className="flex gap-4 mb-4 items-end">
-                            <Select
-                                label="Charged Secondary Stat"
-                                value={config.chargedSecondary?.stat ?? ''}
-                                onChange={(v) =>
-                                    v === ''
-                                        ? onSecondaryChange('chargedSecondary', undefined)
-                                        : onSecondaryChange('chargedSecondary', {
-                                              stat: v as 'defense' | 'hp',
-                                              pct: config.chargedSecondary?.pct ?? 0,
-                                          })
-                                }
-                                helpLabel={
-                                    config.autoFilledFields?.has('chargedSecondary')
-                                        ? 'auto-filled'
-                                        : undefined
-                                }
-                                options={[
-                                    { value: '', label: 'None' },
-                                    { value: 'defense', label: 'Defense' },
-                                    { value: 'hp', label: 'Max HP' },
-                                ]}
-                                className="flex-1"
-                            />
-                            <Input
-                                label="Charged %"
-                                type="number"
-                                min="0"
-                                value={config.chargedSecondary?.pct ?? 0}
-                                disabled={!config.chargedSecondary}
-                                onChange={(e) =>
-                                    onSecondaryChange('chargedSecondary', {
-                                        stat: config.chargedSecondary?.stat ?? 'defense',
-                                        pct: parseFloat(e.target.value) || 0,
-                                    })
-                                }
-                            />
-                        </div>
-                    </CollapsibleForm>
-
-                    <Button
-                        variant="link"
-                        onClick={() => setOpenConditional((v) => !v)}
-                        className="w-full flex justify-between items-center mt-4"
-                    >
-                        <span className="flex items-center gap-2">
-                            <ChevronDownIcon
-                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openConditional ? 'rotate-180' : ''}`}
-                            />
-                            Conditional Damage
-                        </span>
-                    </Button>
-                    <CollapsibleForm isVisible={openConditional}>
-                        {(
-                            [
-                                ['activeConditional', 'Active', config.activeConditional],
-                                ['chargedConditional', 'Charged', config.chargedConditional],
-                            ] as const
-                        ).map(([field, label, cond]) => {
-                            if (!cond) {
-                                return (
-                                    <p
-                                        key={field}
-                                        className="text-xs text-theme-text-secondary mb-2"
-                                    >
-                                        {label}: no conditional bonus detected.
-                                    </p>
-                                );
-                            }
-                            return (
-                                <div key={field} className="mb-4">
-                                    <div className="text-sm font-semibold mb-1">
-                                        {label}: +{cond.pct}%{' '}
-                                        {CONDITIONAL_CONDITION_LABELS[cond.condition]}
-                                        {cond.cap !== undefined ? ` (max +${cond.cap}%)` : ''}
-                                    </div>
-                                    {cond.derivable ? (
-                                        <p className="text-xs text-theme-text-secondary">
-                                            Auto-counted each round from your active{' '}
-                                            {cond.condition === 'self-buff'
-                                                ? 'buffs'
-                                                : 'enemy debuffs'}
-                                            .
-                                        </p>
-                                    ) : (
-                                        <Input
-                                            label="Count"
-                                            type="number"
-                                            min="0"
-                                            value={cond.manualCount ?? 1}
-                                            helpLabel={
-                                                config.autoFilledFields?.has(field)
-                                                    ? 'auto-filled'
-                                                    : undefined
-                                            }
-                                            onChange={(e) =>
-                                                onConditionalChange(field, {
-                                                    ...cond,
-                                                    manualCount: parseInt(e.target.value) || 0,
-                                                })
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </CollapsibleForm>
-
-                    <Button
-                        variant="link"
-                        onClick={() => setOpenCharge((v) => !v)}
-                        className="w-full flex justify-between items-center mt-4"
-                    >
-                        <span className="flex items-center gap-2">
-                            <ChevronDownIcon
-                                className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openCharge ? 'rotate-180' : ''}`}
-                            />
-                            Charge Manipulation
-                        </span>
-                    </Button>
-                    <CollapsibleForm isVisible={openCharge}>
-                        {config.selfChargeGain ? (
-                            <div className="mb-4">
-                                {(() => {
-                                    const cg = config.selfChargeGain;
-                                    const conditionLabel =
-                                        cg.condition === 'enemy-type' && cg.requiredEnemyType
-                                            ? `when enemy is a ${cg.requiredEnemyType}`
-                                            : CONDITIONAL_CONDITION_LABELS[cg.condition];
-                                    return (
-                                        <div className="text-sm font-semibold mb-1">
-                                            Self: +{cg.amount} charge
-                                            {cg.amount !== 1 ? 's' : ''}/round {conditionLabel}
-                                        </div>
-                                    );
-                                })()}
-                                {config.selfChargeGain.derivable ? (
-                                    <p className="text-xs text-theme-text-secondary">
-                                        Auto-counted each round from sim state.
-                                    </p>
-                                ) : (
-                                    <Input
-                                        label="Trigger count / round"
-                                        type="number"
-                                        min="0"
-                                        value={config.selfChargeGain.manualCount ?? 1}
-                                        helpLabel={
-                                            config.autoFilledFields?.has('selfChargeGain')
-                                                ? 'auto-filled'
-                                                : undefined
-                                        }
-                                        onChange={(e) => {
-                                            const gain = config.selfChargeGain;
-                                            if (gain) {
-                                                onChargeGainChange({
-                                                    ...gain,
-                                                    manualCount: parseInt(e.target.value) || 0,
-                                                });
-                                            }
-                                        }}
-                                    />
-                                )}
-                            </div>
-                        ) : (
-                            <p className="text-xs text-theme-text-secondary mb-2">
-                                No self charge gain detected.
-                            </p>
-                        )}
+                    <div className="flex gap-4 mb-4">
                         <Input
-                            label="Ally charges / round"
+                            label="Defense (source)"
                             type="number"
                             min="0"
-                            step="0.5"
-                            value={config.allyChargePerRound ?? 0}
-                            helpLabel="from supporters (e.g. Castor, Liberator)"
-                            onChange={(e) => onAllyChargeChange(parseFloat(e.target.value) || 0)}
+                            value={config.defence}
+                            onChange={(e) => onUpdate('defence', parseInt(e.target.value) || 0)}
+                            helpLabel="source stat for Defense-based damage"
                         />
-                    </CollapsibleForm>
+                        <Input
+                            label="HP (source)"
+                            type="number"
+                            min="0"
+                            value={config.hp}
+                            onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                            helpLabel="source stat for HP-based damage"
+                        />
+                    </div>
+
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
+                        Skills
+                    </div>
+                    <SkillSlotList
+                        shipSkills={config.shipSkills}
+                        hasPassive={hasPassive}
+                        onChange={onShipSkillsChange}
+                    />
+
+                    <Input
+                        label="Ally charges / round"
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={config.allyChargePerRound ?? 0}
+                        helpLabel="from supporters (e.g. Castor, Liberator)"
+                        onChange={(e) => onAllyChargeChange(parseFloat(e.target.value) || 0)}
+                        className="mt-4"
+                    />
 
                     {selectedShip && (
                         <>
@@ -550,52 +256,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             </CollapsibleForm>
                         </>
                     )}
-
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
-                        Ship Buffs
-                    </div>
-                    <GameBuffPicker
-                        label="Ship Buffs"
-                        relevantStats={[
-                            'attack',
-                            'crit',
-                            'critDamage',
-                            'outgoingDamage',
-                            'defensePenetration',
-                            'dotDamage',
-                        ]}
-                        excludeTypes={['effect']}
-                        value={config.buffs}
-                        onChange={onBuffsChange}
-                    />
-
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
-                        Applied Enemy Debuffs
-                    </div>
-                    <GameBuffPicker
-                        label="Applied Enemy Debuffs"
-                        relevantStats={['defense', 'incomingDamage', 'incomingDotDamage']}
-                        excludeTypes={['effect']}
-                        value={config.enemyDebuffs}
-                        onChange={onEnemyDebuffsChange}
-                    />
-
-                    <DoTEditor
-                        dots={config.activeDoTs}
-                        label="DoTs — Active Skill"
-                        labelClassName="text-orange-400"
-                        onAdd={() => onAddDoT('activeDoTs')}
-                        onRemove={(dotId) => onRemoveDoT('activeDoTs', dotId)}
-                        onUpdate={(dotId, updates) => onUpdateDoT('activeDoTs', dotId, updates)}
-                    />
-                    <DoTEditor
-                        dots={config.chargedDoTs}
-                        label="DoTs — Charged Skill"
-                        labelClassName="text-purple-400"
-                        onAdd={() => onAddDoT('chargedDoTs')}
-                        onRemove={(dotId) => onRemoveDoT('chargedDoTs', dotId)}
-                        onUpdate={(dotId, updates) => onUpdateDoT('chargedDoTs', dotId, updates)}
-                    />
                 </CollapsibleForm>
 
                 {simResult && (
