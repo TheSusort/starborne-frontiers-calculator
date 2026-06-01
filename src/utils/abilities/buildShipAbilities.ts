@@ -12,13 +12,16 @@ import {
     SkillSlot,
     Condition,
     AbilityTarget,
+    ModifierChannel,
+    ScalingRule,
 } from '../../types/abilities';
-import { getShipSkillRows } from '../ship/skillRows';
+import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
     parseSkillDamage,
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    detectGrantCondition,
 } from '../skillTextParser';
 import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
 import { selectedBuffToAbility } from './buffAbilityConverters';
@@ -60,31 +63,101 @@ function parseHitCount(text: string): number | undefined {
 }
 
 interface ParsedModifier {
-    channel: 'outgoingDamage';
+    channel: ModifierChannel;
     value: number;
     isMultiplicative: boolean;
     target: AbilityTarget;
-    stealthGated: boolean;
+    conditions: Condition[];
+    scaling?: ScalingRule;
 }
 
 /**
- * Detects a flat outgoing-damage modifier ("deal 40% more direct damage").
- * Targets all-allies when the clause references friendly/allies, otherwise self.
- * Flags a Stealth gate so the caller can attach a Stealth condition.
+ * The sentence containing the character at `index`. Boundaries are `.`/`;` followed
+ * by whitespace or end-of-string, so decimals (e.g. "7.5") are not split.
  */
-function parseModifier(text: string): ParsedModifier | undefined {
-    const plain = stripTags(text);
-    const match = plain.match(/(\d+)%\s+more\s+(?:direct\s+)?damage/i);
-    if (!match) return undefined;
+function sentenceContaining(plain: string, index: number): string {
+    const boundary = /[.;](?=\s|$)/g;
+    let start = 0;
+    let end = plain.length;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(plain)) !== null) {
+        if (m.index < index) {
+            start = m.index + 1;
+        } else {
+            end = m.index + 1;
+            break;
+        }
+    }
+    return plain.slice(start, end);
+}
 
-    const value = parseInt(match[1], 10);
-    // Inspect the clause preceding the match for the targeting cue.
-    const clause = plain.slice(0, match.index! + match[0].length);
-    const isAllyScoped = /friendly|all allies|allies/i.test(clause);
-    const target: AbilityTarget = isAllyScoped ? 'all-allies' : 'self';
-    const stealthGated = /stealth/i.test(clause);
+/** "when affected by Taunt or Provoke" → anyOf self-status conditions (manual "assume active"). */
+function affectedByConditions(sentence: string): Condition[] {
+    const m = sentence.match(
+        /affected by\s+([A-Za-z][A-Za-z' ]*?)(?:\s+or\s+([A-Za-z][A-Za-z' ]*?))?(?=\s*[.,]|\s*$)/i
+    );
+    if (!m) return [];
+    return [m[1], m[2]]
+        .filter((n): n is string => !!n)
+        .map((name) => ({
+            subject: 'self-buff' as const,
+            buffName: name.trim(),
+            derivable: false,
+            anyOf: true,
+        }));
+}
 
-    return { channel: 'outgoingDamage', value, isMultiplicative: true, target, stealthGated };
+/**
+ * Detects passive output/stat modifiers in a skill's text. Handles:
+ *  - "X% more (direct) damage" → outgoing-damage modifier (self, or all-allies when
+ *    "friendly/allies" scoped), gated by a Stealth or "affected by …" condition.
+ *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
+ *    scaling defense-penetration modifier (capped).
+ */
+function parseModifiers(text: string): ParsedModifier[] {
+    const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const out: ParsedModifier[] = [];
+
+    const moreM = plain.match(/(\d+(?:\.\d+)?)%\s+more\s+(?:direct\s+)?damage/i);
+    if (moreM) {
+        const sentence = sentenceContaining(plain, moreM.index!);
+        const isAllyScoped = /friendly|all allies|allies/i.test(sentence);
+        const target: AbilityTarget = isAllyScoped ? 'all-allies' : 'self';
+        const conditions: Condition[] = [];
+        if (/stealth/i.test(sentence)) {
+            const subject =
+                target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
+            conditions.push({ subject, buffName: 'Stealth', derivable: false });
+        }
+        conditions.push(...affectedByConditions(sentence));
+        out.push({
+            channel: 'outgoingDamage',
+            value: parseFloat(moreM[1]),
+            isMultiplicative: true,
+            target,
+            conditions,
+        });
+    }
+
+    const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);
+    if (penM) {
+        const sentence = sentenceContaining(plain, penM.index!);
+        const capM = sentence.match(/up to\s+(?:a\s+max(?:imum)?\s+of\s+)?(\d+(?:\.\d+)?)%/i);
+        out.push({
+            channel: 'defensePenetration',
+            value: 0,
+            isMultiplicative: false,
+            target: 'self',
+            conditions: [{ subject: 'self-buff', derivable: true }],
+            scaling: {
+                conditionIndex: 0,
+                perUnit: parseFloat(penM[1]),
+                ...(capM ? { cap: parseFloat(capM[1]) } : {}),
+            },
+        });
+    }
+
+    return out;
 }
 
 function slotFor(label: string): SkillSlot | null {
@@ -203,28 +276,14 @@ function abilitiesFromText(text: string): Ability[] {
         });
     }
 
-    const modifier = parseModifier(text);
-    if (modifier) {
-        const conditions: Condition[] = modifier.stealthGated
-            ? [
-                  toCondition(
-                      // Ally-scoped Stealth gates on a friendly/self buff; enemy-scoped on enemy buff.
-                      modifier.target === 'self' || modifier.target === 'all-allies'
-                          ? 'self-buff'
-                          : 'enemy-buff',
-                      false,
-                      undefined,
-                      undefined,
-                      text
-                  ),
-              ]
-            : [];
+    for (const modifier of parseModifiers(text)) {
         out.push({
             id: nextId(),
             type: 'modifier',
             target: modifier.target,
             trigger: 'on-cast',
-            conditions,
+            conditions: modifier.conditions,
+            ...(modifier.scaling ? { scaling: modifier.scaling } : {}),
             config: {
                 type: 'modifier',
                 channel: modifier.channel,
@@ -309,6 +368,21 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // defensive: round-trip buffs may lack the flag; parser buffs already set it
         if (ability.autoFilled === undefined) ability.autoFilled = true;
         const slot = slotForBuffSource(buff.skillSource);
+        // Attach a gating condition parsed from the buff's clause (e.g. Thresh's
+        // "When targeting a Defender, … gains Crit Power Up II" → enemy-type Defender).
+        const rowText = getSkillRowForSlot(ship, slot)?.text;
+        const cond = rowText ? detectGrantCondition(rowText, buff.buffName) : null;
+        if (cond) {
+            ability.conditions = [
+                toCondition(
+                    cond.condition,
+                    cond.derivable,
+                    undefined,
+                    cond.requiredEnemyType,
+                    rowText!
+                ),
+            ];
+        }
         pushToSlot(bySlot, slot, [ability]);
     };
     for (const buff of selfBuffs) mergeBuff(buff, 'self');

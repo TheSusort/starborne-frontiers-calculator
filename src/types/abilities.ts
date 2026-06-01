@@ -63,6 +63,7 @@ export interface ScalingRule {
 export type ModifierChannel =
     | 'attack'
     | 'defense'
+    | 'defensePenetration'
     | 'hp'
     | 'crit'
     | 'critDamage'

@@ -355,7 +355,8 @@ function runSinglePass(params: {
             speed: 0,
             healModifier: 0,
         });
-        const effectivePen = defensePenetration + defensePenetrationBuff;
+        const effectivePen =
+            defensePenetration + defensePenetrationBuff + modTotals.defensePenetration;
         const effectiveDefense =
             enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
         const damageReduction =

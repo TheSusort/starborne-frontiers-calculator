@@ -149,6 +149,14 @@ export function parseSkillDamage(text: string): number {
             .slice(tagEndIndex, Math.min(text.length, tagEndIndex + 20))
             .toLowerCase();
         if (following.startsWith(' of its') || following.startsWith(' of this')) continue;
+        // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
+        // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
+        if (/\bmore\b/i.test(match[1])) continue;
+        // <unit-damage> is also used for non-damage numbers (e.g. "7.5% defense
+        // penetration", "repairs 20%"). Only treat it as a base multiplier when the
+        // tag content or the following text actually mentions damage.
+        const content = match[1].toLowerCase();
+        if (!content.includes('damage') && !following.includes('damage')) continue;
         const numeric = parseInt(match[1], 10);
         if (!isNaN(numeric)) return numeric;
     }
@@ -279,6 +287,40 @@ function classifyChargeCondition(
         return { condition: 'enemy-adjacent', derivable: false };
     // speed / full-HP / lowest-speed and anything else → always-true under sim assumptions
     return { condition: 'always', derivable: true };
+}
+
+// "targeting a Defender", "target is an Attacker", "against a Supporter", "is a Debuffer".
+const GRANT_ENEMY_TYPE_RE =
+    /(?:targeting|target is|against|enemy is|it is|is)\s+an?\s+(defender|attacker|debuffer|supporter)/i;
+
+/**
+ * Detects a condition gating a granted/inflicted buff or debuff, scoped to the
+ * sentence that mentions `buffName` (so an unconditional buff in the same skill
+ * isn't wrongly gated). Currently recognises enemy-type conditions
+ * ("When targeting a Defender, … gains Crit Power Up II"). Returns null when the
+ * buff's clause carries no recognised condition. Reference data: docs/ship-skills.csv.
+ */
+export function detectGrantCondition(
+    skillText: string | null | undefined,
+    buffName: string
+): {
+    condition: ConditionalCondition;
+    derivable: boolean;
+    requiredEnemyType?: EnemyBaseClass;
+} | null {
+    if (!skillText || !buffName) return null;
+    const plain = stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. ');
+    const sentences = plain.split(/(?<=[.;])\s+/);
+    const target = buffName.toLowerCase();
+    const clause = sentences.find((s) => s.toLowerCase().includes(target)) ?? plain;
+
+    const m = GRANT_ENEMY_TYPE_RE.exec(clause);
+    if (m) {
+        const t = m[1].toLowerCase();
+        const requiredEnemyType = (t.charAt(0).toUpperCase() + t.slice(1)) as EnemyBaseClass;
+        return { condition: 'enemy-type', derivable: true, requiredEnemyType };
+    }
+    return null;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import { DoTApplicationConfig, SecondaryDamage } from '../../types/calculator';
-import { ConditionContext, conditionsMet } from './evaluateConditions';
+import { ConditionContext, conditionsMet, scaledBonus } from './evaluateConditions';
 
 /** Folded passive-modifier deltas, in the same units as the DPS buff totals (percentage points). */
 export interface ModifierTotals {
@@ -9,6 +9,7 @@ export interface ModifierTotals {
     critDamage: number;
     outgoingDamage: number;
     defence: number;
+    defensePenetration: number;
     hp: number;
 }
 
@@ -28,6 +29,7 @@ export function modifierTotalsFromAbilities(
         critDamage: 0,
         outgoingDamage: 0,
         defence: 0,
+        defensePenetration: 0,
         hp: 0,
     };
     for (const ability of abilities) {
@@ -36,25 +38,31 @@ export function modifierTotalsFromAbilities(
         // `isMultiplicative` is intentionally ignored: these deltas are summed into the
         // same additive-percentage buff totals as the buff path (calculateBuffTotals).
         // Revisit if a flat or true-multiplicative modifier is ever introduced.
-        const { channel, value } = ability.config;
+        // A modifier with a scaling rule (e.g. "7.5% defPen per buff, up to 45%") uses
+        // the per-count scaled amount; otherwise the flat config value.
+        const { channel } = ability.config;
+        const amount = ability.scaling ? scaledBonus(ability, ctx) : ability.config.value;
         switch (channel) {
             case 'attack':
-                totals.attack += value;
+                totals.attack += amount;
                 break;
             case 'crit':
-                totals.crit += value;
+                totals.crit += amount;
                 break;
             case 'critDamage':
-                totals.critDamage += value;
+                totals.critDamage += amount;
                 break;
             case 'outgoingDamage':
-                totals.outgoingDamage += value;
+                totals.outgoingDamage += amount;
                 break;
             case 'defense':
-                totals.defence += value;
+                totals.defence += amount;
+                break;
+            case 'defensePenetration':
+                totals.defensePenetration += amount;
                 break;
             case 'hp':
-                totals.hp += value;
+                totals.hp += amount;
                 break;
             // 'outgoingHeal' | 'incomingDamage' have no DPS bucket — ignore.
         }

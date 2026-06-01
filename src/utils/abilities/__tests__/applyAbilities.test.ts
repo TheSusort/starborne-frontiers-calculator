@@ -93,7 +93,15 @@ function makeCtx(overrides: Partial<ConditionContext> = {}): ConditionContext {
 }
 
 describe('modifierTotalsFromAbilities', () => {
-    const zero = { attack: 0, crit: 0, critDamage: 0, outgoingDamage: 0, defence: 0, hp: 0 };
+    const zero = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        outgoingDamage: 0,
+        defence: 0,
+        defensePenetration: 0,
+        hp: 0,
+    };
 
     it('sums a single outgoingDamage modifier', () => {
         const result = modifierTotalsFromAbilities(
@@ -150,6 +158,38 @@ describe('modifierTotalsFromAbilities', () => {
 
     it('returns all zero with no abilities', () => {
         expect(modifierTotalsFromAbilities([], makeCtx())).toEqual(zero);
+    });
+
+    it('applies a scaling defense-penetration modifier (per self-buff, capped)', () => {
+        // Thresh: 7.5% defPen per buff, up to 45%.
+        const scalingDefPen: Ability = {
+            id: 'p',
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'self-buff', derivable: true }],
+            scaling: { conditionIndex: 0, perUnit: 7.5, cap: 45 },
+            config: {
+                type: 'modifier',
+                channel: 'defensePenetration',
+                value: 0,
+                isMultiplicative: false,
+            },
+        };
+        // 3 self-buffs → 22.5%
+        expect(
+            modifierTotalsFromAbilities(
+                [scalingDefPen],
+                makeCtx({ selfBuffNames: ['a', 'b', 'c'] })
+            )
+        ).toEqual({ ...zero, defensePenetration: 22.5 });
+        // 10 self-buffs → capped at 45%
+        expect(
+            modifierTotalsFromAbilities(
+                [scalingDefPen],
+                makeCtx({ selfBuffNames: Array.from({ length: 10 }, (_, i) => `b${i}`) })
+            )
+        ).toEqual({ ...zero, defensePenetration: 45 });
     });
 });
 

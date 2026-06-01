@@ -236,4 +236,46 @@ describe('buildShipAbilities', () => {
             autoFilled: true,
         });
     });
+
+    it('parses Thresh-style passive: conditional outgoing-dmg modifier + scaling defPen modifier, no false damage', () => {
+        const s = ship({
+            // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
+            secondPassiveSkillText:
+                'This Unit deals <unit-damage>25% more direct damage</unit-damage> when affected by <unit-skill>Taunt</unit-skill> or <unit-skill>Provoke</unit-skill>.<br /><br />This Unit gains <unit-damage>7.5% defense penetration</unit-damage> for each <unit-aid>buff</unit-aid> it has, up to a max of 45%.',
+        });
+        const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+        const mods = passive!.abilities.filter((a) => a.type === 'modifier');
+        // No false-positive base-damage ability from "25% more direct damage".
+        expect(passive!.abilities.some((a) => a.type === 'damage')).toBe(false);
+
+        const outgoing = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
+        )!;
+        expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
+        expect(outgoing.conditions.map((c) => c.buffName)).toEqual(['Taunt', 'Provoke']);
+        expect(outgoing.conditions.every((c) => c.anyOf)).toBe(true);
+
+        const defPen = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'defensePenetration'
+        )!;
+        expect(defPen.scaling).toMatchObject({ conditionIndex: 0, perUnit: 7.5, cap: 45 });
+        expect(defPen.conditions[0]).toMatchObject({ subject: 'self-buff', derivable: true });
+    });
+
+    it('attaches an enemy-type condition to a conditionally-granted buff (Thresh-style)', () => {
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillText:
+                'When targeting a Defender, this Unit gains <unit-skill>Attack Up II</unit-skill> for 1 turn.',
+            chargeSkillCharge: 2,
+        });
+        const charged = buildShipAbilities(s).slots.find((sl) => sl.slot === 'charged');
+        const buff = abilityOfType(charged!.abilities, 'buff');
+        expect(buff?.config).toMatchObject({ type: 'buff', buffName: 'Attack Up II' });
+        expect(buff?.conditions[0]).toMatchObject({
+            subject: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
+    });
 });

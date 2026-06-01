@@ -8,6 +8,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    detectGrantCondition,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -26,6 +27,13 @@ describe('parseSkillDamage', () => {
         const text =
             'Deals <unit-damage>120% damage</unit-damage> then <unit-damage>60% damage</unit-damage>';
         expect(parseSkillDamage(text)).toBe(120);
+    });
+
+    it('skips "% more direct damage" modifier phrasing (not a base multiplier)', () => {
+        // Thresh passive — this is a passive output modifier, parsed by parseModifier.
+        expect(
+            parseSkillDamage('This Unit deals <unit-damage>25% more direct damage</unit-damage>')
+        ).toBe(0);
     });
 
     it('skips stat-based damage ("of its" follows closing tag)', () => {
@@ -605,5 +613,39 @@ describe('parseAllSkillEffects', () => {
         expect(result).toHaveLength(2);
         expect(result.find((e) => e.source === 'active')?.buffName).toBe('Defense Down II');
         expect(result.find((e) => e.source === 'charge')?.buffName).toBe('Attack Up III');
+    });
+});
+
+describe('detectGrantCondition', () => {
+    it('detects an enemy-type condition on a granted buff (Thresh charged)', () => {
+        const text =
+            'When targeting a <unit-skill>Defender</unit-skill>, this Unit gains <unit-skill>Crit Power Up II</unit-skill> for 1 turn.';
+        expect(detectGrantCondition(text, 'Crit Power Up II')).toEqual({
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
+    });
+
+    it('recognises "target is an Attacker" phrasing', () => {
+        const text = 'If the target is an Attacker, this Unit gains Attack Up II for 2 turns.';
+        expect(detectGrantCondition(text, 'Attack Up II')).toMatchObject({
+            condition: 'enemy-type',
+            requiredEnemyType: 'Attacker',
+        });
+    });
+
+    it('returns null for an unconditional grant', () => {
+        const text = 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.';
+        expect(detectGrantCondition(text, 'Attack Up III')).toBeNull();
+    });
+
+    it('is clause-scoped: only the conditional buff gets the condition', () => {
+        const text =
+            'This Unit gains Attack Up II for 2 turns. When targeting a Defender, this Unit gains Crit Power Up II for 1 turn.';
+        expect(detectGrantCondition(text, 'Attack Up II')).toBeNull();
+        expect(detectGrantCondition(text, 'Crit Power Up II')).toMatchObject({
+            requiredEnemyType: 'Defender',
+        });
     });
 });
