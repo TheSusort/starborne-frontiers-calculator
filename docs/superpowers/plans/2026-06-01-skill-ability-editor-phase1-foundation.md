@@ -546,7 +546,9 @@ This reuses existing detectors. **Do not rewrite the regexes.** Reuse: `parseSki
 
 Split into two sub-tasks so each commits independently.
 
-### Task 3a: Map existing detectors → abilities (damage, additional, conditional, charge, buff/debuff, dot)
+> **Scope revision (during execution):** Task 3a is narrowed to the four clean **per-skill scalar detectors** — `damage`, `additional-damage`, `conditional`-scaling, and `charge`. **DoT abilities moved to Task 3b** (reuse `buildDoTAutoFill` + `DOT_TIER_MAP` from `skillBuffAutoFill.ts` — clean name→tier mapping). **Buff/debuff ability mapping is deferred to Phase 3** (the editor): the existing `buildSkillBuffAutoFill` produces `SelectedGameBuff` whose `parsedEffects` carry *multiple* stat channels, which does not map 1:1 to a single `buff` ability `{stat,value}` — that mapping needs a dedicated decision, and Phase 2's simulator keeps consuming the existing `SelectedGameBuff` auto-fill regardless. So Task 3a's `abilitiesFromText` does NOT emit buff/debuff/dot abilities.
+
+### Task 3a: Map per-skill scalar detectors → abilities (damage, additional, conditional, charge)
 
 - [ ] **Step 1: Write failing tests** against real CSV ships.
 
@@ -646,8 +648,8 @@ function abilitiesFromText(text: string, slot: SkillSlot): Ability[] {
     // 4. charge gain
     const charge = parseChargeGain(text);
     if (charge) out.push({ id: nextId(), type: 'charge', target: 'self', trigger: 'on-cast', conditions: [toCondition(/* charge.condition */)], config: { type: 'charge', amount: charge.amount }, autoFilled: true });
-    // 5. buffs / debuffs / dots from parseSkillEffects(text, source) → buff/debuff/dot abilities
-    //    (DoT names like "Corrosion I" map to dot abilities; others to buff/debuff by target.)
+    // NOTE: buff/debuff/dot abilities are NOT emitted here (see scope revision above).
+    //   dot → Task 3b (reuse buildDoTAutoFill); buff/debuff → deferred to Phase 3.
     return out;
 }
 
@@ -678,7 +680,9 @@ git add src/utils/abilities/buildShipAbilities.ts src/utils/abilities/__tests__/
 git commit -m "feat: assemble core abilities from skill text (damage/additional/conditional/charge/buff/debuff/dot)"
 ```
 
-### Task 3b: New detectors — modifier, trigger, hp-threshold, multi-hit
+### Task 3b: New detectors (modifier, trigger, hp-threshold, multi-hit) + DoT abilities
+
+(Also emit **DoT abilities** here: reuse `buildDoTAutoFill(ship)` from `skillBuffAutoFill.ts` to get active/charged `DoTApplicationEntry[]`, and convert each to a `dot` ability (`{ type:'dot', dotType, tier, stacks, duration }`, target `enemy`, `autoFilled:true`) on the matching slot. The name→tier mapping already lives in `DOT_TIER_MAP` there — do not reinvent it.)
 
 - [ ] **Step 1: Write failing tests** for the new dimensions. Use these verified ships/text (pasted exactly from `docs/ship-skills.csv`):
   - **Modifier:** Panguan, passive: "Friendly <unit-aid>Stealthed</unit-aid> units deal 40% more direct damage" → a `modifier` ability, `channel: 'outgoingDamage'`, `value: 40`, `isMultiplicative: true`, `target: 'all-allies'`, gated on ally `Stealth`. (Use Panguan as the primary modifier fixture — it's the clearest "% more output" case. Do NOT derive an HP-aura modifier from Lionheart: its real text is a start-of-combat HP *grant* to adjacent allies, better modeled as a buff/grant; HP-aura detection is deferred.)
