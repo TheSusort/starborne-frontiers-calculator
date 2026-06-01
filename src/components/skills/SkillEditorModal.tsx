@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { Ability, AbilityType, Skill, SkillSlot } from '../../types/abilities';
+import { Ship } from '../../types/ship';
 import { Modal } from '../ui/layout/Modal';
 import { Button } from '../ui/Button';
+import { getSkillRowForSlot } from '../../utils/ship/skillRows';
+import { SkillTooltip } from '../ship/SkillTooltip';
 import { AbilityCard } from './AbilityCard';
 import { AbilityTypePicker } from './AbilityTypePicker';
 import { makeDefaultAbility } from './abilityDefaults';
@@ -10,6 +13,8 @@ interface Props {
     isOpen: boolean;
     slot: SkillSlot;
     skill: Skill | undefined;
+    /** When provided, shows this slot's in-game skill text as reference. */
+    ship?: Ship;
     onChange: (skill: Skill) => void;
     onClose: () => void;
 }
@@ -20,10 +25,18 @@ const SLOT_LABELS: Record<SkillSlot, string> = {
     passive: 'Passive Skill',
 };
 
-export const SkillEditorModal: React.FC<Props> = ({ isOpen, slot, skill, onChange, onClose }) => {
+export const SkillEditorModal: React.FC<Props> = ({
+    isOpen,
+    slot,
+    skill,
+    ship,
+    onChange,
+    onClose,
+}) => {
     const [pickerOpen, setPickerOpen] = useState(false);
 
     const currentSkill: Skill = skill ?? { slot, abilities: [] };
+    const referenceRow = ship ? getSkillRowForSlot(ship, slot) : undefined;
 
     const handleAbilityChange = (index: number, updated: Ability) => {
         onChange({
@@ -50,6 +63,20 @@ export const SkillEditorModal: React.FC<Props> = ({ isOpen, slot, skill, onChang
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={SLOT_LABELS[slot]}>
             <div className="space-y-4">
+                {referenceRow && (
+                    <div className="pb-2 border-b border-dark-border">
+                        <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-2">
+                            Skill Reference
+                        </p>
+                        <SkillTooltip
+                            inline
+                            skillText={referenceRow.text}
+                            skillType={referenceRow.label}
+                            charge={referenceRow.charge}
+                        />
+                    </div>
+                )}
+
                 {currentSkill.abilities.length === 0 && (
                     <p className="text-sm text-theme-text-secondary">
                         No abilities yet. Add one below.

@@ -27,3 +27,18 @@ export function getShipSkillRows(ship: Ship): SkillRow[] {
         ...(activePassive ? [activePassive] : []),
     ].filter((row) => row.text.length > 0);
 }
+
+/**
+ * Returns the skill-reference row matching an editor skill slot:
+ * active → 'Active', charged → 'Charge', passive → the refit-active 'Passive R*' row.
+ * Undefined when the ship has no text for that slot.
+ */
+export function getSkillRowForSlot(
+    ship: Ship,
+    slot: 'active' | 'charged' | 'passive'
+): SkillRow | undefined {
+    const rows = getShipSkillRows(ship);
+    if (slot === 'active') return rows.find((r) => r.label === 'Active');
+    if (slot === 'charged') return rows.find((r) => r.label === 'Charge');
+    return rows.find((r) => r.label.startsWith('Passive'));
+}

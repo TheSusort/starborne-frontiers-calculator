@@ -10,7 +10,6 @@ import {
 import { ShipSkills } from '../../types/abilities';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { ShipSelector } from '../ship/ShipSelector';
-import { ShipSkillList } from '../ship/ShipSkillList';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -59,7 +58,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
-    const [skillRefOpen, setSkillRefOpen] = useState(false);
     const hasPassive = config.shipSkills.slots.some((s) => s.slot === 'passive');
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
@@ -221,6 +219,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     <SkillSlotList
                         shipSkills={config.shipSkills}
                         hasPassive={hasPassive}
+                        ship={selectedShip}
                         onChange={onShipSkillsChange}
                     />
 
@@ -234,28 +233,6 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         onChange={(e) => onAllyChargeChange(parseFloat(e.target.value) || 0)}
                         className="mt-4"
                     />
-
-                    {selectedShip && (
-                        <>
-                            <Button
-                                variant="link"
-                                onClick={() => setSkillRefOpen((v) => !v)}
-                                className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <ChevronDownIcon
-                                        className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen ? 'rotate-180' : ''}`}
-                                    />
-                                    Skill Reference
-                                </span>
-                            </Button>
-                            <CollapsibleForm isVisible={skillRefOpen}>
-                                <div className="pt-2 pb-4 border-b border-dark-border mb-4">
-                                    <ShipSkillList ship={selectedShip} />
-                                </div>
-                            </CollapsibleForm>
-                        </>
-                    )}
                 </CollapsibleForm>
 
                 {simResult && (

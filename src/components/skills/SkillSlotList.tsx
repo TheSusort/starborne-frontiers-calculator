@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { ShipSkills, Skill, SkillSlot } from '../../types/abilities';
+import { Ship } from '../../types/ship';
 import { Button } from '../ui/Button';
 import { SkillEditorModal } from './SkillEditorModal';
 
 interface Props {
     shipSkills: ShipSkills;
     hasPassive: boolean;
+    /** Selected ship, used to show per-slot skill-text reference in the editor modal. */
+    ship?: Ship;
     onChange: (shipSkills: ShipSkills) => void;
 }
 
@@ -15,7 +18,7 @@ const SLOT_LABELS: Record<SkillSlot, string> = {
     passive: 'Passive',
 };
 
-export const SkillSlotList: React.FC<Props> = ({ shipSkills, hasPassive, onChange }) => {
+export const SkillSlotList: React.FC<Props> = ({ shipSkills, hasPassive, ship, onChange }) => {
     const [openSlot, setOpenSlot] = useState<SkillSlot | null>(null);
 
     const slots: SkillSlot[] = hasPassive
@@ -58,6 +61,7 @@ export const SkillSlotList: React.FC<Props> = ({ shipSkills, hasPassive, onChang
                     isOpen
                     slot={openSlot}
                     skill={findSkill(openSlot)}
+                    ship={ship}
                     onChange={handleSkillChange}
                     onClose={() => setOpenSlot(null)}
                 />

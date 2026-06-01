@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SkillEditorModal } from '../SkillEditorModal';
 import { Ability, Skill } from '../../../types/abilities';
+import { Ship } from '../../../types/ship';
 
 const damageAbility: Ability = {
     id: 'a1',
@@ -14,7 +15,59 @@ const damageAbility: Ability = {
 
 const skill: Skill = { slot: 'active', abilities: [damageAbility] };
 
+const refShip = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ...({} as any),
+    refits: [{}, {}],
+    activeSkillText: 'ACTIVE deals 200% damage',
+    chargeSkillText: 'CHARGED deals 350% damage',
+    chargeSkillCharge: 4,
+} as Ship;
+
 describe('SkillEditorModal', () => {
+    it('shows the matching slot skill reference when a ship is provided', () => {
+        const { rerender } = render(
+            <SkillEditorModal
+                isOpen
+                slot="active"
+                skill={skill}
+                ship={refShip}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        expect(screen.getByText(/Skill Reference/i)).toBeInTheDocument();
+        expect(screen.getByText(/ACTIVE deals 200% damage/)).toBeInTheDocument();
+        expect(screen.queryByText(/CHARGED deals 350% damage/)).not.toBeInTheDocument();
+
+        // Charged modal shows the charged reference, not the active one.
+        rerender(
+            <SkillEditorModal
+                isOpen
+                slot="charged"
+                skill={{ slot: 'charged', abilities: [] }}
+                ship={refShip}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        expect(screen.getByText(/CHARGED deals 350% damage/)).toBeInTheDocument();
+        expect(screen.queryByText(/ACTIVE deals 200% damage/)).not.toBeInTheDocument();
+    });
+
+    it('omits the skill reference when no ship is provided', () => {
+        render(
+            <SkillEditorModal
+                isOpen
+                slot="active"
+                skill={skill}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        expect(screen.queryByText(/Skill Reference/i)).not.toBeInTheDocument();
+    });
+
     it('renders the slot title', () => {
         render(
             <SkillEditorModal
