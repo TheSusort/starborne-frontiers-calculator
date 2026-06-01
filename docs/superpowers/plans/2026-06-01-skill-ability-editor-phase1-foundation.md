@@ -680,9 +680,13 @@ git add src/utils/abilities/buildShipAbilities.ts src/utils/abilities/__tests__/
 git commit -m "feat: assemble core abilities from skill text (damage/additional/conditional/charge/buff/debuff/dot)"
 ```
 
-### Task 3b: New detectors (modifier, trigger, hp-threshold, multi-hit) + DoT abilities
+### Task 3b: New detectors — modifier, multi-hit + DoT abilities
 
-(Also emit **DoT abilities** here: reuse `buildDoTAutoFill(ship)` from `skillBuffAutoFill.ts` to get active/charged `DoTApplicationEntry[]`, and convert each to a `dot` ability (`{ type:'dot', dotType, tier, stacks, duration }`, target `enemy`, `autoFilled:true`) on the matching slot. The name→tier mapping already lives in `DOT_TIER_MAP` there — do not reinvent it.)
+> **Scope revision (during execution):** Task 3b emits **modifier**, **multi-hit (`hits`)**, and **DoT** abilities — the three the Phase 2 simulator actually consumes. **`trigger` and `hp-threshold` auto-detection are deferred to Phase 3**: in the data, triggers (on-crit, start-of-round) and hp-thresholds decorate buff/heal/grant abilities, which are themselves deferred to Phase 3 — so there is nothing in the Phase-1 ability set for a detected trigger/hp-threshold to attach to that the sim consumes. The model fields (`Ability.trigger`, `hp-threshold` condition) already exist from Task 1; only their *parser detection* is deferred.
+
+- **DoT abilities:** reuse `buildDoTAutoFill(ship)` from `skillBuffAutoFill.ts` → active/charged `DoTApplicationEntry[]`; convert each to a `dot` ability (`{ type:'dot', dotType, tier, stacks, duration }`, target `enemy`, `autoFilled:true`) on the matching slot. The name→tier mapping lives in `DOT_TIER_MAP` there — do not reinvent it.
+- **multi-hit:** detect "attacks N times … each … M% damage" (Enforcer) → the `damage` ability gets `{ multiplier: M, hits: N }`.
+- **modifier:** detect "X% more direct damage" / "increases … by X%" passive auras → a `modifier` ability (`channel` e.g. `outgoingDamage`, `value`, `isMultiplicative:true`, `target` self/all-allies, optional Stealth condition).
 
 - [ ] **Step 1: Write failing tests** for the new dimensions. Use these verified ships/text (pasted exactly from `docs/ship-skills.csv`):
   - **Modifier:** Panguan, passive: "Friendly <unit-aid>Stealthed</unit-aid> units deal 40% more direct damage" → a `modifier` ability, `channel: 'outgoingDamage'`, `value: 40`, `isMultiplicative: true`, `target: 'all-allies'`, gated on ally `Stealth`. (Use Panguan as the primary modifier fixture — it's the clearest "% more output" case. Do NOT derive an HP-aura modifier from Lionheart: its real text is a start-of-combat HP *grant* to adjacent allies, better modeled as a buff/grant; HP-aura detection is deferred.)
