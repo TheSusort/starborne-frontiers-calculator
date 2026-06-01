@@ -21,6 +21,7 @@ The DPS calculator configures a ship's skill effects through a flat, growing set
 1. **Engine depth:** refactor the DPS simulator to *walk an ability list*, reusing the existing proven math kernels (DoT stacking, buff timeline, affinity/crit/hacking, secondary scaling). Not a from-scratch engine; not a compile-to-old-inputs shim.
 2. **Ability scope:** all ability types are modeled (damage, additional-damage, modifier, buff, debuff, dot, charge, heal, shield, cleanse, purge, control). The DPS sim executes the damage-affecting subset; the rest are represented for the later calcs.
 3. **Phasing:** design the model holistically now; build DPS first. Other calcs + combat sim are follow-on specs.
+   - **Baseline branch:** the implementation plan must branch from `feat/dps-charge-manipulation` (or from `main` after that PR merges), **not** current `main`. The charge-gain model (`ChargeGain`, `selfChargeGain`, the active-only + cap fix, `RoundData.chargeCount`) and the `always`/`self-crit`/`enemy-type` conditions are the baseline this spec assumes — they live on that branch, not yet on `main`.
 4. **`modifier` is its own type** (distinct from `buff`): a passive stat/output aura with no duration/stacks and not cleansable/purgeable (Lionheart HP +10%, Panguan/Lodolite outgoing-damage %).
 5. **Conditions are one primitive that resolves to a count**, used as a **gate** (apply iff count > 0) or a **scaler** (per-count effect, with a cap). OR-grouping handled by a simple per-condition `anyOf` flag.
 6. **Skills are Active, Charged, and one Passive** resolved by refit level via the existing `getShipSkillRows()` — not three passives.
@@ -77,9 +78,12 @@ interface Ability {
 ### Conditions (the count primitive)
 
 ```ts
+// Baseline is the charge branch (see §2 phasing), where ConditionalCondition
+// already has always/self-crit/enemy-type. Subjects marked NEW are not in that
+// union yet — the planner should add them.
 type ConditionSubject =
   | 'always'
-  | 'self-buff' | 'self-debuff'
+  | 'self-buff' | 'self-debuff'     // self-debuff NEW
   | 'enemy-buff' | 'enemy-debuff'
   | 'enemy-type'
   | 'self-crit'
@@ -114,7 +118,7 @@ interface ScalingRule {
 
 ```ts
 | { type: 'damage'; multiplier: number; hits?: number }         // hits default 1 (multi-hit / extra action)
-| { type: 'additional-damage'; stat: 'hp'|'defense'|'attack'; pct: number }
+| { type: 'additional-damage'; stat: 'hp'|'defense'; pct: number }  // game also has shield-based, excluded per the shield game-bug convention; no ship uses attack-based
 | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
 | { type: 'buff'; stat: BuffStat; value: number; isMultiplicative: boolean;
     duration: number|'recurring'; stackable: boolean; maxStacks?: number; stackTrigger?: StackTrigger }
@@ -143,7 +147,7 @@ The DPS round loop (`runSinglePass` in `dpsSimulator.ts`) changes from reading f
 3. **Pass A — build round context:** evaluate `modifier`/`buff`/`debuff` abilities' conditions against current sim state; fold applicable ones into effective stats via the existing **buff timeline / enemy-modifier / affinity-crit-hacking** kernels.
 4. **Pass B — produce outputs** using that context: `damage` (× `hits`), `additional-damage` (secondary kernel), `dot` (DoT kernel), `charge` (accumulator). Sum round damage.
 
-**The math kernels are unchanged.** Only the input source changes (walk abilities, not read fields).
+**The math kernels are unchanged.** Only the input source changes (walk abilities, not read fields). In particular, DPS keeps its existing **same-round DoT tick ordering** (apply new stacks, tick existing, expire — `runSinglePass` steps 3–6); we do not literally execute DoTs as separate high-priority abilities the way `combat-system.md` describes. The combat doc's ordering is the eventual combat-sim target, not a DPS-build requirement.
 
 **Team support preserved:** a support ship is another `ShipSkills`. Its `ally`/`all-allies` buffs and modifiers feed the simulated attacker (Lionheart → attacker HP; Panguan → attacker outgoing damage); its `enemy` debuffs feed the dummy. This is the same merge `TeamShipConfig` does today, now expressed as abilities.
 
