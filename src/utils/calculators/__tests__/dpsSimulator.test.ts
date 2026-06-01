@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
+import { ShipSkills } from '../../../types/abilities';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: effects, isStackable: false };
@@ -131,6 +132,46 @@ describe('simulateDPS', () => {
                 chargedMultiplier: 200,
                 chargeCount: 0,
                 rounds: 5,
+            });
+            expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
+        });
+
+        it('skips charging when an explicit charged damage ability has multiplier 0', () => {
+            const shipSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'active-dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            {
+                                id: 'charged-dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 0 },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 5,
+                shipSkills,
             });
             expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
         });

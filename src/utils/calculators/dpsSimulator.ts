@@ -370,14 +370,11 @@ function runSinglePass(params: {
         // since charges never exceed what the charged skill requires.
         if (hasChargedSkill && action === 'active') {
             let bonusCharges = 0;
-            const chargeAbilities = chargeAbilitiesFromSkill(
-                selectFiringSkill(shipSkills, 'active')
-            );
-            for (const ability of chargeAbilities) {
+            for (const ability of chargeAbilitiesFromSkill(firingSkill)) {
                 if (ability.config.type !== 'charge') continue;
                 const cond = ability.conditions[0];
-                if (!cond) continue;
-                bonusCharges += evaluateCondition(cond, ctx) * ability.config.amount;
+                const count = cond ? evaluateCondition(cond, ctx) : 1;
+                bonusCharges += count * ability.config.amount;
             }
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
@@ -544,10 +541,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         []
     );
     const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
-    const hasChargedSkill =
-        chargeCount >= 1 &&
-        (selectFiringSkill(shipSkills, 'charged')?.abilities.some((a) => a.type === 'damage') ??
-            false);
+    const chargedDamage = damageInputsFromSkill(selectFiringSkill(shipSkills, 'charged'));
+    const hasChargedSkill = chargeCount >= 1 && chargedDamage.multiplier > 0;
 
     // Pre-compute deterministic buff timeline
     const timeline = computeBuffTimeline(
