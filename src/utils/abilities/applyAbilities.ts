@@ -33,6 +33,9 @@ export function modifierTotalsFromAbilities(
     for (const ability of abilities) {
         if (ability.type !== 'modifier' || ability.config.type !== 'modifier') continue;
         if (!conditionsMet(ability.conditions, ctx)) continue;
+        // `isMultiplicative` is intentionally ignored: these deltas are summed into the
+        // same additive-percentage buff totals as the buff path (calculateBuffTotals).
+        // Revisit if a flat or true-multiplicative modifier is ever introduced.
         const { channel, value } = ability.config;
         switch (channel) {
             case 'attack':

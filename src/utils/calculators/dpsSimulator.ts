@@ -306,11 +306,15 @@ function runSinglePass(params: {
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
 
+        // Effective crit rate from a given crit-buff total, clamped by affinity.
+        const cappedCrit = (critBuffTotal: number) =>
+            Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+
         // Fold active passive modifiers (firing skill + passive slot) into the round's
         // buff totals so they affect damage exactly like an equivalent buff. Folded here,
         // after enemy modifiers are known but before the effective-stat computations consume
-        // the buff totals. The pre-modifier crit estimate below is used only for the rare
-        // self-crit-gated modifier condition.
+        // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuff)) is used only
+        // for the rare self-crit-gated modifier condition, avoiding a self-referential gate.
         const modifierCtx = buildRoundContext({
             selfBuffNames: entry.activeSelfBuffs
                 .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
@@ -319,10 +323,7 @@ function runSinglePass(params: {
             corrosionEntryCount: corrosionEntries.length,
             infernoEntryCount: infernoEntries.length,
             bombCount: pendingBombs.length,
-            effectiveCritRate: Math.min(
-                affinityCritCap,
-                Math.max(0, crit + critBuff - affinityCritPenalty)
-            ),
+            effectiveCritRate: cappedCrit(critBuff),
             enemyType,
         });
         const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
@@ -339,10 +340,7 @@ function runSinglePass(params: {
         hpBuff += modTotals.hp;
 
         const effectiveAttack = attack * (1 + attackBuff / 100);
-        const effectiveCrit = Math.min(
-            affinityCritCap,
-            Math.max(0, crit + critBuff - affinityCritPenalty)
-        );
+        const effectiveCrit = cappedCrit(critBuff);
         const effectiveCritDamage = critDamage + critDamageBuff;
         const critMultiplier = calculateCritMultiplier({
             attack: effectiveAttack,
