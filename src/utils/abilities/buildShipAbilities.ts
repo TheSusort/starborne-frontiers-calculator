@@ -1,13 +1,10 @@
 import { Ship } from '../../types/ship';
-import { EnemyBaseClass, ConditionalCondition, DoTApplicationEntry } from '../../types/calculator';
-import { getShipSkillRows } from '../ship/skillRows';
 import {
-    parseSkillDamage,
-    parseSecondaryDamage,
-    parseConditionalDamage,
-    parseChargeGain,
-} from '../skillTextParser';
-import { buildDoTAutoFill } from '../calculators/skillBuffAutoFill';
+    EnemyBaseClass,
+    ConditionalCondition,
+    DoTApplicationEntry,
+    SelectedGameBuff,
+} from '../../types/calculator';
 import {
     Ability,
     ShipSkills,
@@ -16,6 +13,15 @@ import {
     Condition,
     AbilityTarget,
 } from '../../types/abilities';
+import { getShipSkillRows } from '../ship/skillRows';
+import {
+    parseSkillDamage,
+    parseSecondaryDamage,
+    parseConditionalDamage,
+    parseChargeGain,
+} from '../skillTextParser';
+import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
+import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
 const nextId = () => `ab${counter++}`;
@@ -240,6 +246,25 @@ function dotAbility(entry: DoTApplicationEntry): Ability {
     };
 }
 
+/**
+ * Maps a SelectedGameBuff's skillSource onto the editor slot that owns it.
+ * Charge buffs land on 'charged'; any passive source collapses to the single
+ * 'passive' slot. Undefined defaults to 'active' (the safest, most common slot).
+ */
+function slotForBuffSource(skillSource: SelectedGameBuff['skillSource']): SkillSlot {
+    switch (skillSource) {
+        case 'charge':
+            return 'charged';
+        case 'passive1':
+        case 'passive2':
+        case 'passive3':
+            return 'passive';
+        case 'active':
+        default:
+            return 'active';
+    }
+}
+
 export function buildShipAbilities(ship: Ship): ShipSkills {
     counter = 0;
 
@@ -266,6 +291,20 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (existing) existing.push(...dots);
         else bySlot.set(slot, dots);
     }
+
+    // Merge ship-level buffs/debuffs into their slots (DoTs are already excluded
+    // by buildSkillBuffAutoFill). selfBuffs target 'self', enemyDebuffs 'enemy'.
+    const { selfBuffs, enemyDebuffs } = buildSkillBuffAutoFill(ship);
+    const mergeBuff = (buff: SelectedGameBuff, target: AbilityTarget) => {
+        const ability = selectedBuffToAbility(buff, target);
+        if (ability.autoFilled === undefined) ability.autoFilled = true;
+        const slot = slotForBuffSource(buff.skillSource);
+        const existing = bySlot.get(slot);
+        if (existing) existing.push(ability);
+        else bySlot.set(slot, [ability]);
+    };
+    for (const buff of selfBuffs) mergeBuff(buff, 'self');
+    for (const buff of enemyDebuffs) mergeBuff(buff, 'enemy');
 
     const slots: Skill[] = [];
     for (const [slot, abilities] of bySlot) {

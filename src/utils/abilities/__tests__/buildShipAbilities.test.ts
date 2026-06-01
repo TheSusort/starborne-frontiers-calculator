@@ -191,4 +191,49 @@ describe('buildShipAbilities', () => {
         });
         expect(mod!.conditions[0]).toMatchObject({ subject: 'self-buff', buffName: 'Stealth' });
     });
+
+    it('Howler active: self buff (Attack Up III) coexists with active damage', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit grants <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-damage>repairs 90%</unit-damage> of its Attack.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active');
+        expect(active).toBeDefined();
+
+        const buff = abilityOfType(active!.abilities, 'buff');
+        expect(buff).toMatchObject({
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast',
+            config: { type: 'buff', buffName: 'Attack Up III' },
+            autoFilled: true,
+        });
+    });
+
+    it('Snapdragon active: enemy debuff (Defense Down II) coexists with active damage', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns and deals <unit-damage>160% damage</unit-damage>.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active');
+        expect(active).toBeDefined();
+
+        // Damage ability still present.
+        expect(abilityOfType(active!.abilities, 'damage')).toMatchObject({
+            config: { type: 'damage', multiplier: 160 },
+        });
+
+        const debuff = abilityOfType(active!.abilities, 'debuff');
+        expect(debuff).toMatchObject({
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: { type: 'debuff', buffName: 'Defense Down II' },
+            autoFilled: true,
+        });
+    });
 });
