@@ -77,6 +77,9 @@ function abilitiesFromText(text: string): Ability[] {
         });
     }
 
+    // Conditional scaling only attaches to a base-damage ability. An orphan
+    // conditional (no base damage parsed) is intentionally dropped here — the
+    // user adds it in the editor; auto-fill never crashes or mis-attaches it.
     const cond = parseConditionalDamage(text);
     if (cond && out[0]?.type === 'damage') {
         out[0].conditions = [
