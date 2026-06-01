@@ -2128,6 +2128,20 @@ const DocumentationPage: React.FC = () => {
                                         crit rate, crit damage, and defense penetration.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Ship Skills & Ability Editor:
+                                        </span>{' '}
+                                        Each ship has three skill slots &mdash; Active, Charged, and
+                                        Passive &mdash; that you configure through per-skill ability
+                                        editor modals. When you select a ship, its abilities are
+                                        auto-filled from the skill text with all components: base
+                                        damage, secondary damage, conditional scaling, charge gain,
+                                        DoTs, and buffs/debuffs. All fields are fully editable.
+                                        Re-selecting a different ship into a slot rebuilds that
+                                        ship&apos;s abilities from its skill text, replacing any
+                                        manual edits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         When you select a ship, the calculator automatically
                                         populates skill damage multipliers from your ship&apos;s
                                         skill data. The &quot;Start Charged&quot; checkbox is also
