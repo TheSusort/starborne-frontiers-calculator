@@ -2,17 +2,17 @@ import { Ability, ShipSkills, AbilityTarget } from '../../types/abilities';
 import { SelectedGameBuff, EnemyBaseClass } from '../../types/calculator';
 import { conditionsMet, ConditionContext } from './evaluateConditions';
 
-let seq = 0;
-const buffId = (name: string) => `buffability-${name}-${seq++}`;
-
 // NOTE: intentionally does NOT carry skillSource/skillDuration/sourceChargeCount/
 // sourceStartCharged — those sim-scheduling fields aren't on the buff/debuff config.
 // The sim is unchanged; Phase 3b rebuilds any scheduling from auto-fill, not this round-trip.
+// The emitted id is derived from the (stable) source ability id so repeated calls on the
+// same ShipSkills produce identical ids — avoids React remount churn when the page memoizes
+// or uses the id as a list key (GameBuffPicker keys on SelectedGameBuff.id).
 export function abilityToSelectedBuff(ability: Ability): SelectedGameBuff | null {
     const c = ability.config;
     if (c.type !== 'buff' && c.type !== 'debuff') return null;
     return {
-        id: buffId(c.buffName),
+        id: `buff-${ability.id}`,
         buffName: c.buffName,
         stacks: c.stacks,
         parsedEffects: c.parsedEffects,
