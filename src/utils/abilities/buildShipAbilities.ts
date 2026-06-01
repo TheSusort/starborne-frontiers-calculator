@@ -94,6 +94,7 @@ function slotFor(label: string): SkillSlot | null {
  * passthrough carrying derivable / manualCount / requiredEnemyType. Neither
  * source type carries a buff name, so for buff-gated subjects we inspect the raw
  * skill text and tag the common "Stealth" gate so Phase 2 can resolve it.
+ * NOTE: A deliberately-divergent 4-arg twin lives in flatInputToAbilities.ts (no rawText/Stealth-tagging).
  */
 export function toCondition(
     condition: ConditionalCondition,

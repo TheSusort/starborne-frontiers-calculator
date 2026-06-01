@@ -123,4 +123,35 @@ describe('flatInputToAbilities', () => {
             { subject: 'enemy-buff', derivable: false, manualCount: 2 },
         ]);
     });
+
+    it('maps chargedConditional + chargedSecondary onto the charged slot', () => {
+        const s = flatInputToAbilities({
+            ...base,
+            chargedSecondary: { stat: 'hp', pct: 50 },
+            chargedConditional: { pct: 15, condition: 'enemy-debuff', derivable: true },
+        });
+        const charged = s.slots.find((x) => x.slot === 'charged')!;
+        expect(charged.abilities.find((a) => a.type === 'additional-damage')!.config).toMatchObject(
+            { stat: 'hp', pct: 50 }
+        );
+        const dmg = charged.abilities.find((a) => a.type === 'damage')!;
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 15 });
+        expect(dmg.conditions[0]).toMatchObject({ subject: 'enemy-debuff', derivable: true });
+    });
+
+    it('emits active abilities in order: damage, additional-damage, dot, charge', () => {
+        const s = flatInputToAbilities({
+            ...base,
+            activeSecondary: { stat: 'defense', pct: 80 },
+            activeDoTs: [{ id: 'x', type: 'corrosion', tier: 3, stacks: 1, duration: 2 }],
+            selfChargeGain: { amount: 1, condition: 'always', derivable: true },
+        });
+        const active = s.slots.find((x) => x.slot === 'active')!;
+        expect(active.abilities.map((a) => a.type)).toEqual([
+            'damage',
+            'additional-damage',
+            'dot',
+            'charge',
+        ]);
+    });
 });
