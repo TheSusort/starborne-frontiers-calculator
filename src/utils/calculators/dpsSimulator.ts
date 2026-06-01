@@ -1,4 +1,6 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
+import { evaluateCondition, scaledBonus } from '../abilities/evaluateConditions';
+import { buildRoundContext } from '../abilities/roundContext';
 import {
     Buff,
     ChargeGain,
@@ -9,6 +11,7 @@ import {
     SecondaryDamage,
     SelectedGameBuff,
 } from '../../types/calculator';
+import { Ability } from '../../types/abilities';
 import {
     toSimBuffs,
     toEnemyModifiers,
@@ -341,30 +344,50 @@ function runSinglePass(params: {
             secondaryStatValue = source * (secondary.pct / 100);
         }
 
+        // Per-round condition context for the Phase 1 condition engine. Built once
+        // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
+        // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state,
+        // matching the prior inline behaviour.
+        const ctx = buildRoundContext({
+            selfBuffNames: entry.activeSelfBuffs
+                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
+                .map((ab) => ab.buffName),
+            landedEnemyDebuffCount: landedEnemyDebuffs.length,
+            corrosionEntryCount: corrosionEntries.length,
+            infernoEntryCount: infernoEntries.length,
+            bombCount: pendingBombs.length,
+            effectiveCritRate: effectiveCrit,
+            enemyType,
+        });
+
         // Conditional scaling bonus, folded additively into the skill multiplier.
         // Derivable conditions read this round's sim state (pre-Step-3 DoT arrays,
         // so this round's freshly-applied DoTs are not yet counted); manual
         // conditions use a static count.
         let conditionalBonusPct = 0;
         if (conditional) {
-            let count: number;
-            if (conditional.condition === 'self-buff') {
-                count = entry.activeSelfBuffs.filter(
-                    (ab) => ab.stacks === undefined || ab.stacks > 0
-                ).length;
-            } else if (conditional.condition === 'enemy-debuff') {
-                count =
-                    landedEnemyDebuffs.length +
-                    corrosionEntries.length +
-                    infernoEntries.length +
-                    pendingBombs.length;
-            } else {
-                count = conditional.manualCount ?? 1;
-            }
-            conditionalBonusPct = conditional.pct * count;
-            if (conditional.cap !== undefined) {
-                conditionalBonusPct = Math.min(conditionalBonusPct, conditional.cap);
-            }
+            const scalingAbility: Ability = {
+                id: 'cond',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [
+                    {
+                        subject: conditional.condition,
+                        derivable: conditional.derivable,
+                        ...(conditional.manualCount !== undefined
+                            ? { manualCount: conditional.manualCount }
+                            : {}),
+                    },
+                ],
+                scaling: {
+                    conditionIndex: 0,
+                    perUnit: conditional.pct,
+                    ...(conditional.cap !== undefined ? { cap: conditional.cap } : {}),
+                },
+                config: { type: 'damage', multiplier: 0 },
+            };
+            conditionalBonusPct = scaledBonus(scalingAbility, ctx);
         }
 
         // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
@@ -373,37 +396,20 @@ function runSinglePass(params: {
         // Self + ally gains are added here and the total is capped at chargeCount,
         // since charges never exceed what the charged skill requires.
         if (hasChargedSkill && action === 'active') {
-            let chargeGainCount = 0;
+            let bonusCharges = 0;
             if (selfChargeGain) {
-                switch (selfChargeGain.condition) {
-                    case 'always':
-                        chargeGainCount = 1;
-                        break;
-                    case 'self-crit':
-                        chargeGainCount = effectiveCrit / 100;
-                        break;
-                    case 'self-buff':
-                        chargeGainCount = entry.activeSelfBuffs.filter(
-                            (ab) => ab.stacks === undefined || ab.stacks > 0
-                        ).length;
-                        break;
-                    case 'enemy-debuff':
-                        chargeGainCount =
-                            landedEnemyDebuffs.length +
-                            corrosionEntries.length +
-                            infernoEntries.length +
-                            pendingBombs.length;
-                        break;
-                    case 'enemy-type':
-                        chargeGainCount = enemyType === selfChargeGain.requiredEnemyType ? 1 : 0;
-                        break;
-                    default:
-                        // enemy-buff, enemy-adjacent, adjacent-ally, enemy-destroyed
-                        chargeGainCount = selfChargeGain.manualCount ?? 1;
-                        break;
-                }
+                const chargeCond = {
+                    subject: selfChargeGain.condition,
+                    derivable: selfChargeGain.derivable,
+                    ...(selfChargeGain.manualCount !== undefined
+                        ? { manualCount: selfChargeGain.manualCount }
+                        : {}),
+                    ...(selfChargeGain.requiredEnemyType
+                        ? { requiredEnemyType: selfChargeGain.requiredEnemyType }
+                        : {}),
+                };
+                bonusCharges = evaluateCondition(chargeCond, ctx) * selfChargeGain.amount;
             }
-            const bonusCharges = selfChargeGain ? chargeGainCount * selfChargeGain.amount : 0;
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
 
