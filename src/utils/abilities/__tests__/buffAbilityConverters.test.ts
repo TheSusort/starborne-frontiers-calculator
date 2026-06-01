@@ -189,6 +189,42 @@ describe('buffAbilitiesToSelectedBuffs', () => {
         expect(enemyDebuffs).toHaveLength(1);
         expect(enemyDebuffs[0].buffName).toBe('Weaken');
     });
+
+    it('routes an all-allies target buff into selfBuffs', () => {
+        const ctx = buildStaticBuffContext({});
+        const allAlliesBuff = buffAbility({
+            target: 'all-allies',
+            conditions: [],
+        });
+        const { selfBuffs, enemyDebuffs } = buffAbilitiesToSelectedBuffs(
+            skills([allAlliesBuff]),
+            ctx
+        );
+        expect(selfBuffs).toHaveLength(1);
+        expect(selfBuffs[0].buffName).toBe('Power Up');
+        expect(enemyDebuffs).toHaveLength(0);
+    });
+
+    it('applies AND gate for multi-condition: excludes if any condition fails', () => {
+        const ctx = buildStaticBuffContext({ enemyType: 'Defender' });
+        const multiConditionBuff = buffAbility({
+            conditions: [
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+                { subject: 'enemy-buff', derivable: false, manualCount: 0 },
+            ],
+        });
+        const excluded = buffAbilitiesToSelectedBuffs(skills([multiConditionBuff]), ctx);
+        expect(excluded.selfBuffs).toHaveLength(0);
+
+        const multiConditionBuffIncluded = buffAbility({
+            conditions: [
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+                { subject: 'enemy-buff', derivable: false, manualCount: 1 },
+            ],
+        });
+        const included = buffAbilitiesToSelectedBuffs(skills([multiConditionBuffIncluded]), ctx);
+        expect(included.selfBuffs).toHaveLength(1);
+    });
 });
 
 describe('selectedBuffsToBuffAbilities', () => {
