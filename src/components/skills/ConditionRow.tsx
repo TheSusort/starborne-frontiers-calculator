@@ -97,9 +97,13 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
                     type="number"
                     min={0}
                     value={condition.manualCount ?? 1}
-                    onChange={(e) =>
-                        onChange({ ...condition, manualCount: parseInt(e.target.value, 10) })
-                    }
+                    onChange={(e) => {
+                        const n = parseInt(e.target.value, 10);
+                        onChange({
+                            ...condition,
+                            manualCount: Number.isNaN(n) ? 0 : n,
+                        });
+                    }}
                 />
             )}
 
@@ -143,9 +147,13 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
                         min={0}
                         max={100}
                         value={condition.hpPercent ?? ''}
-                        onChange={(e) =>
-                            onChange({ ...condition, hpPercent: parseInt(e.target.value, 10) })
-                        }
+                        onChange={(e) => {
+                            const n = parseInt(e.target.value, 10);
+                            onChange({
+                                ...condition,
+                                hpPercent: Number.isNaN(n) ? 0 : n,
+                            });
+                        }}
                     />
                 </div>
             )}

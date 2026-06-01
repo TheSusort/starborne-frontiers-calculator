@@ -63,4 +63,27 @@ describe('AbilityCard', () => {
         fireEvent.click(screen.getByLabelText('Remove ability'));
         expect(onRemove).toHaveBeenCalled();
     });
+
+    it('reconstructs picker value from config.buffName and shows selected buff', () => {
+        const buffAbilityWithName: Ability = {
+            ...buffAbility,
+            config: {
+                ...buffAbility.config,
+                type: 'buff',
+                buffName: 'test-buff',
+                parsedEffects: { attack: 10 },
+                stacks: 1,
+                isStackable: false,
+            },
+        };
+
+        render(<AbilityCard ability={buffAbilityWithName} onChange={vi.fn()} onRemove={vi.fn()} />);
+
+        // When a buff ability has config.buffName set, the GameBuffPicker
+        // reconstructs its value and displays the selected buff.
+        // Verify: the selected buff name appears in the rendered output
+        // (GameBuffPicker displays selected buffs with their name and effects)
+        expect(screen.getByText(/test-buff/i)).toBeInTheDocument();
+        expect(screen.getByText(/\+10% Atk/i)).toBeInTheDocument();
+    });
 });
