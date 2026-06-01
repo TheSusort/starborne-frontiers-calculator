@@ -241,3 +241,66 @@ describe('selectedBuffsToBuffAbilities', () => {
         expect(debuffs[0].target).toBe('enemy');
     });
 });
+
+describe('Round-trip: selectedBuffsToBuffAbilities → buffAbilitiesToSelectedBuffs', () => {
+    it('preserves self buffs and enemy debuffs through a full round-trip', () => {
+        // Hand-built inputs for determinism: one self buff, one enemy debuff
+        const selfBuffs: SelectedGameBuff[] = [
+            {
+                id: 'x',
+                buffName: 'Attack Up II',
+                stacks: 1,
+                parsedEffects: { attack: 30 },
+                isStackable: false,
+                maxStacks: 1,
+                autoFilled: true,
+            },
+        ];
+        const enemyDebuffs: SelectedGameBuff[] = [
+            {
+                id: 'y',
+                buffName: 'Defense Down II',
+                stacks: 2,
+                parsedEffects: { defense: -30 },
+                isStackable: true,
+                maxStacks: 5,
+                stackTrigger: 'per-round',
+                autoFilled: false,
+            },
+        ];
+
+        // Forward: SelectedGameBuff[] → Ability[]
+        const abilities = selectedBuffsToBuffAbilities(selfBuffs, enemyDebuffs);
+        expect(abilities).toHaveLength(2);
+
+        // Build ShipSkills
+        const shipSkills: ShipSkills = {
+            slots: [{ slot: 'active', abilities }],
+        };
+
+        // Backward: Ability[] → SelectedGameBuff[]
+        const round = buffAbilitiesToSelectedBuffs(shipSkills, buildStaticBuffContext({}));
+
+        // Assert: self buffs match by name
+        expect(round.selfBuffs.map((b) => b.buffName).sort()).toEqual(
+            selfBuffs.map((b) => b.buffName).sort()
+        );
+
+        // Assert: enemy debuffs match by name
+        expect(round.enemyDebuffs.map((b) => b.buffName).sort()).toEqual(
+            enemyDebuffs.map((b) => b.buffName).sort()
+        );
+
+        // Assert: for at least one buff, stacks and parsedEffects match the original
+        const roundedSelfBuff = round.selfBuffs.find((b) => b.buffName === 'Attack Up II');
+        expect(roundedSelfBuff).toBeDefined();
+        expect(roundedSelfBuff!.stacks).toBe(selfBuffs[0].stacks);
+        expect(roundedSelfBuff!.parsedEffects).toEqual(selfBuffs[0].parsedEffects);
+
+        // Assert: for the debuff, stacks and parsedEffects match
+        const roundedEnemyDebuff = round.enemyDebuffs.find((b) => b.buffName === 'Defense Down II');
+        expect(roundedEnemyDebuff).toBeDefined();
+        expect(roundedEnemyDebuff!.stacks).toBe(enemyDebuffs[0].stacks);
+        expect(roundedEnemyDebuff!.parsedEffects).toEqual(enemyDebuffs[0].parsedEffects);
+    });
+});
