@@ -149,6 +149,27 @@ describe('conditionsMet (AND of OR-groups)', () => {
         expect(conditionsMet(conds, ctx({ enemyType: 'Defender' }))).toBe(true);
         expect(conditionsMet(conds, ctx({ enemyType: 'Attacker' }))).toBe(false);
     });
+
+    it('non-adjacent anyOf conditions do NOT merge across a plain condition', () => {
+        // [enemy-type(anyOf), self-crit(plain), enemy-buff(anyOf)] → groups [[type],[crit],[buff]], all AND-ed
+        const conds = [
+            cond({ subject: 'enemy-type', requiredEnemyType: 'Defender', anyOf: true }),
+            cond({ subject: 'self-crit' }),
+            cond({
+                subject: 'enemy-buff',
+                derivable: false,
+                manualCount: 1,
+                anyOf: true,
+                buffName: 'Stealth',
+            }),
+        ];
+        // type true + buff true, but the plain self-crit group is false (crit 0) → overall false
+        expect(conditionsMet(conds, ctx({ enemyType: 'Defender' }))).toBe(false);
+        // all three groups satisfied
+        expect(conditionsMet(conds, ctx({ enemyType: 'Defender', effectiveCritRate: 100 }))).toBe(
+            true
+        );
+    });
 });
 
 describe('scaledBonus', () => {

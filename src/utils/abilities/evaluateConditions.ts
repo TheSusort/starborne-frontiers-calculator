@@ -33,6 +33,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'enemy-type':
             return ctx.enemyType && ctx.enemyType === cond.requiredEnemyType ? 1 : 0;
         case 'self-crit':
+            // Returns probability 0..1 (effectiveCritRate / 100); used as expected-value multiplier.
+            // As a gate (> 0), any crit chance counts as "met"; as a scaler, weights by probability.
             return ctx.effectiveCritRate / 100;
         case 'adjacent-ally':
             return ctx.adjacentAllyCount;
