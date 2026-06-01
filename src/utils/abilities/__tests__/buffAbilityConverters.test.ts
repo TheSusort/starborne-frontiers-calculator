@@ -66,7 +66,7 @@ const gameBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff =
 
 describe('abilityToSelectedBuff', () => {
     it('converts a buff ability to a SelectedGameBuff copying core fields', () => {
-        const sb = abilityToSelectedBuff(buffAbility());
+        const sb = abilityToSelectedBuff(buffAbility(), 'active');
         expect(sb).not.toBeNull();
         expect(sb!.buffName).toBe('Power Up');
         expect(sb!.stacks).toBe(2);
@@ -77,7 +77,36 @@ describe('abilityToSelectedBuff', () => {
     });
 
     it('returns null for a non-buff ability', () => {
-        expect(abilityToSelectedBuff(damageAbility())).toBeNull();
+        expect(abilityToSelectedBuff(damageAbility(), 'active')).toBeNull();
+    });
+
+    it('reconstructs skillSource=charge and skillDuration from a charged-slot buff with duration', () => {
+        const ability = buffAbility({
+            config: {
+                type: 'buff',
+                buffName: 'Power Up',
+                parsedEffects: effects,
+                stacks: 2,
+                isStackable: true,
+                maxStacks: 5,
+                stackTrigger: 'per-round',
+                duration: 2,
+            },
+        });
+        const sb = abilityToSelectedBuff(ability, 'charged');
+        expect(sb!.skillSource).toBe('charge');
+        expect(sb!.skillDuration).toBe(2);
+    });
+
+    it('reconstructs skillSource=active and leaves skillDuration undefined when no duration', () => {
+        const sb = abilityToSelectedBuff(buffAbility(), 'active');
+        expect(sb!.skillSource).toBe('active');
+        expect(sb!.skillDuration).toBeUndefined();
+    });
+
+    it('reconstructs skillSource=passive1 from a passive slot', () => {
+        const sb = abilityToSelectedBuff(buffAbility(), 'passive');
+        expect(sb!.skillSource).toBe('passive1');
     });
 });
 
@@ -91,6 +120,13 @@ describe('selectedBuffToAbility', () => {
             expect(ab.config.buffName).toBe('Power Up');
             expect(ab.config.stacks).toBe(2);
             expect(ab.config.parsedEffects).toEqual(effects);
+        }
+    });
+
+    it('carries skillDuration into config.duration', () => {
+        const ab = selectedBuffToAbility(gameBuff({ skillDuration: 3 }), 'self');
+        if (ab.config.type === 'buff') {
+            expect(ab.config.duration).toBe(3);
         }
     });
 
@@ -177,6 +213,16 @@ describe('buffAbilitiesToSelectedBuffs', () => {
             ctx
         );
         expect(included.selfBuffs).toHaveLength(1);
+    });
+
+    it('reconstructs skillSource=charge for a buff placed on the charged slot', () => {
+        const ctx = buildStaticBuffContext({});
+        const chargedSkills: ShipSkills = {
+            slots: [{ slot: 'charged', abilities: [buffAbility()] }],
+        };
+        const { selfBuffs } = buffAbilitiesToSelectedBuffs(chargedSkills, ctx);
+        expect(selfBuffs).toHaveLength(1);
+        expect(selfBuffs[0].skillSource).toBe('charge');
     });
 
     it('routes an enemy-target debuff into enemyDebuffs', () => {

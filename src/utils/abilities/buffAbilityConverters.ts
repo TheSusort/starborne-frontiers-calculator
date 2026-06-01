@@ -1,16 +1,21 @@
-import { Ability, ShipSkills, AbilityTarget } from '../../types/abilities';
+import { Ability, ShipSkills, AbilityTarget, SkillSlot } from '../../types/abilities';
 import { SelectedGameBuff, EnemyBaseClass } from '../../types/calculator';
 import { conditionsMet, ConditionContext } from './evaluateConditions';
 
-// NOTE: intentionally does NOT carry skillSource/skillDuration/sourceChargeCount/
-// sourceStartCharged — those sim-scheduling fields aren't on the buff/debuff config.
-// The sim is unchanged; Phase 3b rebuilds any scheduling from auto-fill, not this round-trip.
+// Sim-scheduling fields are RECONSTRUCTED here (not dropped): skillSource is derived from
+// the ability's slot (active→'active', charged→'charge', passive→'passive1') and skillDuration
+// from the buff/debuff config's `duration`. Without these, computeBuffTimeline's isAlwaysActive
+// would treat every converted timed buff as permanent and over-count it.
+// sourceChargeCount/sourceStartCharged are still NOT carried (they aren't on the config) — fine
+// for single-attacker DPS, where the timeline falls back to the attacker's own charged set.
 // The emitted id is derived from the (stable) source ability id so repeated calls on the
 // same ShipSkills produce identical ids — avoids React remount churn when the page memoizes
 // or uses the id as a list key (GameBuffPicker keys on SelectedGameBuff.id).
-export function abilityToSelectedBuff(ability: Ability): SelectedGameBuff | null {
+export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): SelectedGameBuff | null {
     const c = ability.config;
     if (c.type !== 'buff' && c.type !== 'debuff') return null;
+    const skillSource: SelectedGameBuff['skillSource'] =
+        slot === 'charged' ? 'charge' : slot === 'passive' ? 'passive1' : 'active';
     return {
         id: `buff-${ability.id}`,
         buffName: c.buffName,
@@ -20,11 +25,17 @@ export function abilityToSelectedBuff(ability: Ability): SelectedGameBuff | null
         maxStacks: c.maxStacks,
         stackTrigger: c.stackTrigger,
         autoFilled: ability.autoFilled,
+        skillSource,
+        skillDuration: c.duration,
     };
 }
 
 export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTarget): Ability {
     const isEnemy = target === 'enemy' || target === 'all-enemies';
+    const duration: number | 'recurring' | undefined =
+        typeof buff.skillDuration === 'number' || buff.skillDuration === 'recurring'
+            ? buff.skillDuration
+            : undefined;
     return {
         id: `ab-${buff.id}`,
         type: isEnemy ? 'debuff' : 'buff',
@@ -41,6 +52,7 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   isStackable: buff.isStackable,
                   maxStacks: buff.maxStacks,
                   stackTrigger: buff.stackTrigger,
+                  duration,
                   application: 'apply',
               }
             : {
@@ -51,6 +63,7 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   isStackable: buff.isStackable,
                   maxStacks: buff.maxStacks,
                   stackTrigger: buff.stackTrigger,
+                  duration,
               },
     };
 }
@@ -85,7 +98,7 @@ export function buffAbilitiesToSelectedBuffs(
         for (const ability of slot.abilities) {
             if (ability.config.type !== 'buff' && ability.config.type !== 'debuff') continue;
             if (!conditionsMet(ability.conditions, staticCtx)) continue;
-            const sb = abilityToSelectedBuff(ability);
+            const sb = abilityToSelectedBuff(ability, slot.slot);
             if (!sb) continue;
             if (ability.target === 'enemy' || ability.target === 'all-enemies') {
                 enemyDebuffs.push(sb);
