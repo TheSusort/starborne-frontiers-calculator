@@ -43,7 +43,11 @@ interface CustomTooltipProps {
 const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, shipMap }) => {
     if (!active || !payload || !label) return null;
 
-    const sorted = [...payload].sort((a, b) => b.value - a.value);
+    const roundDamageFor = (dataKey: string) =>
+        shipMap.get(dataKey)?.result.rounds[label - 1]?.totalRoundDamage ?? 0;
+    const sorted = [...payload].sort(
+        (a, b) => roundDamageFor(b.dataKey) - roundDamageFor(a.dataKey)
+    );
 
     return (
         <div className="bg-dark-lighter p-2 border border-dark-border text-white text-sm">
@@ -51,10 +55,11 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
             {sorted.map((entry) => {
                 const ship = shipMap.get(entry.dataKey);
                 const roundData = ship?.result.rounds[label - 1];
+                const roundDamage = roundData?.totalRoundDamage ?? 0;
                 return (
                     <div key={entry.dataKey} className="mb-1">
                         <p style={{ color: entry.color }} className="font-medium">
-                            {entry.name}: {entry.value.toLocaleString()}
+                            {entry.name}: {roundDamage.toLocaleString()}
                             {roundData?.action === 'charged' && (
                                 <span className="ml-1 text-yellow-400 text-xs">Charged</span>
                             )}
@@ -87,6 +92,9 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                                 )}
                             </div>
                         )}
+                        <p className="text-xs text-theme-text-secondary pl-2">
+                            Total: {entry.value.toLocaleString()}
+                        </p>
                     </div>
                 );
             })}
