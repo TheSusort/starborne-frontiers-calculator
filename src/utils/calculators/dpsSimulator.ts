@@ -19,6 +19,7 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
+    modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import {
     toSimBuffs,
@@ -284,7 +285,7 @@ function runSinglePass(params: {
             }
             return bufs;
         });
-        const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
+        let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
             calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 
         const roundDebuffLanded = Math.random() < debuffLandingChance;
@@ -304,6 +305,38 @@ function runSinglePass(params: {
         });
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
+
+        // Fold active passive modifiers (firing skill + passive slot) into the round's
+        // buff totals so they affect damage exactly like an equivalent buff. Folded here,
+        // after enemy modifiers are known but before the effective-stat computations consume
+        // the buff totals. The pre-modifier crit estimate below is used only for the rare
+        // self-crit-gated modifier condition.
+        const modifierCtx = buildRoundContext({
+            selfBuffNames: entry.activeSelfBuffs
+                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
+                .map((ab) => ab.buffName),
+            landedEnemyDebuffCount: landedEnemyDebuffs.length,
+            corrosionEntryCount: corrosionEntries.length,
+            infernoEntryCount: infernoEntries.length,
+            bombCount: pendingBombs.length,
+            effectiveCritRate: Math.min(
+                affinityCritCap,
+                Math.max(0, crit + critBuff - affinityCritPenalty)
+            ),
+            enemyType,
+        });
+        const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
+        const modifierAbilities = [
+            ...(firingSkill?.abilities ?? []),
+            ...(passiveSkill?.abilities ?? []),
+        ];
+        const modTotals = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
+        attackBuff += modTotals.attack;
+        critBuff += modTotals.crit;
+        critDamageBuff += modTotals.critDamage;
+        outgoingDamageBuff += modTotals.outgoingDamage;
+        defenceBuff += modTotals.defence;
+        hpBuff += modTotals.hp;
 
         const effectiveAttack = attack * (1 + attackBuff / 100);
         const effectiveCrit = Math.min(

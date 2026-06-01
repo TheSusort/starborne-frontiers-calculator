@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
-import { ShipSkills } from '../../../types/abilities';
+import { Ability, ShipSkills } from '../../../types/abilities';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: effects, isStackable: false };
@@ -1111,6 +1111,108 @@ describe('simulateDPS', () => {
 
             expect(fromSkills.rounds).toEqual(fromFlat.rounds);
             expect(fromSkills.summary).toEqual(fromFlat.summary);
+        });
+    });
+
+    describe('modifier abilities (via shipSkills)', () => {
+        const damageAbility = (id: string, multiplier: number, hits?: number): Ability => ({
+            id,
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier, ...(hits !== undefined ? { hits } : {}) },
+        });
+        const modifierAbility = (
+            id: string,
+            channel: 'attack' | 'outgoingDamage',
+            value: number
+        ): Ability => ({
+            id,
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'modifier', channel, value, isMultiplicative: true },
+        });
+        const activeSkills = (abilities: Ability[]): ShipSkills => ({
+            slots: [{ slot: 'active', abilities }],
+        });
+
+        it('outgoingDamage modifier matches an equivalent outgoingDamage buff', () => {
+            const simA = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([
+                    damageAbility('d', 100),
+                    modifierAbility('m', 'outgoingDamage', 40),
+                ]),
+            });
+            const simB = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 100)]),
+                selfBuffs: [makeAlwaysBuff('x', { outgoingDamage: 40 } as ParsedBuffEffects)],
+            });
+            expect(simA.rounds[0].directDamage).toBe(simB.rounds[0].directDamage);
+        });
+
+        it('attack modifier matches an equivalent attack buff', () => {
+            const simA = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([
+                    damageAbility('d', 100),
+                    modifierAbility('m', 'attack', 50),
+                ]),
+            });
+            const simB = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 100)]),
+                selfBuffs: [makeAlwaysBuff('x', { attack: 50 } as ParsedBuffEffects)],
+            });
+            expect(simA.rounds[0].directDamage).toBe(simB.rounds[0].directDamage);
+        });
+
+        it('conditional modifier applies only when the gate is met', () => {
+            const conditionalModifier: Ability = {
+                id: 'm',
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+                ],
+                config: {
+                    type: 'modifier',
+                    channel: 'outgoingDamage',
+                    value: 40,
+                    isMultiplicative: true,
+                },
+            };
+            const skills = activeSkills([damageAbility('d', 100), conditionalModifier]);
+            const matched = simulateDPS({
+                ...baseInput,
+                shipSkills: skills,
+                enemyType: 'Defender',
+            });
+            const unmatched = simulateDPS({
+                ...baseInput,
+                shipSkills: skills,
+                enemyType: 'Attacker',
+            });
+            expect(matched.rounds[0].directDamage).toBeGreaterThan(
+                unmatched.rounds[0].directDamage
+            );
+        });
+
+        it('multi-hit damage equals a single hit with the summed multiplier', () => {
+            const multiHit = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 50, 3)]),
+            });
+            const single = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 150)]),
+            });
+            expect(multiHit.rounds[0].directDamage).toBe(single.rounds[0].directDamage);
         });
     });
 });

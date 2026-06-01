@@ -1,5 +1,63 @@
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import { DoTApplicationConfig, SecondaryDamage } from '../../types/calculator';
+import { ConditionContext, conditionsMet } from './evaluateConditions';
+
+/** Folded passive-modifier deltas, in the same units as the DPS buff totals (percentage points). */
+export interface ModifierTotals {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    outgoingDamage: number;
+    defence: number;
+    hp: number;
+}
+
+/**
+ * Sum the values of all active `modifier` abilities into stat buckets. A modifier is
+ * "active" when its conditions are met for the given context. Channels map to buckets
+ * 1:1 except `defense` → `defence` (spelling). `outgoingHeal` and `incomingDamage`
+ * have no DPS bucket and are ignored. Returns all-zero totals when nothing applies.
+ */
+export function modifierTotalsFromAbilities(
+    abilities: Ability[],
+    ctx: ConditionContext
+): ModifierTotals {
+    const totals: ModifierTotals = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        outgoingDamage: 0,
+        defence: 0,
+        hp: 0,
+    };
+    for (const ability of abilities) {
+        if (ability.type !== 'modifier' || ability.config.type !== 'modifier') continue;
+        if (!conditionsMet(ability.conditions, ctx)) continue;
+        const { channel, value } = ability.config;
+        switch (channel) {
+            case 'attack':
+                totals.attack += value;
+                break;
+            case 'crit':
+                totals.crit += value;
+                break;
+            case 'critDamage':
+                totals.critDamage += value;
+                break;
+            case 'outgoingDamage':
+                totals.outgoingDamage += value;
+                break;
+            case 'defense':
+                totals.defence += value;
+                break;
+            case 'hp':
+                totals.hp += value;
+                break;
+            // 'outgoingHeal' | 'incomingDamage' have no DPS bucket — ignore.
+        }
+    }
+    return totals;
+}
 
 /** The skill in the slot matching the round's action, or undefined if absent. */
 export function selectFiringSkill(

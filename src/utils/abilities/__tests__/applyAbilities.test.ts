@@ -5,8 +5,10 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
+    modifierTotalsFromAbilities,
 } from '../applyAbilities';
-import { Ability, ShipSkills, Skill } from '../../../types/abilities';
+import { Ability, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
+import { ConditionContext } from '../evaluateConditions';
 
 function damage(id: string, multiplier: number, hits?: number): Ability {
     return {
@@ -57,6 +59,99 @@ function charge(id: string, amount: number): Ability {
         config: { type: 'charge', amount },
     };
 }
+
+function modifier(
+    id: string,
+    channel: ModifierChannel,
+    value: number,
+    conditions: Ability['conditions'] = []
+): Ability {
+    return {
+        id,
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions,
+        config: { type: 'modifier', channel, value, isMultiplicative: true },
+    };
+}
+
+function makeCtx(overrides: Partial<ConditionContext> = {}): ConditionContext {
+    return {
+        selfBuffNames: [],
+        selfDebuffNames: [],
+        enemyBuffNames: [],
+        enemyDebuffCount: 0,
+        effectiveCritRate: 0,
+        adjacentAllyCount: 0,
+        enemyAdjacentCount: 0,
+        enemyDestroyedCount: 0,
+        selfHpPct: 100,
+        enemyHpPct: 100,
+        ...overrides,
+    };
+}
+
+describe('modifierTotalsFromAbilities', () => {
+    const zero = { attack: 0, crit: 0, critDamage: 0, outgoingDamage: 0, defence: 0, hp: 0 };
+
+    it('sums a single outgoingDamage modifier', () => {
+        const result = modifierTotalsFromAbilities(
+            [modifier('m', 'outgoingDamage', 40)],
+            makeCtx()
+        );
+        expect(result).toEqual({ ...zero, outgoingDamage: 40 });
+    });
+
+    it('returns all zero when a conditional modifier is gated false', () => {
+        const result = modifierTotalsFromAbilities(
+            [
+                modifier('m', 'attack', 50, [
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+                ]),
+            ],
+            makeCtx({ enemyType: 'Attacker' })
+        );
+        expect(result).toEqual(zero);
+    });
+
+    it('counts a conditional modifier when gated true', () => {
+        const result = modifierTotalsFromAbilities(
+            [
+                modifier('m', 'attack', 50, [
+                    { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+                ]),
+            ],
+            makeCtx({ enemyType: 'Defender' })
+        );
+        expect(result).toEqual({ ...zero, attack: 50 });
+    });
+
+    it('maps the "defense" channel to the defence bucket', () => {
+        const result = modifierTotalsFromAbilities([modifier('m', 'defense', 30)], makeCtx());
+        expect(result).toEqual({ ...zero, defence: 30 });
+    });
+
+    it('stacks two modifiers', () => {
+        const result = modifierTotalsFromAbilities(
+            [modifier('m1', 'attack', 20), modifier('m2', 'attack', 15)],
+            makeCtx()
+        );
+        expect(result).toEqual({ ...zero, attack: 35 });
+    });
+
+    it('ignores channels with no DPS bucket (outgoingHeal, incomingDamage)', () => {
+        const result = modifierTotalsFromAbilities(
+            [modifier('m1', 'outgoingHeal', 50), modifier('m2', 'incomingDamage', 25)],
+            makeCtx()
+        );
+        expect(result).toEqual(zero);
+    });
+
+    it('returns all zero with no abilities', () => {
+        expect(modifierTotalsFromAbilities([], makeCtx())).toEqual(zero);
+    });
+});
 
 describe('selectFiringSkill', () => {
     const active: Skill = { slot: 'active', abilities: [damage('a', 100)] };
