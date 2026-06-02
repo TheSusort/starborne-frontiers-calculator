@@ -10,7 +10,8 @@
  * Usage: npm run audit:skills
  * Writes a grouped report to docs/skill-audit.md and prints a summary.
  */
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
@@ -183,7 +184,7 @@ function stripTags(text: string): string {
     return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '').replace(/<br\s*\/?>/gi, ' ');
 }
 
-interface Finding {
+export interface Finding {
     ship: string;
     slot: string;
     rule: string;
@@ -195,7 +196,13 @@ function isAllowed(ship: string, ruleId: string): boolean {
     return ALLOWLIST.some((a) => a.ship === ship && a.rules.includes(ruleId));
 }
 
-function run() {
+/** True when the (gitignored) reference CSV is present — false in CI/clean checkouts. */
+export function csvAvailable(): boolean {
+    return existsSync(CSV_PATH);
+}
+
+/** Pure pass: every coverage finding across all ships (no I/O side effects beyond reading the CSV). */
+export function collectFindings(): { findings: Finding[]; shipCount: number } {
     const ships = readShips();
     const findings: Finding[] = [];
 
@@ -228,6 +235,11 @@ function run() {
             }
         }
     }
+    return { findings, shipCount: ships.length };
+}
+
+function run() {
+    const { findings, shipCount } = collectFindings();
 
     // ─── Report ───────────────────────────────────────────────────────────────
     const byRule = new Map<string, Finding[]>();
@@ -242,7 +254,7 @@ function run() {
     );
 
     let md = `# Skill parser coverage audit\n\n`;
-    md += `${ships.length} ships audited · ${findings.length} findings across ${byRule.size} rules.\n\n`;
+    md += `${shipCount} ships audited · ${findings.length} findings across ${byRule.size} rules.\n\n`;
     md += `> Coverage gaps only (text shows a mechanic the parse didn't act on). Not a correctness check.\n`;
     md += `> Add intentionally-unmodelled cases to \`scripts/auditSkills.allowlist.ts\`.\n\n`;
 
@@ -257,11 +269,14 @@ function run() {
 
     writeFileSync(OUT_PATH, md);
 
-    console.log(`Audited ${ships.length} ships → ${findings.length} findings.`);
+    console.log(`Audited ${shipCount} ships → ${findings.length} findings.`);
     for (const ruleId of sortedRules) {
         console.log(`  ${ruleId.padEnd(28)} ${byRule.get(ruleId)!.length}`);
     }
     console.log(`\nFull report: docs/skill-audit.md`);
 }
 
-run();
+// Run the CLI only when invoked directly (npm run audit:skills), not when imported by a test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    run();
+}
