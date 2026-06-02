@@ -543,6 +543,41 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('Nayra active: secondary Defense damage with the % at the end of the tag', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        expect(abilityOfType(active.abilities, 'damage')!.config).toMatchObject({
+            multiplier: 170,
+        });
+        expect(abilityOfType(active.abilities, 'additional-damage')!.config).toEqual({
+            type: 'additional-damage',
+            stat: 'defense',
+            pct: 30,
+        });
+    });
+
+    it('Nayra passive: Offensive Affinity Override gated on Isha being on the team; Defensive is unconditional', () => {
+        const s = ship({
+            // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
+            secondPassiveSkillText:
+                'At the start of the round, this Unit gains <unit-skill>Defensive Affinity Override</unit-skill>.<br />If Isha is on the same team, this Unit also gains <unit-skill>Offensive Affinity Override</unit-skill>.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const offensive = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Offensive Affinity Override'
+        )!;
+        expect(offensive.conditions).toEqual([
+            { subject: 'ally-on-team', derivable: false, buffName: 'Isha' },
+        ]);
+        const defensive = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Defensive Affinity Override'
+        )!;
+        expect(defensive.conditions).toEqual([]);
+    });
+
     it('Snapdragon active: enemy debuff (Defense Down II) coexists with active damage', () => {
         const s = ship({
             activeSkillText:

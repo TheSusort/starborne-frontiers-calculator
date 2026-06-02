@@ -189,8 +189,11 @@ export function parseSkillDamage(text: string): number {
  */
 export function parseSecondaryDamage(text: string | null | undefined): SecondaryDamage | null {
     if (!text) return null;
+    // The percentage may sit anywhere inside the tag — at the start ("<unit-damage>80%…")
+    // or after lead-in text ("<unit-damage>damage equal to 30%</unit-damage> of its Defense",
+    // e.g. Nayra). `[^<]*?` (non-greedy) skips any text before the first percentage.
     const pattern =
-        /<unit-damage>(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
+        /<unit-damage>[^<]*?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
     const match = pattern.exec(text);
     if (!match) return null;
     const pct = parseFloat(match[1]);
@@ -551,6 +554,17 @@ export function detectGrantConditions(
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
     if (countGate) return [countGate];
+
+    // 3b. "if <Ally> is on the same team, … gains X" — a roster/team-composition gate (manual,
+    // team-dependent, e.g. Nayra's Offensive Affinity Override needs Isha). Positionally scoped:
+    // only applies to a buff mentioned AFTER the team clause, so an unconditional buff earlier in
+    // the same sentence (Nayra's Defensive Affinity Override) isn't gated.
+    const teamGate = /\b(?:if|while|when)\s+([A-Z][\w'-]+)\s+is\s+on\s+the\s+same\s+team\b/i.exec(
+        clause
+    );
+    if (teamGate && (buffStart === -1 || buffStart > teamGate.index)) {
+        return [{ subject: 'ally-on-team', derivable: false, buffName: teamGate[1] }];
+    }
 
     // 4a. "when another ally inflicts a debuff" — a teammate's action (Provider). Checked
     // before the self enemy-debuff gate, since "ally inflicts a debuff" also matches that.

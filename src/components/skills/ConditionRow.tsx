@@ -27,6 +27,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'ally-inflicts-debuff',
     'ally-critically-repaired',
     'ally-crit-dot',
+    'ally-on-team',
 ];
 
 // Labels not covered by CONDITIONAL_CONDITION_LABELS.
@@ -37,6 +38,7 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     'ally-inflicts-debuff': 'when an ally inflicts a debuff',
     'ally-critically-repaired': 'after an ally is critically repaired',
     'ally-crit-dot': 'when an ally crits with a DoT',
+    'ally-on-team': 'when a specific ally is on the team',
 };
 
 const subjectLabel = (subject: ConditionSubject): string =>

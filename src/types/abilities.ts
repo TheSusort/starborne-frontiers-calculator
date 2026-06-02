@@ -43,7 +43,10 @@ export type ConditionSubject =
     | 'hp-threshold'
     | 'ally-inflicts-debuff'
     | 'ally-critically-repaired'
-    | 'ally-crit-dot';
+    | 'ally-crit-dot'
+    // A specific named ally is on the team (roster/team-composition gate; manual,
+    // team-dependent). The ally's name is carried in `buffName` (e.g. "Isha").
+    | 'ally-on-team';
 
 export interface Condition {
     subject: ConditionSubject;

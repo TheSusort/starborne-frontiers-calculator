@@ -451,12 +451,13 @@ function runSinglePass(params: {
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
         const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
-        // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by the firing skill's extend-dot
-        // abilities — applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
+        // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
+        // applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
         // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
         // conditions; a `chanceFromCritPower` extension (Valerian) rolls min(1, critPower/100),
-        // multiplied by the crit rate when also self-crit-gated.
-        for (const ab of firingSkill?.abilities ?? []) {
+        // multiplied by the crit rate when also self-crit-gated. Sourced from BOTH the firing
+        // skill and the always-active passive slot (Valerian's extension is a passive).
+        for (const ab of [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])]) {
             if (ab.config.type !== 'extend-dot') continue;
             if (!conditionsMet(ab.conditions, modifierCtx)) continue;
             if (ab.config.chanceFromCritPower) {

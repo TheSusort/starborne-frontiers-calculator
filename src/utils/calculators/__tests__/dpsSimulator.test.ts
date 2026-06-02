@@ -1480,6 +1480,46 @@ describe('simulateDPS', () => {
             );
         });
 
+        it('applies a chanceFromCritPower extend that lives on the PASSIVE slot (Valerian)', () => {
+            const corrosion = dotAbility('cd', 'corrosion', 9, 2);
+            const critExtend: Ability = {
+                id: 'ce',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, chanceFromCritPower: true },
+            };
+            // Active applies Corrosion every round; the extension sits on the passive slot.
+            const withPassiveExtend: ShipSkills = {
+                slots: [
+                    { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                    { slot: 'passive', abilities: [critExtend] },
+                ],
+            };
+            const noExtend: ShipSkills = {
+                slots: [
+                    { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                    { slot: 'passive', abilities: [] },
+                ],
+            };
+            const withE = simulateDPS({
+                ...base,
+                crit: 100,
+                critDamage: 150,
+                shipSkills: withPassiveExtend,
+            });
+            const noE = simulateDPS({
+                ...base,
+                crit: 100,
+                critDamage: 150,
+                shipSkills: noExtend,
+            });
+            expect(withE.summary.totalCorrosionDamage).toBeGreaterThan(
+                noE.summary.totalCorrosionDamage
+            );
+        });
+
         it('does not extend Bombs — one-shot detonation total is unchanged', () => {
             const bomb = dotAbility('bd', 'bomb', 100, 2);
             const withExtend = simulateDPS({

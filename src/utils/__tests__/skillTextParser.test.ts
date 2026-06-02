@@ -513,6 +513,20 @@ describe('parseSecondaryDamage', () => {
             'deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>2.5%</unit-damage> of its Defense.';
         expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 2.5 });
     });
+    it('parses "additional damage equal to N%" when the % is at the end of the tag (Nayra)', () => {
+        const text =
+            'dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.';
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 30 });
+        // The base damage is still the 170% multiplier, not the secondary tag.
+        expect(parseSkillDamage(text)).toBe(170);
+    });
+
+    it('parses Nayra\'s charged "210% ... 30% of its defense" (lowercase defense)', () => {
+        const text =
+            'dealing <unit-damage>210%</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.';
+        expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 30 });
+    });
+
     it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
         expect(parseSkillDamage(chakara)).toBe(180);
         expect(parseSkillDamage(lodolite)).toBe(240);
@@ -1051,6 +1065,26 @@ describe('detectGrantConditions', () => {
         expect(detectGrantConditions(text, 'Stasis')).toEqual([
             { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 3 },
         ]);
+    });
+
+    it('gates a buff on "if <Ally> is on the same team" as a roster condition (Nayra)', () => {
+        // p2 form: Defensive (unconditional) and Offensive (Isha-gated) in separate sentences.
+        const text =
+            'At the start of the round, this Unit gains <unit-skill>Defensive Affinity Override</unit-skill>. If Isha is on the same team, this Unit also gains <unit-skill>Offensive Affinity Override</unit-skill>.';
+        expect(detectGrantConditions(text, 'Offensive Affinity Override')).toEqual([
+            { subject: 'ally-on-team', derivable: false, buffName: 'Isha' },
+        ]);
+        expect(detectGrantConditions(text, 'Defensive Affinity Override')).toEqual([]);
+    });
+
+    it('scopes the team gate to the buff after it within one sentence (Nayra p1)', () => {
+        // p1 form: both buffs in ONE sentence — the gate must attach only to Offensive.
+        const text =
+            'This Unit gains <unit-skill>Defensive Affinity Override</unit-skill> at the start of the round, and if Isha is on the same team, it also gains <unit-skill>Offensive Affinity Override</unit-skill>.';
+        expect(detectGrantConditions(text, 'Offensive Affinity Override')).toEqual([
+            { subject: 'ally-on-team', derivable: false, buffName: 'Isha' },
+        ]);
+        expect(detectGrantConditions(text, 'Defensive Affinity Override')).toEqual([]);
     });
 
     it('classifies "3 or more buffs" on the target as enemy-buff gte 3 (Nuqtu)', () => {
