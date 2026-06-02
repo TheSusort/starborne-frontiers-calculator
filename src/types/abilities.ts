@@ -11,6 +11,7 @@ export type AbilityType =
     | 'dot'
     | 'extend-dot'
     | 'detonate-dot'
+    | 'accumulate-detonate'
     | 'charge'
     | 'heal'
     | 'shield'
@@ -116,6 +117,9 @@ export type AbilityConfig =
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
     | { type: 'extend-dot'; turns: number; chanceFromCritPower?: boolean }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
+    // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
+    // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.
+    | { type: 'accumulate-detonate'; turns: number; pct: number }
     | { type: 'charge'; amount: number }
     | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }
     | { type: 'cleanse' | 'purge'; count: number }

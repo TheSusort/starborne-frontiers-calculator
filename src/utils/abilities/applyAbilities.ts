@@ -144,3 +144,15 @@ export function detonationsFromSkill(
     }
     return out;
 }
+
+/** `accumulate-detonate` abilities on the skill, as {turns, pct} pairs (e.g. Echoing Burst). */
+export function accumulatorsFromSkill(skill: Skill | undefined): { turns: number; pct: number }[] {
+    if (!skill) return [];
+    const out: { turns: number; pct: number }[] = [];
+    for (const ability of skill.abilities) {
+        if (ability.config.type === 'accumulate-detonate') {
+            out.push({ turns: ability.config.turns, pct: ability.config.pct });
+        }
+    }
+    return out;
+}

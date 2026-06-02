@@ -309,6 +309,55 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('accumulate-detonate (Echoing Burst)', () => {
+        const damageAbility = (id: string, multiplier: number): Ability => ({
+            id,
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier },
+        });
+        const accumulateAbility = (id: string, turns: number, pct: number): Ability => ({
+            id,
+            type: 'accumulate-detonate',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'accumulate-detonate', turns, pct },
+        });
+        const skills = (abilities: Ability[]): ShipSkills => ({
+            slots: [{ slot: 'active', abilities }],
+        });
+
+        it('gathers direct damage and detonates for the % of the accumulated total on expiry', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                enemyDefense: 0,
+                shipSkills: skills([damageAbility('d', 100), accumulateAbility('e', 2, 100)]),
+                rounds: 3,
+            });
+            const dd = result.rounds[0].directDamage;
+            expect(dd).toBeGreaterThan(0);
+            // Round 1: the accumulator is freshly applied — nothing detonates yet.
+            expect(result.rounds[0].detonationDamage).toBe(0);
+            // Round 2: the round-1 accumulator expires, bursting 2 turns of gathered direct damage.
+            expect(result.rounds[1].detonationDamage).toBeCloseTo(2 * dd, 5);
+        });
+
+        it('scales the burst by the detonation percentage', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                enemyDefense: 0,
+                shipSkills: skills([damageAbility('d', 100), accumulateAbility('e', 2, 50)]),
+                rounds: 3,
+            });
+            const dd = result.rounds[0].directDamage;
+            // 50% of 2 gathered turns = 1× a single round's direct damage.
+            expect(result.rounds[1].detonationDamage).toBeCloseTo(dd, 5);
+        });
+    });
+
     describe('mixed DoTs on active vs charged', () => {
         it('applies correct DoT config based on action type', () => {
             const result = simulateDPS({

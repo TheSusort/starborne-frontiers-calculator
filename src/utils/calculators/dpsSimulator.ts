@@ -20,6 +20,7 @@ import {
     dotsFromSkill,
     chargeAbilitiesFromSkill,
     detonationsFromSkill,
+    accumulatorsFromSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import {
@@ -131,6 +132,14 @@ interface PendingBomb {
     damagePerStack: number;
     stacks: number;
     tier: number;
+}
+
+// Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
+// is active, then detonates for `pct`% of the accumulated total when it expires.
+interface PendingAccumulator {
+    roundsRemaining: number;
+    pct: number;
+    accumulated: number;
 }
 
 export interface ActiveDoTState {
@@ -251,6 +260,7 @@ function runSinglePass(params: {
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
+    const pendingAccumulators: PendingAccumulator[] = [];
 
     const roundData: RoundData[] = [];
 
@@ -526,6 +536,19 @@ function runSinglePass(params: {
             }
         }
 
+        // Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
+        // (gated by the same landing roll as inflicted debuffs). Each starts gathering this
+        // round's direct damage in Step 6b below.
+        if (dotsLanded) {
+            for (const acc of accumulatorsFromSkill(firingSkill)) {
+                pendingAccumulators.push({
+                    roundsRemaining: Math.max(1, acc.turns),
+                    pct: acc.pct,
+                    accumulated: 0,
+                });
+            }
+        }
+
         // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
         const corrosionBaseHp = Math.min(enemyHp, 500_000);
         const corrosionDamage =
@@ -549,6 +572,21 @@ function runSinglePass(params: {
             }
         }
         detonationDamage += bombBurst * affinityMult;
+
+        // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
+        // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
+        // directDamage already includes affinity, so no extra affinity multiplier is applied.
+        let accumulatorBurst = 0;
+        for (let i = pendingAccumulators.length - 1; i >= 0; i--) {
+            pendingAccumulators[i].accumulated += directDamage;
+            pendingAccumulators[i].roundsRemaining -= 1;
+            if (pendingAccumulators[i].roundsRemaining <= 0) {
+                accumulatorBurst +=
+                    pendingAccumulators[i].accumulated * (pendingAccumulators[i].pct / 100);
+                pendingAccumulators.splice(i, 1);
+            }
+        }
+        detonationDamage += accumulatorBurst;
 
         const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + detonationDamage;
         cumulativeDamage += totalRoundDamage;

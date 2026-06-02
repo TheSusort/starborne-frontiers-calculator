@@ -29,6 +29,8 @@ import {
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
+    parseAccumulateDetonate,
+    isAccumulateDetonateEffect,
     parseSkillEffects,
     classifyEnemyEffect,
     statusEffectCondition,
@@ -589,6 +591,23 @@ function abilitiesFromText(text: string): Ability[] {
         });
     }
 
+    const accumulate = parseAccumulateDetonate(text);
+    if (accumulate) {
+        out.push({
+            id: nextId(),
+            type: 'accumulate-detonate',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'accumulate-detonate',
+                turns: accumulate.turns,
+                pct: accumulate.pct,
+            },
+            autoFilled: true,
+        });
+    }
+
     const charge = parseChargeGain(text);
     if (charge) {
         out.push({
@@ -712,7 +731,13 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         pushToSlot(bySlot, slot, [ability]);
     };
     for (const buff of selfBuffs) mergeBuff(buff, 'self');
-    for (const buff of enemyDebuffs) mergeBuff(buff, 'enemy');
+    // Accumulate-and-detonate effects (e.g. Echoing Burst) are represented by their own
+    // accumulate-detonate ability from abilitiesFromText — skip the inert debuff card so
+    // the effect isn't double-listed in the editor.
+    for (const buff of enemyDebuffs) {
+        if (isAccumulateDetonateEffect(buff.buffName)) continue;
+        mergeBuff(buff, 'enemy');
+    }
 
     const slots: Skill[] = [];
     for (const [slot, abilities] of bySlot) {

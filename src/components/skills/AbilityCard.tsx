@@ -29,6 +29,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     dot: 'Damage over Time',
     'extend-dot': 'Extend DoTs',
     'detonate-dot': 'Detonate DoTs',
+    'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',
     heal: 'Heal',
     shield: 'Shield',
@@ -342,6 +343,31 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                             value={config.powerPct}
                             onChange={(e) =>
                                 updateConfig({ ...config, powerPct: toNumber(e.target.value) })
+                            }
+                        />
+                    </div>
+                );
+
+            case 'accumulate-detonate':
+                return (
+                    <div className="flex flex-wrap gap-2">
+                        <Input
+                            label="Gather for (turns)"
+                            helpLabel="While active, this debuff gathers all direct damage dealt to the enemy. On expiry it detonates for the % below of the accumulated total (e.g. Echoing Burst)."
+                            type="number"
+                            min={1}
+                            value={config.turns}
+                            onChange={(e) =>
+                                updateConfig({ ...config, turns: toNumber(e.target.value) })
+                            }
+                        />
+                        <Input
+                            label="Detonate for (%)"
+                            helpLabel="Percentage of the accumulated direct damage dealt as detonation damage when the debuff expires."
+                            type="number"
+                            value={config.pct}
+                            onChange={(e) =>
+                                updateConfig({ ...config, pct: toNumber(e.target.value) })
                             }
                         />
                     </div>

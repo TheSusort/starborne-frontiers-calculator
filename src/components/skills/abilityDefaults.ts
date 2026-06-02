@@ -34,6 +34,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'extend-dot', turns: 1 };
         case 'detonate-dot':
             return { type: 'detonate-dot', dotType: 'inferno', powerPct: 100 };
+        case 'accumulate-detonate':
+            return { type: 'accumulate-detonate', turns: 2, pct: 100 };
         case 'charge':
             return { type: 'charge', amount: 1 };
         case 'heal':
@@ -58,6 +60,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     dot: 'enemy',
     'extend-dot': 'enemy',
     'detonate-dot': 'enemy',
+    'accumulate-detonate': 'enemy',
     charge: 'self',
     heal: 'ally',
     shield: 'ally',

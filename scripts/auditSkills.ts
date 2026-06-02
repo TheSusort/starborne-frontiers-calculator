@@ -148,6 +148,12 @@ const RULES: Rule[] = [
         keyword: (t) => /inflict\w*[^.]*\b(corrosion|inferno|bomb)\b/i.test(t),
         handled: (a) => hasType(a, 'dot'),
     },
+    {
+        id: 'accumulate-detonate',
+        severity: 'high',
+        keyword: (t) => /echoing burst/i.test(t),
+        handled: (a) => hasType(a, 'accumulate-detonate'),
+    },
 ];
 
 // Trigger phrasing that should produce a gating condition on a granted buff/debuff.
@@ -162,8 +168,16 @@ const INTENTIONAL_REACTIVE_RE =
 
 /** The sentence/clause of `plain` mentioning `name` (split on . ; and br-derived spaces). */
 function clauseFor(plain: string, name: string): string {
-    const sentences = plain.split(/(?<=[.;])\s+/);
-    return sentences.find((s) => s.toLowerCase().includes(name.toLowerCase())) ?? plain;
+    // Mask the period in the "Inc."/"Out." buff-name abbreviations so it isn't read as a
+    // sentence boundary (which would split e.g. "Inc. DoT Damage Up III" and fall back to
+    // the whole text — leaking an unrelated sentence's trigger). Mirrors detectGrantConditions.
+    const ABBR_MARK = '\u0001';
+    const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+    const masked = maskAbbrev(plain);
+    const maskedName = maskAbbrev(name).toLowerCase();
+    const sentences = masked.split(/(?<=[.;])\s+/);
+    const clause = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? masked;
+    return clause.split(ABBR_MARK).join(' ');
 }
 
 /**

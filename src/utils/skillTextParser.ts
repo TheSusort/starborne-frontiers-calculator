@@ -464,9 +464,18 @@ export function detectGrantConditions(
     buffName: string
 ): Condition[] {
     if (!skillText || !buffName) return [];
-    const plain = stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. ');
+    // Game buff names use the abbreviations "Inc." (Incoming) and "Out." (Outgoing) — e.g.
+    // "Inc. DoT Damage Up III". Their internal period would be read as a sentence boundary,
+    // splitting the name in half so the clause lookup fails and falls back to the whole
+    // skill text (leaking gates from unrelated sentences). Mask the space after the
+    // abbreviation period with a non-whitespace marker so the split skips it, then restore.
+    const ABBR_MARK = '\u0001';
+    const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+    const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
+    const maskedName = maskAbbrev(buffName).toLowerCase();
     const sentences = plain.split(/(?<=[.;])\s+/);
-    const clause = sentences.find((s) => s.toLowerCase().includes(buffName.toLowerCase())) ?? plain;
+    const clauseMasked = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? plain;
+    const clause = clauseMasked.split(ABBR_MARK).join(' ');
     const low = clause.toLowerCase();
     // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
@@ -649,6 +658,38 @@ export function parseDetonateDoT(
     const m = DETONATE_DOT_RE.exec(stripUnitTags(text));
     if (!m) return null;
     return { dotType: m[1].toLowerCase() as DoTType, powerPct: parseFloat(m[2]) };
+}
+
+// Named "accumulate-and-detonate" debuffs: while active they gather all direct damage
+// dealt to the enemy, then detonate for a % of that accumulated total on expiry. The %
+// is intrinsic to the named effect (from its buff definition, e.g. Echoing Burst "deals
+// 100% of the damage upon expiration"); the duration comes from the skill text. Keyed by
+// lowercase name so detection survives the <unit-*> tags and casing in the source data.
+const ACCUMULATE_DETONATE_EFFECTS: Record<string, number> = { 'echoing burst': 100 };
+
+/** Whether `name` is a known accumulate-and-detonate debuff (so its plain debuff card is suppressed). */
+export function isAccumulateDetonateEffect(name: string | null | undefined): boolean {
+    return !!name && name.toLowerCase() in ACCUMULATE_DETONATE_EFFECTS;
+}
+
+/**
+ * Parses an Echoing Burst-style accumulate-and-detonate debuff inflicted by the skill:
+ * the duration (turns) it gathers direct damage and the % of the accumulated total dealt
+ * on expiry. Returns null when no such named effect is present. Reference: docs/ship-skills.csv.
+ */
+export function parseAccumulateDetonate(
+    text: string | null | undefined
+): { turns: number; pct: number } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).toLowerCase();
+    for (const [name, pct] of Object.entries(ACCUMULATE_DETONATE_EFFECTS)) {
+        const idx = plain.indexOf(name);
+        if (idx === -1) continue;
+        // "for N turns" attaches to the named effect when present (default 2 turns).
+        const m = /for\s+(\d+)\s+turns?/.exec(plain.slice(idx));
+        return { turns: m ? parseInt(m[1], 10) : 2, pct };
+    }
+    return null;
 }
 
 // "<subject> cannot critically hit" — the no-crit attaches to whatever noun precedes it.

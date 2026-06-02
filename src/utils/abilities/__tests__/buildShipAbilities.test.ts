@@ -381,6 +381,29 @@ describe('buildShipAbilities', () => {
         expect(detonate.target).toBe('enemy');
     });
 
+    it('Valkyrie charged: accumulate-detonate(Echoing Burst, 2 turns, 100%) without a redundant debuff card', () => {
+        const s = ship({
+            chargeSkillText:
+                "This Unit's attack ignores Taunt and Provoke, deals <unit-damage>240% damage</unit-damage>, and inflicts <unit-skill>Inc. Damage Up II</unit-skill> and <unit-skill>Echoing Burst</unit-skill> for 2 turns.",
+            chargeSkillCharge: 2,
+        });
+
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const accumulate = abilityOfType(charged.abilities, 'accumulate-detonate')!;
+        expect(accumulate.config).toEqual({
+            type: 'accumulate-detonate',
+            turns: 2,
+            pct: 100,
+        });
+        expect(accumulate.target).toBe('enemy');
+        // Echoing Burst is represented only by the accumulate-detonate ability, not a debuff card.
+        expect(
+            charged.abilities.some(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Echoing Burst'
+            )
+        ).toBe(false);
+    });
+
     it('charged slot: damage ability with multiplier 300', () => {
         const s = ship({
             activeSkillText: 'deals <unit-damage>100% damage</unit-damage>',

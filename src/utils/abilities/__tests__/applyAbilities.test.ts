@@ -5,6 +5,7 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
+    accumulatorsFromSkill,
     modifierTotalsFromAbilities,
 } from '../applyAbilities';
 import { Ability, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
@@ -317,6 +318,34 @@ describe('dotsFromSkill', () => {
 
     it('handles undefined skill', () => {
         expect(dotsFromSkill(undefined)).toEqual([]);
+    });
+});
+
+describe('accumulatorsFromSkill', () => {
+    const accumulate = (id: string, turns: number, pct: number): Ability => ({
+        id,
+        type: 'accumulate-detonate',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'accumulate-detonate', turns, pct },
+    });
+
+    it('extracts accumulate-detonate abilities as {turns, pct}', () => {
+        const skill: Skill = {
+            slot: 'charged',
+            abilities: [damage('a', 240), accumulate('e', 2, 100)],
+        };
+        expect(accumulatorsFromSkill(skill)).toEqual([{ turns: 2, pct: 100 }]);
+    });
+
+    it('returns empty array when no accumulate-detonate abilities', () => {
+        const skill: Skill = { slot: 'active', abilities: [damage('a', 100)] };
+        expect(accumulatorsFromSkill(skill)).toEqual([]);
+    });
+
+    it('handles undefined skill', () => {
+        expect(accumulatorsFromSkill(undefined)).toEqual([]);
     });
 });
 

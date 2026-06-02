@@ -15,6 +15,8 @@ import {
     parseAllyCritDot,
     parseNoCrit,
     parseDetonateDoT,
+    parseAccumulateDetonate,
+    isAccumulateDetonateEffect,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -748,6 +750,34 @@ describe('parseDetonateDoT', () => {
     });
 });
 
+describe('parseAccumulateDetonate', () => {
+    it('parses Echoing Burst with its duration (Valkyrie charged)', () => {
+        const text =
+            "This Unit's attack ignores Taunt and Provoke, deals <unit-damage>240% damage</unit-damage>, and inflicts <unit-skill>Inc. Damage Up II</unit-skill> and <unit-skill>Echoing Burst</unit-skill> for 2 turns.";
+        expect(parseAccumulateDetonate(text)).toEqual({ turns: 2, pct: 100 });
+    });
+
+    it('defaults to 2 turns when no explicit duration follows the effect', () => {
+        expect(parseAccumulateDetonate('This Unit applies Echoing Burst.')).toEqual({
+            turns: 2,
+            pct: 100,
+        });
+    });
+
+    it('returns null when there is no accumulate-detonate effect', () => {
+        expect(parseAccumulateDetonate('This Unit deals 200% damage.')).toBeNull();
+        expect(parseAccumulateDetonate('')).toBeNull();
+        expect(parseAccumulateDetonate(null)).toBeNull();
+    });
+
+    it('recognises known accumulate-detonate effect names', () => {
+        expect(isAccumulateDetonateEffect('Echoing Burst')).toBe(true);
+        expect(isAccumulateDetonateEffect('echoing burst')).toBe(true);
+        expect(isAccumulateDetonateEffect('Inferno III')).toBe(false);
+        expect(isAccumulateDetonateEffect(undefined)).toBe(false);
+    });
+});
+
 describe('parseNoCrit', () => {
     it('detects "deals N% damage that cannot critically hit"', () => {
         expect(
@@ -1008,6 +1038,18 @@ describe('detectGrantConditions', () => {
             'This Unit deals 150% Damage. If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.';
         expect(detectGrantConditions(text, 'Stasis')).toEqual([
             { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 4 },
+        ]);
+    });
+
+    it('scopes the count gate to its own sentence when an abbreviated buff name has an internal period (Asphyxiator)', () => {
+        const text =
+            'This Unit inflicts <unit-skill>Inc. DoT Damage Up III</unit-skill> for 2 turns, deals <unit-damage>215% damage</unit-damage>, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns. If the targeted enemy or adjacent enemies have 3 or more debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns on the targeted enemy and all enemies adjacent to the enemy.';
+        // "Inc. DoT Damage Up III" is inflicted unconditionally — the "3 or more debuffs"
+        // gate belongs to the separate Stasis sentence and must not leak onto it.
+        expect(detectGrantConditions(text, 'Inc. DoT Damage Up III')).toEqual([]);
+        // Stasis keeps the count-threshold gate from its own sentence.
+        expect(detectGrantConditions(text, 'Stasis')).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 3 },
         ]);
     });
 
