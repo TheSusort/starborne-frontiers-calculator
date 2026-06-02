@@ -108,6 +108,91 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('defensive-only passive (Anemone) produces no passive slot — the UI surfaces the slot from skill text instead', () => {
+        // Anemone's passive is pure mitigation/repair; nothing the ability parser models.
+        // buildShipAbilities yields no passive slot, so ShipConfigCard derives `hasPassive`
+        // from the ship's skill text (getSkillRowForSlot) to still show the Edit button.
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>140% damage</unit-damage>.',
+            thirdPassiveSkillText:
+                'This Unit takes 25% less direct damage from enemies debuffed with a Damage over Time effect.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        expect(slot(slots, 'passive')).toBeUndefined();
+    });
+
+    it('Judge passive: HP-gated damage (no scaling) + separate per-destroyed modifier + flat defPen', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.<br /><br />This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+
+        // The 60% damage is gated by enemy HP < 50% and has NO scaling (the per-destroyed
+        // bonus belongs to the modifier, not this ability).
+        const dmg = abilityOfType(passive.abilities, 'damage')!;
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 60 });
+        expect(dmg.scaling).toBeUndefined();
+        expect(dmg.conditions).toEqual([
+            { subject: 'hp-threshold', derivable: true, hpComparator: 'below', hpPercent: 50 },
+        ]);
+
+        // The "20% more direct damage for each destroyed enemy, up to 100%" is the outgoing-damage modifier.
+        const modifier = passive.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(modifier.scaling).toMatchObject({ perUnit: 20, cap: 100 });
+        expect(modifier.conditions).toEqual([{ subject: 'enemy-destroyed', derivable: false }]);
+
+        // Flat 20% defense penetration modifier is still present.
+        expect(
+            passive.abilities.some(
+                (a) =>
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defensePenetration' &&
+                    a.config.value === 20
+            )
+        ).toBe(true);
+    });
+
+    it('Provider charged: damage + extend-dot (charge removal is ignored)', () => {
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillText:
+                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+            chargeSkillCharge: 3,
+        });
+
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
+            multiplier: 200,
+        });
+        const extend = abilityOfType(charged.abilities, 'extend-dot')!;
+        expect(extend.config).toEqual({ type: 'extend-dot', turns: 1 });
+        expect(extend.target).toBe('enemy');
+    });
+
+    it('Provider passive: no-crit damage gated by ally-inflicts-debuff + gated Crit Rate Down II', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit has 20% Shield Penetration. When another ally inflicts a debuff onto an enemy, this unit deals <unit-damage>50% damage</unit-damage> to that enemy that cannont critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.',
+        });
+
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+
+        const dmg = abilityOfType(passive.abilities, 'damage')!;
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 50, noCrit: true });
+        expect(dmg.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
+
+        const debuff = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Crit Rate Down II'
+        )!;
+        expect(debuff.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
+    });
+
     it('charged slot: damage ability with multiplier 300', () => {
         const s = ship({
             activeSkillText: 'deals <unit-damage>100% damage</unit-damage>',

@@ -9,6 +9,9 @@ import {
     parseConditionalDamage,
     parseChargeGain,
     detectGrantConditions,
+    parseHpThresholdCondition,
+    parseExtendDoT,
+    parseNoCrit,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -167,7 +170,13 @@ describe('parseSkillEffects', () => {
                 'active'
             )
         ).toEqual([
-            { buffName: 'Defense Down II', target: 'enemy', duration: 2, source: 'active' },
+            {
+                buffName: 'Defense Down II',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
         ]);
     });
 
@@ -204,8 +213,20 @@ describe('parseSkillEffects', () => {
                 'active'
             )
         ).toEqual([
-            { buffName: 'Defense Down II', target: 'enemy', duration: 1, source: 'active' },
-            { buffName: 'Speed Down II', target: 'enemy', duration: 2, source: 'active' },
+            {
+                buffName: 'Defense Down II',
+                target: 'enemy',
+                duration: 1,
+                source: 'active',
+                application: 'inflict',
+            },
+            {
+                buffName: 'Speed Down II',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
         ]);
     });
 
@@ -351,6 +372,105 @@ describe('parseSkillEffects', () => {
             source: 'active',
         });
     });
+
+    it('parses "inflicting" (gerund) as an enemy debuff', () => {
+        const result = parseSkillEffects(
+            'This Unit attacks all enemies, dealing <unit-damage>240% damage</unit-damage> and inflicting <unit-skill>Stasis</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Stasis',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
+        ]);
+    });
+
+    it('parses "inflict" (bare imperative) as an enemy debuff', () => {
+        const result = parseSkillEffects(
+            'When the target was repaired this round, inflict <unit-skill>Defense Down II</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Defense Down II',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
+        ]);
+    });
+
+    it('parses "is inflicted with" (passive voice) as an enemy debuff', () => {
+        const result = parseSkillEffects(
+            'The primary target is inflicted with <unit-skill>Disable</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Disable',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
+        ]);
+    });
+
+    it('parses "apply" (bare imperative) using BUFFS type to target', () => {
+        const result = parseSkillEffects(
+            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Concentrate Fire',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'apply',
+            },
+        ]);
+    });
+
+    it('parses "is applied with" (passive voice) using BUFFS type to target', () => {
+        const result = parseSkillEffects(
+            'The highest attack enemy is applied with <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            {
+                buffName: 'Concentrate Fire',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'apply',
+            },
+        ]);
+    });
+
+    it('parses "gaining" (gerund) as a self buff', () => {
+        const result = parseSkillEffects(
+            'This Unit repairs itself while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.',
+            'active'
+        );
+        expect(result).toEqual([
+            { buffName: 'Defense Up II', target: 'self', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('does not treat an adjectival "newly applied" debuff as a fresh application', () => {
+        expect(
+            parseSkillEffects(
+                'After a critical hit, this Unit extends the newly applied <unit-skill>Acidic Decay</unit-skill> by 1 turn.',
+                'active'
+            )
+        ).toEqual([]);
+    });
 });
 
 describe('parseSecondaryDamage', () => {
@@ -447,8 +567,9 @@ describe('parseConditionalDamage', () => {
     });
 
     it('captures a cap from "up to max of N%"', () => {
+        // "additional damage" (not "more") is base-damage scaling; "more direct damage" is a modifier.
         const text =
-            'This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.';
+            'This Unit deals an additional <unit-damage>20% damage</unit-damage> for each destroyed enemy, up to max of 100%.';
         expect(parseConditionalDamage(text)).toEqual({
             pct: 20,
             condition: 'enemy-destroyed',
@@ -469,9 +590,133 @@ describe('parseConditionalDamage', () => {
         ).toBeNull();
     });
 
+    it('parses "when attacking a Supporter, it additionally deals X% damage" (Meiying active)', () => {
+        const text =
+            "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, dealing <unit-damage>190% damage</unit-damage>, and when attacking a Supporter, it additionally deals <unit-damage>90%</unit-damage> damage.";
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 90,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Supporter',
+        });
+    });
+
+    it('parses "when attacking a Supporter, it deals an additional X% damage" (Meiying charged)', () => {
+        const text =
+            'dealing <unit-damage>240% damage</unit-damage> and inflicting <unit-skill>Stasis</unit-skill> for 1 turn. When attacking a Supporter, it deals an additional <unit-damage>115%</unit-damage> damage.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 115,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Supporter',
+        });
+    });
+
+    it('does not capture the base multiplier as an enemy-type conditional', () => {
+        // The 190% base is before the enemy-type clause and must not be picked up.
+        const text =
+            'This Unit deals <unit-damage>190% damage</unit-damage> when attacking a Defender, it additionally deals <unit-damage>40%</unit-damage> damage.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 40,
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+        });
+    });
+
     it('returns null for empty input', () => {
         expect(parseConditionalDamage('')).toBeNull();
         expect(parseConditionalDamage(null)).toBeNull();
+    });
+
+    it('does not treat "X% more direct damage for each Y" as base-damage scaling (Judge)', () => {
+        // "more direct damage" is an outgoing-damage MODIFIER (parseModifiers), not base scaling.
+        const text =
+            'At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP. This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.';
+        expect(parseConditionalDamage(text)).toBeNull();
+    });
+});
+
+describe('parseExtendDoT', () => {
+    it('parses "extends active Damage Over Time effects by 1 turn" (Provider)', () => {
+        const text =
+            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+        expect(parseExtendDoT(text)).toBe(1);
+    });
+
+    it('parses a multi-turn extension and the "(DoT)" abbreviation', () => {
+        expect(parseExtendDoT('extends all Damage Over Time (DoT) effects by 2 turns.')).toBe(2);
+    });
+
+    it('returns null when there is no DoT extension', () => {
+        expect(
+            parseExtendDoT('This Unit deals <unit-damage>200% damage</unit-damage>.')
+        ).toBeNull();
+        expect(parseExtendDoT('')).toBeNull();
+        expect(parseExtendDoT(null)).toBeNull();
+    });
+
+    it('does not match a debuff-duration extension that is not a DoT', () => {
+        expect(parseExtendDoT('extends the duration of all buffs by 1 turn.')).toBeNull();
+    });
+});
+
+describe('parseNoCrit', () => {
+    it('detects "deals N% damage that cannot critically hit"', () => {
+        expect(
+            parseNoCrit('deals <unit-damage>200% damage</unit-damage> that cannot critically hit')
+        ).toBe(true);
+    });
+
+    it('detects a separate "This attack cannot critically hit." sentence', () => {
+        expect(
+            parseNoCrit(
+                'deals <unit-damage>40% damage</unit-damage> to that enemy. This attack cannot critically hit.'
+            )
+        ).toBe(true);
+    });
+
+    it('does not flag damage when only a repair cannot crit', () => {
+        expect(
+            parseNoCrit(
+                'repairs allies for 7% of the damage dealt. This repair cannot critically hit.'
+            )
+        ).toBe(false);
+    });
+
+    it('returns false when there is no no-crit clause', () => {
+        expect(parseNoCrit('This Unit deals <unit-damage>180% damage</unit-damage>.')).toBe(false);
+        expect(parseNoCrit('')).toBe(false);
+        expect(parseNoCrit(null)).toBe(false);
+    });
+});
+
+describe('parseHpThresholdCondition', () => {
+    it('detects "deals N% damage to enemies with less than 50% HP" (Judge)', () => {
+        const text =
+            'At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.';
+        expect(parseHpThresholdCondition(text)).toEqual({ hpComparator: 'below', hpPercent: 50 });
+    });
+
+    it('detects an "above" threshold', () => {
+        const text =
+            'This Unit deals <unit-damage>80% damage</unit-damage> to enemies above 70% HP.';
+        expect(parseHpThresholdCondition(text)).toEqual({ hpComparator: 'above', hpPercent: 70 });
+    });
+
+    it('does not match a damage-bonus phrasing (base damage stays ungated)', () => {
+        // "increases Damage by 100% to enemies with less than 30% HP" is a separate bonus on a
+        // ship with its own base damage — not a "deals N% damage to …" gate.
+        const text =
+            'This Unit deals <unit-damage>250% Damage</unit-damage> and increases Damage by 100% to enemies with less than 30% HP.';
+        expect(parseHpThresholdCondition(text)).toBeNull();
+    });
+
+    it('returns null when there is no HP-gated damage clause', () => {
+        expect(
+            parseHpThresholdCondition('This Unit deals <unit-damage>180% damage</unit-damage>.')
+        ).toBeNull();
+        expect(parseHpThresholdCondition('')).toBeNull();
     });
 });
 
@@ -688,6 +933,53 @@ describe('detectGrantConditions', () => {
     it('returns [] for an unconditional grant', () => {
         const text = 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.';
         expect(detectGrantConditions(text, 'Attack Up III')).toEqual([]);
+    });
+
+    it('classifies "when Damaging a Debuffed enemy" as an enemy-debuff presence gate (Sha Xing)', () => {
+        const text =
+            'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns when damaging a Debuffer or Supporter. Additionally, when Damaging a Debuffed enemy, it gains <unit-skill>Tianchao Precision II</unit-skill> for 3 turns.';
+        expect(detectGrantConditions(text, 'Tianchao Precision II')).toEqual([
+            { subject: 'enemy-debuff', derivable: true },
+        ]);
+        // The other granted buff in the same skill keeps its own enemy-type gate.
+        expect(detectGrantConditions(text, 'Stealth')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Debuffer', anyOf: true },
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Supporter', anyOf: true },
+        ]);
+    });
+
+    it('recognises "against a Debuffed target" phrasing', () => {
+        const text = 'Against a Debuffed target, this Unit gains Crit Power Up II for 2 turns.';
+        expect(detectGrantConditions(text, 'Crit Power Up II')).toEqual([
+            { subject: 'enemy-debuff', derivable: true },
+        ]);
+    });
+
+    it('classifies "when applying a debuff" as an enemy-debuff presence gate (Yuyan)', () => {
+        const text =
+            'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.';
+        expect(detectGrantConditions(text, 'Stealth')).toEqual([
+            { subject: 'enemy-debuff', derivable: true },
+        ]);
+        expect(detectGrantConditions(text, 'Tianchao Precision II')).toEqual([
+            { subject: 'enemy-debuff', derivable: true },
+        ]);
+    });
+
+    it('classifies "On inflicting a debuff" as an enemy-debuff presence gate (Marauder)', () => {
+        const text =
+            'On inflicting a debuff, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.';
+        expect(detectGrantConditions(text, 'Marauder Rage II')).toEqual([
+            { subject: 'enemy-debuff', derivable: true },
+        ]);
+    });
+
+    it('classifies "when another ally inflicts a debuff" as a manual ally-inflicts-debuff gate (Provider)', () => {
+        const text =
+            'When another ally inflicts a debuff onto an enemy, this unit deals 50% damage to that enemy that cannot critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.';
+        expect(detectGrantConditions(text, 'Crit Rate Down II')).toEqual([
+            { subject: 'ally-inflicts-debuff', derivable: false },
+        ]);
     });
 
     it('does not classify a reactive "when critically hit" clause', () => {

@@ -130,15 +130,43 @@ describe('selectedBuffToAbility', () => {
         }
     });
 
-    it('produces a debuff ability with application apply for an enemy target', () => {
+    it('defaults a debuff ability to the resistible application inflict when the buff has none', () => {
         const ab = selectedBuffToAbility(gameBuff({ buffName: 'Weaken' }), 'enemy');
         expect(ab.type).toBe('debuff');
         expect(ab.target).toBe('enemy');
         expect(ab.config.type).toBe('debuff');
         if (ab.config.type === 'debuff') {
             expect(ab.config.buffName).toBe('Weaken');
-            expect(ab.config.application).toBe('apply');
+            expect(ab.config.application).toBe('inflict');
         }
+    });
+
+    it("carries the buff's parsed application onto the debuff config", () => {
+        const ab = selectedBuffToAbility(
+            gameBuff({ buffName: 'Defense Down II', application: 'inflict' }),
+            'enemy'
+        );
+        if (ab.config.type === 'debuff') {
+            expect(ab.config.application).toBe('inflict');
+        }
+    });
+
+    it('round-trips application from a debuff ability back to the selected buff', () => {
+        const sb = abilityToSelectedBuff(
+            debuffAbility({
+                id: 'd9',
+                config: {
+                    type: 'debuff',
+                    buffName: 'Weaken',
+                    parsedEffects: { defense: -30 },
+                    stacks: 1,
+                    isStackable: false,
+                    application: 'inflict',
+                },
+            }),
+            'active'
+        );
+        expect(sb?.application).toBe('inflict');
     });
 });
 

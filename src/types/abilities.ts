@@ -9,6 +9,7 @@ export type AbilityType =
     | 'buff'
     | 'debuff'
     | 'dot'
+    | 'extend-dot'
     | 'charge'
     | 'heal'
     | 'shield'
@@ -37,7 +38,8 @@ export type ConditionSubject =
     | 'adjacent-ally'
     | 'enemy-adjacent'
     | 'enemy-destroyed'
-    | 'hp-threshold';
+    | 'hp-threshold'
+    | 'ally-inflicts-debuff';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -79,7 +81,7 @@ export type ModifierChannel =
     | 'incomingDamage';
 
 export type AbilityConfig =
-    | { type: 'damage'; multiplier: number; hits?: number }
+    | { type: 'damage'; multiplier: number; hits?: number; noCrit?: boolean }
     | { type: 'additional-damage'; stat: 'hp' | 'defense'; pct: number }
     | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
     | {
@@ -104,6 +106,7 @@ export type AbilityConfig =
           duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
+    | { type: 'extend-dot'; turns: number }
     | { type: 'charge'; amount: number }
     | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }
     | { type: 'cleanse' | 'purge'; count: number }

@@ -27,6 +27,7 @@ export interface ConditionalDamage {
     derivable: boolean; // true → count from sim state; false → manual
     manualCount?: number; // used when !derivable (default 1)
     cap?: number; // optional total-bonus ceiling ("up to 100%")
+    requiredEnemyType?: EnemyBaseClass; // for 'enemy-type' conditions (e.g. bonus vs Supporters)
 }
 
 export type EnemyBaseClass = 'Attacker' | 'Defender' | 'Debuffer' | 'Supporter';
@@ -114,6 +115,8 @@ export interface SelectedGameBuff {
     // For accumulating stackable buffs: how stacks are gained over rounds.
     // When set, `stacks` is the rate (stacks per trigger), not the total.
     stackTrigger?: StackTrigger;
+    // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
+    application?: 'inflict' | 'apply';
 }
 
 export interface DPSShipConfig {

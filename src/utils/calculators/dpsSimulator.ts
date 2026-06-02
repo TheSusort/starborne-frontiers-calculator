@@ -19,6 +19,7 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
+    extendDotTurnsFromSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import {
@@ -271,6 +272,7 @@ function runSinglePass(params: {
             multiplier: rawMultiplier,
             hits,
             scalingAbility,
+            noCrit: damageNoCrit,
         } = damageInputsFromSkill(firingSkill);
         const effectiveMultiplier = rawMultiplier * hits;
         const secondary = secondaryFromSkill(firingSkill);
@@ -291,15 +293,24 @@ function runSinglePass(params: {
             calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 
         const roundDebuffLanded = Math.random() < debuffLandingChance;
+        // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
+        // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
+        // -25 only on a disadvantage matchup.
+        const affinityDisadvantage = affinityDamageModifier < 0;
         const landedEnemyDebuffs: ActiveBuff[] = [];
         const resistedEnemyDebuffs: ActiveBuff[] = [];
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
-            if (!roundDebuffLanded) {
+            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
+            // 'apply' = affinity-based: guaranteed unless the attacker is at an affinity
+            // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
+            // hacking-vs-security landing roll.
+            const isApply = bufs.some((b) => b.application === 'apply');
+            const lands = isApply ? !affinityDisadvantage : roundDebuffLanded;
+            if (!lands) {
                 resistedEnemyDebuffs.push(ab);
                 return [];
             }
             landedEnemyDebuffs.push(ab);
-            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
             }
@@ -416,8 +427,11 @@ function runSinglePass(params: {
         const preCritDamage =
             effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) +
             secondaryStatValue;
+        // A "cannot critically hit" attack applies no crit multiplier to its damage; the
+        // crit value still informs self-crit condition gates (effectiveCrit), just not this hit.
+        const damageCritMultiplier = damageNoCrit ? 1 : critMultiplier;
         const postDefenseFactor =
-            critMultiplier *
+            damageCritMultiplier *
             (1 - damageReduction / 100) *
             (1 + outgoingDamageBuff / 100) *
             (1 + incomingDamageModifier / 100) *
@@ -425,6 +439,15 @@ function runSinglePass(params: {
         const directDamage = preCritDamage * postDefenseFactor;
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
         const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
+
+        // Step 2.9: Extend already-active ticking DoTs (Corrosion/Inferno) by the firing skill's
+        // extend-dot turns — applied BEFORE this round's new DoTs so only pre-existing ones grow.
+        // Bombs are excluded: delaying a one-shot detonation never adds damage (per design).
+        const extendDotTurns = extendDotTurnsFromSkill(firingSkill);
+        if (extendDotTurns > 0) {
+            for (const e of corrosionEntries) e.remainingRounds += extendDotTurns;
+            for (const e of infernoEntries) e.remainingRounds += extendDotTurns;
+        }
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;

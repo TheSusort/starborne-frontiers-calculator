@@ -88,15 +88,17 @@ export function damageInputsFromSkill(skill: Skill | undefined): {
     multiplier: number;
     hits: number;
     scalingAbility?: Ability;
+    noCrit: boolean;
 } {
     const damage = skill?.abilities.find((a) => a.type === 'damage');
     if (!damage || damage.config.type !== 'damage') {
-        return { multiplier: 0, hits: 1, scalingAbility: undefined };
+        return { multiplier: 0, hits: 1, scalingAbility: undefined, noCrit: false };
     }
     return {
         multiplier: damage.config.multiplier,
         hits: damage.config.hits ?? 1,
         scalingAbility: damage,
+        noCrit: damage.config.noCrit ?? false,
     };
 }
 
@@ -127,4 +129,14 @@ export function dotsFromSkill(skill: Skill | undefined): DoTApplicationConfig {
 /** All `charge` abilities on the skill. */
 export function chargeAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'charge') ?? [];
+}
+
+/** Total turns this skill extends active DoTs by (sum of all `extend-dot` abilities). */
+export function extendDotTurnsFromSkill(skill: Skill | undefined): number {
+    if (!skill) return 0;
+    let turns = 0;
+    for (const ability of skill.abilities) {
+        if (ability.config.type === 'extend-dot') turns += ability.config.turns;
+    }
+    return turns;
 }

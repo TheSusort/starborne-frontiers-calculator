@@ -27,6 +27,7 @@ export function abilityToSelectedBuff(ability: Ability, slot: SkillSlot): Select
         autoFilled: ability.autoFilled,
         skillSource,
         skillDuration: c.duration,
+        ...(c.type === 'debuff' ? { application: c.application } : {}),
     };
 }
 
@@ -53,7 +54,9 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
                   maxStacks: buff.maxStacks,
                   stackTrigger: buff.stackTrigger,
                   duration,
-                  application: 'apply',
+                  // Default to the resistible 'inflict' (the common case + matches makeDefaultAbility);
+                  // only an explicitly-parsed 'apply' verb makes a debuff guaranteed.
+                  application: buff.application ?? 'inflict',
               }
             : {
                   type: 'buff',

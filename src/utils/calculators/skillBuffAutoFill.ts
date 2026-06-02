@@ -70,6 +70,7 @@ function toSelectedBuffs(
             sourceChargeCount,
             sourceStartCharged,
             stackTrigger,
+            ...(effect.application !== undefined ? { application: effect.application } : {}),
         });
     }
 

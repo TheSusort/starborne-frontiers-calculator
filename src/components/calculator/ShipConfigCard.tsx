@@ -17,6 +17,7 @@ import { Checkbox } from '../ui/Checkbox';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
+import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
 import { ShipConfigSummary } from './ShipConfigSummary';
 
@@ -58,9 +59,14 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     enemySecurity,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
-    const hasPassive = config.shipSkills.slots.some((s) => s.slot === 'passive');
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+    // Show the Passive slot whenever the ship has passive skill text to read/edit — not only
+    // when the parser auto-filled abilities. Defensive/repair passives (e.g. Anemone) parse to
+    // nothing but still need the Edit button so users can read and add abilities manually.
+    const hasPassive =
+        config.shipSkills.slots.some((s) => s.slot === 'passive') ||
+        (selectedShip ? !!getSkillRowForSlot(selectedShip, 'passive') : false);
 
     const affinityMatchup = getAffinityMatchup(config.affinity, enemyAffinity);
     const affinityBadge =

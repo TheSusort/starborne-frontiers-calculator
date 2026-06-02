@@ -188,6 +188,12 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
 // "for each". Global so we can skip repair/heal contexts and unknown phrases.
 const CONDITIONAL_RE = /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+([^.,;<]+)/gi;
 
+// Flat conditional damage bonus gated by enemy class, e.g. Meiying's "when attacking a
+// Supporter, it additionally deals 90% damage". Anchored at the enemy-type lead-in so the
+// base multiplier (earlier in the sentence) is never captured; [^.] keeps it in-sentence.
+const ENEMY_TYPE_BONUS_RE =
+    /(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+
 function mapConditionPhrase(
     raw: string
 ): { condition: ConditionalCondition; derivable: boolean } | null {
@@ -228,6 +234,9 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
         const idx = m.index ?? 0;
         const before = text.slice(Math.max(0, idx - 20), idx).toLowerCase();
         if (before.includes('repair')) continue;
+        // "X% more (direct) damage for each Y" is an outgoing-damage MODIFIER (parseModifiers),
+        // not a base-damage scaling — skip so it isn't double-counted on the damage ability.
+        if (/\bmore\b/i.test(m[0].split(/for each/i)[0])) continue;
         const mapped = mapConditionPhrase(m[2]);
         if (!mapped) continue;
         // Scope the cap search to the conditional clause onward so an earlier,
@@ -240,7 +249,40 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             ...(cap !== null ? { cap } : {}),
         };
     }
+    // Fallback: flat "additional N% damage when attacking a <enemy class>" bonus.
+    const typed = ENEMY_TYPE_BONUS_RE.exec(stripUnitTags(text));
+    if (typed) {
+        return {
+            pct: parseFloat(typed[2]),
+            condition: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: capType(typed[1]),
+        };
+    }
     return null;
+}
+
+// "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
+// enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped
+// to "deals … damage to …" so it ignores damage-BONUS phrasings ("increases Damage by 100% to
+// enemies below 30% HP") and scaling caps ("max achieved when below 10% HP").
+const DAMAGE_HP_GATE_RE =
+    /deals?\s+\d+(?:\.\d+)?%\s+damage\s+to\b[^.]*?\b(less than|below|under|more than|above|over|greater than)\s+(\d+)%\s*(?:max\s+)?hp/i;
+
+/**
+ * Detects an enemy-HP threshold gating a "deals N% damage to …" clause, e.g. Judge's
+ * "deals 60% damage to all enemies with less than 50% HP". Returns the comparator and
+ * percentage so the caller can attach an hp-threshold Condition (no scaling). Null when
+ * no HP-gated damage clause is present.
+ */
+export function parseHpThresholdCondition(
+    text: string | null | undefined
+): { hpComparator: 'below' | 'above'; hpPercent: number } | null {
+    if (!text) return null;
+    const m = DAMAGE_HP_GATE_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    const below = /less|below|under/i.test(m[1]);
+    return { hpComparator: below ? 'below' : 'above', hpPercent: parseInt(m[2], 10) };
 }
 
 function stripUnitTags(text: string): string {
@@ -260,6 +302,10 @@ const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
 // buffs on the target" (amount is per-buff = 1). Runs on tag-stripped text.
 const PER_BUFF_CHARGE_RE =
     /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
+
+// "when (an/another) ally inflicts|applies a debuff" — a teammate applies a debuff (Provider).
+// A team-dependent trigger: manual (non-derivable) since the single-ship sim has no allies.
+const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
 
 function classifyChargeCondition(
     text: string // already tag-stripped, any case
@@ -361,11 +407,13 @@ function countGateCondition(clause: string): Condition | null {
  * Recognised (the unambiguous, sim-meaningful cases):
  *  - enemy-type: "When damaging a Defender …", "if the target is an Attacker" (incl. "X or Y")
  *  - self-crit: "if this critically hits/damages …"
+ *  - buff/debuff count threshold: "more than 3 Debuffs", "no debuffs"
+ *  - enemy-debuff presence: "when Damaging a Debuffed enemy", "against a Debuffed target",
+ *    "when/on/upon applying|inflicting a debuff" (this Unit applies one → enemy is debuffed)
  *  - Taunt/Provoke self-status: "if this Unit is Provoked or Taunted …"
  *
- * Genuinely reactive/threshold conditions (when-attacked, below-X%-HP, debuff counts)
- * are intentionally NOT auto-classified — the user adds them in the editor. Reference
- * data: docs/ship-skills.csv.
+ * Genuinely reactive conditions (when-attacked, below-X%-HP) are intentionally NOT
+ * auto-classified — the user adds them in the editor. Reference data: docs/ship-skills.csv.
  */
 export function detectGrantConditions(
     skillText: string | null | undefined,
@@ -376,8 +424,14 @@ export function detectGrantConditions(
     const sentences = plain.split(/(?<=[.;])\s+/);
     const clause = sentences.find((s) => s.toLowerCase().includes(buffName.toLowerCase())) ?? plain;
     const low = clause.toLowerCase();
+    // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
+    const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
     // Only conditional clauses produce conditions.
-    if (!/\b(when|if|while)\b|affected by|targeting|damaging|against/.test(low)) return [];
+    if (
+        !/\b(when|if|while)\b|affected by|targeting|damaging|against/.test(low) &&
+        !appliesDebuffGate
+    )
+        return [];
 
     // 1. enemy-type (single or "X or Y")
     const et = GRANT_ENEMY_TYPE_RE.exec(clause);
@@ -400,7 +454,22 @@ export function detectGrantConditions(
     const countGate = countGateCondition(clause);
     if (countGate) return [countGate];
 
-    // 4. Taunt / Provoke self-status (reactive → manual "assume active")
+    // 4a. "when another ally inflicts a debuff" — a teammate's action (Provider). Checked
+    // before the self enemy-debuff gate, since "ally inflicts a debuff" also matches that.
+    if (ALLY_INFLICTS_DEBUFF_RE.test(clause)) {
+        return [{ subject: 'ally-inflicts-debuff', derivable: false }];
+    }
+
+    // 4. Enemy-debuff presence gate. Two phrasings:
+    //  - "Damaging a Debuffed enemy" / "against a Debuffed target" — enemy already has a debuff
+    //    ("debuffed enemy/target" distinguishes this from "debuffed with a DoT" on a passive).
+    //  - "when/on/upon applying|inflicting a debuff" — this Unit applies one, so the enemy is
+    //    then debuffed (Yuyan, Marauder Rage). Both resolve to "the enemy has a debuff".
+    if (/\bdebuffed\s+(?:enem(?:y|ies)|target|foe)\b/i.test(low) || appliesDebuffGate) {
+        return [{ subject: 'enemy-debuff', derivable: true }];
+    }
+
+    // 5. Taunt / Provoke self-status (reactive → manual "assume active")
     const statuses: string[] = [];
     if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
     if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');
@@ -414,6 +483,36 @@ export function detectGrantConditions(
     }
 
     return [];
+}
+
+// "extends [active/all] Damage Over Time [(DoT)] effects by N turn(s)" — prolongs existing
+// ticking DoTs (Provider's charge). Requires "Damage Over Time" so it doesn't catch generic
+// buff/debuff duration extensions.
+const EXTEND_DOT_RE = /extends?\b[^.]*?\bdamage over time\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+
+/**
+ * Returns the number of turns a skill extends active Damage Over Time effects by, or null
+ * when the skill has no DoT-extension clause. Reference data: docs/ship-skills.csv.
+ */
+export function parseExtendDoT(text: string | null | undefined): number | null {
+    if (!text) return null;
+    const m = EXTEND_DOT_RE.exec(stripUnitTags(text));
+    return m ? parseInt(m[1], 10) : null;
+}
+
+// "(damage|attack) … cannot critically hit" — the attack can't crit. Anchored on damage/attack
+// (within the sentence) so a "this repair cannot critically hit" heal clause doesn't match.
+// Tolerates the "cannont" misspelling present in the source data (Provider).
+const NO_CRIT_RE = /\b(?:damage|attack)\b[^.;]*\b(?:cannot|cannont)\s+critically\s+hit\b/i;
+
+/** Whether a skill's attack/damage cannot critically hit. Reference data: docs/ship-skills.csv. */
+export function parseNoCrit(text: string | null | undefined): boolean {
+    return !!text && NO_CRIT_RE.test(stripUnitTags(text));
+}
+
+/** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
+export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
+    return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
 }
 
 /**
@@ -480,9 +579,30 @@ export interface SkillEffect {
     stacks?: number;
     source: SkillSource;
     stackTrigger?: StackTrigger;
+    // Enemy debuffs only: 'inflict' verbs are resistible, 'apply' verbs are guaranteed.
+    application?: 'inflict' | 'apply';
 }
 
-const APPLICATION_VERBS = new Set(['grants', 'granted', 'gains', 'inflicts', 'applies']);
+// Application verbs grouped by the side they target, covering each verb's
+// morphological forms (bare/3rd-person/gerund/past-participle) so phrasings like
+// "inflict", "inflicting", "is inflicted with" all register, not just "inflicts".
+const SELF_VERBS = new Set([
+    'grant',
+    'grants',
+    'granting',
+    'granted',
+    'gain',
+    'gains',
+    'gaining',
+    'gained',
+]);
+const ENEMY_VERBS = new Set(['inflict', 'inflicts', 'inflicting', 'inflicted']);
+// "apply" forms are side-ambiguous (a buff is self, a debuff is enemy) — verbToTarget disambiguates via BUFFS.
+const AMBIGUOUS_VERBS = new Set(['apply', 'applies', 'applying', 'applied']);
+const APPLICATION_VERBS = new Set([...SELF_VERBS, ...ENEMY_VERBS, ...AMBIGUOUS_VERBS]);
+// Past participles double as adjectives ("the newly applied Corrosion") — that's a
+// reference to an existing effect being extended, not a fresh application.
+const ADJECTIVAL_MARKER = 'newly';
 const SKIP_VERBS = new Set(['ignoring', 'loses', 'removes', 'resists', 'when']);
 const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
@@ -550,22 +670,37 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
     // Scan words right-to-left (closest to tag first)
     const words = accumulatedText.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
     for (let i = words.length - 1; i >= 0; i--) {
-        if (APPLICATION_VERBS.has(words[i])) return words[i];
+        if (APPLICATION_VERBS.has(words[i])) {
+            // "newly applied X" is adjectival (referencing an existing effect being
+            // extended), not an application — keep scanning for a real verb instead.
+            if (words[i - 1] === ADJECTIVAL_MARKER) continue;
+            return words[i];
+        }
         if (SKIP_VERBS.has(words[i])) return null;
     }
     return undefined;
 }
 
 /**
- * Maps a verb to a target side, cross-referencing BUFFS type for the ambiguous "applies" verb.
- * "applies" with a buff-type effect → self; anything else → enemy.
+ * Maps a verb to a target side, cross-referencing BUFFS type for the ambiguous "apply" forms.
+ * An "apply" verb with a buff-type effect → self; anything else → enemy.
  */
 function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
-    if (verb === 'gains' || verb === 'grants' || verb === 'granted') return 'self';
-    if (verb === 'inflicts') return 'enemy';
-    // applies: use BUFFS type to disambiguate
+    if (SELF_VERBS.has(verb)) return 'self';
+    if (ENEMY_VERBS.has(verb)) return 'enemy';
+    // apply forms: use BUFFS type to disambiguate
     const found = BUFFS.find((b) => b.name === buffName);
     return found?.type === 'buff' ? 'self' : 'enemy';
+}
+
+/**
+ * Maps a verb to how a debuff lands: "inflict" forms are resistible, "apply" forms are
+ * guaranteed. Only meaningful for enemy debuffs; returns undefined for self-buff verbs.
+ */
+function verbToApplication(verb: string): 'inflict' | 'apply' | undefined {
+    if (ENEMY_VERBS.has(verb)) return 'inflict';
+    if (AMBIGUOUS_VERBS.has(verb)) return 'apply';
+    return undefined;
 }
 
 export function parseSkillEffects(
@@ -587,8 +722,9 @@ export function parseSkillEffects(
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
 
-        // Step 2: Target
+        // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed)
         const target = verbToTarget(verb, buffName);
+        const application = target === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
         const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';
@@ -632,6 +768,7 @@ export function parseSkillEffects(
             duration,
             ...(stacks !== undefined ? { stacks } : {}),
             ...(stackTrigger !== undefined ? { stackTrigger } : {}),
+            ...(application !== undefined ? { application } : {}),
             source,
         });
     }

@@ -22,6 +22,10 @@ import {
     parseConditionalDamage,
     parseChargeGain,
     detectGrantConditions,
+    parseHpThresholdCondition,
+    parseExtendDoT,
+    parseNoCrit,
+    parseAllyInflictsDebuff,
 } from '../skillTextParser';
 import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
 import { selectedBuffToAbility } from './buffAbilityConverters';
@@ -282,13 +286,19 @@ function abilitiesFromText(text: string): Ability[] {
     const mult = parseSkillDamage(text);
     if (mult > 0) {
         const hits = parseHitCount(text);
+        const noCrit = parseNoCrit(text);
         out.push({
             id: nextId(),
             type: 'damage',
             target: 'enemy',
             trigger: 'on-cast',
             conditions: [],
-            config: { type: 'damage', multiplier: mult, ...(hits !== undefined ? { hits } : {}) },
+            config: {
+                type: 'damage',
+                multiplier: mult,
+                ...(hits !== undefined ? { hits } : {}),
+                ...(noCrit ? { noCrit: true } : {}),
+            },
             autoFilled: true,
         });
     }
@@ -312,13 +322,56 @@ function abilitiesFromText(text: string): Ability[] {
     const cond = parseConditionalDamage(text);
     if (cond && out[0]?.type === 'damage') {
         out[0].conditions = [
-            toCondition(cond.condition, cond.derivable, cond.manualCount, undefined, text),
+            toCondition(
+                cond.condition,
+                cond.derivable,
+                cond.manualCount,
+                cond.requiredEnemyType,
+                text
+            ),
         ];
         out[0].scaling = {
             conditionIndex: 0,
             perUnit: cond.pct,
             ...(cond.cap !== undefined ? { cap: cond.cap } : {}),
         };
+    }
+
+    // "deals N% damage to enemies with less than X% HP" gates the damage on an enemy-HP
+    // threshold (no scaling). Only when no conditional scaling was attached above.
+    const hpGate = parseHpThresholdCondition(text);
+    if (hpGate && out[0]?.type === 'damage' && !out[0].scaling) {
+        out[0].conditions = [
+            ...out[0].conditions,
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: hpGate.hpComparator,
+                hpPercent: hpGate.hpPercent,
+            },
+        ];
+    }
+
+    // "when an ally inflicts a debuff, this Unit deals N% damage" — gate the damage on the
+    // manual, team-dependent ally-inflicts-debuff trigger (Provider).
+    if (parseAllyInflictsDebuff(text) && out[0]?.type === 'damage') {
+        out[0].conditions = [
+            ...out[0].conditions,
+            { subject: 'ally-inflicts-debuff', derivable: false },
+        ];
+    }
+
+    const extendTurns = parseExtendDoT(text);
+    if (extendTurns) {
+        out.push({
+            id: nextId(),
+            type: 'extend-dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'extend-dot', turns: extendTurns },
+            autoFilled: true,
+        });
     }
 
     const charge = parseChargeGain(text);

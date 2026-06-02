@@ -242,7 +242,12 @@ describe('damageInputsFromSkill', () => {
     it('returns multiplier 0, hits 1, no scalingAbility when no damage ability', () => {
         const skill: Skill = { slot: 'active', abilities: [additional('s', 'hp', 50)] };
         const result = damageInputsFromSkill(skill);
-        expect(result).toEqual({ multiplier: 0, hits: 1, scalingAbility: undefined });
+        expect(result).toEqual({
+            multiplier: 0,
+            hits: 1,
+            scalingAbility: undefined,
+            noCrit: false,
+        });
     });
 
     it('handles undefined skill', () => {
@@ -250,6 +255,7 @@ describe('damageInputsFromSkill', () => {
             multiplier: 0,
             hits: 1,
             scalingAbility: undefined,
+            noCrit: false,
         });
     });
 });

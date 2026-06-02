@@ -24,6 +24,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'enemy-adjacent',
     'enemy-destroyed',
     'hp-threshold',
+    'ally-inflicts-debuff',
 ];
 
 // Labels not covered by CONDITIONAL_CONDITION_LABELS.
@@ -31,6 +32,7 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     always: 'Always',
     'self-debuff': 'per debuff on this unit',
     'hp-threshold': 'when HP crosses a threshold',
+    'ally-inflicts-debuff': 'when an ally inflicts a debuff',
 };
 
 const subjectLabel = (subject: ConditionSubject): string =>

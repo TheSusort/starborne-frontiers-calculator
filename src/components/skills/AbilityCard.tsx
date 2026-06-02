@@ -27,6 +27,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     buff: 'Buff',
     debuff: 'Debuff',
     dot: 'Damage over Time',
+    'extend-dot': 'Extend DoTs',
     charge: 'Charge',
     heal: 'Heal',
     shield: 'Shield',
@@ -184,6 +185,13 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                                 }
                             />
                         </div>
+                        <Checkbox
+                            label="Cannot critically hit"
+                            checked={config.noCrit ?? false}
+                            onChange={(checked) =>
+                                updateConfig({ ...config, noCrit: checked ? true : undefined })
+                            }
+                        />
                         {scalingEditor}
                     </div>
                 );
@@ -289,6 +297,20 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                     </div>
                 );
 
+            case 'extend-dot':
+                return (
+                    <Input
+                        label="Extend active DoTs by (turns)"
+                        helpLabel="Adds this many turns to active Corrosion/Inferno effects when the skill fires, so they tick longer. Bombs are unaffected."
+                        type="number"
+                        min={1}
+                        value={config.turns}
+                        onChange={(e) =>
+                            updateConfig({ ...config, turns: toNumber(e.target.value) })
+                        }
+                    />
+                );
+
             case 'buff':
             case 'debuff': {
                 const pickerValue: SelectedGameBuff[] = config.buffName
@@ -346,6 +368,7 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                             {config.type === 'debuff' && (
                                 <Select
                                     label="Application"
+                                    helpLabel="Inflict = resistible (rolls against your Hacking vs enemy Security). Apply = guaranteed to land, except when you're at an affinity disadvantage (then it's resisted)."
                                     value={config.application}
                                     options={DEBUFF_APPLICATION_OPTIONS}
                                     onChange={(value) =>

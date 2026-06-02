@@ -539,6 +539,44 @@ describe('simulateDPS', () => {
             const result = simulateDPS({ ...baseNoDefense, affinityDamageModifier: 0 });
             expect(result.summary.totalDamage).toBe(baseline.summary.totalDamage);
         });
+
+        it('affinity scales hacking, so it changes how often an inflicted debuff lands', () => {
+            // Inflict (hacking-based) debuff. hacking 120 / security 100:
+            //  disadvantage → effectiveHacking 90  → 0% land
+            //  neutral      → 120 → 20% land
+            //  advantage    → 150 → 50% land
+            const inflictDebuff: SelectedGameBuff = {
+                ...makeAlwaysBuff('inflict-debuff', { defense: -50 }),
+                application: 'inflict',
+            };
+            const base = {
+                ...baseNoDefense,
+                enemyDefense: 10000,
+                rounds: 2000,
+                hacking: 120,
+                enemySecurity: 100,
+                enemyDebuffs: [inflictDebuff],
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+            };
+            const landedRounds = (mods: Partial<typeof base>) =>
+                simulateDPS({ ...base, ...mods }).rounds.filter((r) =>
+                    r.activeEnemyDebuffs.some((ab) => ab.buffName === 'inflict-debuff')
+                ).length;
+
+            const disadvantage = landedRounds({
+                affinityDamageModifier: -25,
+                affinityCritCap: 75,
+                affinityCritPenalty: 25,
+            });
+            const neutral = landedRounds({});
+            const advantage = landedRounds({ affinityDamageModifier: 25 });
+
+            expect(disadvantage).toBe(0); // 0% landing is deterministic
+            expect(advantage).toBeGreaterThan(neutral);
+            expect(neutral).toBeGreaterThan(disadvantage);
+        });
     });
 
     describe('per-round buff accuracy', () => {
@@ -722,6 +760,81 @@ describe('simulateDPS', () => {
         it('produces same number of rounds regardless of landing chance', () => {
             const result = simulateDPS({ ...baseWithDebuff, hacking: 150, enemySecurity: 100 });
             expect(result.rounds).toHaveLength(5);
+        });
+
+        it('an "apply" debuff is guaranteed — lands even at 0% landing chance', () => {
+            const applyDebuff: SelectedGameBuff = {
+                ...makeAlwaysBuff('def-apply', { defense: -50 }),
+                application: 'apply',
+            };
+            // At 0% landing, a resistible debuff never lands, but the guaranteed one always does.
+            const guaranteed = simulateDPS({
+                ...baseWithDebuff,
+                enemyDebuffs: [applyDebuff],
+                hacking: 0,
+                enemySecurity: 100,
+            });
+            const resistible = simulateDPS({
+                ...baseWithDebuff,
+                hacking: 0,
+                enemySecurity: 100,
+            });
+            expect(guaranteed.summary.totalDamage).toBeGreaterThan(resistible.summary.totalDamage);
+            // Guaranteed lands every round, so it matches the 100%-landing result.
+            const full = simulateDPS({
+                ...baseWithDebuff,
+                enemyDebuffs: [applyDebuff],
+                hacking: 200,
+                enemySecurity: 100,
+            });
+            expect(guaranteed.summary.totalDamage).toBe(full.summary.totalDamage);
+            expect(
+                guaranteed.rounds.every((r) =>
+                    r.activeEnemyDebuffs.some((ab) => ab.buffName === 'def-apply')
+                )
+            ).toBe(true);
+        });
+
+        it('an "apply" (affinity-based) debuff is resisted at an affinity disadvantage', () => {
+            const applyDebuff: SelectedGameBuff = {
+                ...makeAlwaysBuff('def-apply', { defense: -50 }),
+                application: 'apply',
+            };
+            // Same high hacking (would otherwise guarantee landing), but at an affinity
+            // disadvantage the affinity-based debuff never lands per the combat hit-check.
+            const disadvantage = simulateDPS({
+                ...baseWithDebuff,
+                enemyDebuffs: [applyDebuff],
+                hacking: 200,
+                enemySecurity: 100,
+                affinityDamageModifier: -25,
+                affinityCritCap: 75,
+                affinityCritPenalty: 25,
+            });
+            const noDebuffs = simulateDPS({
+                ...baseInput,
+                enemyDefense: 10000,
+                rounds: 5,
+                affinityDamageModifier: -25,
+                affinityCritCap: 75,
+                affinityCritPenalty: 25,
+            });
+            // Resisted → the defense debuff never applies → same damage as having no debuff.
+            expect(disadvantage.summary.totalDamage).toBe(noDebuffs.summary.totalDamage);
+            expect(
+                disadvantage.rounds.every(
+                    (r) => !r.activeEnemyDebuffs.some((ab) => ab.buffName === 'def-apply')
+                )
+            ).toBe(true);
+
+            // At neutral affinity the same apply debuff still lands every round.
+            const neutral = simulateDPS({
+                ...baseWithDebuff,
+                enemyDebuffs: [applyDebuff],
+                hacking: 200,
+                enemySecurity: 100,
+            });
+            expect(neutral.summary.totalDamage).toBeGreaterThan(disadvantage.summary.totalDamage);
         });
     });
 
@@ -1213,6 +1326,107 @@ describe('simulateDPS', () => {
                 shipSkills: activeSkills([damageAbility('d', 150)]),
             });
             expect(multiHit.rounds[0].directDamage).toBe(single.rounds[0].directDamage);
+        });
+    });
+
+    describe('extend-dot abilities (via shipSkills)', () => {
+        const damageAbility = (id: string, multiplier: number): Ability => ({
+            id,
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier },
+        });
+        const dotAbility = (
+            id: string,
+            dotType: 'corrosion' | 'inferno' | 'bomb',
+            tier: number,
+            duration: number
+        ): Ability => ({
+            id,
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType, tier, stacks: 1, duration },
+        });
+        const extendDotAbility = (id: string, turns: number): Ability => ({
+            id,
+            type: 'extend-dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'extend-dot', turns },
+        });
+
+        // Active applies a Corrosion DoT every round; Charged fires on rounds 3, 6 (chargeCount 2).
+        const skills = (dot: Ability, charged: Ability[]): ShipSkills => ({
+            slots: [
+                { slot: 'active', abilities: [damageAbility('a', 100), dot] },
+                { slot: 'charged', abilities: charged },
+            ],
+        });
+        const base = { ...baseInput, enemyHp: 500000, rounds: 8, chargeCount: 2 };
+
+        it('extending a ticking DoT (Corrosion) increases total damage', () => {
+            const corrosion = dotAbility('cd', 'corrosion', 9, 2);
+            const withExtend = simulateDPS({
+                ...base,
+                shipSkills: skills(corrosion, [damageAbility('c', 200), extendDotAbility('e', 1)]),
+            });
+            const noExtend = simulateDPS({
+                ...base,
+                shipSkills: skills(corrosion, [damageAbility('c', 200)]),
+            });
+            expect(withExtend.summary.totalDamage).toBeGreaterThan(noExtend.summary.totalDamage);
+        });
+
+        it('does not extend Bombs — one-shot detonation total is unchanged', () => {
+            const bomb = dotAbility('bd', 'bomb', 100, 2);
+            const withExtend = simulateDPS({
+                ...base,
+                shipSkills: skills(bomb, [damageAbility('c', 200), extendDotAbility('e', 1)]),
+            });
+            const noExtend = simulateDPS({
+                ...base,
+                shipSkills: skills(bomb, [damageAbility('c', 200)]),
+            });
+            expect(withExtend.summary.totalDamage).toBe(noExtend.summary.totalDamage);
+        });
+    });
+
+    describe('no-crit damage (via shipSkills)', () => {
+        const damage = (noCrit?: boolean): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'd',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'damage',
+                                multiplier: 100,
+                                ...(noCrit ? { noCrit } : {}),
+                            },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('a "cannot critically hit" attack applies no crit multiplier', () => {
+            // baseInput: crit 100, critDamage 150 → normal crit multiplier 2.5×.
+            const withCrit = simulateDPS({ ...baseInput, shipSkills: damage() });
+            const noCrit = simulateDPS({ ...baseInput, shipSkills: damage(true) });
+            expect(withCrit.rounds[0].directDamage).toBeGreaterThan(noCrit.rounds[0].directDamage);
+            // No-crit damage equals the same attack with crit rate 0 (crit multiplier 1×).
+            const crit0 = simulateDPS({ ...baseInput, crit: 0, shipSkills: damage() });
+            expect(noCrit.rounds[0].directDamage).toBe(crit0.rounds[0].directDamage);
         });
     });
 });
