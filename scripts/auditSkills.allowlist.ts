@@ -17,11 +17,6 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['detonation', 'ungated-effect-with-trigger'],
         reason: 'Countdown-reduction + crit-scaling Bomb detonation; "gains Stealth on detonating a Bomb" is reactive.',
     },
-    {
-        ship: 'Valerian',
-        rules: ['extend-dot'],
-        reason: 'Crit-chance self-extension of a freshly-applied Corrosion — not the general "extend active DoTs by N turns" form.',
-    },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
@@ -91,7 +86,7 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Belladonna',
         rules: ['ungated-effect-with-trigger'],
-        reason: 'Named-DoT count (Acidic Decay) + Corrosion→Acidic Decay conversion.',
+        reason: 'Crit-power extension now parsed; remaining: named-DoT count (3+ Acidic Decay → Stasis) + Corrosion→Acidic Decay conversion (team mode).',
     },
     {
         ship: 'Berserker',

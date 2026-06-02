@@ -41,7 +41,8 @@ export type ConditionSubject =
     | 'enemy-destroyed'
     | 'hp-threshold'
     | 'ally-inflicts-debuff'
-    | 'ally-critically-repaired';
+    | 'ally-critically-repaired'
+    | 'ally-crit-dot';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -113,7 +114,7 @@ export type AbilityConfig =
           duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
-    | { type: 'extend-dot'; turns: number }
+    | { type: 'extend-dot'; turns: number; chanceFromCritPower?: boolean }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     | { type: 'charge'; amount: number }
     | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }

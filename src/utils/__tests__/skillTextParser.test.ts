@@ -11,6 +11,8 @@ import {
     detectGrantConditions,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseCritPowerExtend,
+    parseAllyCritDot,
     parseNoCrit,
     parseDetonateDoT,
 } from '../skillTextParser';
@@ -659,6 +661,50 @@ describe('parseExtendDoT', () => {
 
     it('does not match a debuff-duration extension that is not a DoT', () => {
         expect(parseExtendDoT('extends the duration of all buffs by 1 turn.')).toBeNull();
+    });
+});
+
+describe('parseCritPowerExtend', () => {
+    it('parses Valerian self-crit extension (chance = crit power)', () => {
+        const text =
+            'After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied Corrosion is extended by 1 turn, with the extension chance equal to the Critical Power.';
+        expect(parseCritPowerExtend(text)).toEqual({
+            turns: 1,
+            condition: { subject: 'self-crit', derivable: true },
+        });
+    });
+
+    it('parses Belladonna ally-triggered extension as ally-inflicts-debuff', () => {
+        const text =
+            'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it. Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.';
+        expect(parseCritPowerExtend(text)).toEqual({
+            turns: 1,
+            condition: { subject: 'ally-inflicts-debuff', derivable: false },
+        });
+    });
+
+    it('returns null without a crit-power extension', () => {
+        expect(
+            parseCritPowerExtend('extends active Damage Over Time effects by 1 turn.')
+        ).toBeNull();
+        expect(parseCritPowerExtend('')).toBeNull();
+    });
+});
+
+describe('parseAllyCritDot', () => {
+    it('detects Crocus "ally inflicts a DoT with a critical hit"', () => {
+        expect(
+            parseAllyCritDot(
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.'
+            )
+        ).toBe(true);
+    });
+
+    it('returns false otherwise', () => {
+        expect(parseAllyCritDot('When an ally inflicts a debuff, this Unit gains Stealth.')).toBe(
+            false
+        );
+        expect(parseAllyCritDot('')).toBe(false);
     });
 });
 

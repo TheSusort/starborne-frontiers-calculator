@@ -1,5 +1,5 @@
 import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
-import { evaluateCondition, scaledBonus } from '../abilities/evaluateConditions';
+import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import {
     Buff,
@@ -19,7 +19,6 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
-    extendDotTurnsFromSkill,
     detonationsFromSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
@@ -442,13 +441,23 @@ function runSinglePass(params: {
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
         const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
-        // Step 2.9: Extend already-active ticking DoTs (Corrosion/Inferno) by the firing skill's
-        // extend-dot turns — applied BEFORE this round's new DoTs so only pre-existing ones grow.
-        // Bombs are excluded: delaying a one-shot detonation never adds damage (per design).
-        const extendDotTurns = extendDotTurnsFromSkill(firingSkill);
-        if (extendDotTurns > 0) {
-            for (const e of corrosionEntries) e.remainingRounds += extendDotTurns;
-            for (const e of infernoEntries) e.remainingRounds += extendDotTurns;
+        // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by the firing skill's extend-dot
+        // abilities — applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
+        // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
+        // conditions; a `chanceFromCritPower` extension (Valerian) rolls min(1, critPower/100),
+        // multiplied by the crit rate when also self-crit-gated.
+        for (const ab of firingSkill?.abilities ?? []) {
+            if (ab.config.type !== 'extend-dot') continue;
+            if (!conditionsMet(ab.conditions, modifierCtx)) continue;
+            if (ab.config.chanceFromCritPower) {
+                const critPowerFactor = Math.min(1, effectiveCritDamage / 100);
+                const critGate = ab.conditions.some((c) => c.subject === 'self-crit')
+                    ? effectiveCrit / 100
+                    : 1;
+                if (Math.random() >= critGate * critPowerFactor) continue;
+            }
+            for (const e of corrosionEntries) e.remainingRounds += ab.config.turns;
+            for (const e of infernoEntries) e.remainingRounds += ab.config.turns;
         }
 
         // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining

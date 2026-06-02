@@ -131,16 +131,6 @@ export function chargeAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'charge') ?? [];
 }
 
-/** Total turns this skill extends active DoTs by (sum of all `extend-dot` abilities). */
-export function extendDotTurnsFromSkill(skill: Skill | undefined): number {
-    if (!skill) return 0;
-    let turns = 0;
-    for (const ability of skill.abilities) {
-        if (ability.config.type === 'extend-dot') turns += ability.config.turns;
-    }
-    return turns;
-}
-
 /** `detonate-dot` abilities on the skill, as {dotType, powerPct} pairs. */
 export function detonationsFromSkill(
     skill: Skill | undefined

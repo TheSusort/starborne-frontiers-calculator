@@ -24,12 +24,19 @@ import {
     detectGrantConditions,
     parseHpThresholdCondition,
     parseExtendDoT,
+    parseCritPowerExtend,
+    parseAllyCritDot,
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
+    parseSkillEffects,
     classifyEnemyEffect,
 } from '../skillTextParser';
-import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
+import {
+    buildDoTAutoFill,
+    buildSkillBuffAutoFill,
+    DOT_TIER_MAP,
+} from '../calculators/skillBuffAutoFill';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -478,6 +485,44 @@ function abilitiesFromText(text: string): Ability[] {
             config: { type: 'extend-dot', turns: extendTurns },
             autoFilled: true,
         });
+    }
+
+    // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
+    const critExtend = parseCritPowerExtend(text);
+    if (critExtend) {
+        out.push({
+            id: nextId(),
+            type: 'extend-dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [critExtend.condition],
+            config: { type: 'extend-dot', turns: critExtend.turns, chanceFromCritPower: true },
+            autoFilled: true,
+        });
+    }
+
+    // Crocus: "when an ally crits with a DoT, inflict <DoT>" → a DoT gated by the manual,
+    // team-dependent ally-crit-dot condition (passive — represented for the editor, not simulated).
+    if (parseAllyCritDot(text)) {
+        for (const eff of parseSkillEffects(text, 'active')) {
+            const info = DOT_TIER_MAP[eff.buffName];
+            if (!info) continue;
+            out.push({
+                id: nextId(),
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'ally-crit-dot', derivable: false }],
+                config: {
+                    type: 'dot',
+                    dotType: info.type,
+                    tier: info.tier,
+                    stacks: eff.stacks ?? 1,
+                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                },
+                autoFilled: true,
+            });
+        }
     }
 
     const detonate = parseDetonateDoT(text);

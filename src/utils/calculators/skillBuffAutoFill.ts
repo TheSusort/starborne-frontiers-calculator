@@ -95,7 +95,7 @@ export function mergeAutoFill(
 
 // Maps parsed buff names to their DoT type and numeric tier.
 // Also used to exclude DoT buffs from the buff picker auto-fill (they go to the DoT config).
-const DOT_TIER_MAP: Record<string, { type: DoTType; tier: number }> = {
+export const DOT_TIER_MAP: Record<string, { type: DoTType; tier: number }> = {
     Corrosion: { type: 'corrosion', tier: 3 },
     'Corrosion I': { type: 'corrosion', tier: 3 },
     'Corrosion II': { type: 'corrosion', tier: 6 },

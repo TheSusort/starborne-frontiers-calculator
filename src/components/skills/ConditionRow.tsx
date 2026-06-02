@@ -26,6 +26,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'hp-threshold',
     'ally-inflicts-debuff',
     'ally-critically-repaired',
+    'ally-crit-dot',
 ];
 
 // Labels not covered by CONDITIONAL_CONDITION_LABELS.
@@ -35,6 +36,7 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     'hp-threshold': 'when HP crosses a threshold',
     'ally-inflicts-debuff': 'when an ally inflicts a debuff',
     'ally-critically-repaired': 'after an ally is critically repaired',
+    'ally-crit-dot': 'when an ally crits with a DoT',
 };
 
 const subjectLabel = (subject: ConditionSubject): string =>

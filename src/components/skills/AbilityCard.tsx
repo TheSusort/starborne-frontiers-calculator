@@ -300,16 +300,28 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
 
             case 'extend-dot':
                 return (
-                    <Input
-                        label="Extend active DoTs by (turns)"
-                        helpLabel="Adds this many turns to active Corrosion/Inferno effects when the skill fires, so they tick longer. Bombs are unaffected."
-                        type="number"
-                        min={1}
-                        value={config.turns}
-                        onChange={(e) =>
-                            updateConfig({ ...config, turns: toNumber(e.target.value) })
-                        }
-                    />
+                    <div className="space-y-2">
+                        <Input
+                            label="Extend active DoTs by (turns)"
+                            helpLabel="Adds this many turns to active Corrosion/Inferno effects when the skill fires, so they tick longer. Bombs are unaffected."
+                            type="number"
+                            min={1}
+                            value={config.turns}
+                            onChange={(e) =>
+                                updateConfig({ ...config, turns: toNumber(e.target.value) })
+                            }
+                        />
+                        <Checkbox
+                            label="Chance = Crit Power"
+                            checked={config.chanceFromCritPower ?? false}
+                            onChange={(checked) =>
+                                updateConfig({
+                                    ...config,
+                                    chanceFromCritPower: checked ? true : undefined,
+                                })
+                            }
+                        />
+                    </div>
                 );
 
             case 'detonate-dot':

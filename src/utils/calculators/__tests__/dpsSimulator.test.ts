@@ -1382,6 +1382,55 @@ describe('simulateDPS', () => {
             expect(withExtend.summary.totalDamage).toBeGreaterThan(noExtend.summary.totalDamage);
         });
 
+        it('a self-crit chanceFromCritPower extend applies at full crit, not at zero crit', () => {
+            const corrosion = dotAbility('cd', 'corrosion', 9, 2);
+            const critExtend: Ability = {
+                id: 'ce',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, chanceFromCritPower: true },
+            };
+            const skillsWith = (extra: Ability[]): ShipSkills => ({
+                slots: [
+                    { slot: 'active', abilities: [damageAbility('a', 100), corrosion, ...extra] },
+                ],
+            });
+            // crit 100 + critDamage 150 → p = 1 → extension always applies → more Corrosion ticks.
+            const withExtend = simulateDPS({
+                ...base,
+                crit: 100,
+                critDamage: 150,
+                shipSkills: skillsWith([critExtend]),
+            });
+            const noExtend = simulateDPS({
+                ...base,
+                crit: 100,
+                critDamage: 150,
+                shipSkills: skillsWith([]),
+            });
+            expect(withExtend.summary.totalCorrosionDamage).toBeGreaterThan(
+                noExtend.summary.totalCorrosionDamage
+            );
+            // crit 0 → p = 0 → extension never applies.
+            const zeroCrit = simulateDPS({
+                ...base,
+                crit: 0,
+                critDamage: 150,
+                shipSkills: skillsWith([critExtend]),
+            });
+            const zeroCritNoExtend = simulateDPS({
+                ...base,
+                crit: 0,
+                critDamage: 150,
+                shipSkills: skillsWith([]),
+            });
+            expect(zeroCrit.summary.totalCorrosionDamage).toBe(
+                zeroCritNoExtend.summary.totalCorrosionDamage
+            );
+        });
+
         it('does not extend Bombs — one-shot detonation total is unchanged', () => {
             const bomb = dotAbility('bd', 'bomb', 100, 2);
             const withExtend = simulateDPS({

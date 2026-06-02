@@ -233,6 +233,48 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
+    it('Valerian passive: crit-power Corrosion extension gated by self-crit', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit repairs 15% of damage dealt, including damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied Corrosion is extended by 1 turn, with the extension chance equal to the Critical Power.',
+        });
+        const ext = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'extend-dot'
+        )!;
+        expect(ext.config).toEqual({ type: 'extend-dot', turns: 1, chanceFromCritPower: true });
+        expect(ext.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+    });
+
+    it('Belladonna passive: crit-power extension gated by ally-inflicts-debuff (team)', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it.<br /><br />Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.',
+        });
+        const ext = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'extend-dot'
+        )!;
+        expect(ext.config).toMatchObject({ chanceFromCritPower: true, turns: 1 });
+        expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
+    });
+
+    it('Crocus passive: ally-crit-DoT triggers a gated Corrosion II DoT', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
+        });
+        const dot = abilityOfType(slot(buildShipAbilities(s).slots, 'passive')!.abilities, 'dot')!;
+        expect(dot.config).toMatchObject({ type: 'dot', dotType: 'corrosion' });
+        expect(dot.conditions).toEqual([{ subject: 'ally-crit-dot', derivable: false }]);
+    });
+
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
         const s = ship({
             chargeSkillText:

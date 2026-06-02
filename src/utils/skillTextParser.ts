@@ -567,6 +567,38 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
     return m ? parseInt(m[1], 10) : null;
 }
 
+// "extend(s/ed) … by/for N turn(s) … chance … crit power" — a duration extension whose chance is
+// the crit-power stat (Valerian, Belladonna). The trigger gates it: an ally inflicting → the
+// team-dependent ally-inflicts-debuff; otherwise a self crit ("with a Critical hit") → self-crit.
+const CRIT_POWER_EXTEND_RE =
+    /extend\w*\b[^.]*?\b(?:by|for)\s+(\d+)\s+turns?\b[^.]*?\bchance\b[^.]*?\bcrit(?:ical)?\s*power\b/i;
+
+/**
+ * Parses a crit-power-chance DoT extension: the turns and the gating condition. Returns null when
+ * absent. The extension fires with probability min(1, critPower/100), gated by the condition.
+ */
+export function parseCritPowerExtend(
+    text: string | null | undefined
+): { turns: number; condition: Condition } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    const m = CRIT_POWER_EXTEND_RE.exec(plain);
+    if (!m) return null;
+    const condition: Condition = /\ball(?:y|ies)\b[^.]*\binflict/i.test(plain)
+        ? { subject: 'ally-inflicts-debuff', derivable: false }
+        : { subject: 'self-crit', derivable: true };
+    return { turns: parseInt(m[1], 10), condition };
+}
+
+// Crocus: "when (an/another) ally inflicts a Damage Over Time (DoT) effect with a critical hit".
+const ALLY_CRIT_DOT_RE =
+    /\ball(?:y|ies)\b[^.]*\binflict\w*[^.]*\b(?:damage over time|dot)\b[^.]*\bcritical/i;
+
+/** Whether a skill triggers "when an ally inflicts a DoT with a critical hit" (manual, team-gated). */
+export function parseAllyCritDot(text: string | null | undefined): boolean {
+    return !!text && ALLY_CRIT_DOT_RE.test(stripUnitTags(text));
+}
+
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
 // consume active DoTs of that type and deal their damage at once, scaled by N% (Incinerator,
 // Crocus, Demolisher). Lingshe's countdown-reduction / crit-scaling detonation is not this form.
