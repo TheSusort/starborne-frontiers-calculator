@@ -55,6 +55,8 @@ export interface Condition {
     buffName?: string;
     hpComparator?: 'below' | 'above';
     hpPercent?: number;
+    // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive scaling).
+    hpSubject?: 'self' | 'enemy';
     // Threshold gating for count subjects (buff/debuff/adjacency/destroyed counts).
     // When set, the condition is "met" only when the derived/manual count satisfies
     // the comparator against `countThreshold` (e.g. enemy has ≥3 debuffs, self has 0

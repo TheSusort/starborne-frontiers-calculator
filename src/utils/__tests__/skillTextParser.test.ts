@@ -1003,6 +1003,20 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('classifies "if it is at full HP" as a self HP-threshold gate (Cobalt)', () => {
+        const text =
+            'This Unit gains <unit-skill>Out. Damage Up II</unit-skill> for 1 turn at the start of the turn if it is at full HP.';
+        expect(detectGrantConditions(text, 'Out. Damage Up II')).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'above',
+                hpPercent: 99,
+                hpSubject: 'self',
+            },
+        ]);
+    });
+
     it('recognises "when attacking a Defender" as an enemy-type gate (IonScorp)', () => {
         const text =
             'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';

@@ -59,6 +59,11 @@ const HP_COMPARATOR_OPTIONS = [
     { value: 'above', label: 'above' },
 ];
 
+const HP_SUBJECT_OPTIONS = [
+    { value: 'enemy', label: 'Enemy' },
+    { value: 'self', label: 'Self' },
+];
+
 const BUFF_NAME_SUBJECTS: ConditionSubject[] = [
     'enemy-buff',
     'self-buff',
@@ -161,6 +166,14 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
 
             {condition.subject === 'hp-threshold' && (
                 <div className="flex items-end gap-2">
+                    <Select
+                        label="Whose HP"
+                        value={condition.hpSubject ?? 'enemy'}
+                        options={HP_SUBJECT_OPTIONS}
+                        onChange={(value) =>
+                            onChange({ ...condition, hpSubject: value as 'self' | 'enemy' })
+                        }
+                    />
                     <Select
                         label="HP is"
                         value={condition.hpComparator ?? 'below'}

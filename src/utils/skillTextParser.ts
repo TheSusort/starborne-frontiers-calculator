@@ -503,6 +503,20 @@ export function detectGrantConditions(
         return [{ subject: 'self-crit', derivable: true }];
     }
 
+    // 2a. self "at full HP" → self HP-threshold (above 99% ≈ full, since the sim treats the
+    // attacker as full HP). Reactive "below X% HP" gates stay manual (not auto-classified).
+    if (/\bat full (?:hp|health)\b/i.test(low)) {
+        return [
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'above',
+                hpPercent: 99,
+                hpSubject: 'self',
+            },
+        ];
+    }
+
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
     if (countGate) return [countGate];

@@ -114,6 +114,18 @@ describe('evaluateCondition', () => {
         expect(evaluateCondition(below, ctx({ enemyHpPct: 60 }))).toBe(0);
     });
 
+    it("'hp-threshold' with hpSubject 'self' resolves against the unit's own HP", () => {
+        const selfAboveFull = cond({
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'above',
+            hpPercent: 99,
+            hpSubject: 'self',
+        });
+        expect(evaluateCondition(selfAboveFull, ctx({ selfHpPct: 100, enemyHpPct: 10 }))).toBe(1);
+        expect(evaluateCondition(selfAboveFull, ctx({ selfHpPct: 50, enemyHpPct: 100 }))).toBe(0);
+    });
+
     it('non-derivable uses manualCount (default 1)', () => {
         expect(evaluateCondition(cond({ subject: 'enemy-buff', derivable: false }), ctx())).toBe(1);
         expect(

@@ -60,9 +60,10 @@ function countNames(names: string[], filter?: string): number {
     return names.filter((n) => n === filter).length;
 }
 
-// HP-threshold basis: enemy HP for offensive scaling. Under DPS assumptions both are 100.
+// HP-threshold basis: enemy HP by default (offensive scaling), or the unit's own HP when
+// hpSubject is 'self' (e.g. "if at full HP"). Under DPS assumptions both are 100.
 function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
-    const hp = ctx.enemyHpPct;
+    const hp = cond.hpSubject === 'self' ? ctx.selfHpPct : ctx.enemyHpPct;
     const t = cond.hpPercent ?? 0;
     return cond.hpComparator === 'above' ? hp > t : hp < t;
 }

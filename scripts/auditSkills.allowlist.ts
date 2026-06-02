@@ -82,7 +82,6 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['ungated-effect-with-trigger'],
         reason: 'Enemy HP-threshold gate (Cheat Death — not DPS).',
     },
-    { ship: 'Cobalt', rules: ['ungated-effect-with-trigger'], reason: 'Self full-HP gate.' },
     {
         ship: 'Bayah',
         rules: ['ungated-effect-with-trigger'],
