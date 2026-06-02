@@ -21,6 +21,8 @@ interface Props {
     onClose: () => void;
     title: string;
     subtitle?: string;
+    /** Optional controls rendered in the header, between the title and the close button. */
+    headerActions?: React.ReactNode;
     children: React.ReactNode;
     fullHeight?: boolean;
     highZIndex?: boolean;
@@ -32,6 +34,7 @@ export const Modal: React.FC<Props> = ({
     onClose,
     title,
     subtitle,
+    headerActions,
     children,
     fullHeight = false,
     highZIndex = false,
@@ -87,8 +90,8 @@ export const Modal: React.FC<Props> = ({
                         aria-labelledby="modal-title"
                     >
                         {/* Header */}
-                        <div className="px-6 py-4 border-b border-dark-border flex justify-between items-center">
-                            <div>
+                        <div className="px-6 py-4 border-b border-dark-border flex justify-between items-center gap-3">
+                            <div className="min-w-0">
                                 <h3 id="modal-title" className="text-xl font-semibold">
                                     {title}
                                 </h3>
@@ -98,9 +101,16 @@ export const Modal: React.FC<Props> = ({
                                     </p>
                                 )}
                             </div>
-                            <Button aria-label="Close modal" variant="secondary" onClick={onClose}>
-                                <CloseIcon />
-                            </Button>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                {headerActions}
+                                <Button
+                                    aria-label="Close modal"
+                                    variant="secondary"
+                                    onClick={onClose}
+                                >
+                                    <CloseIcon />
+                                </Button>
+                            </div>
                         </div>
 
                         {/* Content - Now scrollable */}

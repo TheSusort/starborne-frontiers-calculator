@@ -153,6 +153,43 @@ describe('SkillEditorModal', () => {
         expect(updated.abilities[0].type).toBe('charge');
     });
 
+    it('renders header shortcuts to the other available slots and navigates on click', () => {
+        const onNavigate = vi.fn();
+        render(
+            <SkillEditorModal
+                isOpen
+                slot="active"
+                skill={skill}
+                availableSlots={['active', 'charged', 'passive']}
+                onNavigate={onNavigate}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        // The current slot is the title, not a shortcut button.
+        expect(screen.getByRole('button', { name: 'Edit Charged Skill' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Edit Passive Skill' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Edit Active Skill' })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Charged Skill' }));
+        expect(onNavigate).toHaveBeenCalledWith('charged');
+    });
+
+    it('renders no slot shortcuts when navigation props are absent', () => {
+        render(
+            <SkillEditorModal
+                isOpen
+                slot="active"
+                skill={skill}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        expect(
+            screen.queryByRole('button', { name: /Edit (Charged|Passive) Skill/ })
+        ).not.toBeInTheDocument();
+    });
+
     it('renders nothing when closed', () => {
         render(
             <SkillEditorModal

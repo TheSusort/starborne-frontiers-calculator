@@ -40,6 +40,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS Calculator: passive-skill DoT extensions now affect the simulation. Previously a "extend the Corrosion duration with chance equal to Critical Power" effect was only applied when it came from the Active/Charged skill; on a passive (e.g. Valerian) it was ignored, so nothing extended. Passive extend-DoT effects are now folded into each round like passive modifiers.',
     'DPS Calculator skill auto-fill now recognises secondary stat-based damage phrased as "additional damage equal to N% of its Defense/HP" when the percentage sits at the end of the tag (e.g. Nayra\'s active and charged skills) — previously this extra Defense-based damage was missed entirely.',
     'DPS Calculator skill auto-fill now recognises buffs gated on a specific ally being on the team — e.g. Nayra only gains Offensive Affinity Override when Isha is present. Such buffs are tagged with a new "when a specific ally is on the team" condition instead of being treated as always active.',
+    "DPS Calculator skill editor: the editor modal now has header shortcuts to jump straight to the ship's other skill slots (Active / Charged / Passive) without closing and reopening.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

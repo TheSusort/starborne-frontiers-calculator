@@ -62,6 +62,8 @@ export const SkillSlotList: React.FC<Props> = ({ shipSkills, hasPassive, ship, o
                     slot={openSlot}
                     skill={findSkill(openSlot)}
                     ship={ship}
+                    availableSlots={slots}
+                    onNavigate={setOpenSlot}
                     onChange={handleSkillChange}
                     onClose={() => setOpenSlot(null)}
                 />
