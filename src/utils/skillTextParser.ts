@@ -274,8 +274,19 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             requiredEnemyType: capType(typed[1]),
         };
     }
+    // "if critical, additionally deals N% damage" → a self-crit conditional bonus on the base
+    // multiplier (Crucialis). The base damage always applies; this N% is added only on a crit
+    // (scaledBonus weights it by crit rate as an expected value).
+    const critBonus = CRIT_BONUS_RE.exec(stripUnitTags(text));
+    if (critBonus) {
+        return { pct: parseFloat(critBonus[1]), condition: 'self-crit', derivable: true };
+    }
     return null;
 }
+
+// "if [this] critical[ly hits], … additional[ly] … N% damage" — extra damage dealt on a crit.
+const CRIT_BONUS_RE =
+    /\bif\s+(?:this\s+(?:unit\s+)?)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
 
 // "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
 // enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped

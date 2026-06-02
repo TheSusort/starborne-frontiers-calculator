@@ -632,6 +632,16 @@ describe('parseConditionalDamage', () => {
         expect(parseConditionalDamage(null)).toBeNull();
     });
 
+    it('parses "if critical, additionally deals N% damage" as a self-crit bonus (Crucialis)', () => {
+        const text =
+            'This Unit deals <unit-damage>80% damage</unit-damage> and, if critical, additionally deals <unit-damage>75%</unit-damage> damage.';
+        expect(parseConditionalDamage(text)).toEqual({
+            pct: 75,
+            condition: 'self-crit',
+            derivable: true,
+        });
+    });
+
     it('does not treat "X% more direct damage for each Y" as base-damage scaling (Judge)', () => {
         // "more direct damage" is an outgoing-damage MODIFIER (parseModifiers), not base scaling.
         const text =

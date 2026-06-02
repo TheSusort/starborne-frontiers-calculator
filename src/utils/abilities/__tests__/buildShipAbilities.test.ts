@@ -263,6 +263,20 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
+    it('Crucialis active: base damage + self-crit conditional bonus', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>80% damage</unit-damage> and, if critical, additionally deals <unit-damage>75%</unit-damage> damage.',
+        });
+        const dmg = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'active')!.abilities,
+            'damage'
+        )!;
+        expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 80 });
+        expect(dmg.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+        expect(dmg.scaling).toMatchObject({ conditionIndex: 0, perUnit: 75 });
+    });
+
     it('Los passive: "30% more direct damage when its HP is below 50%" → self HP-gated modifier', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
