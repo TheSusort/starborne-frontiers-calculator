@@ -326,9 +326,12 @@ function parseModifiers(text: string): ParsedModifier[] {
         });
     }
 
-    // "increases Damage by N% [to enemies with <effect> / below X% HP]" → an outgoing-damage
-    // bonus (Obsidian's "increases Damage by 100% to enemies with less than 30% HP").
-    const incM = plain.match(/increases?\s+(?:direct\s+)?damage\s+by\s+(\d+(?:\.\d+)?)%/i);
+    // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
+    // → an outgoing-damage bonus (Obsidian; Akula's HP-scaling "up to 30%" is modelled flat at its
+    // max, since the sim treats the enemy as full HP).
+    const incM = plain.match(
+        /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%/i
+    );
     if (incM) {
         const sentence = sentenceContaining(plain, incM.index!);
         const conditions: Condition[] = [];

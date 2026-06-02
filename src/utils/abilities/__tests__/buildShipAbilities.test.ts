@@ -263,6 +263,22 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
+    it('Akula passive: "increases outgoing direct damage by up to 30%" → flat +30% modifier', () => {
+        // Enemy is assumed at full HP, so the HP-scaling bonus is at its max — modelled flat.
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Starts combat fully Charged. Increases outgoing direct damage by up to <unit-damage>30%</unit-damage> based on the target's current HP percentage; the higher the percentage, the more the damage.",
+        });
+        const mod = slot(buildShipAbilities(s).slots, 'passive')!.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+        expect(mod.target).toBe('self');
+        expect(mod.conditions).toEqual([]);
+    });
+
     it('Crucialis active: base damage + self-crit conditional bonus', () => {
         const s = ship({
             activeSkillText:
