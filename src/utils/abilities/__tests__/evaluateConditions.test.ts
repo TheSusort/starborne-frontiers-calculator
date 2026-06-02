@@ -90,6 +90,19 @@ describe('evaluateCondition', () => {
         expect(evaluateCondition(c, ctx({ enemyType: 'Attacker' }))).toBe(0);
     });
 
+    it("negated 'enemy-type' is 1 when the enemy is NOT the type (non-Defenders)", () => {
+        const c = cond({
+            subject: 'enemy-type',
+            derivable: true,
+            requiredEnemyType: 'Defender',
+            negate: true,
+        });
+        expect(evaluateCondition(c, ctx({ enemyType: 'Attacker' }))).toBe(1);
+        expect(evaluateCondition(c, ctx({ enemyType: 'Defender' }))).toBe(0);
+        // Unknown enemy type → cannot confirm "not a Defender" → 0.
+        expect(evaluateCondition(c, ctx({ enemyType: undefined }))).toBe(0);
+    });
+
     it("'hp-threshold' below/above resolves against context HP", () => {
         const below = cond({
             subject: 'hp-threshold',

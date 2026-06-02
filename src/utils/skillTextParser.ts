@@ -8,6 +8,7 @@ import {
     ConditionalCondition,
     ChargeGain,
     EnemyBaseClass,
+    DoTType,
 } from '../types/calculator';
 import { Condition, ConditionSubject } from '../types/abilities';
 
@@ -78,6 +79,20 @@ export function parseSkillText(skillText: string | null | undefined): SkillTextS
     }
 
     return segments;
+}
+
+// DoT families are debuffs even when not listed in BUFFS as such.
+const DOT_DEBUFF_PREFIXES = new Set(['corrosion', 'inferno', 'bomb', 'acidic']);
+
+/**
+ * Classifies an effect referenced on an enemy ("enemies with <effect>") as a buff or debuff,
+ * using the BUFFS type and DoT families. Defaults to debuff when unknown — most "enemies with X"
+ * gates reference a debuff the unit applies (Stealth is the notable buff exception, found in BUFFS).
+ */
+export function classifyEnemyEffect(name: string): 'buff' | 'debuff' {
+    if (DOT_DEBUFF_PREFIXES.has(name.toLowerCase().split(' ')[0])) return 'debuff';
+    const found = BUFFS.find((b) => b.name.toLowerCase() === name.toLowerCase());
+    return found?.type === 'buff' ? 'buff' : 'debuff';
 }
 
 /**
@@ -344,6 +359,13 @@ const GRANT_ENEMY_TYPE_RE = new RegExp(
     'i'
 );
 
+// Negated enemy class: "targeting non-Defenders", "against non-Attackers" → enemy is NOT
+// that type. Scoped to enemy-targeting lead-ins so "non-defender ally" phrasings don't match.
+const NON_ENEMY_TYPE_RE = new RegExp(
+    `(?:targeting|damaging|against)\\s+non-?\\s*(${ENEMY_TYPE_WORD.source})`,
+    'i'
+);
+
 const capType = (s: string): EnemyBaseClass =>
     (s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()) as EnemyBaseClass;
 
@@ -411,6 +433,8 @@ function countGateCondition(clause: string): Condition | null {
  *  - enemy-debuff presence: "when Damaging a Debuffed enemy", "against a Debuffed target",
  *    "when/on/upon applying|inflicting a debuff" (this Unit applies one → enemy is debuffed)
  *  - Taunt/Provoke self-status: "if this Unit is Provoked or Taunted …"
+ *  - manual team triggers: "when an ally inflicts a debuff", "after an ally is critically
+ *    repaired" (non-derivable — toggled in the editor since the sim has no allies)
  *
  * Genuinely reactive conditions (when-attacked, below-X%-HP) are intentionally NOT
  * auto-classified — the user adds them in the editor. Reference data: docs/ship-skills.csv.
@@ -426,12 +450,32 @@ export function detectGrantConditions(
     const low = clause.toLowerCase();
     // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
+    // "after an ally is critically repaired" — a team-dependent reactive trigger (manual).
+    const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
     // Only conditional clauses produce conditions.
     if (
         !/\b(when|if|while)\b|affected by|targeting|damaging|against/.test(low) &&
-        !appliesDebuffGate
+        !appliesDebuffGate &&
+        !allyCritRepairGate
     )
         return [];
+
+    if (allyCritRepairGate) {
+        return [{ subject: 'ally-critically-repaired', derivable: false }];
+    }
+
+    // 1a. negated enemy-type ("targeting non-Defenders") — checked before the positive form.
+    const notType = NON_ENEMY_TYPE_RE.exec(clause);
+    if (notType) {
+        return [
+            {
+                subject: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: capType(notType[1]),
+                negate: true,
+            },
+        ];
+    }
 
     // 1. enemy-type (single or "X or Y")
     const et = GRANT_ENEMY_TYPE_RE.exec(clause);
@@ -500,14 +544,39 @@ export function parseExtendDoT(text: string | null | undefined): number | null {
     return m ? parseInt(m[1], 10) : null;
 }
 
-// "(damage|attack) … cannot critically hit" — the attack can't crit. Anchored on damage/attack
-// (within the sentence) so a "this repair cannot critically hit" heal clause doesn't match.
-// Tolerates the "cannont" misspelling present in the source data (Provider).
-const NO_CRIT_RE = /\b(?:damage|attack)\b[^.;]*\b(?:cannot|cannont)\s+critically\s+hit\b/i;
+// "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
+// consume active DoTs of that type and deal their damage at once, scaled by N% (Incinerator,
+// Crocus, Demolisher). Lingshe's countdown-reduction / crit-scaling detonation is not this form.
+const DETONATE_DOT_RE =
+    /detonat\w*\s+(corrosion|inferno|bomb)\s+effects\s+(?:with|at)\s+(\d+(?:\.\d+)?)%/i;
+
+/**
+ * Parses a DoT detonation: the DoT type consumed and the % of its power dealt. Returns null
+ * when no detonation clause is present. Reference data: docs/ship-skills.csv.
+ */
+export function parseDetonateDoT(
+    text: string | null | undefined
+): { dotType: DoTType; powerPct: number } | null {
+    if (!text) return null;
+    const m = DETONATE_DOT_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    return { dotType: m[1].toLowerCase() as DoTType, powerPct: parseFloat(m[2]) };
+}
+
+// "<subject> cannot critically hit" — the no-crit attaches to whatever noun precedes it.
+// We flag the ATTACK as no-crit unless that subject is a repair/heal (e.g. Pallas's "this
+// repair cannot critically hit", which sits after an unrelated "the damage dealt").
+// Tolerates the "cannont" misspelling in the source data (Provider).
+const NO_CRIT_RE = /(\w+)\s+(?:cannot|cannont)\s+critically\s+hit\b/gi;
+const NO_CRIT_HEAL_SUBJECTS = new Set(['repair', 'repairs', 'heal', 'heals']);
 
 /** Whether a skill's attack/damage cannot critically hit. Reference data: docs/ship-skills.csv. */
 export function parseNoCrit(text: string | null | undefined): boolean {
-    return !!text && NO_CRIT_RE.test(stripUnitTags(text));
+    if (!text) return false;
+    for (const m of stripUnitTags(text).matchAll(NO_CRIT_RE)) {
+        if (!NO_CRIT_HEAL_SUBJECTS.has(m[1].toLowerCase())) return true;
+    }
+    return false;
 }
 
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */

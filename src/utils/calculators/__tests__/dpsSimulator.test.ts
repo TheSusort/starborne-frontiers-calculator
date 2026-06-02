@@ -37,7 +37,7 @@ describe('simulateDPS', () => {
             expect(result.rounds[2].directDamage).toBe(dmg);
             expect(result.rounds.every((r) => r.corrosionDamage === 0)).toBe(true);
             expect(result.rounds.every((r) => r.infernoDamage === 0)).toBe(true);
-            expect(result.rounds.every((r) => r.bombDamage === 0)).toBe(true);
+            expect(result.rounds.every((r) => r.detonationDamage === 0)).toBe(true);
         });
 
         it('calculates correct summary totals', () => {
@@ -48,7 +48,7 @@ describe('simulateDPS', () => {
             expect(result.summary.totalDirectDamage).toBe(perRound * 5);
             expect(result.summary.totalCorrosionDamage).toBe(0);
             expect(result.summary.totalInfernoDamage).toBe(0);
-            expect(result.summary.totalBombDamage).toBe(0);
+            expect(result.summary.totalDetonationDamage).toBe(0);
         });
 
         it('applies defense reduction to direct damage', () => {
@@ -256,9 +256,9 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: '1', type: 'bomb', tier: 100, stacks: 1, duration: 2 }],
                 rounds: 4,
             });
-            expect(result.rounds[0].bombDamage).toBe(0);
-            expect(result.rounds[1].bombDamage).toBe(10000);
-            expect(result.rounds[2].bombDamage).toBe(10000);
+            expect(result.rounds[0].detonationDamage).toBe(0);
+            expect(result.rounds[1].detonationDamage).toBe(10000);
+            expect(result.rounds[2].detonationDamage).toBe(10000);
         });
 
         it('is not affected by defense or outgoing damage buff', () => {
@@ -276,7 +276,7 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: '1', type: 'bomb', tier: 200, stacks: 1, duration: 1 }],
                 rounds: 1,
             });
-            expect(noDef.rounds[0].bombDamage).toBe(withDef.rounds[0].bombDamage);
+            expect(noDef.rounds[0].detonationDamage).toBe(withDef.rounds[0].detonationDamage);
         });
 
         it('scales with attack buff', () => {
@@ -288,7 +288,7 @@ describe('simulateDPS', () => {
                 rounds: 1,
             });
             // effectiveAttack = 10000 * 1.5 = 15000, bomb = 1 * 15000 = 15000
-            expect(withAtkBuff.rounds[0].bombDamage).toBe(15000);
+            expect(withAtkBuff.rounds[0].detonationDamage).toBe(15000);
         });
 
         it('is not affected by outgoing damage buff', () => {
@@ -305,7 +305,7 @@ describe('simulateDPS', () => {
                 selfBuffs: [makeAlwaysBuff('1', { outgoingDamage: 50 })],
                 rounds: 1,
             });
-            expect(noBuff.rounds[0].bombDamage).toBe(withBuff.rounds[0].bombDamage);
+            expect(noBuff.rounds[0].detonationDamage).toBe(withBuff.rounds[0].detonationDamage);
         });
     });
 
@@ -1393,6 +1393,34 @@ describe('simulateDPS', () => {
                 shipSkills: skills(bomb, [damageAbility('c', 200)]),
             });
             expect(withExtend.summary.totalDamage).toBe(noExtend.summary.totalDamage);
+        });
+
+        it('detonate-dot consumes active Inferno and pays it out as detonation damage', () => {
+            const inferno = dotAbility('id', 'inferno', 15, 3);
+            const detonate: Ability = {
+                id: 'det',
+                type: 'detonate-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'detonate-dot', dotType: 'inferno', powerPct: 180 },
+            };
+            const withDetonate = simulateDPS({
+                ...base,
+                shipSkills: skills(inferno, [damageAbility('c', 200), detonate]),
+            });
+            const noDetonate = simulateDPS({
+                ...base,
+                shipSkills: skills(inferno, [damageAbility('c', 200)]),
+            });
+            // Detonation pays out remaining Inferno at once → more total + a detonationDamage spike.
+            expect(withDetonate.summary.totalDetonationDamage).toBeGreaterThan(0);
+            expect(withDetonate.summary.totalDamage).toBeGreaterThan(
+                noDetonate.summary.totalDamage
+            );
+            // The round the charged skill fires (round 3, chargeCount 2) consumes Inferno stacks.
+            expect(withDetonate.rounds[2].detonationDamage).toBeGreaterThan(0);
+            expect(withDetonate.rounds[2].activeInfernoStacks).toBe(0);
         });
     });
 

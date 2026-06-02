@@ -25,6 +25,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'enemy-destroyed',
     'hp-threshold',
     'ally-inflicts-debuff',
+    'ally-critically-repaired',
 ];
 
 // Labels not covered by CONDITIONAL_CONDITION_LABELS.
@@ -33,6 +34,7 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     'self-debuff': 'per debuff on this unit',
     'hp-threshold': 'when HP crosses a threshold',
     'ally-inflicts-debuff': 'when an ally inflicts a debuff',
+    'ally-critically-repaired': 'after an ally is critically repaired',
 };
 
 const subjectLabel = (subject: ConditionSubject): string =>
@@ -128,15 +130,24 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
             )}
 
             {condition.subject === 'enemy-type' && (
-                <Select
-                    label="Enemy type"
-                    value={condition.requiredEnemyType ?? ''}
-                    options={ENEMY_TYPE_OPTIONS}
-                    noDefaultSelection
-                    onChange={(value) =>
-                        onChange({ ...condition, requiredEnemyType: value as EnemyBaseClass })
-                    }
-                />
+                <>
+                    <Select
+                        label="Enemy type"
+                        value={condition.requiredEnemyType ?? ''}
+                        options={ENEMY_TYPE_OPTIONS}
+                        noDefaultSelection
+                        onChange={(value) =>
+                            onChange({ ...condition, requiredEnemyType: value as EnemyBaseClass })
+                        }
+                    />
+                    <Checkbox
+                        label="Enemy is NOT this type"
+                        checked={condition.negate ?? false}
+                        onChange={(checked) =>
+                            onChange({ ...condition, negate: checked ? true : undefined })
+                        }
+                    />
+                </>
             )}
 
             {BUFF_NAME_SUBJECTS.includes(condition.subject) && (

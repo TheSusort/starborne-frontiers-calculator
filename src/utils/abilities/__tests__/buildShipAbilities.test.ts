@@ -193,6 +193,69 @@ describe('buildShipAbilities', () => {
         expect(debuff.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
     });
 
+    it('Lodolite active: Concentrate Fire debuff gated by a negated enemy-type (non-Defenders)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>240% damage</unit-damage>. When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.',
+        });
+
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const debuff = active.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Concentrate Fire'
+        )!;
+        expect(debuff.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender', negate: true },
+        ]);
+    });
+
+    it('Incinerator passive: damage + modifier both gated by enemy-debuff(Inferno)', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'At the end of the round, this unit deals <unit-damage>100% damage</unit-damage> to all enemies with <unit-skill>Inferno</unit-skill>.<br /><br />Additionally, this Unit deals <unit-damage>30% more direct damage</unit-damage> to enemies afflicted with <unit-skill>Inferno</unit-skill>.',
+        });
+
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+
+        const dmg = abilityOfType(passive.abilities, 'damage')!;
+        expect(dmg.config).toMatchObject({ multiplier: 100 });
+        expect(dmg.conditions).toEqual([
+            { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
+        ]);
+
+        const mod = passive.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+        expect(mod.conditions).toEqual([
+            { subject: 'enemy-debuff', buffName: 'Inferno', derivable: true },
+        ]);
+    });
+
+    it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>225% damage</unit-damage>, detonates Inferno effects with 180% of their power, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns.',
+            chargeSkillCharge: 3,
+        });
+
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
+            multiplier: 225,
+        });
+        expect(abilityOfType(charged.abilities, 'dot')!.config).toMatchObject({
+            dotType: 'inferno',
+        });
+        const detonate = abilityOfType(charged.abilities, 'detonate-dot')!;
+        expect(detonate.config).toEqual({
+            type: 'detonate-dot',
+            dotType: 'inferno',
+            powerPct: 180,
+        });
+        expect(detonate.target).toBe('enemy');
+    });
+
     it('charged slot: damage ability with multiplier 300', () => {
         const s = ship({
             activeSkillText: 'deals <unit-damage>100% damage</unit-damage>',
@@ -275,6 +338,41 @@ describe('buildShipAbilities', () => {
             autoFilled: true,
         });
         expect(mod!.conditions[0]).toMatchObject({ subject: 'self-buff', buffName: 'Stealth' });
+    });
+
+    it('Lodolite passive: crit-damage vs Defenders + all-ally damage vs enemies with Concentrate Fire/Stealth', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.',
+        });
+
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const mods = passive.abilities.filter((a) => a.config.type === 'modifier');
+
+        // 10% more critical damage to defenders → critDamage modifier gated by enemy-type Defender.
+        const crit = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'critDamage'
+        )!;
+        expect(crit.config).toMatchObject({ channel: 'critDamage', value: 10 });
+        expect(crit.target).toBe('self');
+        expect(crit.conditions).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
+
+        // 15% more direct damage to enemies with Concentrate Fire or Stealth → all-ally outgoing,
+        // gated by enemy-buff (anyOf), NOT a self-buff Stealth condition.
+        const out = mods.find(
+            (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
+        )!;
+        expect(out.config).toMatchObject({ channel: 'outgoingDamage', value: 15 });
+        expect(out.target).toBe('all-allies');
+        // Concentrate Fire is a debuff → derivable enemy-debuff; Stealth is a buff → manual enemy-buff.
+        expect(out.conditions).toEqual([
+            { subject: 'enemy-debuff', buffName: 'Concentrate Fire', derivable: true, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Stealth', derivable: false, anyOf: true },
+        ]);
     });
 
     it('Howler active: self buff (Attack Up III) coexists with active damage', () => {

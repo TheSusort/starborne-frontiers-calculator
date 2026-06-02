@@ -12,6 +12,7 @@ import {
     parseHpThresholdCondition,
     parseExtendDoT,
     parseNoCrit,
+    parseDetonateDoT,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -661,6 +662,36 @@ describe('parseExtendDoT', () => {
     });
 });
 
+describe('parseDetonateDoT', () => {
+    it('parses "detonates Inferno effects with 180% of their power" (Incinerator)', () => {
+        const text =
+            'This Unit deals <unit-damage>225% damage</unit-damage>, detonates Inferno effects with 180% of their power, and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns.';
+        expect(parseDetonateDoT(text)).toEqual({ dotType: 'inferno', powerPct: 180 });
+    });
+
+    it('parses "detonates Corrosion effects at 180% power" (Crocus)', () => {
+        expect(
+            parseDetonateDoT(
+                'This Unit deals 250% damage and detonates Corrosion effects at 180% power.'
+            )
+        ).toEqual({ dotType: 'corrosion', powerPct: 180 });
+    });
+
+    it('parses "detonates Bomb effects with 150% of their power" (Demolisher)', () => {
+        expect(
+            parseDetonateDoT(
+                'detonates Bomb effects with 150% of their power, and inflicts Bomb II.'
+            )
+        ).toEqual({ dotType: 'bomb', powerPct: 150 });
+    });
+
+    it('returns null when there is no detonation clause', () => {
+        expect(parseDetonateDoT('This Unit deals 200% damage.')).toBeNull();
+        expect(parseDetonateDoT('')).toBeNull();
+        expect(parseDetonateDoT(null)).toBeNull();
+    });
+});
+
 describe('parseNoCrit', () => {
     it('detects "deals N% damage that cannot critically hit"', () => {
         expect(
@@ -680,6 +711,15 @@ describe('parseNoCrit', () => {
         expect(
             parseNoCrit(
                 'repairs allies for 7% of the damage dealt. This repair cannot critically hit.'
+            )
+        ).toBe(false);
+    });
+
+    it('does not flag damage when "the damage dealt" precedes a repair that cannot crit (Pallas)', () => {
+        // "cannot critically hit" attaches to the repair, not the earlier "damage dealt".
+        expect(
+            parseNoCrit(
+                'This Unit deals <unit-damage>200% damage</unit-damage>. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.'
             )
         ).toBe(false);
     });
@@ -955,6 +995,14 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('classifies "When targeting non-Defenders" as a negated enemy-type gate (Lodolite)', () => {
+        const text =
+            'When targeting non-Defenders, apply <unit-skill>Concentrate Fire</unit-skill> for 2 turns.';
+        expect(detectGrantConditions(text, 'Concentrate Fire')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender', negate: true },
+        ]);
+    });
+
     it('classifies "when applying a debuff" as an enemy-debuff presence gate (Yuyan)', () => {
         const text =
             'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.';
@@ -979,6 +1027,17 @@ describe('detectGrantConditions', () => {
             'When another ally inflicts a debuff onto an enemy, this unit deals 50% damage to that enemy that cannot critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.';
         expect(detectGrantConditions(text, 'Crit Rate Down II')).toEqual([
             { subject: 'ally-inflicts-debuff', derivable: false },
+        ]);
+    });
+
+    it('classifies "after an ally is critically repaired" as a manual gate (Pallas)', () => {
+        const text =
+            'This Unit gains <unit-skill>Attack Up II</unit-skill> and <unit-skill>Leech II</unit-skill> for 1 turn after an ally is critically repaired.';
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
+            { subject: 'ally-critically-repaired', derivable: false },
+        ]);
+        expect(detectGrantConditions(text, 'Leech II')).toEqual([
+            { subject: 'ally-critically-repaired', derivable: false },
         ]);
     });
 

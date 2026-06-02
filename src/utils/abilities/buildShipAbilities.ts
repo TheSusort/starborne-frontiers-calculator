@@ -26,6 +26,8 @@ import {
     parseExtendDoT,
     parseNoCrit,
     parseAllyInflictsDebuff,
+    parseDetonateDoT,
+    classifyEnemyEffect,
 } from '../skillTextParser';
 import { buildDoTAutoFill, buildSkillBuffAutoFill } from '../calculators/skillBuffAutoFill';
 import { selectedBuffToAbility } from './buffAbilityConverters';
@@ -95,6 +97,27 @@ function sentenceContaining(plain: string, index: number): string {
     return plain.slice(start, end);
 }
 
+/**
+ * The clause containing the character at `index`, delimited by commas as well as `.`/`;`
+ * (so comma-joined sub-clauses with different subjects — "This Unit deals X, all allies
+ * deal Y" — are scoped separately). The sentence-boundary check uses a whitespace lookahead
+ * so decimals (e.g. "7.5") aren't split.
+ */
+function clauseContaining(plain: string, index: number): string {
+    const boundary = /,|[.;](?=\s|$)/g;
+    let start = 0;
+    let end = plain.length;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(plain)) !== null) {
+        if (m.index < index) start = m.index + 1;
+        else {
+            end = m.index;
+            break;
+        }
+    }
+    return plain.slice(start, end);
+}
+
 /** "when affected by Taunt or Provoke" → anyOf self-status conditions (manual "assume active"). */
 function affectedByConditions(sentence: string): Condition[] {
     const m = sentence.match(
@@ -109,6 +132,46 @@ function affectedByConditions(sentence: string): Condition[] {
             derivable: false,
             anyOf: true,
         }));
+}
+
+/**
+ * Effect names in an "enemies (with|afflicted with) <effect> [or <effect>]" clause, read from
+ * the raw <unit-skill> tags (so multi-word names like "Concentrate Fire" survive intact).
+ */
+function enemyEffectNamesFromClause(rawText: string): string[] {
+    const m = rawText.match(/\benem(?:y|ies)\b[^.]*?\bwith\b([^.]*)/i);
+    if (!m) return [];
+    return [...m[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((t) => t[1].trim());
+}
+
+/**
+ * Effect names gating a "deals N% damage to enemies (with|afflicted with) <effect>" clause.
+ * Scoped to the damage clause (no sentence break between) so it only gates that damage ability.
+ */
+function damageEnemyEffectNamesFromClause(rawText: string): string[] {
+    // Keep unit-skill tags but drop damage/aid tags so "deals N% damage to …" matches across them.
+    const t = rawText.replace(/<\/?unit-(?:aid|damage)>/gi, '');
+    const m = t.match(
+        /deals?\s+\d+(?:\.\d+)?%\s+damage\s+to\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:with|afflicted\s+with)\b([^.]*)/i
+    );
+    if (!m) return [];
+    return [...m[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) => x[1].trim());
+}
+
+/**
+ * Builds enemy-effect gating conditions from effect names: debuffs/DoTs → derivable `enemy-debuff`
+ * (the sim tracks enemy debuff/DoT counts), buffs → manual `enemy-buff`. Multiple → anyOf.
+ */
+function enemyEffectConditions(names: string[]): Condition[] {
+    return names.map((buffName) => {
+        const isDebuff = classifyEnemyEffect(buffName) === 'debuff';
+        return {
+            subject: isDebuff ? 'enemy-debuff' : 'enemy-buff',
+            derivable: isDebuff,
+            buffName,
+            ...(names.length > 1 ? { anyOf: true } : {}),
+        };
+    });
 }
 
 /** Extracts a "up to (a max of) Y%" cap from a clause, if present. */
@@ -180,7 +243,15 @@ function parseModifiers(text: string): ParsedModifier[] {
             }
         } else {
             const conditions: Condition[] = [];
-            if (/stealth/i.test(sentence)) {
+            // "to enemies (with|afflicted with) <effect> [or <effect>]" → the ENEMY has one of
+            // these effects, classified per effect type (debuff/DoT → enemy-debuff, buff → enemy-buff).
+            const enemyEffects = /\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)
+                ? enemyEffectNamesFromClause(text)
+                : [];
+            if (enemyEffects.length) {
+                conditions.push(...enemyEffectConditions(enemyEffects));
+            } else if (/stealth/i.test(sentence)) {
+                // "while Stealthed" (self) — the acting unit's own Stealth.
                 const subject =
                     target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
                 conditions.push({ subject, buffName: 'Stealth', derivable: false });
@@ -194,6 +265,34 @@ function parseModifiers(text: string): ParsedModifier[] {
                 conditions,
             });
         }
+    }
+
+    // "X% more critical damage [to <enemy class>]" → crit-damage modifier (Lodolite).
+    const critM = plain.match(/(\d+(?:\.\d+)?)%\s+more\s+critical\s+damage/i);
+    if (critM) {
+        // Comma-scoped: "This Unit deals X% more critical damage, all allies deal Y%…" are
+        // separate subjects, so don't let the all-ally clause leak into this one.
+        const clause = clauseContaining(plain, critM.index!);
+        const isAllyScoped = /friendly|all allies|allies/i.test(clause);
+        const conditions: Condition[] = [];
+        const typeM = clause.match(
+            /\b(?:to|against|targeting|damaging)\s+(defender|attacker|debuffer|supporter)s?\b/i
+        );
+        if (typeM) {
+            conditions.push({
+                subject: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: (typeM[1].charAt(0).toUpperCase() +
+                    typeM[1].slice(1).toLowerCase()) as EnemyBaseClass,
+            });
+        }
+        out.push({
+            channel: 'critDamage',
+            value: parseFloat(critM[1]),
+            isMultiplicative: true,
+            target: isAllyScoped ? 'all-allies' : 'self',
+            conditions,
+        });
     }
 
     const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);
@@ -361,6 +460,13 @@ function abilitiesFromText(text: string): Ability[] {
         ];
     }
 
+    // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
+    // having that effect (Incinerator's "100% damage to all enemies with Inferno").
+    const damageEffects = damageEnemyEffectNamesFromClause(text);
+    if (damageEffects.length && out[0]?.type === 'damage') {
+        out[0].conditions = [...out[0].conditions, ...enemyEffectConditions(damageEffects)];
+    }
+
     const extendTurns = parseExtendDoT(text);
     if (extendTurns) {
         out.push({
@@ -370,6 +476,23 @@ function abilitiesFromText(text: string): Ability[] {
             trigger: 'on-cast',
             conditions: [],
             config: { type: 'extend-dot', turns: extendTurns },
+            autoFilled: true,
+        });
+    }
+
+    const detonate = parseDetonateDoT(text);
+    if (detonate) {
+        out.push({
+            id: nextId(),
+            type: 'detonate-dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'detonate-dot',
+                dotType: detonate.dotType,
+                powerPct: detonate.powerPct,
+            },
             autoFilled: true,
         });
     }

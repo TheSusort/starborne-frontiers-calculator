@@ -20,6 +20,7 @@ import {
     dotsFromSkill,
     chargeAbilitiesFromSkill,
     extendDotTurnsFromSkill,
+    detonationsFromSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import {
@@ -89,7 +90,8 @@ export interface RoundData {
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
-    bombDamage: number;
+    /** Detonation damage this round: Bomb detonations + DoT detonations (game-categorised together). */
+    detonationDamage: number;
     totalRoundDamage: number;
     cumulativeDamage: number;
     activeCorrosionStacks: number;
@@ -109,7 +111,7 @@ export interface DPSSimulationSummary {
     totalDirectDamage: number;
     totalCorrosionDamage: number;
     totalInfernoDamage: number;
-    totalBombDamage: number;
+    totalDetonationDamage: number;
     totalSecondaryDamage: number;
     totalConditionalDamage: number;
 }
@@ -205,7 +207,7 @@ function runSinglePass(params: {
         direct: number;
         corrosion: number;
         inferno: number;
-        bomb: number;
+        detonation: number;
         cumulative: number;
         totalSecondary: number;
         totalConditional: number;
@@ -244,7 +246,7 @@ function runSinglePass(params: {
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
-    let totalBombRaw = 0;
+    let totalDetonationRaw = 0;
     let totalSecondaryRaw = 0;
     let totalConditionalRaw = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
@@ -449,6 +451,44 @@ function runSinglePass(params: {
             for (const e of infernoEntries) e.remainingRounds += extendDotTurns;
         }
 
+        // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
+        // damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
+        // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
+        // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
+        let detonationDamage = 0;
+        for (const det of detonationsFromSkill(firingSkill)) {
+            const pct = det.powerPct / 100;
+            if (det.dotType === 'inferno') {
+                detonationDamage +=
+                    infernoEntries.reduce(
+                        (sum, e) =>
+                            sum + e.stacks * (e.tier / 100) * effectiveAttack * e.remainingRounds,
+                        0
+                    ) *
+                    dotMult *
+                    affinityMult *
+                    pct;
+                infernoEntries.length = 0;
+            } else if (det.dotType === 'corrosion') {
+                const baseHp = Math.min(enemyHp, 500_000);
+                detonationDamage +=
+                    corrosionEntries.reduce(
+                        (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
+                        0
+                    ) *
+                    dotMult *
+                    affinityMult *
+                    pct;
+                corrosionEntries.length = 0;
+            } else if (det.dotType === 'bomb') {
+                detonationDamage +=
+                    pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
+                    affinityMult *
+                    pct;
+                pendingBombs.length = 0;
+            }
+        }
+
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;
         if (dotsLanded) {
@@ -490,25 +530,25 @@ function runSinglePass(params: {
         expireStacks(corrosionEntries);
         expireStacks(infernoEntries);
 
-        // Step 6: Process bombs
-        let bombDamage = 0;
+        // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
+        let bombBurst = 0;
         for (let i = pendingBombs.length - 1; i >= 0; i--) {
             pendingBombs[i].countdown -= 1;
             if (pendingBombs[i].countdown <= 0) {
-                bombDamage += pendingBombs[i].stacks * pendingBombs[i].damagePerStack;
+                bombBurst += pendingBombs[i].stacks * pendingBombs[i].damagePerStack;
                 pendingBombs.splice(i, 1);
             }
         }
-        bombDamage *= affinityMult;
+        detonationDamage += bombBurst * affinityMult;
 
-        const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
+        const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + detonationDamage;
         cumulativeDamage += totalRoundDamage;
         totalDirectRaw += directDamage;
         totalSecondaryRaw += secondaryDamage;
         totalConditionalRaw += conditionalDamage;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
-        totalBombRaw += bombDamage;
+        totalDetonationRaw += detonationDamage;
 
         // Report stacks after expiry (state going into next round)
         roundData.push({
@@ -519,7 +559,7 @@ function runSinglePass(params: {
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),
-            bombDamage: Math.round(bombDamage),
+            detonationDamage: Math.round(detonationDamage),
             totalRoundDamage: Math.round(totalRoundDamage),
             cumulativeDamage: Math.round(cumulativeDamage),
             activeCorrosionStacks: totalStacks(corrosionEntries),
@@ -559,7 +599,7 @@ function runSinglePass(params: {
             direct: totalDirectRaw,
             corrosion: totalCorrosionRaw,
             inferno: totalInfernoRaw,
-            bomb: totalBombRaw,
+            detonation: totalDetonationRaw,
             cumulative: cumulativeDamage,
             totalSecondary: totalSecondaryRaw,
             totalConditional: totalConditionalRaw,
@@ -659,7 +699,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalDirectDamage: Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
-            totalBombDamage: Math.round(rawTotals.bomb),
+            totalDetonationDamage: Math.round(rawTotals.detonation),
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
             totalConditionalDamage: Math.round(rawTotals.totalConditional),
         },

@@ -23,6 +23,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS Calculator now models skills that "extend active Damage Over Time effects by N turns" (e.g. Provider). Auto-detected from skill text and editable as a new ability type — active Corrosion/Inferno effects tick for longer, increasing their total damage (Bombs are unaffected).',
     'DPS Calculator now models attacks that "cannot critically hit" (e.g. several active/charged skills) — such damage no longer receives the crit multiplier. Auto-detected from skill text and editable as a per-damage-ability checkbox.',
     'DPS Calculator skill auto-fill now recognises effects gated on "when an ally inflicts a debuff" (e.g. Provider) as a new manual, team-dependent condition you can toggle in the editor.',
+    'DPS Calculator now supports negated enemy-type conditions — e.g. Lodolite\'s "when targeting non-Defenders". Auto-detected from skill text, with an "Enemy is NOT this type" toggle in the editor.',
+    'DPS Calculator skill auto-fill now parses "X% more critical damage [to <class>]" modifiers and gates effects "to enemies with/afflicted with <effect>" on the enemy having that effect — classified correctly as a debuff/DoT (e.g. Inferno, Concentrate Fire) or a buff (e.g. Stealth). This covers both the bonus-damage modifier and the damage itself (e.g. Incinerator\'s "100% damage to all enemies with Inferno", Lodolite\'s passive).',
+    'DPS Calculator skill auto-fill now gates buffs granted "after an ally is critically repaired" (e.g. Pallas) on a new manual, team-dependent condition you can toggle in the editor, instead of treating them as always active.',
+    'DPS Calculator now models DoT detonation — skills that "detonate Corrosion/Inferno/Bomb effects with N% of their power" (e.g. Incinerator, Crocus, Demolisher) consume the active DoTs and deal their remaining damage at once, scaled by the power %. Auto-detected from skill text and editable as a new ability type. Bomb bursts and detonations are now grouped together as "Detonation" damage (matching the game), replacing the separate "Bomb" damage line.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

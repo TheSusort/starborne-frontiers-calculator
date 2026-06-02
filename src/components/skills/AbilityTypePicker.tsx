@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     debuff: 'Debuff',
     dot: 'DoT',
     'extend-dot': 'Extend DoTs',
+    'detonate-dot': 'Detonate DoTs',
     charge: 'Charge',
     heal: 'Heal',
     shield: 'Shield',
@@ -24,7 +25,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
 
 const CATEGORIES: { label: string; types: AbilityType[] }[] = [
     { label: 'Damage', types: ['damage', 'additional-damage'] },
-    { label: 'Modify', types: ['modifier', 'buff', 'debuff', 'dot', 'extend-dot'] },
+    { label: 'Modify', types: ['modifier', 'buff', 'debuff', 'dot', 'extend-dot', 'detonate-dot'] },
     { label: 'Charge', types: ['charge'] },
     { label: 'Utility', types: ['heal', 'shield', 'cleanse', 'purge', 'control'] },
 ];

@@ -2136,10 +2136,10 @@ const DocumentationPage: React.FC = () => {
                                         editor modals. When you select a ship, its abilities are
                                         auto-filled from the skill text with all components: base
                                         damage, secondary damage, conditional scaling, charge gain,
-                                        DoTs, DoT extensions, and buffs/debuffs. All fields are
-                                        fully editable. Re-selecting a different ship into a slot
-                                        rebuilds that ship&apos;s abilities from its skill text,
-                                        replacing any manual edits.
+                                        DoTs, DoT extensions, DoT detonations, and buffs/debuffs.
+                                        All fields are fully editable. Re-selecting a different ship
+                                        into a slot rebuilds that ship&apos;s abilities from its
+                                        skill text, replacing any manual edits.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         When you select a ship, the calculator automatically

@@ -28,7 +28,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     const hasDoTs =
         simResult.summary.totalCorrosionDamage > 0 ||
         simResult.summary.totalInfernoDamage > 0 ||
-        simResult.summary.totalBombDamage > 0;
+        simResult.summary.totalDetonationDamage > 0;
 
     const critMultiplier = calculateCritMultiplier({
         attack: config.attack * (1 + attackerBuffTotals.attackBuff / 100),
@@ -119,9 +119,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                         </div>
                     </div>
                     <div className="text-center p-1 bg-dark-lighter rounded">
-                        <div className="text-xs text-red-400">Bomb</div>
+                        <div className="text-xs text-red-400">Detonation</div>
                         <div className="text-xs text-red-400">
-                            {simResult.summary.totalBombDamage.toLocaleString()}
+                            {simResult.summary.totalDetonationDamage.toLocaleString()}
                         </div>
                     </div>
                 </div>

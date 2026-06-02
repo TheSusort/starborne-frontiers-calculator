@@ -33,8 +33,11 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             // debuffs + DoTs, ignoring cond.buffName. A buffName on an enemy-debuff
             // condition is not a filter here — unlike self-buff/enemy-buff above.
             return ctx.enemyDebuffCount;
-        case 'enemy-type':
-            return ctx.enemyType && ctx.enemyType === cond.requiredEnemyType ? 1 : 0;
+        case 'enemy-type': {
+            if (!ctx.enemyType) return 0; // unknown type → cannot confirm either way
+            const matches = ctx.enemyType === cond.requiredEnemyType;
+            return (cond.negate ? !matches : matches) ? 1 : 0;
+        }
         case 'self-crit':
             // Returns probability 0..1 (effectiveCritRate / 100); used as expected-value multiplier.
             // As a gate (> 0), any crit chance counts as "met"; as a scaler, weights by probability.

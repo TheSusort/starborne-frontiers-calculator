@@ -10,6 +10,7 @@ export type AbilityType =
     | 'debuff'
     | 'dot'
     | 'extend-dot'
+    | 'detonate-dot'
     | 'charge'
     | 'heal'
     | 'shield'
@@ -39,7 +40,8 @@ export type ConditionSubject =
     | 'enemy-adjacent'
     | 'enemy-destroyed'
     | 'hp-threshold'
-    | 'ally-inflicts-debuff';
+    | 'ally-inflicts-debuff'
+    | 'ally-critically-repaired';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -47,6 +49,9 @@ export interface Condition {
     manualCount?: number;
     anyOf?: boolean;
     requiredEnemyType?: EnemyBaseClass;
+    // For 'enemy-type': when true, the gate means the enemy is NOT `requiredEnemyType`
+    // (e.g. "when targeting non-Defenders").
+    negate?: boolean;
     buffName?: string;
     hpComparator?: 'below' | 'above';
     hpPercent?: number;
@@ -107,6 +112,7 @@ export type AbilityConfig =
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
     | { type: 'extend-dot'; turns: number }
+    | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     | { type: 'charge'; amount: number }
     | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }
     | { type: 'cleanse' | 'purge'; count: number }

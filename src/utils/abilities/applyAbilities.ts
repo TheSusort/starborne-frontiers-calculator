@@ -140,3 +140,17 @@ export function extendDotTurnsFromSkill(skill: Skill | undefined): number {
     }
     return turns;
 }
+
+/** `detonate-dot` abilities on the skill, as {dotType, powerPct} pairs. */
+export function detonationsFromSkill(
+    skill: Skill | undefined
+): { dotType: 'corrosion' | 'inferno' | 'bomb'; powerPct: number }[] {
+    if (!skill) return [];
+    const out: { dotType: 'corrosion' | 'inferno' | 'bomb'; powerPct: number }[] = [];
+    for (const ability of skill.abilities) {
+        if (ability.config.type === 'detonate-dot') {
+            out.push({ dotType: ability.config.dotType, powerPct: ability.config.powerPct });
+        }
+    }
+    return out;
+}

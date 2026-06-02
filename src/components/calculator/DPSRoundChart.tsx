@@ -85,9 +85,9 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                                         Inf: {roundData.infernoDamage.toLocaleString()}
                                     </span>
                                 )}
-                                {roundData.bombDamage > 0 && (
+                                {roundData.detonationDamage > 0 && (
                                     <span className="ml-2" style={{ color: '#e74c3c' }}>
-                                        Bomb: {roundData.bombDamage.toLocaleString()}
+                                        Detonation: {roundData.detonationDamage.toLocaleString()}
                                     </span>
                                 )}
                             </div>

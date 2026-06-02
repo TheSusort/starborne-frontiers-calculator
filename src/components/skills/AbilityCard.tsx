@@ -28,6 +28,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     debuff: 'Debuff',
     dot: 'Damage over Time',
     'extend-dot': 'Extend DoTs',
+    'detonate-dot': 'Detonate DoTs',
     charge: 'Charge',
     heal: 'Heal',
     shield: 'Shield',
@@ -309,6 +310,29 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
                             updateConfig({ ...config, turns: toNumber(e.target.value) })
                         }
                     />
+                );
+
+            case 'detonate-dot':
+                return (
+                    <div className="flex flex-wrap gap-2">
+                        <Select
+                            label="Detonate DoT type"
+                            value={config.dotType}
+                            options={DOT_TYPE_OPTIONS}
+                            onChange={(value) =>
+                                updateConfig({ ...config, dotType: value as DoTType })
+                            }
+                        />
+                        <Input
+                            label="Power (%)"
+                            helpLabel="Consumes active DoTs of this type and deals their full remaining damage at once, scaled by this %. The payout is detonation damage."
+                            type="number"
+                            value={config.powerPct}
+                            onChange={(e) =>
+                                updateConfig({ ...config, powerPct: toNumber(e.target.value) })
+                            }
+                        />
+                    </div>
                 );
 
             case 'buff':
