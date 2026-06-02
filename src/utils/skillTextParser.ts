@@ -473,6 +473,17 @@ export function detectGrantConditions(
         return [{ subject: 'ally-critically-repaired', derivable: false }];
     }
 
+    // 0. Recurring grant: "gains X each/every turn|round" stacks unconditionally — a one-time gate
+    // in the same sentence (e.g. Shashou's "Stealth after damaging a Debuffer … and gains Blast
+    // each turn") applies to the other buff, not this one. Scope to this buff's own segment.
+    const buffStart = low.indexOf(buffName.toLowerCase());
+    if (buffStart !== -1) {
+        const afterBuff = clause
+            .slice(buffStart + buffName.length)
+            .split(/\b(?:and\s+)?(?:gains?|grants?|inflicts?|applies)\b/i)[0];
+        if (/\b(?:each|every)\s+(?:turn|round)\b/i.test(afterBuff)) return [];
+    }
+
     // 1a. negated enemy-type ("targeting non-Defenders") — checked before the positive form.
     const notType = NON_ENEMY_TYPE_RE.exec(clause);
     if (notType) {

@@ -1063,6 +1063,17 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('gates only the conditional buff, not a recurring per-turn grant in the same sentence (Shashou)', () => {
+        const text =
+            'This Unit gains <unit-skill>Stealth</unit-skill> for 3 turns after damaging a Debuffer or Supporter and gains 1 stack of <unit-skill>Blast</unit-skill> each turn.';
+        expect(detectGrantConditions(text, 'Stealth')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Debuffer', anyOf: true },
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Supporter', anyOf: true },
+        ]);
+        // "gains 1 stack of Blast each turn" is recurring/unconditional — no enemy-type gate.
+        expect(detectGrantConditions(text, 'Blast')).toEqual([]);
+    });
+
     it('recognises "when attacking a Defender" as an enemy-type gate (IonScorp)', () => {
         const text =
             'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';

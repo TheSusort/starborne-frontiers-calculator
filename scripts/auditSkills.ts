@@ -82,7 +82,11 @@ const hasModifier = (abilities: Ability[], channel: string) =>
     abilities.some((a) => a.config.type === 'modifier' && a.config.channel === channel);
 const ungatedEffects = (abilities: Ability[]) =>
     abilities.filter(
-        (a) => (a.config.type === 'buff' || a.config.type === 'debuff') && a.conditions.length === 0
+        (a) =>
+            (a.config.type === 'buff' || a.config.type === 'debuff') &&
+            a.conditions.length === 0 &&
+            // Recurring per-turn grants are unconditional by design (not a missing gate).
+            a.config.duration !== 'recurring'
     );
 
 interface Rule {
