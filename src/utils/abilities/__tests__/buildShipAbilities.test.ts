@@ -233,6 +233,29 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
+    it('Los passive: "30% more direct damage when its HP is below 50%" → self HP-gated modifier', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit deals <unit-damage>30% more Direct damage</unit-damage> when its HP is below 50%.<br />Additionally, this Unit starts combat fully charged.',
+        });
+        const mod = slot(buildShipAbilities(s).slots, 'passive')!.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+        expect(mod.target).toBe('self');
+        expect(mod.conditions).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 50,
+                hpSubject: 'self',
+            },
+        ]);
+    });
+
     it('Valerian passive: crit-power Corrosion extension gated by self-crit', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

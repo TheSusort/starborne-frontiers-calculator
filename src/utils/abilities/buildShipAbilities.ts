@@ -181,6 +181,26 @@ function enemyEffectConditions(names: string[]): Condition[] {
     });
 }
 
+/**
+ * Self/enemy HP-threshold condition from a modifier clause: "when its HP is below 50%" (Los) →
+ * self hp-threshold below 50. "below|above N% HP" / "HP is below|above N%" both match; the
+ * subject is enemy only when the clause references an enemy/target, else self.
+ */
+function hpThresholdFromSentence(sentence: string): Condition | null {
+    const m =
+        sentence.match(/\bhp\s+is\s+(below|above|under|over)\s+(\d+)\s*%/i) ??
+        sentence.match(/\b(below|above|under|over)\s+(\d+)\s*%\s*hp/i);
+    if (!m) return null;
+    const hpSubject = /\benem(?:y|ies)|target\b/i.test(sentence) ? 'enemy' : 'self';
+    return {
+        subject: 'hp-threshold',
+        derivable: true,
+        hpComparator: /below|under/i.test(m[1]) ? 'below' : 'above',
+        hpPercent: parseInt(m[2], 10),
+        hpSubject,
+    };
+}
+
 /** Extracts a "up to (a max of) Y%" cap from a clause, if present. */
 function capFromSentence(sentence: string): number | undefined {
     const m = sentence.match(/up to\s+(?:a\s+)?(?:max(?:imum)?\s+of\s+)?(\d+(?:\.\d+)?)%/i);
@@ -264,6 +284,8 @@ function parseModifiers(text: string): ParsedModifier[] {
                 conditions.push({ subject, buffName: 'Stealth', derivable: false });
             }
             conditions.push(...affectedByConditions(sentence));
+            const hpCond = hpThresholdFromSentence(sentence);
+            if (hpCond) conditions.push(hpCond);
             out.push({
                 channel: 'outgoingDamage',
                 value,
@@ -293,6 +315,8 @@ function parseModifiers(text: string): ParsedModifier[] {
                     typeM[1].slice(1).toLowerCase()) as EnemyBaseClass,
             });
         }
+        const critHpCond = hpThresholdFromSentence(clause);
+        if (critHpCond) conditions.push(critHpCond);
         out.push({
             channel: 'critDamage',
             value: parseFloat(critM[1]),
