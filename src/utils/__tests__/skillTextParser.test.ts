@@ -1003,6 +1003,30 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('recognises "when attacking a Defender" as an enemy-type gate (IonScorp)', () => {
+        const text =
+            'This Unit deals <unit-damage>190% damage</unit-damage>, but when attacking a Defender, it deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+        expect(detectGrantConditions(text, 'Disable')).toEqual([
+            { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
+        ]);
+    });
+
+    it('classifies "after dealing damage to an enemy with 2 or more debuffs" as enemy-debuff gte 2 (Bayah)', () => {
+        const text =
+            'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.';
+        expect(detectGrantConditions(text, 'Terran Bolster II')).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 2 },
+        ]);
+    });
+
+    it('classifies "After dealing Damage to an enemy with more than 2 Debuffs" as enemy-debuff gte 3 (Bizon)', () => {
+        const text =
+            'After dealing Damage to an enemy with more than 2 Debuffs, this Unit inflicts <unit-skill>Block Buff</unit-skill> for 1 turn.';
+        expect(detectGrantConditions(text, 'Block Buff')).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 3 },
+        ]);
+    });
+
     it('classifies "when applying a debuff" as an enemy-debuff presence gate (Yuyan)', () => {
         const text =
             'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.';

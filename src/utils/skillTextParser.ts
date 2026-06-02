@@ -355,7 +355,7 @@ const ENEMY_TYPE_WORD = /defender|attacker|debuffer|supporter/i;
 // Enemy-class lead-ins: "targeting a Defender", "damaging an Attacker",
 // "target is a Supporter", "against a Debuffer". Followed by a type (optionally "X or Y").
 const GRANT_ENEMY_TYPE_RE = new RegExp(
-    `(?:targeting|damaging|against|target is|enemy is)\\s+an?\\s+(${ENEMY_TYPE_WORD.source})(?:\\s+or\\s+(?:an?\\s+)?(${ENEMY_TYPE_WORD.source}))?`,
+    `(?:targeting|damaging|attacking|against|target is|enemy is)\\s+an?\\s+(${ENEMY_TYPE_WORD.source})(?:\\s+or\\s+(?:an?\\s+)?(${ENEMY_TYPE_WORD.source}))?`,
     'i'
 );
 
@@ -409,8 +409,17 @@ function countGateCondition(clause: string): Condition | null {
     if (!comparator || !kind) return null;
 
     const isDebuff = /debuff/.test(kind);
-    // Whose count: enemy when the enemy/target is referenced and "this Unit" is not.
-    const isEnemy = /\b(enem(?:y|ies)|target|targeted)\b/.test(low) && !/\bthis unit\b/.test(low);
+    // Whose count: the nearest subject mentioned BEFORE the count phrase. "an enemy with 2 or
+    // more debuffs" → enemy even when "this Unit" appears elsewhere (e.g. "this Unit gains X …
+    // after dealing damage to an enemy with N debuffs").
+    const before = low.slice(0, m?.index ?? 0);
+    const lastEnemy = Math.max(
+        before.lastIndexOf('enem'),
+        before.lastIndexOf('target'),
+        before.lastIndexOf('foe')
+    );
+    const lastSelf = before.lastIndexOf('this unit');
+    const isEnemy = lastEnemy > lastSelf;
     const subject: ConditionSubject = isDebuff
         ? isEnemy
             ? 'enemy-debuff'
@@ -454,7 +463,7 @@ export function detectGrantConditions(
     const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
     // Only conditional clauses produce conditions.
     if (
-        !/\b(when|if|while)\b|affected by|targeting|damaging|against/.test(low) &&
+        !/\b(when|if|while|after)\b|affected by|targeting|damaging|against/.test(low) &&
         !appliesDebuffGate &&
         !allyCritRepairGate
     )
