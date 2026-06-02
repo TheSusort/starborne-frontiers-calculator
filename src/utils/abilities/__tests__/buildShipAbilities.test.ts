@@ -233,6 +233,36 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
+    it('Obsidian charged: "increases Damage by 100% to enemies with less than 30% HP" → enemy-HP-gated modifier', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>250% Damage</unit-damage>, with additional Damage equal to <unit-damage>20%</unit-damage> of its max HP and increases <unit-damage>Damage by 100%</unit-damage> to enemies with less than <unit-damage>30%</unit-damage> HP.',
+            chargeSkillCharge: 3,
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        expect(abilityOfType(charged.abilities, 'damage')!.config).toMatchObject({
+            multiplier: 250,
+        });
+        expect(abilityOfType(charged.abilities, 'additional-damage')!.config).toMatchObject({
+            stat: 'hp',
+            pct: 20,
+        });
+        const mod = charged.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 100 });
+        expect(mod.target).toBe('self');
+        expect(mod.conditions).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 30,
+                hpSubject: 'enemy',
+            },
+        ]);
+    });
+
     it('Los passive: "30% more direct damage when its HP is below 50%" → self HP-gated modifier', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

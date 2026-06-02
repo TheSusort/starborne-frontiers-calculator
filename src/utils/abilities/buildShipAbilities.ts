@@ -187,15 +187,16 @@ function enemyEffectConditions(names: string[]): Condition[] {
  * subject is enemy only when the clause references an enemy/target, else self.
  */
 function hpThresholdFromSentence(sentence: string): Condition | null {
+    const cmp = '(below|under|less than|fewer than|above|over|more than|greater than)';
     const m =
-        sentence.match(/\bhp\s+is\s+(below|above|under|over)\s+(\d+)\s*%/i) ??
-        sentence.match(/\b(below|above|under|over)\s+(\d+)\s*%\s*hp/i);
+        sentence.match(new RegExp(`\\bhp\\s+is\\s+${cmp}\\s+(\\d+)\\s*%`, 'i')) ??
+        sentence.match(new RegExp(`\\b${cmp}\\s+(\\d+)\\s*%\\s*hp`, 'i'));
     if (!m) return null;
     const hpSubject = /\benem(?:y|ies)|target\b/i.test(sentence) ? 'enemy' : 'self';
     return {
         subject: 'hp-threshold',
         derivable: true,
-        hpComparator: /below|under/i.test(m[1]) ? 'below' : 'above',
+        hpComparator: /below|under|less|fewer/i.test(m[1]) ? 'below' : 'above',
         hpPercent: parseInt(m[2], 10),
         hpSubject,
     };
@@ -322,6 +323,26 @@ function parseModifiers(text: string): ParsedModifier[] {
             value: parseFloat(critM[1]),
             isMultiplicative: true,
             target: isAllyScoped ? 'all-allies' : 'self',
+            conditions,
+        });
+    }
+
+    // "increases Damage by N% [to enemies with <effect> / below X% HP]" → an outgoing-damage
+    // bonus (Obsidian's "increases Damage by 100% to enemies with less than 30% HP").
+    const incM = plain.match(/increases?\s+(?:direct\s+)?damage\s+by\s+(\d+(?:\.\d+)?)%/i);
+    if (incM) {
+        const sentence = sentenceContaining(plain, incM.index!);
+        const conditions: Condition[] = [];
+        if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
+            conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
+        }
+        const hpCond = hpThresholdFromSentence(sentence);
+        if (hpCond) conditions.push(hpCond);
+        out.push({
+            channel: 'outgoingDamage',
+            value: parseFloat(incM[1]),
+            isMultiplicative: true,
+            target: /friendly|all allies|allies/i.test(sentence) ? 'all-allies' : 'self',
             conditions,
         });
     }
