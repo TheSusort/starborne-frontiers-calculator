@@ -983,12 +983,13 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('recognises Taunt/Provoke self-status as anyOf self-buff conditions', () => {
+    it('classifies Taunt as enemy-buff and Provoke as self-debuff (anyOf)', () => {
+        // Taunt is a buff on the enemy (targeting); Provoke is a debuff on this Unit (targeting).
         const text =
             'If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill>.';
         expect(detectGrantConditions(text, 'Terran Guard III')).toEqual([
-            { subject: 'self-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-buff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
         ]);
     });
 

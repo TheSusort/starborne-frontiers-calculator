@@ -547,20 +547,31 @@ export function detectGrantConditions(
         return [{ subject: 'enemy-debuff', derivable: true }];
     }
 
-    // 5. Taunt / Provoke self-status (reactive → manual "assume active")
+    // 5. Taunt / Provoke targeting status (reactive → manual "assume active")
     const statuses: string[] = [];
     if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
     if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');
     if (statuses.length) {
-        return statuses.map((s) => ({
-            subject: 'self-buff' as const,
-            buffName: s,
-            derivable: false,
-            ...(statuses.length > 1 ? { anyOf: true } : {}),
-        }));
+        return statuses.map((s) => statusEffectCondition(s, statuses.length > 1));
     }
 
     return [];
+}
+
+/**
+ * Maps a targeting status to its model condition. Taunt is a buff on the ENEMY (it forces
+ * targeting); Provoke is a debuff on THIS unit. Both are manual (the user assumes the situation).
+ * Any other named status falls back to a manual self-buff.
+ */
+export function statusEffectCondition(name: string, anyOf = false): Condition {
+    const lower = name.toLowerCase();
+    const base =
+        lower === 'taunt'
+            ? { subject: 'enemy-buff' as const, buffName: 'Taunt' }
+            : lower === 'provoke'
+              ? { subject: 'self-debuff' as const, buffName: 'Provoke' }
+              : { subject: 'self-buff' as const, buffName: name };
+    return { ...base, derivable: false, ...(anyOf ? { anyOf: true } : {}) };
 }
 
 // "extends [active/all] Damage Over Time [(DoT)] effects by N turn(s)" — prolongs existing

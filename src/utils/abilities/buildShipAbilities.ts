@@ -31,6 +31,7 @@ import {
     parseDetonateDoT,
     parseSkillEffects,
     classifyEnemyEffect,
+    statusEffectCondition,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -125,7 +126,10 @@ function clauseContaining(plain: string, index: number): string {
     return plain.slice(start, end);
 }
 
-/** "when affected by Taunt or Provoke" → anyOf self-status conditions (manual "assume active"). */
+/**
+ * "when affected by Taunt or Provoke" → manual targeting-status conditions (anyOf). Taunt maps
+ * to an enemy buff, Provoke to a self debuff (see statusEffectCondition).
+ */
 function affectedByConditions(sentence: string): Condition[] {
     const m = sentence.match(
         /affected by\s+([A-Za-z][A-Za-z' ]*?)(?:\s+or\s+([A-Za-z][A-Za-z' ]*?))?(?=\s*[.,]|\s*$)/i
@@ -133,12 +137,7 @@ function affectedByConditions(sentence: string): Condition[] {
     if (!m) return [];
     return [m[1], m[2]]
         .filter((n): n is string => !!n)
-        .map((name) => ({
-            subject: 'self-buff' as const,
-            buffName: name.trim(),
-            derivable: false,
-            anyOf: true,
-        }));
+        .map((name) => statusEffectCondition(name.trim(), true));
 }
 
 /**
