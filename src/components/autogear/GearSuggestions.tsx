@@ -9,8 +9,7 @@ import { Ship } from '../../types/ship';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { StarToggleButton } from '../starred/StarToggleButton';
 import { HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
-import { STATS } from '../../constants/stats';
-import { StatName } from '../../types/stats';
+import { getLimitStatLabel } from '../../constants/stats';
 
 interface GearSuggestionsProps {
     suggestions: GearSuggestion[];
@@ -84,7 +83,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                     <ul className="list-disc pl-4 space-y-1">
                         {hardViolations.map((v, i) => (
                             <li key={i} className="text-red-100 text-sm">
-                                {STATS[v.stat as StatName]?.label ?? v.stat}: needed {v.kind}{' '}
+                                {getLimitStatLabel(v.stat)}: needed {v.kind}{' '}
                                 {v.limit.toLocaleString()}, got {v.actual.toFixed(1)}
                             </li>
                         ))}
