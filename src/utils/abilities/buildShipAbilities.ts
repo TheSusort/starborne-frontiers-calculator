@@ -393,12 +393,12 @@ function slotFor(label: string): SkillSlot | null {
 }
 
 /**
- * Helper to append abilities to a slot in the abilities map, creating the entry if needed.
+ * Helper to append positioned abilities to a slot in the abilities map, creating the entry if needed.
  */
 function pushToSlot(
-    bySlot: Map<SkillSlot, Ability[]>,
+    bySlot: Map<SkillSlot, PositionedAbility[]>,
     slot: SkillSlot,
-    abilities: Ability[]
+    abilities: PositionedAbility[]
 ): void {
     const existing = bySlot.get(slot);
     if (existing) existing.push(...abilities);
@@ -435,39 +435,62 @@ export function toCondition(
     return out;
 }
 
-function abilitiesFromText(text: string): Ability[] {
-    const out: Ability[] = [];
+/** A parsed ability together with its position anchor in the raw skill text. */
+interface PositionedAbility {
+    ability: Ability;
+    pos: number;
+}
+
+const MAX_POS = Number.MAX_SAFE_INTEGER;
+
+function abilitiesFromText(text: string): PositionedAbility[] {
+    // Build the list in construction order first (so out[0]?.type === 'damage' checks work
+    // for condition/scaling attachment). Positions are computed in parallel and applied
+    // at the END via a single stable sort — so construction order never leaks into the result.
+    const out: Array<{ ability: Ability; pos: number }> = [];
 
     const mult = parseSkillDamage(text);
+    const damagePos = text.search(/<unit-damage>/i);
     if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
         out.push({
-            id: nextId(),
-            type: 'damage',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: {
+            ability: {
+                id: nextId(),
                 type: 'damage',
-                multiplier: mult,
-                ...(hits !== undefined ? { hits } : {}),
-                ...(noCrit ? { noCrit: true } : {}),
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'damage',
+                    multiplier: mult,
+                    ...(hits !== undefined ? { hits } : {}),
+                    ...(noCrit ? { noCrit: true } : {}),
+                },
+                autoFilled: true,
             },
-            autoFilled: true,
+            pos: damagePos >= 0 ? damagePos : MAX_POS,
         });
     }
 
     const sec = parseSecondaryDamage(text);
     if (sec) {
+        // Position of the SECOND <unit-damage> tag (the one carrying the secondary %).
+        const firstDmgTag = '<unit-damage>';
+        const firstIdx = text.search(/<unit-damage>/i);
+        const secondIdx =
+            firstIdx >= 0 ? text.indexOf(firstDmgTag, firstIdx + firstDmgTag.length) : -1;
         out.push({
-            id: nextId(),
-            type: 'additional-damage',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
-            autoFilled: true,
+            ability: {
+                id: nextId(),
+                type: 'additional-damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'additional-damage', stat: sec.stat, pct: sec.pct },
+                autoFilled: true,
+            },
+            pos: secondIdx >= 0 ? secondIdx : firstIdx >= 0 ? firstIdx : MAX_POS,
         });
     }
 
@@ -475,8 +498,8 @@ function abilitiesFromText(text: string): Ability[] {
     // conditional (no base damage parsed) is intentionally dropped here — the
     // user adds it in the editor; auto-fill never crashes or mis-attaches it.
     const cond = parseConditionalDamage(text);
-    if (cond && out[0]?.type === 'damage') {
-        out[0].conditions = [
+    if (cond && out[0]?.ability.type === 'damage') {
+        out[0].ability.conditions = [
             toCondition(
                 cond.condition,
                 cond.derivable,
@@ -485,7 +508,7 @@ function abilitiesFromText(text: string): Ability[] {
                 text
             ),
         ];
-        out[0].scaling = {
+        out[0].ability.scaling = {
             conditionIndex: 0,
             perUnit: cond.pct,
             ...(cond.cap !== undefined ? { cap: cond.cap } : {}),
@@ -495,9 +518,9 @@ function abilitiesFromText(text: string): Ability[] {
     // "deals N% damage to enemies with less than X% HP" gates the damage on an enemy-HP
     // threshold (no scaling). Only when no conditional scaling was attached above.
     const hpGate = parseHpThresholdCondition(text);
-    if (hpGate && out[0]?.type === 'damage' && !out[0].scaling) {
-        out[0].conditions = [
-            ...out[0].conditions,
+    if (hpGate && out[0]?.ability.type === 'damage' && !out[0].ability.scaling) {
+        out[0].ability.conditions = [
+            ...out[0].ability.conditions,
             {
                 subject: 'hp-threshold',
                 derivable: true,
@@ -509,9 +532,9 @@ function abilitiesFromText(text: string): Ability[] {
 
     // "when an ally inflicts a debuff, this Unit deals N% damage" — gate the damage on the
     // manual, team-dependent ally-inflicts-debuff trigger (Provider).
-    if (parseAllyInflictsDebuff(text) && out[0]?.type === 'damage') {
-        out[0].conditions = [
-            ...out[0].conditions,
+    if (parseAllyInflictsDebuff(text) && out[0]?.ability.type === 'damage') {
+        out[0].ability.conditions = [
+            ...out[0].ability.conditions,
             { subject: 'ally-inflicts-debuff', derivable: false },
         ];
     }
@@ -519,34 +542,45 @@ function abilitiesFromText(text: string): Ability[] {
     // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
     // having that effect (Incinerator's "100% damage to all enemies with Inferno").
     const damageEffects = damageEnemyEffectNamesFromClause(text);
-    if (damageEffects.length && out[0]?.type === 'damage') {
-        out[0].conditions = [...out[0].conditions, ...enemyEffectConditions(damageEffects)];
+    if (damageEffects.length && out[0]?.ability.type === 'damage') {
+        out[0].ability.conditions = [
+            ...out[0].ability.conditions,
+            ...enemyEffectConditions(damageEffects),
+        ];
     }
 
     const extendTurns = parseExtendDoT(text);
     if (extendTurns) {
+        const extendPos = text.search(/extend/i);
         out.push({
-            id: nextId(),
-            type: 'extend-dot',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: { type: 'extend-dot', turns: extendTurns },
-            autoFilled: true,
+            ability: {
+                id: nextId(),
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'extend-dot', turns: extendTurns },
+                autoFilled: true,
+            },
+            pos: extendPos >= 0 ? extendPos : MAX_POS,
         });
     }
 
     // Crit-power-chance extension (Valerian self-crit; Belladonna ally-inflicts → team).
     const critExtend = parseCritPowerExtend(text);
     if (critExtend) {
+        const critExtendPos = text.search(/extend/i);
         out.push({
-            id: nextId(),
-            type: 'extend-dot',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [critExtend.condition],
-            config: { type: 'extend-dot', turns: critExtend.turns, chanceFromCritPower: true },
-            autoFilled: true,
+            ability: {
+                id: nextId(),
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [critExtend.condition],
+                config: { type: 'extend-dot', turns: critExtend.turns, chanceFromCritPower: true },
+                autoFilled: true,
+            },
+            pos: critExtendPos >= 0 ? critExtendPos : MAX_POS,
         });
     }
 
@@ -556,94 +590,114 @@ function abilitiesFromText(text: string): Ability[] {
         for (const eff of parseSkillEffects(text, 'active')) {
             const info = DOT_TIER_MAP[eff.buffName];
             if (!info) continue;
+            const allyCritDotPos = text.indexOf(eff.buffName);
             out.push({
-                id: nextId(),
-                type: 'dot',
-                target: 'enemy',
-                trigger: 'on-cast',
-                conditions: [{ subject: 'ally-crit-dot', derivable: false }],
-                config: {
+                ability: {
+                    id: nextId(),
                     type: 'dot',
-                    dotType: info.type,
-                    tier: info.tier,
-                    stacks: eff.stacks ?? 1,
-                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [{ subject: 'ally-crit-dot', derivable: false }],
+                    config: {
+                        type: 'dot',
+                        dotType: info.type,
+                        tier: info.tier,
+                        stacks: eff.stacks ?? 1,
+                        duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                    },
+                    autoFilled: true,
                 },
-                autoFilled: true,
+                pos: allyCritDotPos >= 0 ? allyCritDotPos : MAX_POS,
             });
         }
     }
 
     const detonate = parseDetonateDoT(text);
     if (detonate) {
+        const detonatePos = text.search(/detonat/i);
         out.push({
-            id: nextId(),
-            type: 'detonate-dot',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: {
+            ability: {
+                id: nextId(),
                 type: 'detonate-dot',
-                dotType: detonate.dotType,
-                powerPct: detonate.powerPct,
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'detonate-dot',
+                    dotType: detonate.dotType,
+                    powerPct: detonate.powerPct,
+                },
+                autoFilled: true,
             },
-            autoFilled: true,
+            pos: detonatePos >= 0 ? detonatePos : MAX_POS,
         });
     }
 
     const accumulate = parseAccumulateDetonate(text);
     if (accumulate) {
+        const accumulatePos = text.search(/echoing burst/i);
         out.push({
-            id: nextId(),
-            type: 'accumulate-detonate',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: {
+            ability: {
+                id: nextId(),
                 type: 'accumulate-detonate',
-                turns: accumulate.turns,
-                pct: accumulate.pct,
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'accumulate-detonate',
+                    turns: accumulate.turns,
+                    pct: accumulate.pct,
+                },
+                autoFilled: true,
             },
-            autoFilled: true,
+            pos: accumulatePos >= 0 ? accumulatePos : MAX_POS,
         });
     }
 
     const charge = parseChargeGain(text);
     if (charge) {
+        const chargePos = text.search(/charge/i);
         out.push({
-            id: nextId(),
-            type: 'charge',
-            target: 'self',
-            trigger: 'on-cast',
-            conditions: [
-                toCondition(
-                    charge.condition,
-                    charge.derivable,
-                    charge.manualCount,
-                    charge.requiredEnemyType,
-                    text
-                ),
-            ],
-            config: { type: 'charge', amount: charge.amount },
-            autoFilled: true,
+            ability: {
+                id: nextId(),
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [
+                    toCondition(
+                        charge.condition,
+                        charge.derivable,
+                        charge.manualCount,
+                        charge.requiredEnemyType,
+                        text
+                    ),
+                ],
+                config: { type: 'charge', amount: charge.amount },
+                autoFilled: true,
+            },
+            pos: chargePos >= 0 ? chargePos : MAX_POS,
         });
     }
 
+    const modifierPos = text.search(/more|increase|penetration/i);
     for (const modifier of parseModifiers(text)) {
         out.push({
-            id: nextId(),
-            type: 'modifier',
-            target: modifier.target,
-            trigger: 'on-cast',
-            conditions: modifier.conditions,
-            ...(modifier.scaling ? { scaling: modifier.scaling } : {}),
-            config: {
+            ability: {
+                id: nextId(),
                 type: 'modifier',
-                channel: modifier.channel,
-                value: modifier.value,
-                isMultiplicative: modifier.isMultiplicative,
+                target: modifier.target,
+                trigger: 'on-cast',
+                conditions: modifier.conditions,
+                ...(modifier.scaling ? { scaling: modifier.scaling } : {}),
+                config: {
+                    type: 'modifier',
+                    channel: modifier.channel,
+                    value: modifier.value,
+                    isMultiplicative: modifier.isMultiplicative,
+                },
+                autoFilled: true,
             },
-            autoFilled: true,
+            pos: modifierPos >= 0 ? modifierPos : MAX_POS,
         });
     }
 
@@ -698,17 +752,22 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     const dotsForSlot = (slot: SkillSlot): DoTApplicationEntry[] =>
         slot === 'active' ? activeDoTs : slot === 'charged' ? chargedDoTs : [];
 
-    const bySlot = new Map<SkillSlot, Ability[]>();
+    const bySlot = new Map<SkillSlot, PositionedAbility[]>();
     for (const row of getShipSkillRows(ship)) {
         const slot = slotFor(row.label);
         if (!slot) continue;
-        const abilities = abilitiesFromText(row.text);
-        pushToSlot(bySlot, slot, abilities);
+        const positioned = abilitiesFromText(row.text);
+        pushToSlot(bySlot, slot, positioned);
     }
 
     // Merge ship-level DoTs into their slots (creating the slot entry if needed).
+    // Position anchor: index of the DoT type name (e.g. "Corrosion", "Inferno") in the row text.
     for (const slot of ['active', 'charged'] as const) {
-        const dots = dotsForSlot(slot).map(dotAbility);
+        const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
+        const dots = dotsForSlot(slot).map((entry) => {
+            const pos = rowText.search(new RegExp(entry.type, 'i'));
+            return { ability: dotAbility(entry), pos: pos >= 0 ? pos : MAX_POS };
+        });
         if (!dots.length) continue;
         pushToSlot(bySlot, slot, dots);
     }
@@ -723,12 +782,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const slot = slotForBuffSource(buff.skillSource);
         // Attach a gating condition parsed from the buff's clause (e.g. Thresh's
         // "When targeting a Defender, … gains Crit Power Up II" → enemy-type Defender).
-        const rowText = getSkillRowForSlot(ship, slot)?.text;
+        const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
         const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
         if (conditions.length) {
             ability.conditions = conditions;
         }
-        pushToSlot(bySlot, slot, [ability]);
+        // Position anchor: index of the buff name in the row text (order-irrelevant for
+        // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
+        const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
     for (const buff of selfBuffs) mergeBuff(buff, 'self');
     // Accumulate-and-detonate effects (e.g. Echoing Burst) are represented by their own
@@ -739,9 +801,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         mergeBuff(buff, 'enemy');
     }
 
+    // Sort each slot's abilities by their text position (stable sort preserves insertion
+    // order for ties). This is the ONLY sort — construction order inside abilitiesFromText
+    // is preserved during condition/scaling attachment and only reordered here.
     const slots: Skill[] = [];
-    for (const [slot, abilities] of bySlot) {
-        if (abilities.length) slots.push({ slot, abilities });
+    for (const [slot, positioned] of bySlot) {
+        if (!positioned.length) continue;
+        positioned.sort((a, b) => a.pos - b.pos);
+        slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }
     return { slots };
 }

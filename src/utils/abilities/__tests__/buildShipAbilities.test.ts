@@ -720,4 +720,30 @@ describe('buildShipAbilities', () => {
             { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
         ]);
     });
+
+    describe('text-order emission', () => {
+        it('emits a dot BEFORE the damage ability when the DoT comes first in the skill text', () => {
+            const s = ship({
+                activeSkillText:
+                    'Inflicts 2 <unit-skill>Corrosion II</unit-skill> for 2 turns, then deals <unit-damage>90%</unit-damage> damage.',
+            });
+            const skills = buildShipAbilities(s);
+            const active = skills.slots.find((sl) => sl.slot === 'active')!;
+            const types = active.abilities.map((a) => a.type);
+            expect(types.indexOf('dot')).toBeGreaterThanOrEqual(0);
+            expect(types.indexOf('damage')).toBeGreaterThanOrEqual(0);
+            expect(types.indexOf('dot')).toBeLessThan(types.indexOf('damage'));
+        });
+
+        it('keeps damage first when it precedes the DoT in text', () => {
+            const s = ship({
+                activeSkillText:
+                    'Deals <unit-damage>90%</unit-damage> damage and inflicts 2 <unit-skill>Corrosion II</unit-skill> for 2 turns.',
+            });
+            const skills = buildShipAbilities(s);
+            const active = skills.slots.find((sl) => sl.slot === 'active')!;
+            const types = active.abilities.map((a) => a.type);
+            expect(types.indexOf('damage')).toBeLessThan(types.indexOf('dot'));
+        });
+    });
 });
