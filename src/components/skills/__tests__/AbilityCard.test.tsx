@@ -64,6 +64,46 @@ describe('AbilityCard', () => {
         expect(onRemove).toHaveBeenCalled();
     });
 
+    describe('sim-coverage notices', () => {
+        const heal: Ability = {
+            id: 'a1',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 20, basis: 'hp' },
+        };
+        const dot: Ability = {
+            id: 'a2',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+        };
+
+        it('shows a not-simulated note for utility types', () => {
+            render(<AbilityCard ability={heal} onChange={() => {}} onRemove={() => {}} />);
+            expect(screen.getByText(/not simulated in the dps calculator/i)).toBeInTheDocument();
+        });
+
+        it('warns when a firing-only type sits on the passive slot', () => {
+            render(
+                <AbilityCard ability={dot} slot="passive" onChange={() => {}} onRemove={() => {}} />
+            );
+            expect(screen.getByText(/not simulated on the passive slot/i)).toBeInTheDocument();
+        });
+
+        it('does not warn for the same type on the active slot', () => {
+            render(
+                <AbilityCard ability={dot} slot="active" onChange={() => {}} onRemove={() => {}} />
+            );
+            expect(
+                screen.queryByText(/not simulated on the passive slot/i)
+            ).not.toBeInTheDocument();
+        });
+    });
+
     it('reconstructs picker value from config.buffName and shows selected buff', () => {
         const buffAbilityWithName: Ability = {
             ...buffAbility,
