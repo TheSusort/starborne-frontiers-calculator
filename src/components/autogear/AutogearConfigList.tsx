@@ -3,7 +3,7 @@ import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/aut
 import { GEAR_SETS, ShipTypeName } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { STATS } from '../../constants/stats';
+import { STATS, getLimitStatLabel } from '../../constants/stats';
 import { StatName } from '../../types/stats';
 
 interface AutogearConfigListProps {
@@ -80,7 +80,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                                 {priority.maxLimit && (
                                     <span>{'max ' + priority.maxLimit}</span>
                                 )}{' '}
-                                {STATS[priority.stat]?.label || priority.stat}
+                                {getLimitStatLabel(priority.stat)}
                                 {priority.hardRequirement && <span> (strict)</span>}
                             </span>
                         ))}

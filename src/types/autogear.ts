@@ -1,9 +1,9 @@
 import type { ShipTypeName } from '../constants/shipTypes';
 import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
-import { StatName } from './stats';
+import { StatName, LimitableStat } from './stats';
 
 export interface StatPriority {
-    stat: StatName;
+    stat: LimitableStat;
     weight?: number;
     minLimit?: number;
     maxLimit?: number;

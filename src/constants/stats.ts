@@ -1,4 +1,4 @@
-import type { StatName, StatType } from '../types/stats';
+import type { StatName, StatType, LimitableStat, DerivedStatName } from '../types/stats';
 import { GearSlotName } from './gearTypes';
 
 const MAX_FLAT_VALUE = 5000;
@@ -134,5 +134,20 @@ export const STAT_NORMALIZERS: Record<string, number> = {
     critChance: 25, // Normalize around 25%
     critDamage: 50, // Normalize around 50%
     speed: 100, // Normalize around 100
+    effectiveHp: 30000, // effectiveHP runs ~1.3-5x raw hp; normalize above hp's 10k
     // Add other stats as needed
 };
+
+// Labels for derived limit stats (not present in STATS, which is keyed by StatName).
+export const DERIVED_STAT_LABELS: Record<DerivedStatName, { label: string; shortLabel: string }> = {
+    effectiveHp: { label: 'Effective HP', shortLabel: 'EHP' },
+};
+
+/** Display label for any limitable stat, including derived ones. */
+export function getLimitStatLabel(stat: LimitableStat): string {
+    return (
+        STATS[stat as StatName]?.label ??
+        DERIVED_STAT_LABELS[stat as DerivedStatName]?.label ??
+        stat
+    );
+}
