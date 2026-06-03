@@ -1313,7 +1313,9 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text">
                                         Define minimum and maximum values for specific stats. The
                                         algorithm will try to keep stats within these ranges while
-                                        optimizing the overall build.
+                                        optimizing the overall build. You can also limit{' '}
+                                        <strong>Effective HP</strong> — a derived survivability
+                                        value combining HP, Defense, and damage reduction.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Each row has an <strong>Edit</strong> button (opens the form
