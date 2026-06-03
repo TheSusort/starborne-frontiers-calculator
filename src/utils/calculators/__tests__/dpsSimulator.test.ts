@@ -1803,6 +1803,11 @@ describe('simulateDPS', () => {
                 hacking: 173,
                 enemySecurity: 100,
                 rounds: 30,
+                // DoTs so the partial landing chance (0.73) actually feeds the summary —
+                // exercises BOTH the crit and landing accumulators, not just crit.
+                activeDoTs: [
+                    { id: 'd', type: 'corrosion' as const, tier: 6, stacks: 1, duration: 2 },
+                ],
             };
             expect(simulateDPS(input).summary).toEqual(simulateDPS(input).summary);
         });
