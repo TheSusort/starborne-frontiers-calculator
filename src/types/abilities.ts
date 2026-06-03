@@ -41,6 +41,13 @@ export type ConditionSubject =
     | 'enemy-adjacent'
     | 'enemy-destroyed'
     | 'hp-threshold'
+    // HP-percentage COUNT subjects: the count IS the enemy's current (or missing)
+    // HP percentage (0..100), for HP-proportional scaling — Akula ("up to 30% more,
+    // the higher the target's HP") scales on enemy-hp-pct with perUnit 0.3; Tithonus
+    // ("up to 40%, max below 10% HP") on enemy-hp-missing-pct with perUnit 40/90 +
+    // cap 40. Distinct from 'hp-threshold', which is a binary above/below gate.
+    | 'enemy-hp-pct'
+    | 'enemy-hp-missing-pct'
     | 'ally-inflicts-debuff'
     | 'ally-critically-repaired'
     | 'ally-crit-dot'

@@ -290,3 +290,19 @@ describe('binary roundCrit', () => {
         expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70 }))).toBe(0.7);
     });
 });
+
+describe('HP-percentage count subjects', () => {
+    it('enemy-hp-pct counts the enemy HP percentage', () => {
+        const c = cond({ subject: 'enemy-hp-pct' });
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 100 }))).toBe(100);
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 42 }))).toBe(42);
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 0 }))).toBe(0);
+    });
+
+    it('enemy-hp-missing-pct counts the missing percentage', () => {
+        const c = cond({ subject: 'enemy-hp-missing-pct' });
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 100 }))).toBe(0);
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 30 }))).toBe(70);
+        expect(evaluateCondition(c, ctx({ enemyHpPct: 0 }))).toBe(100);
+    });
+});

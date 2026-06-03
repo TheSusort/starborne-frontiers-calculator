@@ -232,6 +232,38 @@ function forEachCondition(sentence: string): Condition | null {
 }
 
 /**
+ * Detects an HP-proportional "up to X%" bonus: the value scales linearly with the
+ * target's CURRENT HP% (Akula — "based on the target's current HP percentage; the
+ * higher the percentage, the more") or MISSING HP% (Tithonus — "based on the
+ * target's missing HP, with the maximum achieved when the target is below 10% HP").
+ * Returns the count condition + scaling rule (perUnit per HP point, capped at the
+ * full value), or null when the sentence has no HP-proportional phrasing. The
+ * "below N% HP" anchor in the missing-HP form sets where the maximum is reached
+ * (perUnit = value / (100 − N)); it is NOT an hp-threshold gate.
+ */
+function hpProportionalScaling(
+    sentence: string,
+    value: number
+): { condition: Condition; scaling: ScalingRule } | null {
+    if (/based on the target'?s?\s+current\s+hp/i.test(sentence)) {
+        return {
+            condition: { subject: 'enemy-hp-pct', derivable: true },
+            scaling: { conditionIndex: 0, perUnit: value / 100, cap: value },
+        };
+    }
+    if (/based on the target'?s?\s+missing\s+hp/i.test(sentence)) {
+        const anchorM = sentence.match(/maximum[^.;]*below\s+(\d+(?:\.\d+)?)\s*%\s*hp/i);
+        const anchor = anchorM ? parseFloat(anchorM[1]) : 0;
+        const span = Math.max(1, 100 - anchor);
+        return {
+            condition: { subject: 'enemy-hp-missing-pct', derivable: true },
+            scaling: { conditionIndex: 0, perUnit: value / span, cap: value },
+        };
+    }
+    return null;
+}
+
+/**
  * Detects passive output/stat modifiers in a skill's text. Handles:
  *  - "X% more (direct) damage" → outgoing-damage modifier (self, or all-allies when
  *    "friendly/allies" scoped), gated by a Stealth or "affected by …" condition.
@@ -251,7 +283,20 @@ function parseModifiers(text: string): ParsedModifier[] {
         const isAllyScoped = /friendly|all allies|allies/i.test(sentence);
         const target: AbilityTarget = isAllyScoped ? 'all-allies' : 'self';
         const value = parseFloat(moreM[1]);
-        if (/for each/i.test(sentence)) {
+        const hpScaling = hpProportionalScaling(sentence, value);
+        if (hpScaling) {
+            // "up to X% more damage based on the target's current/missing HP" —
+            // Tithonus-style HP-proportional bonus (the "below N% HP" anchor in the
+            // sentence is the scaling maximum, NOT an hp-threshold gate).
+            out.push({
+                channel: 'outgoingDamage',
+                value: 0,
+                isMultiplicative: true,
+                target,
+                conditions: [hpScaling.condition],
+                scaling: hpScaling.scaling,
+            });
+        } else if (/for each/i.test(sentence)) {
             // "X% more damage for each <thing>" → scaling modifier (skip if uncountable).
             const countCond = forEachCondition(sentence);
             if (countCond) {
@@ -329,26 +374,43 @@ function parseModifiers(text: string): ParsedModifier[] {
     }
 
     // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
-    // → an outgoing-damage bonus (Obsidian; Akula's HP-scaling "up to 30%" is modelled flat at its
-    // max, since the sim treats the enemy as full HP).
+    // → an outgoing-damage bonus (Obsidian). HP-proportional phrasings (Akula's "up to 30%
+    // based on the target's current HP percentage") become a scaling modifier on the live
+    // enemy-hp-pct count — the sim derives enemy HP from cumulative damage per round.
     const incM = plain.match(
         /increases?\s+(?:outgoing\s+)?(?:direct\s+)?damage\s+by\s+(?:up\s+to\s+)?(\d+(?:\.\d+)?)%/i
     );
     if (incM) {
         const sentence = sentenceContaining(plain, incM.index!);
-        const conditions: Condition[] = [];
-        if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
-            conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
+        const incValue = parseFloat(incM[1]);
+        const incTarget: AbilityTarget = /friendly|all allies|allies/i.test(sentence)
+            ? 'all-allies'
+            : 'self';
+        const incHpScaling = hpProportionalScaling(sentence, incValue);
+        if (incHpScaling) {
+            out.push({
+                channel: 'outgoingDamage',
+                value: 0,
+                isMultiplicative: true,
+                target: incTarget,
+                conditions: [incHpScaling.condition],
+                scaling: incHpScaling.scaling,
+            });
+        } else {
+            const conditions: Condition[] = [];
+            if (/\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)) {
+                conditions.push(...enemyEffectConditions(enemyEffectNamesFromClause(text)));
+            }
+            const hpCond = hpThresholdFromSentence(sentence);
+            if (hpCond) conditions.push(hpCond);
+            out.push({
+                channel: 'outgoingDamage',
+                value: incValue,
+                isMultiplicative: true,
+                target: incTarget,
+                conditions,
+            });
         }
-        const hpCond = hpThresholdFromSentence(sentence);
-        if (hpCond) conditions.push(hpCond);
-        out.push({
-            channel: 'outgoingDamage',
-            value: parseFloat(incM[1]),
-            isMultiplicative: true,
-            target: /friendly|all allies|allies/i.test(sentence) ? 'all-allies' : 'self',
-            conditions,
-        });
     }
 
     const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);

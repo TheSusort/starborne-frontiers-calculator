@@ -24,6 +24,8 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'enemy-adjacent',
     'enemy-destroyed',
     'hp-threshold',
+    'enemy-hp-pct',
+    'enemy-hp-missing-pct',
     'ally-inflicts-debuff',
     'ally-critically-repaired',
     'ally-crit-dot',
@@ -35,6 +37,8 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     always: 'Always',
     'self-debuff': 'per debuff on this unit',
     'hp-threshold': 'when HP crosses a threshold',
+    'enemy-hp-pct': "per point of the enemy's current HP %",
+    'enemy-hp-missing-pct': "per point of the enemy's missing HP %",
     'ally-inflicts-debuff': 'when an ally inflicts a debuff',
     'ally-critically-repaired': 'after an ally is critically repaired',
     'ally-crit-dot': 'when an ally crits with a DoT',
@@ -84,6 +88,8 @@ const COUNT_SUBJECTS: ConditionSubject[] = [
     'adjacent-ally',
     'enemy-adjacent',
     'enemy-destroyed',
+    'enemy-hp-pct',
+    'enemy-hp-missing-pct',
 ];
 
 const COUNT_COMPARATOR_OPTIONS = [

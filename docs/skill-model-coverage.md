@@ -62,6 +62,7 @@ round (as `modifierCtx` and `ctx`), both **before Step-3 DoT application**.
 | `enemy-type` | ✅ (incl. negation, anyOf OR-lists) | global page-level `enemyType` | real | ✅ |
 | `self-crit` | ✅ | binary per-round outcome from deterministic crit schedule (in payload ctx); `effectiveCritRate / 100` probability in modifier ctx | real | ✅ |
 | `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct` fixed 100; `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self fixed 100, enemy live | ✅ enemy HP-threshold gates now switch mid-fight; self remains fixed |
+| `enemy-hp-pct` / `enemy-hp-missing-pct` | ✅ (`hpProportionalScaling`: "up to X% based on the target's current/missing HP" — Akula/Tithonus) | count = live `enemyHpPct` (or `100 −` it) | real | ✅ HP-proportional scaling modifiers track the declining pool |
 | `adjacent-ally` | ✅ (for-each scaling) | `adjacentAllyCount` | **0** | ❌ manual only |
 | `enemy-adjacent` | ✅ (charge classifier) | `enemyAdjacentCount` | **0** | ❌ manual only |
 | `enemy-destroyed` | ✅ (for-each, Judge) | `enemyDestroyedCount` | **0** | ❌ manual only |

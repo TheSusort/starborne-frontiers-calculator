@@ -263,8 +263,9 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
-    it('Akula passive: "increases outgoing direct damage by up to 30%" → flat +30% modifier', () => {
-        // Enemy is assumed at full HP, so the HP-scaling bonus is at its max — modelled flat.
+    it('Akula passive (R2 text): HP-proportional scaling modifier, not a flat +30%', () => {
+        // Was modelled flat at max while the sim assumed full enemy HP; enemy HP now
+        // declines per round, so the bonus scales on the live enemy-hp-pct count.
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
@@ -274,9 +275,11 @@ describe('buildShipAbilities', () => {
         const mod = slot(buildShipAbilities(s).slots, 'passive')!.abilities.find(
             (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
         )!;
-        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 0 });
         expect(mod.target).toBe('self');
-        expect(mod.conditions).toEqual([]);
+        expect(mod.conditions[0]).toMatchObject({ subject: 'enemy-hp-pct', derivable: true });
+        expect(mod.scaling!.perUnit).toBeCloseTo(0.3);
+        expect(mod.scaling!.cap).toBe(30);
     });
 
     it('Crucialis active: base damage + self-crit conditional bonus', () => {
@@ -781,6 +784,48 @@ describe('buildShipAbilities', () => {
                 subject: 'enemy-type',
                 requiredEnemyType: 'Supporter',
             });
+        });
+    });
+
+    describe('HP-proportional modifiers (Akula / Tithonus)', () => {
+        it('Akula passive: outgoing damage scaling with CURRENT enemy HP% (up to 30%)', () => {
+            const akula = ship({
+                firstPassiveSkillText:
+                    "This Unit's attacks don't break <unit-skill>Stasis</unit-skill>. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+            });
+            const { slots } = buildShipAbilities(akula);
+            const mod = abilityOfType(slot(slots, 'passive')!.abilities, 'modifier');
+            expect(mod).toMatchObject({
+                config: { type: 'modifier', channel: 'outgoingDamage', value: 0 },
+            });
+            expect(mod!.conditions[0]).toMatchObject({
+                subject: 'enemy-hp-pct',
+                derivable: true,
+            });
+            expect(mod!.scaling!.conditionIndex).toBe(0);
+            expect(mod!.scaling!.perUnit).toBeCloseTo(0.3); // 30 / 100 HP points
+            expect(mod!.scaling!.cap).toBe(30);
+        });
+
+        it('Tithonus passive: more-damage scaling with MISSING enemy HP, max below 10%', () => {
+            const tithonus = ship({
+                firstPassiveSkillText:
+                    "This Unit <unit-aid>gains 1 extra action</unit-aid> after it <unit-aid>purges</unit-aid> at least 4 <unit-aid>buffs</unit-aid> with a single skill.<br /><br />This Unit gains up to <unit-damage>40% more direct damage</unit-damage> based on the target's missing HP, with the maximum achieved when the target is below 10% HP.",
+            });
+            const { slots } = buildShipAbilities(tithonus);
+            const mod = abilityOfType(slot(slots, 'passive')!.abilities, 'modifier');
+            expect(mod).toMatchObject({
+                config: { type: 'modifier', channel: 'outgoingDamage', value: 0 },
+            });
+            expect(mod!.conditions[0]).toMatchObject({
+                subject: 'enemy-hp-missing-pct',
+                derivable: true,
+            });
+            // max at 90 missing points → 40/90 per point, capped at 40
+            expect(mod!.scaling!.perUnit).toBeCloseTo(40 / 90);
+            expect(mod!.scaling!.cap).toBe(40);
+            // the "below 10% HP" anchor must NOT also become an hp-threshold gate
+            expect(mod!.conditions).toHaveLength(1);
         });
     });
 

@@ -2060,6 +2060,65 @@ describe('simulateDPS', () => {
             expect(result.rounds[0].activeCorrosionStacks).toBeGreaterThan(0);
         });
 
+        it('HP-proportional modifier shrinks as the enemy pool depletes (Akula)', () => {
+            // Akula passive: "+up to 30% outgoing damage based on the target's CURRENT
+            // HP%" → modifier scaling 0.3/HP-point, cap 30, on enemy-hp-pct.
+            // 30k pool, base hit 10000:
+            //  r1: hp 100%   → +30%   → 13000   (cum 13000)
+            //  r2: hp 56.67% → +17%   → 11700   (cum 24700)
+            //  r3: hp 17.67% → +5.3%  → 10530   (cum 35230 ≥ pool)
+            //  r4+: hp 0%    → +0%    → 10000
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                enemyHp: 30000,
+                rounds: 5,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'a',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: { type: 'damage', multiplier: 100 },
+                                },
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                {
+                                    id: 'akula-mod',
+                                    type: 'modifier',
+                                    target: 'self',
+                                    trigger: 'on-cast',
+                                    conditions: [{ subject: 'enemy-hp-pct', derivable: true }],
+                                    scaling: { conditionIndex: 0, perUnit: 0.3, cap: 30 },
+                                    config: {
+                                        type: 'modifier',
+                                        channel: 'outgoingDamage',
+                                        value: 0,
+                                        isMultiplicative: true,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            expect(result.rounds.map((r) => r.directDamage)).toEqual([
+                13000, 11700, 10530, 10000, 10000,
+            ]);
+        });
+
         it('passive-slot damage hits fire when their gate passes (Judge)', () => {
             // Judge passive: "At the start of the round, this Unit deals 60% damage to
             // all enemies with less than 50% HP." Active: plain 230%.

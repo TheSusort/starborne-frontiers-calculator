@@ -55,6 +55,13 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyDestroyedCount;
         case 'hp-threshold':
             return evalHpThreshold(cond, ctx) ? 1 : 0;
+        // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as
+        // SCALING sources for HP-proportional modifiers (Akula/Tithonus) — perUnit
+        // is "per HP point". As a bare gate they pass while the enemy lives.
+        case 'enemy-hp-pct':
+            return ctx.enemyHpPct;
+        case 'enemy-hp-missing-pct':
+            return 100 - ctx.enemyHpPct;
         default:
             return 0;
     }
