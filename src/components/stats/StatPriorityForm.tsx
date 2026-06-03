@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Input, Select, Tooltip } from '../ui';
-import { StatName } from '../../types/stats';
+import { LimitableStat } from '../../types/stats';
 import { StatPriority } from '../../types/autogear';
-import { STATS } from '../../constants/stats';
+import { getLimitStatLabel } from '../../constants/stats';
 
-const AVAILABLE_STATS: StatName[] = [
+const AVAILABLE_STATS: LimitableStat[] = [
     'attack',
     'defence',
     'hp',
+    'effectiveHp',
     'speed',
     'crit',
     'critDamage',
@@ -34,7 +35,7 @@ export const StatPriorityForm: React.FC<Props> = ({
     onSave,
     onCancel,
 }) => {
-    const [selectedStat, setSelectedStat] = useState<StatName>(AVAILABLE_STATS[0]);
+    const [selectedStat, setSelectedStat] = useState<LimitableStat>(AVAILABLE_STATS[0]);
     const [maxLimit, setMaxLimit] = useState<string>('');
     const [minLimit, setMinLimit] = useState<string>('');
     const [hardRequirement, setHardRequirement] = useState<boolean>(false);
@@ -91,10 +92,10 @@ export const StatPriorityForm: React.FC<Props> = ({
                     label="Stat"
                     className="flex-1 min-w-[8rem]"
                     value={selectedStat}
-                    onChange={(value) => setSelectedStat(value as StatName)}
+                    onChange={(value) => setSelectedStat(value as LimitableStat)}
                     options={AVAILABLE_STATS.map((stat) => ({
                         value: stat,
-                        label: STATS[stat].label,
+                        label: getLimitStatLabel(stat),
                     }))}
                     helpLabel="Set a stat priority to be met by the gear you equip. A min or max value is required."
                 />

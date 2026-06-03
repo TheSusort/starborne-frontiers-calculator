@@ -5,7 +5,12 @@ import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
 import type { FleetBuff } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
-import { calculateTotalScore, calculateHardViolation, clearScoreCache } from '../scoring';
+import {
+    calculateTotalScore,
+    calculateHardViolation,
+    clearScoreCache,
+    resolveLimitStatValue,
+} from '../scoring';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { compareIndividuals } from '../individualComparator';
 import { BaseStrategy } from '../BaseStrategy';
@@ -361,7 +366,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const violations: HardRequirementViolation[] = [];
         for (const p of priorities) {
             if (!p.hardRequirement) continue;
-            const value = stats[p.stat] || 0;
+            const value = resolveLimitStatValue(stats, p.stat);
             if (p.minLimit && value < p.minLimit) {
                 violations.push({ stat: p.stat, kind: 'min', limit: p.minLimit, actual: value });
             }

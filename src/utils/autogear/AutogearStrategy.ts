@@ -8,10 +8,10 @@ import type {
     FleetBuff,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import type { EngineeringStat, StatName } from '../../types/stats';
+import type { EngineeringStat, LimitableStat } from '../../types/stats';
 
 export interface HardRequirementViolation {
-    stat: StatName;
+    stat: LimitableStat;
     kind: 'min' | 'max';
     limit: number;
     actual: number;
