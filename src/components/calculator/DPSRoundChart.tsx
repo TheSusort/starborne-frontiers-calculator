@@ -95,9 +95,7 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                             <p className="text-xs text-theme-text-secondary pl-2">
                                 Enemy HP: {roundData.enemyHpPct}%
                                 {ship && killRoundFor(ship, enemyHp) === label && (
-                                    <span className="ml-1 text-red-400">
-                                        💀 reaches 0 this round
-                                    </span>
+                                    <span className="ml-1 text-red-400">reaches 0 this round</span>
                                 )}
                             </p>
                         )}
