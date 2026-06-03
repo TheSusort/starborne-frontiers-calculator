@@ -162,8 +162,11 @@ const DPSCalculatorPage: React.FC = () => {
         };
     }, [attackerBuffs, teamAttackerBuffs]);
 
-    // Convert each config's editor abilities (buff/debuff) into the sim's selfBuffs /
-    // enemyDebuffs. Memoized off configs + enemyType so it never runs in render.
+    // Convert each config's editor abilities (buff/debuff) into SelectedGameBuff form for
+    // the display-only buff-totals preview (mergedAttackerBuffTotals below). The sim itself
+    // no longer consumes these — the combat engine reads buff/debuff abilities from
+    // shipSkills directly with live condition gating (no double-count). Memoized off
+    // configs + enemyType so it never runs in render.
     const convertedMap = useMemo(
         () =>
             new Map(
@@ -208,7 +211,6 @@ const DPSCalculatorPage: React.FC = () => {
     const simResults = useMemo(() => {
         const map = new Map<string, DPSSimulationResult>();
         configs.forEach((config) => {
-            const converted = convertedMap.get(config.id)!;
             const { damageModifier, critCap, critPenalty } = computeAffinityModifiers(
                 config.affinity,
                 enemyAffinity
@@ -229,8 +231,8 @@ const DPSCalculatorPage: React.FC = () => {
                     enemyHp,
                     enemySecurity,
                     rounds,
-                    selfBuffs: [...attackerBuffs, ...teamAttackerBuffs, ...converted.selfBuffs],
-                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs, ...converted.enemyDebuffs],
+                    selfBuffs: [...attackerBuffs, ...teamAttackerBuffs],
+                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs],
                     startCharged: config.startCharged,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
@@ -243,7 +245,6 @@ const DPSCalculatorPage: React.FC = () => {
         return map;
     }, [
         configs,
-        convertedMap,
         enemyDefense,
         enemyHp,
         enemySecurity,

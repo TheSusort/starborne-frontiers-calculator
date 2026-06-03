@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
-import { configShipSkillsToSimInputs } from '../../abilities/configToSimInputs';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -398,7 +397,8 @@ describe('dpsGoldenParity', () => {
     }));
 
     // Scenario 10: ability buffs/debuffs unconditioned
-    // Mirrors page wiring: pass through configShipSkillsToSimInputs and spread into selfBuffs/enemyDebuffs
+    // Mirrors the post-Task-6 page wiring: the sim reads buff/debuff abilities from
+    // shipSkills directly (no converted spread into selfBuffs/enemyDebuffs).
     snap('ability buffs/debuffs unconditioned', () => {
         const shipSkills: ShipSkills = {
             slots: [
@@ -476,12 +476,9 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         };
-        const converted = configShipSkillsToSimInputs(shipSkills);
         return {
             ...BASE,
             shipSkills,
-            selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
-            enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
         };
     });
 
@@ -596,15 +593,12 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         };
-        const converted = configShipSkillsToSimInputs(shipSkills);
         return {
             ...BASE,
             affinityDamageModifier: -25,
             affinityCritCap: 75,
             affinityCritPenalty: 25,
             shipSkills,
-            selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
-            enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
         };
     });
 
@@ -688,13 +682,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         };
-        const converted = configShipSkillsToSimInputs(shipSkills);
         return {
             ...BASE,
             chargeCount: 0,
             shipSkills,
-            selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
-            enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
         };
     });
 });

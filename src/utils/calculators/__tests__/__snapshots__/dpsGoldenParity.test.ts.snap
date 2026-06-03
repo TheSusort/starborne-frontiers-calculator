@@ -17,12 +17,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -35,16 +30,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 20000,
-      "cumulativeDamage": 29634,
+      "cumulativeDamage": 27410,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
       "enemyHpPct": 100,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 1,
-      "totalRoundDamage": 29634,
+      "totalRoundDamage": 27410,
     },
     {
       "action": "active",
@@ -66,12 +61,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -84,16 +74,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 40000,
-      "cumulativeDamage": 93718,
+      "cumulativeDamage": 85937,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
       "enemyHpPct": 93,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 2,
-      "totalRoundDamage": 64084,
+      "totalRoundDamage": 58526,
     },
     {
       "action": "active",
@@ -115,12 +105,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -133,16 +118,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 163351,
+      "cumulativeDamage": 153347,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
-      "enemyHpPct": 77,
+      "enemyHpPct": 79,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 3,
-      "totalRoundDamage": 69634,
+      "totalRoundDamage": 67410,
     },
     {
       "action": "active",
@@ -164,12 +149,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -182,16 +162,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 247435,
+      "cumulativeDamage": 231873,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
-      "enemyHpPct": 59,
+      "enemyHpPct": 62,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 4,
-      "totalRoundDamage": 84084,
+      "totalRoundDamage": 78526,
     },
     {
       "action": "active",
@@ -213,12 +193,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -231,16 +206,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 317069,
+      "cumulativeDamage": 299284,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
-      "enemyHpPct": 38,
+      "enemyHpPct": 42,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 5,
-      "totalRoundDamage": 69634,
+      "totalRoundDamage": 67410,
     },
     {
       "action": "active",
@@ -262,12 +237,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -280,16 +250,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 401153,
+      "cumulativeDamage": 377810,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
-      "enemyHpPct": 21,
+      "enemyHpPct": 25,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 6,
-      "totalRoundDamage": 84084,
+      "totalRoundDamage": 78526,
     },
     {
       "action": "active",
@@ -311,12 +281,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -329,16 +294,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 470786,
+      "cumulativeDamage": 445220,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
-      "enemyHpPct": 0,
+      "enemyHpPct": 6,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 7,
-      "totalRoundDamage": 69634,
+      "totalRoundDamage": 67410,
     },
     {
       "action": "active",
@@ -360,12 +325,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -378,16 +338,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 554870,
+      "cumulativeDamage": 523746,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
       "enemyHpPct": 0,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 8,
-      "totalRoundDamage": 84084,
+      "totalRoundDamage": 78526,
     },
     {
       "action": "active",
@@ -409,12 +369,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -427,16 +382,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 624504,
+      "cumulativeDamage": 591157,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
       "enemyHpPct": 0,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 9,
-      "totalRoundDamage": 69634,
+      "totalRoundDamage": 67410,
     },
     {
       "action": "active",
@@ -458,12 +413,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -476,16 +426,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 708588,
+      "cumulativeDamage": 669683,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
       "enemyHpPct": 0,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 10,
-      "totalRoundDamage": 84084,
+      "totalRoundDamage": 78526,
     },
     {
       "action": "active",
@@ -507,12 +457,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -525,16 +470,16 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 778221,
+      "cumulativeDamage": 737093,
       "detonationDamage": 0,
       "didCrit": false,
-      "directDamage": 9634,
+      "directDamage": 7410,
       "dotsLanded": true,
       "enemyHpPct": 0,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 11,
-      "totalRoundDamage": 69634,
+      "totalRoundDamage": 67410,
     },
     {
       "action": "active",
@@ -556,12 +501,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       ],
       "activeEnemyDebuffs": [],
       "activeInfernoStacks": 0,
-      "activeSelfBuffs": [
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "appliedDoTs": [
         {
           "duration": 3,
@@ -574,25 +514,25 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "corrosionDamage": 60000,
-      "cumulativeDamage": 862305,
+      "cumulativeDamage": 815619,
       "detonationDamage": 0,
       "didCrit": true,
-      "directDamage": 24084,
+      "directDamage": 18526,
       "dotsLanded": true,
       "enemyHpPct": 0,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 12,
-      "totalRoundDamage": 84084,
+      "totalRoundDamage": 78526,
     },
   ],
   "summary": {
-    "avgDamagePerRound": 71859,
+    "avgDamagePerRound": 67968,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 660000,
-    "totalDamage": 862305,
+    "totalDamage": 815619,
     "totalDetonationDamage": 0,
-    "totalDirectDamage": 202305,
+    "totalDirectDamage": 155619,
     "totalInfernoDamage": 0,
     "totalSecondaryDamage": 0,
   },
@@ -611,6 +551,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -618,10 +562,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 1,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -648,6 +588,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -655,10 +599,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 2,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -685,6 +625,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -692,10 +636,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 3,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -727,6 +667,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 1,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -734,10 +678,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 3,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 1,
         },
       ],
       "appliedDoTs": [],
@@ -769,6 +709,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -776,10 +720,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 4,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -806,6 +746,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -813,10 +757,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -843,6 +783,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -850,10 +794,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -885,6 +825,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 1,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -892,10 +836,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 1,
         },
       ],
       "appliedDoTs": [],
@@ -927,6 +867,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -934,10 +878,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -964,6 +904,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -971,10 +915,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -1001,6 +941,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 2,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -1008,10 +952,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [],
@@ -1043,6 +983,10 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [
         {
+          "buffName": "Attack Up",
+          "turnsRemaining": 1,
+        },
+        {
           "buffName": "Focus",
           "turnsRemaining": "recurring",
         },
@@ -1050,10 +994,6 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
           "buffName": "Momentum",
           "stacks": 5,
           "turnsRemaining": "recurring",
-        },
-        {
-          "buffName": "Attack Up",
-          "turnsRemaining": 1,
         },
       ],
       "appliedDoTs": [],
