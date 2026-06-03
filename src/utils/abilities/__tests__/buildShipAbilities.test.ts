@@ -783,4 +783,30 @@ describe('buildShipAbilities', () => {
             });
         });
     });
+
+    describe('Judge passive (hp-threshold-gated passive damage)', () => {
+        it('passive: damage 60 gated below 50% HP + flat 20% defPen modifier', () => {
+            const judge = ship({
+                firstPassiveSkillText:
+                    'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.',
+            });
+            const { slots } = buildShipAbilities(judge);
+            const passive = slot(slots, 'passive');
+            expect(passive).toBeDefined();
+
+            const dmg = abilityOfType(passive!.abilities, 'damage');
+            expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 60 } });
+            expect(dmg!.conditions[0]).toMatchObject({
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 50,
+            });
+
+            const mod = abilityOfType(passive!.abilities, 'modifier');
+            expect(mod).toMatchObject({
+                config: { type: 'modifier', channel: 'defensePenetration', value: 20 },
+            });
+        });
+    });
 });

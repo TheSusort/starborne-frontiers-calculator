@@ -449,6 +449,25 @@ function runSinglePass(params: {
             ? scaledBonus(scalingAbility, ctxFor.get(scalingAbility.id) ?? ctx)
             : 0;
 
+        // Passive payload hit (Judge: "At the start of the round, this Unit deals 60%
+        // damage to all enemies with less than 50% HP"). The always-active passive slot
+        // can carry a gated damage ability; gate it per round against the same ctx and
+        // add the passing hit as an extra damage instance. "Start of the round" matches
+        // the entering-round enemyHpPct the gate evaluates. Uses the round's crit
+        // outcome and defense math like the firing hit; its own noCrit is respected.
+        const { gatedSkill: gatedPassive, ctxFor: passiveCtxFor } = gateFiringAbilities(
+            passiveSkill,
+            ctx
+        );
+        const passiveHit = damageInputsFromSkill(gatedPassive);
+        const passiveScalingBonus = passiveHit.scalingAbility
+            ? scaledBonus(
+                  passiveHit.scalingAbility,
+                  passiveCtxFor.get(passiveHit.scalingAbility.id) ?? ctx
+              )
+            : 0;
+        const passiveMultiplier = passiveHit.multiplier * passiveHit.hits + passiveScalingBonus;
+
         // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
         // round fires the charged skill, which consumes all charges (reset to 0 at
         // the top of the loop) — nothing banks toward the next charge on that round.
@@ -478,13 +497,18 @@ function runSinglePass(params: {
         // A "cannot critically hit" attack forces roundCrit false (decided at the gate),
         // so this multiplier alone carries the crit effect.
         const damageCritMultiplier = roundCrit ? 1 + effectiveCritDamage / 100 : 1;
-        const postDefenseFactor =
-            damageCritMultiplier *
+        // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
+        // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
+        const nonCritFactor =
             (1 - damageReduction / 100) *
             (1 + outgoingDamageBuff / 100) *
             (1 + incomingDamageModifier / 100) *
             affinityMult;
-        const directDamage = preCritDamage * postDefenseFactor;
+        const postDefenseFactor = damageCritMultiplier * nonCritFactor;
+        const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;
+        const passiveDamage =
+            effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
+        const directDamage = preCritDamage * postDefenseFactor + passiveDamage;
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
         const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 

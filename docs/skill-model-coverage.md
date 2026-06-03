@@ -19,7 +19,7 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 
 | Type | Parser auto-fills | Editor fields | Sim consumes | Conditions gate in sim | Scaling in sim | Slots consulted by sim |
 |---|---|---|---|---|---|---|
-| `damage` | ✅ multiplier, `hits`, `noCrit`, scaling+cap, hp-threshold & enemy-effect & ally-gates as conditions | ✅ all incl. scaling | ✅ | ✅ `gateFiringAbilities` gates the ability — EXCEPT the bare scaling-source condition, which scales only (Meiying: base 190% hits everyone, +90% Supporter-only). A scaling condition WITH `countComparator` gates too. | ✅ `scaledBonus` on `conditions[scaling.conditionIndex]` | firing only |
+| `damage` | ✅ multiplier, `hits`, `noCrit`, scaling+cap, hp-threshold & enemy-effect & ally-gates as conditions | ✅ all incl. scaling | ✅ | ✅ `gateFiringAbilities` gates the ability — EXCEPT the bare scaling-source condition, which scales only (Meiying: base 190% hits everyone, +90% Supporter-only). A scaling condition WITH `countComparator` gates too. | ✅ `scaledBonus` on `conditions[scaling.conditionIndex]` | **firing + passive** (passive damage = gated extra hit, e.g. Judge) |
 | `additional-damage` | ✅ `parseSecondaryDamage` (hp/def %) | ✅ | ✅ | ✅ `gateFiringAbilities` (`applyAbilities.ts`) | ❌ | firing only |
 | `modifier` | ✅ `parseModifiers` (outgoingDamage, critDamage, defPen flat + for-each scaling) | ⚠️ all except `isMultiplicative` (hidden, no-op) | ✅ | ✅ per-round, full `conditionsMet` (`applyAbilities.ts:37`) | ✅ | **firing + passive** |
 | `buff` | ✅ via `buildSkillBuffAutoFill` + `detectGrantConditions` | ✅ (stacks, duration; `stackTrigger`/`maxStacks` come from picker, not directly editable) | ✅ via static conversion → `SelectedGameBuff` → `computeBuffTimeline` | ⚠️ **static gate only** at conversion time; never re-evaluated per round (`buffAbilityConverters.ts:117`) | stacks (accumulating via `stackTrigger`) | all slots (routed by `skillSource`) |
@@ -106,7 +106,7 @@ forgetting this silently drops passive-sourced abilities (the Valerian extend-do
 | `modifierTotalsFromAbilities` | firing **+ passive** ✅ |
 | extend-dot loop | firing **+ passive** ✅ |
 | buff/debuff (via timeline `skillSource`) | all slots ✅ |
-| `damageInputsFromSkill` | firing only (correct — passives don't attack) |
+| `damageInputsFromSkill` | firing **+ passive** — the passive slot's damage ability is gated per round and added as an extra hit (Judge's start-of-round 60% vs <50% HP). Passive `additional-damage`/`secondary` still firing-only (no known ship). |
 | `secondaryFromSkill` | firing only |
 | `dotsFromSkill` | firing only — **a `dot` added to the passive slot in the editor is a silent no-op** (parser never emits passive DoTs, but the editor allows it) |
 | `chargeAbilitiesFromSkill` | firing only (active rounds only by design) |

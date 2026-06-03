@@ -2060,6 +2060,63 @@ describe('simulateDPS', () => {
             expect(result.rounds[0].activeCorrosionStacks).toBeGreaterThan(0);
         });
 
+        it('passive-slot damage hits fire when their gate passes (Judge)', () => {
+            // Judge passive: "At the start of the round, this Unit deals 60% damage to
+            // all enemies with less than 50% HP." Active: plain 230%.
+            // 23k/round vs 100k pool → entering HP%: 100, 77, 54, 31(<50!), ...
+            // Passive fires from round 4: 23000 + 6000 = 29000.
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                enemyHp: 100000,
+                rounds: 6,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'a',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: { type: 'damage', multiplier: 230 },
+                                },
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                {
+                                    id: 'p',
+                                    type: 'damage',
+                                    target: 'all-enemies',
+                                    trigger: 'on-cast',
+                                    conditions: [
+                                        {
+                                            subject: 'hp-threshold',
+                                            derivable: true,
+                                            hpComparator: 'below',
+                                            hpPercent: 50,
+                                        },
+                                    ],
+                                    config: { type: 'damage', multiplier: 60 },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            const damages = result.rounds.map((r) => r.directDamage);
+            // entering HP%: 100, 77, 54, 31, 2, 0 → passive fires rounds 4-6
+            expect(damages).toEqual([23000, 23000, 23000, 29000, 29000, 29000]);
+        });
+
         it('a scaling-source condition does NOT gate the base damage (Meiying)', () => {
             // "dealing 190% damage, and when attacking a Supporter, it additionally deals
             // 90% damage" — the +90% is Supporter-only, but the 190% base hits everyone.
