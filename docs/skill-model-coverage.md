@@ -25,10 +25,10 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 | `buff` | ✅ via `buildSkillBuffAutoFill` + `detectGrantConditions` | ✅ (stacks, duration; `stackTrigger`/`maxStacks` come from picker, not directly editable) | ✅ via static conversion → `SelectedGameBuff` → `computeBuffTimeline` | ⚠️ **static gate only** at conversion time; never re-evaluated per round (`buffAbilityConverters.ts:117`) | stacks (accumulating via `stackTrigger`) | all slots (routed by `skillSource`) |
 | `debuff` | ✅ same + `application` (inflict/apply) | ✅ | ✅ (landing roll: hacking vs security for inflict; affinity for apply) | ⚠️ static gate only | stacks | all slots |
 | `dot` | ✅ `buildDoTAutoFill` (active/charged slots only — never passive) | ✅ (duration finite only) | ✅ Step 3, gated by hacking landing roll | ✅ `gateFiringAbilities` (`dotsFromSkill`) | ❌ | firing only |
-| `extend-dot` | ✅ `parseExtendDoT` + `parseCritPowerExtend` | ✅ | ✅ Step 2.9 (corrosion+inferno, not bombs) | ✅ per-round `conditionsMet` (`dpsSimulator.ts:471`) + `chanceFromCritPower` probability | — | **firing + passive** (Valerian fix) |
+| `extend-dot` | ✅ `parseExtendDoT` + `parseCritPowerExtend` | ✅ | ✅ Step 2.9 (corrosion+inferno, not bombs) | ✅ per-round `conditionsMet` against the payload ctx (binary self-crit) + deterministic `chanceFromCritPower` schedule | — | **firing + passive** (Valerian fix) |
 | `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ✅ `gateFiringAbilities` | ❌ | firing only |
-| `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ per-round `conditionsMet` (`dpsSimulator.ts:433`); un-thresholded conditions also scale by expected value | expected-value via `evaluateCondition` | firing only |
+| `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ `gateFiringAbilities`; un-thresholded conditions also scale (binary self-crit, per-count subjects) | per-count / binary self-crit via `evaluateCondition` (positional ctx) | firing only |
 | `heal` | ❌ never emitted | ❌ **type pickable but NO config fields rendered** (label-only in `AbilityCard`) | ❌ **not consumed** | — | — | — |
 | `shield` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
 | `cleanse` / `purge` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
