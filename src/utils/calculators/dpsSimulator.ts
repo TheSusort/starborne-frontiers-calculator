@@ -296,6 +296,9 @@ function runSinglePass(params: {
         const firingSkill = selectFiringSkill(shipSkills, action);
         // noCrit is read from the UNGATED skill: the flag is a property of the attack
         // itself and must be known before the ctx (and therefore the gate) exists.
+        // Assumes one base-damage ability per skill (true for all parser output); a
+        // gated-off first damage ability with a differently-flagged second one would
+        // read the wrong flag — not representable from skill text today.
         const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
         // Per-round buff totals from timeline

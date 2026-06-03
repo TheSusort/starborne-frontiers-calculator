@@ -1999,5 +1999,64 @@ describe('simulateDPS', () => {
             expect(result.rounds.every((r) => r.activeCorrosionStacks === 0)).toBe(true);
             expect(result.rounds[0].directDamage).toBe(0); // dropped dot didn't feed the overlay
         });
+
+        it('gated-off detonate-dot abilities contribute no detonation damage', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 3,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                // ungated dot so there IS something detonatable each round
+                                {
+                                    id: 'c',
+                                    type: 'dot',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: {
+                                        type: 'dot',
+                                        dotType: 'corrosion',
+                                        tier: 6,
+                                        stacks: 2,
+                                        duration: 3,
+                                    },
+                                },
+                                // detonate gated on a never-met condition → must contribute nothing
+                                {
+                                    id: 'det',
+                                    type: 'detonate-dot',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [
+                                        {
+                                            subject: 'self-buff',
+                                            derivable: true,
+                                            buffName: 'Stealth',
+                                        },
+                                    ],
+                                    config: {
+                                        type: 'detonate-dot',
+                                        dotType: 'corrosion',
+                                        powerPct: 100,
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            // The gated-off detonation never consumes the DoT: zero detonation damage and
+            // corrosion keeps ticking (nonzero from round 2, once round-1 stacks tick).
+            expect(result.rounds.every((r) => r.detonationDamage === 0)).toBe(true);
+            expect(result.rounds[0].activeCorrosionStacks).toBeGreaterThan(0);
+        });
     });
 });
