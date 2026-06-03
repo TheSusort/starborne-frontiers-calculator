@@ -42,6 +42,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS Calculator skill auto-fill now recognises buffs gated on a specific ally being on the team — e.g. Nayra only gains Offensive Affinity Override when Isha is present. Such buffs are tagged with a new "when a specific ally is on the team" condition instead of being treated as always active.',
     "DPS Calculator skill editor: the editor modal now has header shortcuts to jump straight to the ship's other skill slots (Active / Charged / Passive) without closing and reopening.",
     'DPS Calculator: charge gains gated by a count threshold (e.g. "if the enemy has 3+ debuffs") or by multiple conditions now respect the full gate, instead of only checking the first condition and scaling by the raw count — so threshold-gated charge gains no longer fire early.',
+    'DPS Calculator skill editor: the Passive skill button now appears for un-refit ships too (e.g. FrontLine) — the base passive is innate, so it\'s no longer hidden until the ship is refit. Also stopped mis-reading Shield-gain text like "Shield equal to 25% of Max HP" as bonus HP-based damage.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

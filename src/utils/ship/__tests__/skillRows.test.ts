@@ -39,4 +39,15 @@ describe('getSkillRowForSlot', () => {
         expect(getSkillRowForSlot(noCharge, 'charged')).toBeUndefined();
         expect(getSkillRowForSlot(noCharge, 'passive')).toBeUndefined();
     });
+
+    it('surfaces the base (R0) passive even on an unrefit ship (e.g. FrontLine)', () => {
+        const unrefit = ship({
+            refits: [],
+            activeSkillText: 'Active deals 100% damage',
+            firstPassiveSkillText: 'This ship has 20% Shield Penetration.',
+        });
+        const row = getSkillRowForSlot(unrefit, 'passive');
+        expect(row?.label).toBe('Passive R0');
+        expect(row?.text).toContain('Shield Penetration');
+    });
 });

@@ -189,11 +189,13 @@ export function parseSkillDamage(text: string): number {
  */
 export function parseSecondaryDamage(text: string | null | undefined): SecondaryDamage | null {
     if (!text) return null;
-    // The percentage may sit anywhere inside the tag — at the start ("<unit-damage>80%…")
-    // or after lead-in text ("<unit-damage>damage equal to 30%</unit-damage> of its Defense",
-    // e.g. Nayra). `[^<]*?` (non-greedy) skips any text before the first percentage.
+    // The percentage may sit at the start of the tag ("<unit-damage>80%…") or after a
+    // "damage equal to" lead-in inside the tag ("<unit-damage>damage equal to 30%</unit-damage>
+    // of its Defense", e.g. Nayra). The lead-in is restricted to "damage equal to" so unrelated
+    // tagged values like "Shield equal to 25% of its Max HP" (FrontLine) are NOT misread as
+    // secondary damage.
     const pattern =
-        /<unit-damage>[^<]*?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
+        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
     const match = pattern.exec(text);
     if (!match) return null;
     const pct = parseFloat(match[1]);

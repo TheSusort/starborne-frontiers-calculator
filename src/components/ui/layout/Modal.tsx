@@ -103,11 +103,7 @@ export const Modal: React.FC<Props> = ({
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
                                 {headerActions}
-                                <Button
-                                    aria-label="Close modal"
-                                    variant="secondary"
-                                    onClick={onClose}
-                                >
+                                <Button aria-label="Close modal" variant="danger" onClick={onClose}>
                                     <CloseIcon />
                                 </Button>
                             </div>

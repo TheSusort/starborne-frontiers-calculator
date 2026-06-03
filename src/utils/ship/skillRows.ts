@@ -8,12 +8,15 @@ export interface SkillRow {
 
 export function getShipSkillRows(ship: Ship): SkillRow[] {
     const refitCount = ship.refits.length;
+    // The highest-unlocked passive applies. R4 needs 4 refits, R2 needs 2; the base passive
+    // (R0) is innate and applies even on an unrefit ship — so it must NOT be gated behind a
+    // refit count, or unrefit ships (e.g. FrontLine) surface no passive at all.
     const activePassive: SkillRow | null =
         refitCount >= 4 && ship.thirdPassiveSkillText
             ? { label: 'Passive R4', text: ship.thirdPassiveSkillText }
             : refitCount >= 2 && ship.secondPassiveSkillText
               ? { label: 'Passive R2', text: ship.secondPassiveSkillText }
-              : refitCount >= 1 && ship.firstPassiveSkillText
+              : ship.firstPassiveSkillText
                 ? { label: 'Passive R0', text: ship.firstPassiveSkillText }
                 : null;
 

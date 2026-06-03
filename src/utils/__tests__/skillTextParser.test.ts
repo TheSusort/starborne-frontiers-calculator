@@ -527,6 +527,12 @@ describe('parseSecondaryDamage', () => {
         expect(parseSecondaryDamage(text)).toEqual({ stat: 'defense', pct: 30 });
     });
 
+    it('does not treat a tagged "Shield equal to N% of its Max HP" as secondary damage (FrontLine)', () => {
+        const text =
+            'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.';
+        expect(parseSecondaryDamage(text)).toBeNull();
+    });
+
     it('parseSkillDamage still returns the primary multiplier for a secondary-damage skill', () => {
         expect(parseSkillDamage(chakara)).toBe(180);
         expect(parseSkillDamage(lodolite)).toBe(240);
