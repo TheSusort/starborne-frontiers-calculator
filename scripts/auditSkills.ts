@@ -120,7 +120,13 @@ const RULES: Rule[] = [
     {
         id: 'no-crit',
         severity: 'high',
-        keyword: (t) => /(?:damage|attack)[^.;]*cann?ont?\s+critically\s+hit/i.test(t),
+        // Matches "cannot"/"cannont" (source-data misspelling), but only when the subject is
+        // an attack — NOT a repair/heal (mirrors parseNoCrit, which intentionally leaves
+        // "this repair cannot critically hit", e.g. Pallas, as a normal crit-capable attack).
+        keyword: (t) =>
+            [...t.matchAll(/(\w+)\s+cann(?:ot|ont)\s+critically\s+hit/gi)].some(
+                (m) => !/^(?:repairs?|heals?)$/i.test(m[1])
+            ),
         handled: (a) => a.some((x) => x.config.type === 'damage' && x.config.noCrit === true),
     },
     {

@@ -428,9 +428,18 @@ function runSinglePass(params: {
             let bonusCharges = 0;
             for (const ability of chargeAbilitiesFromSkill(firingSkill)) {
                 if (ability.config.type !== 'charge') continue;
-                const cond = ability.conditions[0];
-                const count = cond ? evaluateCondition(cond, ctx) : 1;
-                bonusCharges += count * ability.config.amount;
+                // Gate on ALL conditions (respects count thresholds ≥/≤/= and multi-condition
+                // AND/OR groups), not just the first.
+                if (!conditionsMet(ability.conditions, ctx)) continue;
+                // A thresholded gate contributes the flat amount once; an unthresholded
+                // count/probability condition scales it (self-crit expected value, per-count
+                // subjects). No condition → flat amount.
+                const primary = ability.conditions[0];
+                const scale =
+                    !primary || primary.countComparator != null
+                        ? 1
+                        : evaluateCondition(primary, ctx);
+                bonusCharges += scale * ability.config.amount;
             }
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }

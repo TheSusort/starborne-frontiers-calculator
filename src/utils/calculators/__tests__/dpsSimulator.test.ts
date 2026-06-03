@@ -1225,6 +1225,66 @@ describe('simulateDPS', () => {
             });
             expect(chargedRounds(result)).toEqual([]);
         });
+
+        it('a count-threshold charge gate adds the flat amount once (not scaled by the raw count)', () => {
+            const chargeAbility = (conditions: Ability['conditions']): Ability => ({
+                id: 'cg',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions,
+                config: { type: 'charge', amount: 1 },
+            });
+            const dmg = (id: string, multiplier: number): Ability => ({
+                id,
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier },
+            });
+            const skills = (conditions: Ability['conditions']): ShipSkills => ({
+                slots: [
+                    { slot: 'active', abilities: [dmg('a', 100), chargeAbility(conditions)] },
+                    { slot: 'charged', abilities: [dmg('c', 200)] },
+                ],
+            });
+            // self-buff count is 3; gate is "≥ 2 self buffs" → met. A correct gate adds +1/round
+            // (cadence [3,6,9,12]); the old raw-count bug would add +3/round (much faster).
+            const threeBuffs = [
+                makeAlwaysBuff('b1', {}),
+                makeAlwaysBuff('b2', {}),
+                makeAlwaysBuff('b3', {}),
+            ];
+            const met = simulateDPS({
+                ...base,
+                shipSkills: skills([
+                    {
+                        subject: 'self-buff',
+                        derivable: true,
+                        countComparator: 'gte',
+                        countThreshold: 2,
+                    },
+                ]),
+                selfBuffs: threeBuffs,
+            });
+            expect(chargedRounds(met)).toEqual([3, 6, 9, 12]);
+
+            // Below the threshold (1 < 2) the gate fails → no bonus → baseline cadence.
+            const notMet = simulateDPS({
+                ...base,
+                shipSkills: skills([
+                    {
+                        subject: 'self-buff',
+                        derivable: true,
+                        countComparator: 'gte',
+                        countThreshold: 2,
+                    },
+                ]),
+                selfBuffs: [makeAlwaysBuff('b1', {})],
+            });
+            expect(chargedRounds(notMet)).toEqual([4, 8, 12]);
+        });
     });
 
     describe('ShipSkills adapter equivalence', () => {
