@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability, Condition, ShipSkills } from '../../../types/abilities';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: effects, isStackable: false };
@@ -1133,11 +1133,16 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: 'c', type: 'corrosion', tier: 3, stacks: 1, duration: 10 }],
                 activeConditional: { pct: 20, condition: 'enemy-debuff', derivable: true },
             });
-            // round 1: count 0 → preCrit 1000; round 2: count 1 → 1200; round 3: count 2 → 1400
-            expect(result.rounds[0].directDamage).toBe(1000);
+            // Scaling conditions are now hard GATES (Task 6): an enemy-debuff scaling
+            // condition with count 0 fails the gate, so round 1 (no prior-round DoT
+            // entries) is zeroed entirely — not just the +0% conditional slice. The
+            // flat adapter emits the same-cast dot AFTER the damage ability, so it does
+            // not feed round 1's overlay either. Rounds 2-3 still pass (count 1, then 2).
+            // round 1: count 0 → GATED OFF → 0; round 2: count 1 → 1200; round 3: count 2 → 1400
+            expect(result.rounds[0].directDamage).toBe(0);
             expect(result.rounds[1].directDamage).toBe(1200);
             expect(result.rounds[2].directDamage).toBe(1400);
-            // conditional slice: 0 + 200 + 400 = 600
+            // conditional slice: round 1 gated off (0) + 200 + 400 = 600 (unchanged total)
             expect(result.summary.totalConditionalDamage).toBe(600);
         });
     });
@@ -1810,6 +1815,189 @@ describe('simulateDPS', () => {
                 ],
             };
             expect(simulateDPS(input).summary).toEqual(simulateDPS(input).summary);
+        });
+    });
+
+    describe('hard condition gating of payload abilities', () => {
+        const gatedDamageSkills = (conditions: Condition[]): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'd1',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions,
+                            config: { type: 'damage', multiplier: 100 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('a failing gate zeroes the damage ability', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 3,
+                shipSkills: gatedDamageSkills([{ subject: 'enemy-debuff', derivable: true }]),
+            });
+            expect(result.rounds.every((r) => r.directDamage === 0)).toBe(true);
+        });
+
+        it('an execute gate (enemy below 50% HP) switches on once enough damage accumulates', () => {
+            // 10k dmg/round vs 40k enemy HP. enemyHpPct ENTERING each round (from damage
+            // through previous rounds): r1=100, r2=75, r3=50, r4=25. 'below 50' (strict <)
+            // first passes entering round 4. So rounds 1-3 deal 10000, rounds 4+ deal 15000
+            // (base + 10% of 50000 HP secondary, both ×1 with critDamage 0).
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                enemyHp: 40000,
+                rounds: 6,
+                hp: 50000,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'base',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: { type: 'damage', multiplier: 100 },
+                                },
+                                {
+                                    id: 'exec',
+                                    type: 'additional-damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [
+                                        {
+                                            subject: 'hp-threshold',
+                                            derivable: true,
+                                            hpComparator: 'below',
+                                            hpPercent: 50,
+                                        },
+                                    ],
+                                    config: { type: 'additional-damage', stat: 'hp', pct: 10 },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            const damages = result.rounds.map((r) => r.directDamage);
+            expect(damages).toEqual([10000, 10000, 10000, 15000, 15000, 15000]);
+        });
+
+        it('a fresh same-cast dot satisfies a LATER damage gate but not an EARLIER one (text order)', () => {
+            const skills = (order: 'dot-first' | 'damage-first'): ShipSkills => {
+                const dmg: Ability = {
+                    id: 'd',
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [{ subject: 'enemy-debuff', derivable: true }],
+                    config: { type: 'damage', multiplier: 100 },
+                };
+                const dotAb: Ability = {
+                    id: 'c',
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 2 },
+                };
+                return {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: order === 'dot-first' ? [dotAb, dmg] : [dmg, dotAb],
+                        },
+                    ],
+                };
+            };
+            const base = {
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 1,
+            };
+            expect(
+                simulateDPS({ ...base, shipSkills: skills('dot-first') }).rounds[0].directDamage
+            ).toBe(10000);
+            expect(
+                simulateDPS({ ...base, shipSkills: skills('damage-first') }).rounds[0].directDamage
+            ).toBe(0);
+        });
+
+        it('gated-off dot abilities apply nothing (and do not feed the overlay)', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 3,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'c',
+                                    type: 'dot',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [
+                                        {
+                                            subject: 'self-buff',
+                                            derivable: true,
+                                            buffName: 'Stealth',
+                                        },
+                                    ], // no Stealth → fail
+                                    config: {
+                                        type: 'dot',
+                                        dotType: 'corrosion',
+                                        tier: 6,
+                                        stacks: 2,
+                                        duration: 3,
+                                    },
+                                },
+                                // damage gated on enemy-debuff: the DROPPED dot must NOT satisfy it
+                                {
+                                    id: 'd',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [{ subject: 'enemy-debuff', derivable: true }],
+                                    config: { type: 'damage', multiplier: 100 },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            expect(result.rounds.every((r) => r.corrosionDamage === 0)).toBe(true);
+            expect(result.rounds.every((r) => r.activeCorrosionStacks === 0)).toBe(true);
+            expect(result.rounds[0].directDamage).toBe(0); // dropped dot didn't feed the overlay
         });
     });
 });

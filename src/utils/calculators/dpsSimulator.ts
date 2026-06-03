@@ -22,6 +22,7 @@ import {
     detonationsFromSkill,
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
+    gateFiringAbilities,
 } from '../abilities/applyAbilities';
 import { makeRateGate } from './rateAccumulator';
 import {
@@ -288,17 +289,14 @@ function runSinglePass(params: {
             }
         }
 
-        // Read this round's damage shape from the firing skill's abilities.
+        // Enemy HP% entering this round, derived from damage dealt so far. Floors at 0
+        // once cumulative damage exceeds the pool (the sim keeps hitting the "dead" dummy).
+        const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - cumulativeDamage / enemyHp)) : 100;
+
         const firingSkill = selectFiringSkill(shipSkills, action);
-        const {
-            multiplier: rawMultiplier,
-            hits,
-            scalingAbility,
-            noCrit: damageNoCrit,
-        } = damageInputsFromSkill(firingSkill);
-        const effectiveMultiplier = rawMultiplier * hits;
-        const secondary = secondaryFromSkill(firingSkill);
-        const dotsConfig = dotsFromSkill(firingSkill);
+        // noCrit is read from the UNGATED skill: the flag is a property of the attack
+        // itself and must be known before the ctx (and therefore the gate) exists.
+        const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
@@ -360,6 +358,7 @@ function runSinglePass(params: {
             bombCount: pendingBombs.length,
             effectiveCritRate: cappedCrit(critBuff),
             enemyType,
+            enemyHpPct,
         });
         const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
         const modifierAbilities = [
@@ -397,11 +396,6 @@ function runSinglePass(params: {
         const affinityMult = 1 + affinityDamageModifier / 100;
         const effectiveDefence = defence * (1 + defenceBuff / 100);
         const effectiveHp = hp * (1 + hpBuff / 100);
-        let secondaryStatValue = 0;
-        if (secondary) {
-            const source = secondary.stat === 'defense' ? effectiveDefence : effectiveHp;
-            secondaryStatValue = source * (secondary.pct / 100);
-        }
 
         // Per-round condition context for the Phase 1 condition engine. Built once
         // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
@@ -418,14 +412,36 @@ function runSinglePass(params: {
             effectiveCritRate: effectiveCrit,
             enemyType,
             roundCrit,
+            enemyHpPct,
         });
+
+        // Hard gate: payload abilities whose conditions fail contribute nothing this
+        // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
+        const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx);
+        const {
+            multiplier: rawMultiplier,
+            hits,
+            scalingAbility,
+        } = damageInputsFromSkill(gatedSkill);
+        const effectiveMultiplier = rawMultiplier * hits;
+        const secondary = secondaryFromSkill(gatedSkill);
+        const dotsConfig = dotsFromSkill(gatedSkill);
+
+        let secondaryStatValue = 0;
+        if (secondary) {
+            const source = secondary.stat === 'defense' ? effectiveDefence : effectiveHp;
+            secondaryStatValue = source * (secondary.pct / 100);
+        }
 
         // Conditional scaling bonus, folded additively into the skill multiplier.
         // Read from the firing skill's damage ability's own scaling rule. Derivable
         // conditions read this round's sim state (pre-Step-3 DoT arrays, so this
         // round's freshly-applied DoTs are not yet counted); manual conditions use
-        // a static count.
-        const conditionalBonusPct = scalingAbility ? scaledBonus(scalingAbility, ctx) : 0;
+        // a static count. Threads the POSITIONAL context (ctxFor) so a damage ability
+        // AFTER a same-cast dot scales with the fresh dot counted.
+        const conditionalBonusPct = scalingAbility
+            ? scaledBonus(scalingAbility, ctxFor.get(scalingAbility.id) ?? ctx)
+            : 0;
 
         // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
         // round fires the charged skill, which consumes all charges (reset to 0 at
@@ -434,19 +450,17 @@ function runSinglePass(params: {
         // since charges never exceed what the charged skill requires.
         if (hasChargedSkill && action === 'active') {
             let bonusCharges = 0;
-            for (const ability of chargeAbilitiesFromSkill(firingSkill)) {
+            for (const ability of chargeAbilitiesFromSkill(gatedSkill)) {
                 if (ability.config.type !== 'charge') continue;
-                // Gate on ALL conditions (respects count thresholds ≥/≤/= and multi-condition
-                // AND/OR groups), not just the first.
-                if (!conditionsMet(ability.conditions, ctx)) continue;
+                // Gating already happened in gateFiringAbilities (full AND/OR + thresholds).
                 // A thresholded gate contributes the flat amount once; an unthresholded
-                // count/probability condition scales it (binary self-crit, per-count
+                // count/probability condition still SCALES it (binary self-crit, per-count
                 // subjects). No condition → flat amount.
                 const primary = ability.conditions[0];
                 const scale =
                     !primary || primary.countComparator != null
                         ? 1
-                        : evaluateCondition(primary, ctx);
+                        : evaluateCondition(primary, ctxFor.get(ability.id) ?? ctx);
                 bonusCharges += scale * ability.config.amount;
             }
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
@@ -491,7 +505,7 @@ function runSinglePass(params: {
         // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
         // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
         let detonationDamage = 0;
-        for (const det of detonationsFromSkill(firingSkill)) {
+        for (const det of detonationsFromSkill(gatedSkill)) {
             const pct = det.powerPct / 100;
             if (det.dotType === 'inferno') {
                 detonationDamage +=
@@ -556,7 +570,7 @@ function runSinglePass(params: {
         // (gated by the same landing roll as inflicted debuffs). Each starts gathering this
         // round's direct damage in Step 6b below.
         if (dotsLanded) {
-            for (const acc of accumulatorsFromSkill(firingSkill)) {
+            for (const acc of accumulatorsFromSkill(gatedSkill)) {
                 pendingAccumulators.push({
                     roundsRemaining: Math.max(1, acc.turns),
                     pct: acc.pct,
