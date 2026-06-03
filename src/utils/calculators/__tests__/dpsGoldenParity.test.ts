@@ -326,6 +326,7 @@ describe('dpsGoldenParity', () => {
     // Scenario 9: modifiers flat + scaling + hp-threshold
     snap('modifiers flat + scaling + hp-threshold', {
         ...BASE,
+        enemyHp: 100000,
         shipSkills: {
             slots: [
                 {
@@ -369,7 +370,7 @@ describe('dpsGoldenParity', () => {
                             conditions: [{ subject: 'enemy-debuff', derivable: true }],
                             scaling: { conditionIndex: 0, perUnit: 7.5, cap: 45 },
                         }),
-                        // attack modifier gated on hp-threshold (self below 50%)
+                        // attack modifier gated on hp-threshold (enemy below 50%)
                         ab({
                             type: 'modifier',
                             config: {
@@ -384,7 +385,6 @@ describe('dpsGoldenParity', () => {
                                     derivable: true,
                                     hpComparator: 'below',
                                     hpPercent: 50,
-                                    hpSubject: 'self',
                                 },
                             ],
                         }),
@@ -608,6 +608,7 @@ describe('dpsGoldenParity', () => {
     // Scenario 13: judge passive gated damage
     snap('judge passive gated damage', {
         ...BASE,
+        enemyHp: 80000,
         shipSkills: {
             slots: [
                 {
