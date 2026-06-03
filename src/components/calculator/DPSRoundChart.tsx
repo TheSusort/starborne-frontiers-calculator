@@ -63,6 +63,9 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                             {roundData?.action === 'charged' && (
                                 <span className="ml-1 text-yellow-400 text-xs">Charged</span>
                             )}
+                            {roundData?.didCrit && (
+                                <span className="ml-1 text-red-400 text-xs">Crit</span>
+                            )}
                         </p>
                         {roundData && roundData.chargeCount > 0 && (
                             <p className="text-xs text-yellow-400 pl-2">
