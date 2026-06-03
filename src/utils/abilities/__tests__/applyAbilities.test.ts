@@ -7,8 +7,9 @@ import {
     chargeAbilitiesFromSkill,
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
+    gateFiringAbilities,
 } from '../applyAbilities';
-import { Ability, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
+import { Ability, Condition, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
 import { ConditionContext } from '../evaluateConditions';
 
 function damage(id: string, multiplier: number, hits?: number): Ability {
@@ -367,5 +368,99 @@ describe('chargeAbilitiesFromSkill', () => {
 
     it('handles undefined skill', () => {
         expect(chargeAbilitiesFromSkill(undefined)).toEqual([]);
+    });
+});
+
+describe('gateFiringAbilities', () => {
+    const baseCtx: ConditionContext = {
+        selfBuffNames: [],
+        selfDebuffNames: [],
+        enemyBuffNames: [],
+        enemyDebuffCount: 0,
+        effectiveCritRate: 100,
+        adjacentAllyCount: 0,
+        enemyAdjacentCount: 0,
+        enemyDestroyedCount: 0,
+        selfHpPct: 100,
+        enemyHpPct: 100,
+    };
+    const dmg = (id: string, conditions: Condition[] = []): Ability => ({
+        id,
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions,
+        config: { type: 'damage', multiplier: 100 },
+    });
+    const dot = (id: string): Ability => ({
+        id,
+        type: 'dot',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'dot', dotType: 'corrosion', tier: 6, stacks: 1, duration: 2 },
+    });
+
+    it('returns undefined skill for undefined input', () => {
+        expect(gateFiringAbilities(undefined, baseCtx).gatedSkill).toBeUndefined();
+    });
+
+    it('drops abilities whose conditions fail; keeps the rest', () => {
+        const skill: Skill = {
+            slot: 'active',
+            abilities: [
+                dmg('a', [{ subject: 'enemy-debuff', derivable: true }]), // 0 debuffs → fail
+                dot('b'),
+            ],
+        };
+        const { gatedSkill } = gateFiringAbilities(skill, baseCtx);
+        expect(gatedSkill!.abilities.map((a) => a.id)).toEqual(['b']);
+    });
+
+    it('a kept dot makes a LATER enemy-debuff gate pass, but not an EARLIER one', () => {
+        const failEarly: Skill = {
+            slot: 'active',
+            abilities: [dmg('a', [{ subject: 'enemy-debuff', derivable: true }]), dot('b')],
+        };
+        expect(
+            gateFiringAbilities(failEarly, baseCtx).gatedSkill!.abilities.map((a) => a.id)
+        ).toEqual(['b']);
+
+        const passLate: Skill = {
+            slot: 'active',
+            abilities: [dot('b'), dmg('a', [{ subject: 'enemy-debuff', derivable: true }])],
+        };
+        expect(
+            gateFiringAbilities(passLate, baseCtx).gatedSkill!.abilities.map((a) => a.id)
+        ).toEqual(['b', 'a']);
+    });
+
+    it('ctxFor records the positional context (overlay applied) per ability', () => {
+        const skill: Skill = { slot: 'active', abilities: [dot('b'), dmg('a')] };
+        const { ctxFor } = gateFiringAbilities(skill, baseCtx);
+        expect(ctxFor.get('b')!.enemyDebuffCount).toBe(0);
+        expect(ctxFor.get('a')!.enemyDebuffCount).toBe(1);
+    });
+
+    it('honors count-threshold comparators as gates', () => {
+        const skill: Skill = {
+            slot: 'active',
+            abilities: [
+                dmg('a', [
+                    {
+                        subject: 'enemy-debuff',
+                        derivable: true,
+                        countComparator: 'gte',
+                        countThreshold: 2,
+                    },
+                ]),
+            ],
+        };
+        expect(
+            gateFiringAbilities(skill, { ...baseCtx, enemyDebuffCount: 1 }).gatedSkill!.abilities
+        ).toHaveLength(0);
+        expect(
+            gateFiringAbilities(skill, { ...baseCtx, enemyDebuffCount: 2 }).gatedSkill!.abilities
+        ).toHaveLength(1);
     });
 });

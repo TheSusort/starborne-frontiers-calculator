@@ -145,6 +145,41 @@ export function detonationsFromSkill(
     return out;
 }
 
+/**
+ * Hard condition gate for the firing skill's payload abilities, walked in ARRAY
+ * ORDER (the parser emits in skill-text order — the game's execution order).
+ * An ability whose conditions fail contributes nothing this round (dropped from
+ * the returned skill). A kept `dot` ability increments an enemy-debuff overlay
+ * (+1 ENTRY, matching the sim's entry-count semantics) so LATER abilities in the
+ * same cast see it — "Inflicts 2 Corrosion. Deals 90% +30% per debuff" resolves
+ * like the game. `ctxFor` records each ability's positional context so scaling
+ * (scaledBonus) uses the counts as of that ability's position.
+ *
+ * Covers the firing-skill payload path only; modifier and extend-dot abilities
+ * keep their own firing+passive gating, and buff/debuff abilities gate statically
+ * at conversion (see buffAbilityConverters).
+ */
+export function gateFiringAbilities(
+    skill: Skill | undefined,
+    baseCtx: ConditionContext
+): { gatedSkill: Skill | undefined; ctxFor: Map<string, ConditionContext> } {
+    const ctxFor = new Map<string, ConditionContext>();
+    if (!skill) return { gatedSkill: undefined, ctxFor };
+    let overlay = 0;
+    const kept: Ability[] = [];
+    for (const ability of skill.abilities) {
+        const ctx =
+            overlay > 0
+                ? { ...baseCtx, enemyDebuffCount: baseCtx.enemyDebuffCount + overlay }
+                : baseCtx;
+        ctxFor.set(ability.id, ctx);
+        if (!conditionsMet(ability.conditions, ctx)) continue;
+        kept.push(ability);
+        if (ability.config.type === 'dot') overlay += 1;
+    }
+    return { gatedSkill: { ...skill, abilities: kept }, ctxFor };
+}
+
 /** `accumulate-detonate` abilities on the skill, as {turns, pct} pairs (e.g. Echoing Burst). */
 export function accumulatorsFromSkill(skill: Skill | undefined): { turns: number; pct: number }[] {
     if (!skill) return [];
