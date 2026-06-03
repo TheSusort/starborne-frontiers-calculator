@@ -135,6 +135,7 @@ export const SkillEditorModal: React.FC<Props> = ({
                     <AbilityCard
                         key={ability.id}
                         ability={ability}
+                        slot={slot}
                         onChange={(updated) => handleAbilityChange(index, updated)}
                         onRemove={() => handleAbilityRemove(index)}
                         onMoveUp={index > 0 ? () => handleAbilityMove(index, -1) : undefined}
