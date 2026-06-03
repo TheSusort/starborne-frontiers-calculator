@@ -1243,3 +1243,15 @@ describe('detectGrantConditions', () => {
         ]);
     });
 });
+
+describe('parseChargeGain ally-crit trigger (Hermes)', () => {
+    it('classifies "when an ally critically hits" as a manual condition, NOT self-crit', () => {
+        const text =
+            'When an ally critically hits an enemy, this Unit <unit-aid>gains 1 charge</unit-aid> to its Charged Skill.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: false,
+        });
+    });
+});

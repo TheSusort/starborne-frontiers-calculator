@@ -453,6 +453,14 @@ In `simulateDPS` (~line 483), destructure the three new fields from `input` and 
 
 - [ ] **Step 5: Add the per-round charge-gain block**
 
+> **Superseded (post-launch correction):** the shipped simulator differs from the
+> pseudocode below — charge gains (`bonusCharges` from `selfChargeGain` /
+> `chargeGainCount`, plus `allyChargePerRound`) accumulate on **active rounds
+> only** (`hasChargedSkill && action === 'active'`; the charged round consumes
+> all charges and banks nothing), and `charges` is **capped**:
+> `charges = Math.min(charges + bonusCharges + allyChargePerRound, chargeCount)`.
+> The code below is the original plan, kept as a historical artifact.
+
 In the round loop, immediately **after** the conditional-bonus block (the `conditionalBonusPct` computation, ~lines 332-352) and before Step 1 damage — so `effectiveCrit` (~line 294) and `landedEnemyDebuffs`/DoT arrays (~line 341) are in scope — add:
 
 ```ts

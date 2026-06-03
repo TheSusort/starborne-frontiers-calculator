@@ -198,7 +198,7 @@ Follows repo conventions: existing `Modal`, `Button`, `Select`, `Input`, `Checkb
 | `src/types/abilities.ts` | The shared model: `ShipSkills`, `Skill`, `Ability`, `Condition`, configs, enums |
 | `src/utils/abilities/buildShipAbilities.ts` | Hybrid parser assembler (ship text → `ShipSkills`) |
 | `src/utils/abilities/evaluateConditions.ts` | Resolve a `Condition[]` to a count against sim state (gate/scale) |
-| `src/utils/abilities/applyAbility.ts` | Map an ability + context to a sim effect (delegates to existing kernels) |
+| `src/utils/abilities/applyAbilities.ts` | Map an ability + context to a sim effect (delegates to existing kernels) |
 | `src/utils/calculators/dpsSimulator.ts` | Refactored two-pass round loop over abilities |
 | `src/components/skills/*` | `SkillSlotList`, `SkillEditorModal`, `AbilityTypePicker`, `AbilityCard`, `ConditionRow` |
 | `src/pages/calculators/DPSCalculatorPage.tsx` | Wire skills into config; pass to `simulateDPS` |

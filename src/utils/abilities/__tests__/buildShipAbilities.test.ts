@@ -787,6 +787,21 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('"% more damage for each debuff on the enemy" scales on a DERIVABLE enemy-debuff count', () => {
+        // The sim derives enemy debuff counts per round (landed debuffs + DoT entries),
+        // so this for-each modifier must track them live, not a manual count.
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit deals <unit-damage>10% more direct damage</unit-damage> for each debuff on the enemy, up to a max of 50%.',
+        });
+        const mod = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'modifier'
+        )!;
+        expect(mod.conditions[0]).toMatchObject({ subject: 'enemy-debuff', derivable: true });
+        expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10, cap: 50 });
+    });
+
     describe('HP-proportional modifiers (Akula / Tithonus)', () => {
         it('Akula passive: outgoing damage scaling with CURRENT enemy HP% (up to 30%)', () => {
             const akula = ship({

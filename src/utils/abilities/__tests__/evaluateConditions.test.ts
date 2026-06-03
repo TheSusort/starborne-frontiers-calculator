@@ -276,6 +276,23 @@ describe('scaledBonus', () => {
     it('returns 0 when no scaling rule', () => {
         expect(scaledBonus(dmg([], undefined), ctx())).toBe(0);
     });
+
+    it('scaling reads only the indexed condition, even inside an anyOf OR-group', () => {
+        // anyOf affects GATING (conditionsMet groups consecutive anyOf conditions);
+        // scaledBonus deliberately reads the raw count of conditions[conditionIndex]
+        // alone — the other group members never contribute to the bonus.
+        const a = dmg(
+            [
+                cond({ subject: 'enemy-debuff', derivable: true, anyOf: true }),
+                cond({ subject: 'self-buff', derivable: true, anyOf: true }),
+            ],
+            { conditionIndex: 0, perUnit: 10, cap: 30 }
+        );
+        expect(scaledBonus(a, ctx({ enemyDebuffCount: 2 }))).toBe(20);
+        expect(scaledBonus(a, ctx({ enemyDebuffCount: 5 }))).toBe(30); // capped
+        // self-buffs alone satisfy the OR-gate but contribute nothing to scaling
+        expect(scaledBonus(a, ctx({ selfBuffNames: ['Stealth'] }))).toBe(0);
+    });
 });
 
 describe('binary roundCrit', () => {

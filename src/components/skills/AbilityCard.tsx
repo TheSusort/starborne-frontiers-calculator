@@ -100,10 +100,11 @@ const toNumber = (raw: string): number => {
     return isNaN(n) ? 0 : n;
 };
 
+// Numeric input → turns; any non-numeric input (e.g. typing "r…") → 'recurring',
+// so the recurring mode is reachable from a text field and survives editing.
 const toDuration = (raw: string): number | 'recurring' => {
-    if (raw === 'recurring') return 'recurring';
     const n = parseInt(raw, 10);
-    return isNaN(n) ? 0 : n;
+    return isNaN(n) ? 'recurring' : n;
 };
 
 export const AbilityCard: React.FC<Props> = ({
@@ -453,8 +454,12 @@ export const AbilityCard: React.FC<Props> = ({
                             )}
                             <Input
                                 label="Duration"
-                                type="number"
-                                value={config.duration ?? ''}
+                                helpLabel='turns, or "recurring"'
+                                value={
+                                    typeof config.duration === 'number'
+                                        ? String(config.duration)
+                                        : (config.duration ?? '')
+                                }
                                 onChange={(e) =>
                                     updateConfig({
                                         ...config,

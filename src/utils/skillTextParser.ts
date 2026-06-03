@@ -344,6 +344,11 @@ function classifyChargeCondition(
     const p = text.toLowerCase();
     if (p.includes('is a defender'))
         return { condition: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' };
+    // "When an ALLY critically hits an enemy, this Unit gains 1 charge" (Hermes) — a
+    // team-dependent trigger, NOT this unit's own crit; must not scale by own crit rate.
+    // Manual assume-active, matching the other reactive team conditions.
+    if (/\ball(?:y|ies)\b/.test(p) && p.includes('critical'))
+        return { condition: 'always', derivable: false };
     if (p.includes('critically damag') || p.includes('critically hit'))
         return { condition: 'self-crit', derivable: true };
     if (p.includes('inflict') && p.includes('debuff'))

@@ -221,8 +221,10 @@ function forEachCondition(sentence: string): Condition | null {
     if (!m) return null;
     const what = m[1].toLowerCase();
     if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
+    // Enemy DEBUFF counts ARE sim-derivable (landed debuffs + DoT entries per round) —
+    // matches mapConditionPhrase; enemy BUFF counts below are not (manual).
     if (/debuff/.test(what) && /enem|target/.test(what))
-        return { subject: 'enemy-debuff', derivable: false };
+        return { subject: 'enemy-debuff', derivable: true };
     if (/buff/.test(what) && /enem|target/.test(what))
         return { subject: 'enemy-buff', derivable: false };
     if (/adjacent all/.test(what)) return { subject: 'adjacent-ally', derivable: false };

@@ -74,6 +74,7 @@ const DPSCalculatorPage: React.FC = () => {
                             hp: Math.round(final.hp ?? 0),
                             allyChargePerRound: 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
+                            affinity: ship.affinity,
                             startCharged: detectFullyCharged([
                                 ship.activeSkillText,
                                 ship.chargeSkillText,
@@ -348,7 +349,9 @@ const DPSCalculatorPage: React.FC = () => {
                     defence: Math.round(final.defence ?? 0),
                     hp: Math.round(final.hp ?? 0),
                     allyChargePerRound: c.allyChargePerRound ?? 0,
-                    chargeCount: ship.chargeSkillCharge ?? c.chargeCount,
+                    // Reset (not carry over) when the new ship has no charge metadata —
+                    // a stale threshold from the previous ship would mis-pace the sim.
+                    chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectFullyCharged([
                         ship.activeSkillText,
                         ship.chargeSkillText,

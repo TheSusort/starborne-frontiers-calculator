@@ -26,6 +26,13 @@ Both sources accumulate **every round** (active and charged). When the charged
 skill fires, charges **reset to 0** — matching the simulator's current overflow
 behavior. This only shifts cadence; it introduces no new damage slice.
 
+> **Superseded (post-launch correction):** the shipped simulator accumulates
+> charge gains on **active rounds only** — the charged round consumes all
+> charges and banks nothing — and the running total is **capped at
+> `chargeCount`** (charges never exceed the requirement). See
+> `dpsSimulator.ts` and its charge-manipulation tests for the authoritative
+> semantics.
+
 ## Sim assumptions (provided by user)
 
 These bound which triggers are modelable and how:
