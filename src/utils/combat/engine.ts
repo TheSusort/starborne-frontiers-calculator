@@ -1,8 +1,14 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
-import { Buff, EnemyBaseClass, SelectedGameBuff } from '../../types/calculator';
-import { ShipSkills } from '../../types/abilities';
+import {
+    Buff,
+    DoTApplicationConfig,
+    EnemyBaseClass,
+    SelectedGameBuff,
+} from '../../types/calculator';
+import { Ability, ShipSkills, Skill } from '../../types/abilities';
+import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
     selectFiringSkill,
     damageInputsFromSkill,
@@ -17,7 +23,13 @@ import {
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { ActiveDoTStack, createActor, selectNextActor } from './state';
+import {
+    ActiveDoTStack,
+    PendingAccumulator,
+    PendingBomb,
+    createActor,
+    selectNextActor,
+} from './state';
 import { ActiveBuff, createStatusEngine } from './statusEngine';
 import { CombatEventBus } from './events';
 
@@ -56,6 +68,269 @@ function expireStacks(entries: ActiveDoTStack[]): void {
     }
 }
 
+// Expand an active buff/debuff into its underlying SelectedGameBuff effects.
+// Accumulating buffs override their static stacks with the per-round count and
+// drop out entirely when at zero stacks; non-accumulating ones pass through.
+function expandBuffs(ab: ActiveBuff, bufs: SelectedGameBuff[]): SelectedGameBuff[] {
+    if (ab.stacks !== undefined) {
+        return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
+    }
+    return bufs;
+}
+
+// Per-round self-buff totals from the status engine's active list. Expands each
+// active buff back into its SelectedGameBuff effects (stack override included) and
+// folds them into the six tracked totals. The later active-passive modifier
+// fold-in stays in the loop (it depends on modifierCtx); these totals are returned
+// mutable so the loop can add the modifier deltas at the original sequence point.
+function resolveSelfBuffTotals(args: {
+    activeSelfBuffs: ActiveBuff[];
+    selfBuffLookup: Map<string, SelectedGameBuff[]>;
+}): ReturnType<typeof calculateBuffTotals> {
+    const roundSelfBuffs = args.activeSelfBuffs.flatMap((ab) =>
+        // Accumulating buff: override static stacks with per-round count; skip when 0
+        expandBuffs(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
+    );
+    return calculateBuffTotals(toSimBuffs(roundSelfBuffs));
+}
+
+// Per-round enemy-debuff expansion with landing logic. 'apply' (affinity-based)
+// debuffs land unless the attacker is at an affinity disadvantage; everything else
+// is gated by the precomputed hacking-vs-security landing roll. Returns the
+// expanded effect list plus the landed/resisted ActiveBuff partitions. The landing
+// roll is passed in (already drawn from debuffLandingGate at the loop's sequence
+// point) so no stateful gate is called inside the helper.
+function resolveEnemyDebuffs(args: {
+    activeEnemyDebuffs: ActiveBuff[];
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+    affinityDisadvantage: boolean;
+    roundDebuffLanded: boolean;
+    emitResisted: (buffName: string) => void;
+    emitApplied: (buffName: string) => void;
+}): {
+    roundEnemyDebuffs: SelectedGameBuff[];
+    landedEnemyDebuffs: ActiveBuff[];
+    resistedEnemyDebuffs: ActiveBuff[];
+} {
+    const landedEnemyDebuffs: ActiveBuff[] = [];
+    const resistedEnemyDebuffs: ActiveBuff[] = [];
+    const roundEnemyDebuffs = args.activeEnemyDebuffs.flatMap((ab) => {
+        const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
+        // 'apply' = affinity-based: guaranteed unless the attacker is at an affinity
+        // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
+        // hacking-vs-security landing roll.
+        const isApply = bufs.some((b) => b.application === 'apply');
+        const lands = isApply ? !args.affinityDisadvantage : args.roundDebuffLanded;
+        if (!lands) {
+            resistedEnemyDebuffs.push(ab);
+            args.emitResisted(ab.buffName);
+            return [];
+        }
+        landedEnemyDebuffs.push(ab);
+        args.emitApplied(ab.buffName);
+        return expandBuffs(ab, bufs);
+    });
+    return { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs };
+}
+
+// Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
+// applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
+// excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
+// conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
+// (Valerian) fires at exactly critPowerFactor frequency via the deterministic
+// extendChanceGate schedule. Sourced from BOTH the firing skill and the
+// always-active passive slot (Valerian's extension is a passive). The stateful gate is
+// passed in and called at the same sequence point as the original inline loop.
+function extendDoTs(args: {
+    abilities: Ability[];
+    ctx: ConditionContext;
+    effectiveCritDamage: number;
+    extendChanceGate: (rate: number) => boolean;
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+}): void {
+    for (const ab of args.abilities) {
+        if (ab.config.type !== 'extend-dot') continue;
+        if (!conditionsMet(ab.conditions, args.ctx)) continue;
+        if (ab.config.chanceFromCritPower) {
+            const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
+            if (!args.extendChanceGate(critPowerFactor)) continue;
+        }
+        for (const e of args.corrosionEntries) e.remainingRounds += ab.config.turns;
+        for (const e of args.infernoEntries) e.remainingRounds += ab.config.turns;
+    }
+}
+
+// Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
+// damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
+// that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
+// stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
+function detonate(args: {
+    gatedSkill: Skill | undefined;
+    effectiveAttack: number;
+    enemyHp: number;
+    dotMult: number;
+    affinityMult: number;
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    pendingBombs: PendingBomb[];
+}): number {
+    let detonationDamage = 0;
+    for (const det of detonationsFromSkill(args.gatedSkill)) {
+        const pct = det.powerPct / 100;
+        if (det.dotType === 'inferno') {
+            detonationDamage +=
+                args.infernoEntries.reduce(
+                    (sum, e) =>
+                        sum + e.stacks * (e.tier / 100) * args.effectiveAttack * e.remainingRounds,
+                    0
+                ) *
+                args.dotMult *
+                args.affinityMult *
+                pct;
+            args.infernoEntries.length = 0;
+        } else if (det.dotType === 'corrosion') {
+            const baseHp = Math.min(args.enemyHp, 500_000);
+            detonationDamage +=
+                args.corrosionEntries.reduce(
+                    (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
+                    0
+                ) *
+                args.dotMult *
+                args.affinityMult *
+                pct;
+            args.corrosionEntries.length = 0;
+        } else if (det.dotType === 'bomb') {
+            detonationDamage +=
+                args.pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
+                args.affinityMult *
+                pct;
+            args.pendingBombs.length = 0;
+        }
+    }
+    return detonationDamage;
+}
+
+// Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
+function applyNewDoTs(args: {
+    dotsConfig: DoTApplicationConfig;
+    effectiveAttack: number;
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    pendingBombs: PendingBomb[];
+    emitDotApplied: (dotType: 'corrosion' | 'inferno' | 'bomb', stacks: number) => void;
+}): void {
+    for (const dot of args.dotsConfig) {
+        if (dot.stacks <= 0 || dot.tier <= 0) continue;
+        if (dot.type === 'corrosion') {
+            args.corrosionEntries.push({
+                stacks: dot.stacks,
+                tier: dot.tier,
+                remainingRounds: dot.duration,
+            });
+            args.emitDotApplied('corrosion', dot.stacks);
+        } else if (dot.type === 'inferno') {
+            args.infernoEntries.push({
+                stacks: dot.stacks,
+                tier: dot.tier,
+                remainingRounds: dot.duration,
+            });
+            args.emitDotApplied('inferno', dot.stacks);
+        } else if (dot.type === 'bomb') {
+            args.pendingBombs.push({
+                countdown: Math.max(1, dot.duration),
+                damagePerStack: args.effectiveAttack * (dot.tier / 100),
+                stacks: dot.stacks,
+                tier: dot.tier,
+            });
+            args.emitDotApplied('bomb', dot.stacks);
+        }
+    }
+}
+
+// Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
+// (gated by the same landing roll as inflicted debuffs). Each starts gathering this
+// round's direct damage in Step 6b below.
+function applyAccumulators(args: {
+    gatedSkill: Skill | undefined;
+    pendingAccumulators: PendingAccumulator[];
+}): void {
+    for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
+        args.pendingAccumulators.push({
+            roundsRemaining: Math.max(1, acc.turns),
+            pct: acc.pct,
+            accumulated: 0,
+        });
+    }
+}
+
+// Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
+function processBombs(args: { pendingBombs: PendingBomb[]; affinityMult: number }): number {
+    let bombBurst = 0;
+    for (let i = args.pendingBombs.length - 1; i >= 0; i--) {
+        args.pendingBombs[i].countdown -= 1;
+        if (args.pendingBombs[i].countdown <= 0) {
+            bombBurst += args.pendingBombs[i].stacks * args.pendingBombs[i].damagePerStack;
+            args.pendingBombs.splice(i, 1);
+        }
+    }
+    return bombBurst * args.affinityMult;
+}
+
+// Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
+// for pct% of the accumulated total on expiry (game-categorised as detonation damage).
+// directDamage already includes affinity, so no extra affinity multiplier is applied.
+function processAccumulators(args: {
+    pendingAccumulators: PendingAccumulator[];
+    directDamage: number;
+}): number {
+    let accumulatorBurst = 0;
+    for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
+        args.pendingAccumulators[i].accumulated += args.directDamage;
+        args.pendingAccumulators[i].roundsRemaining -= 1;
+        if (args.pendingAccumulators[i].roundsRemaining <= 0) {
+            accumulatorBurst +=
+                args.pendingAccumulators[i].accumulated * (args.pendingAccumulators[i].pct / 100);
+            args.pendingAccumulators.splice(i, 1);
+        }
+    }
+    return accumulatorBurst;
+}
+
+// Steps 4 & 5: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%) and
+// inferno (scales with the attacker's effective attack, no outgoing buff), then expire
+// both stack sets. Returns the two per-round tick totals.
+function tickDoTs(args: {
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    enemyHp: number;
+    effectiveAttack: number;
+    dotMult: number;
+    affinityMult: number;
+    emitTicked: (dotType: 'corrosion' | 'inferno', damage: number) => void;
+}): { corrosionDamage: number; infernoDamage: number } {
+    // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
+    const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
+    const corrosionDamage =
+        tickDoTStacks(args.corrosionEntries, corrosionBaseHp) * args.dotMult * args.affinityMult;
+    if (corrosionDamage > 0) {
+        args.emitTicked('corrosion', corrosionDamage);
+    }
+
+    // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
+    const infernoDamage =
+        tickDoTStacks(args.infernoEntries, args.effectiveAttack) * args.dotMult * args.affinityMult;
+    if (infernoDamage > 0) {
+        args.emitTicked('inferno', infernoDamage);
+    }
+
+    // Expire DoT stacks after ticking
+    expireStacks(args.corrosionEntries);
+    expireStacks(args.infernoEntries);
+
+    return { corrosionDamage, infernoDamage };
+}
+
 export interface CombatEngineInput {
     attack: number;
     crit: number;
@@ -69,6 +344,8 @@ export interface CombatEngineInput {
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
+    // Rate/fold fields below (debuffLandingChance, selfDotModifier, defensePenetrationBuff)
+    // are pre-derived by the adapter (simulateDPS) — pass the resolved values, not raw hacking.
     debuffLandingChance: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
@@ -240,53 +517,32 @@ export function runCombat(input: CombatEngineInput): {
         // decrement into the owner's Post Turn.
         const entry = statusEngine.step(r);
 
-        const roundSelfBuffs = entry.activeSelfBuffs.flatMap((ab) => {
-            const bufs = selfBuffLookup.get(ab.buffName) ?? [];
-            // Accumulating buff: override static stacks with per-round count; skip when 0
-            if (ab.stacks !== undefined) {
-                return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
-            }
-            return bufs;
-        });
+        // Self-buff names visible to the condition engine (both buildRoundContext
+        // calls). Accumulating buffs at zero stacks are excluded.
+        const activeSelfBuffNames = entry.activeSelfBuffs
+            .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
+            .map((ab) => ab.buffName);
+
         let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
-            calculateBuffTotals(toSimBuffs(roundSelfBuffs));
+            resolveSelfBuffTotals({ activeSelfBuffs: entry.activeSelfBuffs, selfBuffLookup });
 
         const roundDebuffLanded = debuffLandingGate(debuffLandingChance);
         // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
         // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
         // -25 only on a disadvantage matchup.
         const affinityDisadvantage = affinityDamageModifier < 0;
-        const landedEnemyDebuffs: ActiveBuff[] = [];
-        const resistedEnemyDebuffs: ActiveBuff[] = [];
-        const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
-            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
-            // 'apply' = affinity-based: guaranteed unless the attacker is at an affinity
-            // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
-            // hacking-vs-security landing roll.
-            const isApply = bufs.some((b) => b.application === 'apply');
-            const lands = isApply ? !affinityDisadvantage : roundDebuffLanded;
-            if (!lands) {
-                resistedEnemyDebuffs.push(ab);
-                bus?.emit({
-                    type: 'debuff-resisted',
-                    targetId: enemy.id,
-                    round: r,
-                    buffName: ab.buffName,
-                });
-                return [];
+        const { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs } = resolveEnemyDebuffs(
+            {
+                activeEnemyDebuffs: entry.activeEnemyDebuffs,
+                enemyDebuffLookup,
+                affinityDisadvantage,
+                roundDebuffLanded,
+                emitResisted: (buffName) =>
+                    bus?.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName }),
+                emitApplied: (buffName) =>
+                    bus?.emit({ type: 'debuff-applied', targetId: enemy.id, round: r, buffName }),
             }
-            landedEnemyDebuffs.push(ab);
-            bus?.emit({
-                type: 'debuff-applied',
-                targetId: enemy.id,
-                round: r,
-                buffName: ab.buffName,
-            });
-            if (ab.stacks !== undefined) {
-                return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
-            }
-            return bufs;
-        });
+        );
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
 
@@ -300,9 +556,7 @@ export function runCombat(input: CombatEngineInput): {
         // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuff)) is used only
         // for the rare self-crit-gated modifier condition, avoiding a self-referential gate.
         const modifierCtx = buildRoundContext({
-            selfBuffNames: entry.activeSelfBuffs
-                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
-                .map((ab) => ab.buffName),
+            selfBuffNames: activeSelfBuffNames,
             landedEnemyDebuffCount: landedEnemyDebuffs.length,
             corrosionEntryCount: corrosionEntries.length,
             infernoEntryCount: infernoEntries.length,
@@ -353,9 +607,7 @@ export function runCombat(input: CombatEngineInput): {
         // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state,
         // matching the prior inline behaviour.
         const ctx = buildRoundContext({
-            selfBuffNames: entry.activeSelfBuffs
-                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
-                .map((ab) => ab.buffName),
+            selfBuffNames: activeSelfBuffNames,
             landedEnemyDebuffCount: landedEnemyDebuffs.length,
             corrosionEntryCount: corrosionEntries.length,
             infernoEntryCount: infernoEntries.length,
@@ -469,180 +721,64 @@ export function runCombat(input: CombatEngineInput): {
             didHit: true,
         });
 
-        // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
-        // applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
-        // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
-        // conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
-        // (Valerian) fires at exactly critPowerFactor frequency via the deterministic
-        // extendChanceGate schedule. Sourced from BOTH the firing skill and the
-        // always-active passive slot (Valerian's extension is a passive).
-        for (const ab of [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])]) {
-            if (ab.config.type !== 'extend-dot') continue;
-            if (!conditionsMet(ab.conditions, ctx)) continue;
-            if (ab.config.chanceFromCritPower) {
-                const critPowerFactor = Math.min(1, effectiveCritDamage / 100);
-                if (!extendChanceGate(critPowerFactor)) continue;
-            }
-            for (const e of corrosionEntries) e.remainingRounds += ab.config.turns;
-            for (const e of infernoEntries) e.remainingRounds += ab.config.turns;
-        }
+        extendDoTs({
+            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+            ctx,
+            effectiveCritDamage,
+            extendChanceGate,
+            corrosionEntries,
+            infernoEntries,
+        });
 
-        // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
-        // damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
-        // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
-        // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
-        let detonationDamage = 0;
-        for (const det of detonationsFromSkill(gatedSkill)) {
-            const pct = det.powerPct / 100;
-            if (det.dotType === 'inferno') {
-                detonationDamage +=
-                    infernoEntries.reduce(
-                        (sum, e) =>
-                            sum + e.stacks * (e.tier / 100) * effectiveAttack * e.remainingRounds,
-                        0
-                    ) *
-                    dotMult *
-                    affinityMult *
-                    pct;
-                infernoEntries.length = 0;
-            } else if (det.dotType === 'corrosion') {
-                const baseHp = Math.min(enemyHp, 500_000);
-                detonationDamage +=
-                    corrosionEntries.reduce(
-                        (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
-                        0
-                    ) *
-                    dotMult *
-                    affinityMult *
-                    pct;
-                corrosionEntries.length = 0;
-            } else if (det.dotType === 'bomb') {
-                detonationDamage +=
-                    pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
-                    affinityMult *
-                    pct;
-                pendingBombs.length = 0;
-            }
-        }
+        let detonationDamage = detonate({
+            gatedSkill,
+            effectiveAttack,
+            enemyHp,
+            dotMult,
+            affinityMult,
+            corrosionEntries,
+            infernoEntries,
+            pendingBombs,
+        });
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;
         if (dotsLanded) {
-            for (const dot of dotsConfig) {
-                if (dot.stacks <= 0 || dot.tier <= 0) continue;
-                if (dot.type === 'corrosion') {
-                    corrosionEntries.push({
-                        stacks: dot.stacks,
-                        tier: dot.tier,
-                        remainingRounds: dot.duration,
-                    });
+            applyNewDoTs({
+                dotsConfig,
+                effectiveAttack,
+                corrosionEntries,
+                infernoEntries,
+                pendingBombs,
+                emitDotApplied: (dotType, stacks) =>
                     bus?.emit({
                         type: 'dot-applied',
                         targetId: enemy.id,
                         round: r,
-                        dotType: 'corrosion',
-                        stacks: dot.stacks,
-                    });
-                } else if (dot.type === 'inferno') {
-                    infernoEntries.push({
-                        stacks: dot.stacks,
-                        tier: dot.tier,
-                        remainingRounds: dot.duration,
-                    });
-                    bus?.emit({
-                        type: 'dot-applied',
-                        targetId: enemy.id,
-                        round: r,
-                        dotType: 'inferno',
-                        stacks: dot.stacks,
-                    });
-                } else if (dot.type === 'bomb') {
-                    pendingBombs.push({
-                        countdown: Math.max(1, dot.duration),
-                        damagePerStack: effectiveAttack * (dot.tier / 100),
-                        stacks: dot.stacks,
-                        tier: dot.tier,
-                    });
-                    bus?.emit({
-                        type: 'dot-applied',
-                        targetId: enemy.id,
-                        round: r,
-                        dotType: 'bomb',
-                        stacks: dot.stacks,
-                    });
-                }
-            }
+                        dotType,
+                        stacks,
+                    }),
+            });
         }
 
-        // Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
-        // (gated by the same landing roll as inflicted debuffs). Each starts gathering this
-        // round's direct damage in Step 6b below.
         if (dotsLanded) {
-            for (const acc of accumulatorsFromSkill(gatedSkill)) {
-                pendingAccumulators.push({
-                    roundsRemaining: Math.max(1, acc.turns),
-                    pct: acc.pct,
-                    accumulated: 0,
-                });
-            }
+            applyAccumulators({ gatedSkill, pendingAccumulators });
         }
 
-        // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
-        const corrosionBaseHp = Math.min(enemyHp, 500_000);
-        const corrosionDamage =
-            tickDoTStacks(corrosionEntries, corrosionBaseHp) * dotMult * affinityMult;
-        if (corrosionDamage > 0) {
-            bus?.emit({
-                type: 'dot-ticked',
-                targetId: enemy.id,
-                round: r,
-                dotType: 'corrosion',
-                damage: corrosionDamage,
-            });
-        }
+        const { corrosionDamage, infernoDamage } = tickDoTs({
+            corrosionEntries,
+            infernoEntries,
+            enemyHp,
+            effectiveAttack,
+            dotMult,
+            affinityMult,
+            emitTicked: (dotType, damage) =>
+                bus?.emit({ type: 'dot-ticked', targetId: enemy.id, round: r, dotType, damage }),
+        });
 
-        // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
-        const infernoDamage =
-            tickDoTStacks(infernoEntries, effectiveAttack) * dotMult * affinityMult;
-        if (infernoDamage > 0) {
-            bus?.emit({
-                type: 'dot-ticked',
-                targetId: enemy.id,
-                round: r,
-                dotType: 'inferno',
-                damage: infernoDamage,
-            });
-        }
+        detonationDamage += processBombs({ pendingBombs, affinityMult });
 
-        // Expire DoT stacks after ticking
-        expireStacks(corrosionEntries);
-        expireStacks(infernoEntries);
-
-        // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
-        let bombBurst = 0;
-        for (let i = pendingBombs.length - 1; i >= 0; i--) {
-            pendingBombs[i].countdown -= 1;
-            if (pendingBombs[i].countdown <= 0) {
-                bombBurst += pendingBombs[i].stacks * pendingBombs[i].damagePerStack;
-                pendingBombs.splice(i, 1);
-            }
-        }
-        detonationDamage += bombBurst * affinityMult;
-
-        // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
-        // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
-        // directDamage already includes affinity, so no extra affinity multiplier is applied.
-        let accumulatorBurst = 0;
-        for (let i = pendingAccumulators.length - 1; i >= 0; i--) {
-            pendingAccumulators[i].accumulated += directDamage;
-            pendingAccumulators[i].roundsRemaining -= 1;
-            if (pendingAccumulators[i].roundsRemaining <= 0) {
-                accumulatorBurst +=
-                    pendingAccumulators[i].accumulated * (pendingAccumulators[i].pct / 100);
-                pendingAccumulators.splice(i, 1);
-            }
-        }
-        detonationDamage += accumulatorBurst;
+        detonationDamage += processAccumulators({ pendingAccumulators, directDamage });
 
         if (detonationDamage > 0) {
             bus?.emit({
