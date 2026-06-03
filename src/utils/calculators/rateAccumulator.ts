@@ -1,7 +1,9 @@
 /**
  * Deterministic stand-in for a probabilistic event: a fractional accumulator that
- * fires at exactly the supplied rate, evenly spaced (a 70% rate over 10 calls fires
- * 7 times, never with a gap longer than ceil(1/rate)).
+ * fires at exactly the supplied rate (a 70% rate over 10 calls fires 7 times).
+ * Steady-state spacing is ~1/rate calls, but the schedule is back-loaded: the
+ * accumulator starts at 0, so the FIRST fire lands only once the rate has fully
+ * accumulated (rate 0.2 first fires on call 5, not call 1).
  *
  * The rate is supplied per call so callers whose probability changes between events
  * (e.g. crit rate shifting with buffs round-to-round) accumulate correctly. Rates are

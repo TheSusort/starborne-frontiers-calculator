@@ -36,6 +36,10 @@ describe('makeRateGate', () => {
         expect(fires(0.1, 10).filter(Boolean)).toHaveLength(1);
     });
 
+    it('back-loads the first fire: rate 0.2 first fires on call 5', () => {
+        expect(fires(0.2, 5)).toEqual([false, false, false, false, true]);
+    });
+
     it('clamps rates outside [0, 1]', () => {
         expect(fires(1.5, 3)).toEqual([true, true, true]);
         expect(fires(-0.5, 3)).toEqual([false, false, false]);
