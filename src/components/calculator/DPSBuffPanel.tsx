@@ -106,7 +106,7 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
             {hasDoTs && (
                 <>
                     <div className="text-xs text-theme-text-secondary mt-2 mb-1">
-                        {dotsLanded ? 'DoTs Applied' : 'DoTs Resisted'}
+                        {dotsLanded ? 'DoTs Inflicted' : 'DoTs Resisted'}
                     </div>
                     {appliedDoTs.map((dot, i) => (
                         <div

@@ -2130,6 +2130,21 @@ const DocumentationPage: React.FC = () => {
                                         crit rate, crit damage, and defense penetration.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Ship Skills & Ability Editor:
+                                        </span>{' '}
+                                        Each ship has three skill slots &mdash; Active, Charged, and
+                                        Passive &mdash; that you configure through per-skill ability
+                                        editor modals. When you select a ship, its abilities are
+                                        auto-filled from the skill text with all components: base
+                                        damage, secondary damage, conditional scaling, charge gain,
+                                        DoTs, DoT extensions, DoT detonations,
+                                        accumulate-and-detonate debuffs (e.g. Echoing Burst), and
+                                        buffs/debuffs. All fields are fully editable. Re-selecting a
+                                        different ship into a slot rebuilds that ship&apos;s
+                                        abilities from its skill text, replacing any manual edits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         When you select a ship, the calculator automatically
                                         populates skill damage multipliers from your ship&apos;s
                                         skill data. The &quot;Start Charged&quot; checkbox is also
@@ -2167,6 +2182,79 @@ const DocumentationPage: React.FC = () => {
                                         automatically each round; other conditions take a manual
                                         count. Auto-detected from skill text and editable per skill
                                         row.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Condition Thresholds:</span>{' '}
+                                        Effects gated on a count — &quot;if the target has 3 or more
+                                        debuffs&quot;, &quot;if this unit has no debuffs&quot; —
+                                        fire only when the count actually meets the threshold,
+                                        rather than on the first buff or debuff. Auto-detected from
+                                        skill text and editable per condition (at least / at most /
+                                        exactly N). Self buff and enemy debuff counts are tallied
+                                        from sim state; enemy buff and self debuff counts default to
+                                        zero under the single-target DPS assumptions.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Deterministic Simulation:
+                                        </span>{' '}
+                                        The simulator is fully deterministic — identical inputs
+                                        always produce identical results. Crits follow a per-round
+                                        fractional-accumulator schedule at the ship&apos;s effective
+                                        crit rate, with separate schedules for active and charged
+                                        hits to avoid cadence aliasing. Rounds where a crit lands
+                                        show a <span className="font-semibold">Crit</span> badge in
+                                        the chart tooltip. Attacks marked &quot;cannot critically
+                                        hit&quot; never crit and consume no crit chance. Debuff and
+                                        DoT landing, and chance-based DoT extensions, also follow
+                                        deterministic schedules — no randomness anywhere in the sim.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Hard Condition Gates:</span>{' '}
+                                        Conditions on damage, additional stat-based damage, DoTs,
+                                        DoT detonations, and accumulate-and-detonate abilities now
+                                        gate — if the condition is not met in a given round, that
+                                        component contributes nothing. &quot;Below X% HP&quot; and
+                                        scaling conditions that require a non-zero count also gate
+                                        strictly: damage gated on &quot;per enemy debuff&quot; deals
+                                        nothing when the enemy has zero debuffs that round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Derived Enemy HP:</span>{' '}
+                                        Enemy HP percentage declines as cumulative damage
+                                        accumulates against the configured enemy HP pool, so
+                                        execute-style &quot;below X% HP&quot; gates switch on
+                                        mid-fight at the correct round rather than always passing or
+                                        always failing.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Ability Execution Order:
+                                        </span>{' '}
+                                        Abilities within a skill are executed in the same order they
+                                        appear in the skill text, matching the game. This means a
+                                        DoT inflicted early in a skill can satisfy a later
+                                        ability&apos;s &quot;enemy has a debuff&quot; condition in
+                                        the same round. You can reorder abilities with the up/down
+                                        buttons in the skill editor.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Charge Manipulation:</span>{' '}
+                                        Ships that add charges to their own Charged Skill each round
+                                        (e.g. &quot;+1 charge if you crit&quot;) make the charged
+                                        skill fire sooner. These self-gain conditions are
+                                        auto-detected from skill text and tallied automatically each
+                                        round from sim state (crits, enemy debuffs, active self
+                                        buffs); you can also set a manual trigger count per
+                                        condition. The{' '}
+                                        <span className="text-primary">Ally charges / round</span>{' '}
+                                        field models supporter ships that feed charges to the
+                                        attacker. The{' '}
+                                        <span className="text-primary">Enemy Type</span> selector
+                                        enables type-conditional charge gains (e.g. gains that only
+                                        trigger against a Defender). The simulation summary shows a
+                                        &quot;Charged skill fires: every N rounds&quot; line
+                                        reflecting the effective cadence.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Start Charged:</span> Some

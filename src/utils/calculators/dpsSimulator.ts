@@ -1,12 +1,30 @@
-import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
+import { calculateDamageReduction } from '../autogear/priorityScore';
+import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
+import { buildRoundContext } from '../abilities/roundContext';
 import {
     Buff,
+    ChargeGain,
     ConditionalDamage,
     DoTApplicationConfig,
     DoTApplicationEntry,
+    EnemyBaseClass,
     SecondaryDamage,
     SelectedGameBuff,
 } from '../../types/calculator';
+import { ShipSkills } from '../../types/abilities';
+import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
+import {
+    selectFiringSkill,
+    damageInputsFromSkill,
+    secondaryFromSkill,
+    dotsFromSkill,
+    chargeAbilitiesFromSkill,
+    detonationsFromSkill,
+    accumulatorsFromSkill,
+    modifierTotalsFromAbilities,
+    gateFiringAbilities,
+} from '../abilities/applyAbilities';
+import { makeRateGate } from './rateAccumulator';
 import {
     toSimBuffs,
     toEnemyModifiers,
@@ -20,11 +38,13 @@ export interface DPSSimulationInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    activeMultiplier: number;
-    chargedMultiplier: number;
+    // Flat damage fields are only read by the flatInputToAbilities fallback (when
+    // `shipSkills` is omitted). Callers that pass `shipSkills` (the DPS page) skip them.
+    activeMultiplier?: number;
+    chargedMultiplier?: number;
     chargeCount: number;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
+    activeDoTs?: DoTApplicationConfig;
+    chargedDoTs?: DoTApplicationConfig;
     enemyDefense: number;
     enemyHp: number;
     rounds: number;
@@ -53,16 +73,32 @@ export interface DPSSimulationInput {
     activeConditional?: ConditionalDamage;
     /** Conditional scaling bonus applied on charged-skill rounds. */
     chargedConditional?: ConditionalDamage;
+    /** Per-round self charge gain parsed from the attacker's skill text. */
+    selfChargeGain?: ChargeGain;
+    /** Flat extra charges per round contributed by allies/supporters. */
+    allyChargePerRound?: number;
+    /** Enemy base class, for the 'enemy-type' charge-gain condition. */
+    enemyType?: EnemyBaseClass;
+    /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
+    shipSkills?: ShipSkills;
 }
 
 export interface RoundData {
     round: number;
     action: 'active' | 'charged';
     charges: number;
+    /** Charges required to fire the charged skill; 0 when the ship has no charged skill. */
+    chargeCount: number;
+    /** This round's deterministic binary crit outcome (per-stream schedule). */
+    didCrit: boolean;
+    /** Enemy HP% ENTERING this round (100 → 0), derived from cumulative damage vs the
+     *  enemy HP pool — the value hp-threshold conditions are gated against. */
+    enemyHpPct: number;
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
-    bombDamage: number;
+    /** Detonation damage this round: Bomb detonations + DoT detonations (game-categorised together). */
+    detonationDamage: number;
     totalRoundDamage: number;
     cumulativeDamage: number;
     activeCorrosionStacks: number;
@@ -82,7 +118,7 @@ export interface DPSSimulationSummary {
     totalDirectDamage: number;
     totalCorrosionDamage: number;
     totalInfernoDamage: number;
-    totalBombDamage: number;
+    totalDetonationDamage: number;
     totalSecondaryDamage: number;
     totalConditionalDamage: number;
 }
@@ -103,6 +139,14 @@ interface PendingBomb {
     damagePerStack: number;
     stacks: number;
     tier: number;
+}
+
+// Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
+// is active, then detonates for `pct`% of the accumulated total when it expires.
+interface PendingAccumulator {
+    roundsRemaining: number;
+    pct: number;
+    accumulated: number;
 }
 
 export interface ActiveDoTState {
@@ -152,11 +196,8 @@ function runSinglePass(params: {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    activeMultiplier: number;
-    chargedMultiplier: number;
     chargeCount: number;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
+    shipSkills: ShipSkills;
     enemyDefense: number;
     enemyHp: number;
     numRounds: number;
@@ -173,17 +214,15 @@ function runSinglePass(params: {
     affinityCritPenalty: number;
     defence: number;
     hp: number;
-    activeSecondary?: SecondaryDamage;
-    chargedSecondary?: SecondaryDamage;
-    activeConditional?: ConditionalDamage;
-    chargedConditional?: ConditionalDamage;
+    allyChargePerRound?: number;
+    enemyType?: EnemyBaseClass;
 }): {
     rounds: RoundData[];
     rawTotals: {
         direct: number;
         corrosion: number;
         inferno: number;
-        bomb: number;
+        detonation: number;
         cumulative: number;
         totalSecondary: number;
         totalConditional: number;
@@ -194,11 +233,8 @@ function runSinglePass(params: {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
+        shipSkills,
         enemyDefense,
         enemyHp,
         numRounds,
@@ -215,48 +251,58 @@ function runSinglePass(params: {
         affinityCritPenalty,
         defence,
         hp,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
+        allyChargePerRound,
+        enemyType,
     } = params;
 
     // All mutable state declared fresh on every call
     let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
+    // Deterministic event gates — replace Math.random / expected-value math so
+    // identical inputs always produce identical output. Crit uses one gate PER
+    // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
+    // of how the charge cadence aligns with the crit schedule (no aliasing).
+    const activeCritGate = makeRateGate();
+    const chargedCritGate = makeRateGate();
+    const debuffLandingGate = makeRateGate();
+    const extendChanceGate = makeRateGate();
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
-    let totalBombRaw = 0;
+    let totalDetonationRaw = 0;
     let totalSecondaryRaw = 0;
     let totalConditionalRaw = 0;
     const corrosionEntries: ActiveDoTStack[] = [];
     const infernoEntries: ActiveDoTStack[] = [];
     const pendingBombs: PendingBomb[] = [];
+    const pendingAccumulators: PendingAccumulator[] = [];
 
     const roundData: RoundData[] = [];
 
     for (let r = 1; r <= numRounds; r++) {
         let action: 'active' | 'charged';
-        let multiplier: number;
-        let dotsConfig: DoTApplicationConfig;
 
         if (hasChargedSkill && charges >= chargeCount) {
             action = 'charged';
-            multiplier = chargedMultiplier;
-            dotsConfig = chargedDoTs;
             charges = 0;
         } else {
             action = 'active';
-            multiplier = activeMultiplier;
-            dotsConfig = activeDoTs;
             if (hasChargedSkill) {
                 charges += 1;
             }
         }
 
-        const secondary = action === 'charged' ? chargedSecondary : activeSecondary;
-        const conditional = action === 'charged' ? chargedConditional : activeConditional;
+        // Enemy HP% entering this round, derived from damage dealt so far. Floors at 0
+        // once cumulative damage exceeds the pool (the sim keeps hitting the "dead" dummy).
+        const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - cumulativeDamage / enemyHp)) : 100;
+
+        const firingSkill = selectFiringSkill(shipSkills, action);
+        // noCrit is read from the UNGATED skill: the flag is a property of the attack
+        // itself and must be known before the ctx (and therefore the gate) exists.
+        // Assumes one base-damage ability per skill (true for all parser output); a
+        // gated-off first damage ability with a differently-flagged second one would
+        // read the wrong flag — not representable from skill text today.
+        const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
         // Per-round buff totals from timeline
         const entry = timeline[r - 1];
@@ -269,19 +315,28 @@ function runSinglePass(params: {
             }
             return bufs;
         });
-        const { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
+        let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
             calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 
-        const roundDebuffLanded = Math.random() < debuffLandingChance;
+        const roundDebuffLanded = debuffLandingGate(debuffLandingChance);
+        // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
+        // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
+        // -25 only on a disadvantage matchup.
+        const affinityDisadvantage = affinityDamageModifier < 0;
         const landedEnemyDebuffs: ActiveBuff[] = [];
         const resistedEnemyDebuffs: ActiveBuff[] = [];
         const roundEnemyDebuffs = entry.activeEnemyDebuffs.flatMap((ab) => {
-            if (!roundDebuffLanded) {
+            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
+            // 'apply' = affinity-based: guaranteed unless the attacker is at an affinity
+            // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
+            // hacking-vs-security landing roll.
+            const isApply = bufs.some((b) => b.application === 'apply');
+            const lands = isApply ? !affinityDisadvantage : roundDebuffLanded;
+            if (!lands) {
                 resistedEnemyDebuffs.push(ab);
                 return [];
             }
             landedEnemyDebuffs.push(ab);
-            const bufs = enemyDebuffLookup.get(ab.buffName) ?? [];
             if (ab.stacks !== undefined) {
                 return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
             }
@@ -290,24 +345,52 @@ function runSinglePass(params: {
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
 
-        const effectiveAttack = attack * (1 + attackBuff / 100);
-        const effectiveCrit = Math.min(
-            affinityCritCap,
-            Math.max(0, crit + critBuff - affinityCritPenalty)
-        );
-        const effectiveCritDamage = critDamage + critDamageBuff;
-        const critMultiplier = calculateCritMultiplier({
-            attack: effectiveAttack,
-            crit: effectiveCrit,
-            critDamage: effectiveCritDamage,
-            hp: 0,
-            defence: 0,
-            hacking: 0,
-            security: 0,
-            speed: 0,
-            healModifier: 0,
+        // Effective crit rate from a given crit-buff total, clamped by affinity.
+        const cappedCrit = (critBuffTotal: number) =>
+            Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+
+        // Fold active passive modifiers (firing skill + passive slot) into the round's
+        // buff totals so they affect damage exactly like an equivalent buff. Folded here,
+        // after enemy modifiers are known but before the effective-stat computations consume
+        // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuff)) is used only
+        // for the rare self-crit-gated modifier condition, avoiding a self-referential gate.
+        const modifierCtx = buildRoundContext({
+            selfBuffNames: entry.activeSelfBuffs
+                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
+                .map((ab) => ab.buffName),
+            landedEnemyDebuffCount: landedEnemyDebuffs.length,
+            corrosionEntryCount: corrosionEntries.length,
+            infernoEntryCount: infernoEntries.length,
+            bombCount: pendingBombs.length,
+            effectiveCritRate: cappedCrit(critBuff),
+            enemyType,
+            enemyHpPct,
         });
-        const effectivePen = defensePenetration + defensePenetrationBuff;
+        const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
+        const modifierAbilities = [
+            ...(firingSkill?.abilities ?? []),
+            ...(passiveSkill?.abilities ?? []),
+        ];
+        const modTotals = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
+        attackBuff += modTotals.attack;
+        critBuff += modTotals.crit;
+        critDamageBuff += modTotals.critDamage;
+        outgoingDamageBuff += modTotals.outgoingDamage;
+        defenceBuff += modTotals.defence;
+        hpBuff += modTotals.hp;
+
+        const effectiveAttack = attack * (1 + attackBuff / 100);
+        const effectiveCrit = cappedCrit(critBuff);
+        const effectiveCritDamage = critDamage + critDamageBuff;
+        // This round's binary crit outcome. A noCrit attack cannot crit and consumes
+        // no crit chance (the gate does not advance). Decided AFTER the modifier
+        // fold-in so the schedule uses the final effective crit rate; modifierCtx
+        // above deliberately keeps the probability-based estimate (see spec).
+        const roundCrit = damageNoCrit
+            ? false
+            : (action === 'charged' ? chargedCritGate : activeCritGate)(effectiveCrit / 100);
+        const effectivePen =
+            defensePenetration + defensePenetrationBuff + modTotals.defensePenetration;
         const effectiveDefense =
             enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
         const damageReduction =
@@ -319,6 +402,37 @@ function runSinglePass(params: {
         const affinityMult = 1 + affinityDamageModifier / 100;
         const effectiveDefence = defence * (1 + defenceBuff / 100);
         const effectiveHp = hp * (1 + hpBuff / 100);
+
+        // Per-round condition context for the Phase 1 condition engine. Built once
+        // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
+        // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state,
+        // matching the prior inline behaviour.
+        const ctx = buildRoundContext({
+            selfBuffNames: entry.activeSelfBuffs
+                .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
+                .map((ab) => ab.buffName),
+            landedEnemyDebuffCount: landedEnemyDebuffs.length,
+            corrosionEntryCount: corrosionEntries.length,
+            infernoEntryCount: infernoEntries.length,
+            bombCount: pendingBombs.length,
+            effectiveCritRate: effectiveCrit,
+            enemyType,
+            roundCrit,
+            enemyHpPct,
+        });
+
+        // Hard gate: payload abilities whose conditions fail contribute nothing this
+        // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
+        const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx);
+        const {
+            multiplier: rawMultiplier,
+            hits,
+            scalingAbility,
+        } = damageInputsFromSkill(gatedSkill);
+        const effectiveMultiplier = rawMultiplier * hits;
+        const secondary = secondaryFromSkill(gatedSkill);
+        const dotsConfig = dotsFromSkill(gatedSkill);
+
         let secondaryStatValue = 0;
         if (secondary) {
             const source = secondary.stat === 'defense' ? effectiveDefence : effectiveHp;
@@ -326,42 +440,133 @@ function runSinglePass(params: {
         }
 
         // Conditional scaling bonus, folded additively into the skill multiplier.
-        // Derivable conditions read this round's sim state (pre-Step-3 DoT arrays,
-        // so this round's freshly-applied DoTs are not yet counted); manual
-        // conditions use a static count.
-        let conditionalBonusPct = 0;
-        if (conditional) {
-            let count: number;
-            if (conditional.condition === 'self-buff') {
-                count = entry.activeSelfBuffs.filter(
-                    (ab) => ab.stacks === undefined || ab.stacks > 0
-                ).length;
-            } else if (conditional.condition === 'enemy-debuff') {
-                count =
-                    landedEnemyDebuffs.length +
-                    corrosionEntries.length +
-                    infernoEntries.length +
-                    pendingBombs.length;
-            } else {
-                count = conditional.manualCount ?? 1;
+        // Read from the firing skill's damage ability's own scaling rule. Derivable
+        // conditions read this round's sim state (pre-Step-3 DoT arrays, so this
+        // round's freshly-applied DoTs are not yet counted); manual conditions use
+        // a static count. Threads the POSITIONAL context (ctxFor) so a damage ability
+        // AFTER a same-cast dot scales with the fresh dot counted.
+        const conditionalBonusPct = scalingAbility
+            ? scaledBonus(scalingAbility, ctxFor.get(scalingAbility.id) ?? ctx)
+            : 0;
+
+        // Passive payload hit (Judge: "At the start of the round, this Unit deals 60%
+        // damage to all enemies with less than 50% HP"). The always-active passive slot
+        // can carry a gated damage ability; gate it per round against the same ctx and
+        // add the passing hit as an extra damage instance. "Start of the round" matches
+        // the entering-round enemyHpPct the gate evaluates. Uses the round's crit
+        // outcome and defense math like the firing hit; its own noCrit is respected.
+        const { gatedSkill: gatedPassive, ctxFor: passiveCtxFor } = gateFiringAbilities(
+            passiveSkill,
+            ctx
+        );
+        const passiveHit = damageInputsFromSkill(gatedPassive);
+        const passiveScalingBonus = passiveHit.scalingAbility
+            ? scaledBonus(
+                  passiveHit.scalingAbility,
+                  passiveCtxFor.get(passiveHit.scalingAbility.id) ?? ctx
+              )
+            : 0;
+        const passiveMultiplier = passiveHit.multiplier * passiveHit.hits + passiveScalingBonus;
+
+        // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
+        // round fires the charged skill, which consumes all charges (reset to 0 at
+        // the top of the loop) — nothing banks toward the next charge on that round.
+        // Self + ally gains are added here and the total is capped at chargeCount,
+        // since charges never exceed what the charged skill requires.
+        if (hasChargedSkill && action === 'active') {
+            let bonusCharges = 0;
+            for (const ability of chargeAbilitiesFromSkill(gatedSkill)) {
+                if (ability.config.type !== 'charge') continue;
+                // Gating already happened in gateFiringAbilities (full AND/OR + thresholds).
+                // A thresholded gate contributes the flat amount once; an unthresholded
+                // count/probability condition still SCALES it (binary self-crit, per-count
+                // subjects). No condition → flat amount.
+                const primary = ability.conditions[0];
+                const scale =
+                    !primary || primary.countComparator != null
+                        ? 1
+                        : evaluateCondition(primary, ctxFor.get(ability.id) ?? ctx);
+                bonusCharges += scale * ability.config.amount;
             }
-            conditionalBonusPct = conditional.pct * count;
-            if (conditional.cap !== undefined) {
-                conditionalBonusPct = Math.min(conditionalBonusPct, conditional.cap);
-            }
+            charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
 
         const preCritDamage =
-            effectiveAttack * ((multiplier + conditionalBonusPct) / 100) + secondaryStatValue;
-        const postDefenseFactor =
-            critMultiplier *
+            effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) +
+            secondaryStatValue;
+        // A "cannot critically hit" attack forces roundCrit false (decided at the gate),
+        // so this multiplier alone carries the crit effect.
+        const damageCritMultiplier = roundCrit ? 1 + effectiveCritDamage / 100 : 1;
+        // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
+        // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
+        const nonCritFactor =
             (1 - damageReduction / 100) *
             (1 + outgoingDamageBuff / 100) *
             (1 + incomingDamageModifier / 100) *
             affinityMult;
-        const directDamage = preCritDamage * postDefenseFactor;
+        const postDefenseFactor = damageCritMultiplier * nonCritFactor;
+        const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;
+        const passiveDamage =
+            effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;
+        const directDamage = preCritDamage * postDefenseFactor + passiveDamage;
         const secondaryDamage = secondaryStatValue * postDefenseFactor;
         const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
+
+        // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
+        // applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
+        // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
+        // conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
+        // (Valerian) fires at exactly critPowerFactor frequency via the deterministic
+        // extendChanceGate schedule. Sourced from BOTH the firing skill and the
+        // always-active passive slot (Valerian's extension is a passive).
+        for (const ab of [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])]) {
+            if (ab.config.type !== 'extend-dot') continue;
+            if (!conditionsMet(ab.conditions, ctx)) continue;
+            if (ab.config.chanceFromCritPower) {
+                const critPowerFactor = Math.min(1, effectiveCritDamage / 100);
+                if (!extendChanceGate(critPowerFactor)) continue;
+            }
+            for (const e of corrosionEntries) e.remainingRounds += ab.config.turns;
+            for (const e of infernoEntries) e.remainingRounds += ab.config.turns;
+        }
+
+        // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
+        // damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
+        // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
+        // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
+        let detonationDamage = 0;
+        for (const det of detonationsFromSkill(gatedSkill)) {
+            const pct = det.powerPct / 100;
+            if (det.dotType === 'inferno') {
+                detonationDamage +=
+                    infernoEntries.reduce(
+                        (sum, e) =>
+                            sum + e.stacks * (e.tier / 100) * effectiveAttack * e.remainingRounds,
+                        0
+                    ) *
+                    dotMult *
+                    affinityMult *
+                    pct;
+                infernoEntries.length = 0;
+            } else if (det.dotType === 'corrosion') {
+                const baseHp = Math.min(enemyHp, 500_000);
+                detonationDamage +=
+                    corrosionEntries.reduce(
+                        (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
+                        0
+                    ) *
+                    dotMult *
+                    affinityMult *
+                    pct;
+                corrosionEntries.length = 0;
+            } else if (det.dotType === 'bomb') {
+                detonationDamage +=
+                    pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
+                    affinityMult *
+                    pct;
+                pendingBombs.length = 0;
+            }
+        }
 
         // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
         const dotsLanded = roundDebuffLanded;
@@ -391,6 +596,19 @@ function runSinglePass(params: {
             }
         }
 
+        // Step 3b: Apply Echoing Burst-style accumulators inflicted by this round's skill
+        // (gated by the same landing roll as inflicted debuffs). Each starts gathering this
+        // round's direct damage in Step 6b below.
+        if (dotsLanded) {
+            for (const acc of accumulatorsFromSkill(gatedSkill)) {
+                pendingAccumulators.push({
+                    roundsRemaining: Math.max(1, acc.turns),
+                    pct: acc.pct,
+                    accumulated: 0,
+                });
+            }
+        }
+
         // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
         const corrosionBaseHp = Math.min(enemyHp, 500_000);
         const corrosionDamage =
@@ -404,35 +622,53 @@ function runSinglePass(params: {
         expireStacks(corrosionEntries);
         expireStacks(infernoEntries);
 
-        // Step 6: Process bombs
-        let bombDamage = 0;
+        // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
+        let bombBurst = 0;
         for (let i = pendingBombs.length - 1; i >= 0; i--) {
             pendingBombs[i].countdown -= 1;
             if (pendingBombs[i].countdown <= 0) {
-                bombDamage += pendingBombs[i].stacks * pendingBombs[i].damagePerStack;
+                bombBurst += pendingBombs[i].stacks * pendingBombs[i].damagePerStack;
                 pendingBombs.splice(i, 1);
             }
         }
-        bombDamage *= affinityMult;
+        detonationDamage += bombBurst * affinityMult;
 
-        const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + bombDamage;
+        // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
+        // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
+        // directDamage already includes affinity, so no extra affinity multiplier is applied.
+        let accumulatorBurst = 0;
+        for (let i = pendingAccumulators.length - 1; i >= 0; i--) {
+            pendingAccumulators[i].accumulated += directDamage;
+            pendingAccumulators[i].roundsRemaining -= 1;
+            if (pendingAccumulators[i].roundsRemaining <= 0) {
+                accumulatorBurst +=
+                    pendingAccumulators[i].accumulated * (pendingAccumulators[i].pct / 100);
+                pendingAccumulators.splice(i, 1);
+            }
+        }
+        detonationDamage += accumulatorBurst;
+
+        const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + detonationDamage;
         cumulativeDamage += totalRoundDamage;
         totalDirectRaw += directDamage;
         totalSecondaryRaw += secondaryDamage;
         totalConditionalRaw += conditionalDamage;
         totalCorrosionRaw += corrosionDamage;
         totalInfernoRaw += infernoDamage;
-        totalBombRaw += bombDamage;
+        totalDetonationRaw += detonationDamage;
 
         // Report stacks after expiry (state going into next round)
         roundData.push({
             round: r,
             action,
-            charges,
+            charges: Math.round(charges),
+            chargeCount: hasChargedSkill ? chargeCount : 0,
+            didCrit: roundCrit,
+            enemyHpPct: Math.round(enemyHpPct),
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),
-            bombDamage: Math.round(bombDamage),
+            detonationDamage: Math.round(detonationDamage),
             totalRoundDamage: Math.round(totalRoundDamage),
             cumulativeDamage: Math.round(cumulativeDamage),
             activeCorrosionStacks: totalStacks(corrosionEntries),
@@ -472,7 +708,7 @@ function runSinglePass(params: {
             direct: totalDirectRaw,
             corrosion: totalCorrosionRaw,
             inferno: totalInfernoRaw,
-            bomb: totalBombRaw,
+            detonation: totalDetonationRaw,
             cumulative: cumulativeDamage,
             totalSecondary: totalSecondaryRaw,
             totalConditional: totalConditionalRaw,
@@ -486,11 +722,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
         enemyDefense,
         enemyHp,
         rounds: numRounds,
@@ -498,10 +730,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyDebuffs,
         defence = 0,
         hp = 0,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
+        allyChargePerRound,
+        enemyType,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -516,7 +746,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         selfBuffs,
         []
     );
-    const hasChargedSkill = chargedMultiplier > 0 && chargeCount >= 1;
+    const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
+    const chargedDamage = damageInputsFromSkill(selectFiringSkill(shipSkills, 'charged'));
+    const hasChargedSkill = chargeCount >= 1 && chargedDamage.multiplier > 0;
 
     // Pre-compute deterministic buff timeline
     const timeline = computeBuffTimeline(
@@ -544,11 +776,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
-        activeMultiplier,
-        chargedMultiplier,
         chargeCount,
-        activeDoTs,
-        chargedDoTs,
+        shipSkills,
         enemyDefense,
         enemyHp,
         numRounds,
@@ -565,10 +794,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinityCritPenalty,
         defence,
         hp,
-        activeSecondary,
-        chargedSecondary,
-        activeConditional,
-        chargedConditional,
+        allyChargePerRound,
+        enemyType,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
@@ -581,7 +808,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalDirectDamage: Math.round(rawTotals.direct),
             totalCorrosionDamage: Math.round(rawTotals.corrosion),
             totalInfernoDamage: Math.round(rawTotals.inferno),
-            totalBombDamage: Math.round(rawTotals.bomb),
+            totalDetonationDamage: Math.round(rawTotals.detonation),
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
             totalConditionalDamage: Math.round(rawTotals.totalConditional),
         },

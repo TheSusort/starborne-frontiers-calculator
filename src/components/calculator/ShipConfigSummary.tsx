@@ -2,6 +2,7 @@ import React from 'react';
 import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
+import { damageInputsFromSkill, selectFiringSkill } from '../../utils/abilities/applyAbilities';
 
 interface ShipConfigSummaryProps {
     config: DPSShipConfig;
@@ -27,7 +28,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     const hasDoTs =
         simResult.summary.totalCorrosionDamage > 0 ||
         simResult.summary.totalInfernoDamage > 0 ||
-        simResult.summary.totalBombDamage > 0;
+        simResult.summary.totalDetonationDamage > 0;
 
     const critMultiplier = calculateCritMultiplier({
         attack: config.attack * (1 + attackerBuffTotals.attackBuff / 100),
@@ -40,6 +41,8 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
         speed: 0,
         healModifier: 0,
     });
+
+    const chargedDmg = damageInputsFromSkill(selectFiringSkill(config.shipSkills, 'charged'));
 
     const comparedToBestPercentage =
         bestTotalDamage !== undefined && bestTotalDamage !== 0 && !isBest
@@ -64,6 +67,21 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
             </div>
+            {chargedDmg.multiplier > 0 && config.chargeCount > 0 && (
+                <div className="flex justify-between mb-2">
+                    <span className="text-theme-text-secondary">Charged skill fires:</span>
+                    <span>
+                        {(() => {
+                            const fires = simResult.rounds.filter(
+                                (r) => r.action === 'charged'
+                            ).length;
+                            return fires > 0
+                                ? `every ${(simResult.rounds.length / fires).toFixed(1)} rounds`
+                                : '—';
+                        })()}
+                    </span>
+                </div>
+            )}
             {simResult.summary.totalSecondaryDamage > 0 && (
                 <div className="flex justify-between mb-2">
                     <span className="text-theme-text-secondary">
@@ -101,9 +119,9 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                         </div>
                     </div>
                     <div className="text-center p-1 bg-dark-lighter rounded">
-                        <div className="text-xs text-red-400">Bomb</div>
+                        <div className="text-xs text-red-400">Detonation</div>
                         <div className="text-xs text-red-400">
-                            {simResult.summary.totalBombDamage.toLocaleString()}
+                            {simResult.summary.totalDetonationDamage.toLocaleString()}
                         </div>
                     </div>
                 </div>

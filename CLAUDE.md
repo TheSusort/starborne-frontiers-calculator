@@ -60,6 +60,14 @@ npm run admin:import -- --file <path> --email <user@email.com>  # Import game da
 
 **Engineering Points Conversion:** Flat stats divide by 2; percentage stats use as-is.
 
+### Reference Data (`docs/`, gitignored)
+
+Local reference files (not committed — they exist on dev machines). Use them to ground skill-parsing, combat modeling, and lore work:
+
+- **`docs/ship-skills.csv`** — every ship's skill text. Columns: `name, active_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text`. The source of truth for the DPS/skill parser (`skillTextParser.ts`) and the skill/ability model. Only the refit-active passive applies in-game — resolve via `getShipSkillRows()`.
+- **`docs/combat-system.md`** — the game's combat loop, turn-meter, skill→ability execution, targeting, and hit/crit rules (from a developer flowchart, `combat-system.png`). Reference when modeling how skills/abilities actually resolve.
+- **`docs/bios.csv`** — ship bios and lore. Columns: `Definition Id, Name, Quote, Author, Bio N Title, Bio N` (up to 6 bios each). Backs the Ship Lore page content.
+
 ## Important Conventions
 
 ### File Organization

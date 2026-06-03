@@ -4,7 +4,7 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { SelectedGameBuff, TeamShipConfig } from '../../types/calculator';
+import { SelectedGameBuff, TeamShipConfig, EnemyBaseClass } from '../../types/calculator';
 import { AffinityName, Ship } from '../../types/ship';
 import { GameBuffPicker } from './GameBuffPicker';
 import { TeamShipRow } from './TeamShipRow';
@@ -33,6 +33,8 @@ interface CombatSettingsPanelProps {
     onTeamShipStartChargedChange: (id: string, checked: boolean) => void;
     onTeamShipBuffsChange: (id: string, buffs: SelectedGameBuff[]) => void;
     onTeamShipEnemyDebuffsChange: (id: string, debuffs: SelectedGameBuff[]) => void;
+    enemyType?: EnemyBaseClass;
+    onEnemyTypeChange: (v: EnemyBaseClass | undefined) => void;
 }
 
 export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
@@ -59,6 +61,8 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onTeamShipStartChargedChange,
     onTeamShipBuffsChange,
     onTeamShipEnemyDebuffsChange,
+    enemyType,
+    onEnemyTypeChange,
 }) => (
     <div className="card space-y-2">
         <Button
@@ -75,7 +79,7 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <Input
                         label="Enemy Defense"
                         type="number"
@@ -115,6 +119,20 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                             { value: 'chemical', label: 'Chemical' },
                             { value: 'electric', label: 'Electric' },
                         ]}
+                    />
+                    <Select
+                        label="Enemy Type"
+                        value={enemyType ?? ''}
+                        options={[
+                            { value: '', label: 'Any / Unknown' },
+                            { value: 'Attacker', label: 'Attacker' },
+                            { value: 'Defender', label: 'Defender' },
+                            { value: 'Debuffer', label: 'Debuffer' },
+                            { value: 'Supporter', label: 'Supporter' },
+                        ]}
+                        onChange={(v) =>
+                            onEnemyTypeChange(v === '' ? undefined : (v as EnemyBaseClass))
+                        }
                     />
                 </div>
                 <p className="text-sm text-theme-text-secondary">

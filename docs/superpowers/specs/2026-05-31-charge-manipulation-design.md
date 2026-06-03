@@ -26,6 +26,13 @@ Both sources accumulate **every round** (active and charged). When the charged
 skill fires, charges **reset to 0** — matching the simulator's current overflow
 behavior. This only shifts cadence; it introduces no new damage slice.
 
+> **Superseded (post-launch correction):** the shipped simulator accumulates
+> charge gains on **active rounds only** — the charged round consumes all
+> charges and banks nothing — and the running total is **capped at
+> `chargeCount`** (charges never exceed the requirement). See
+> `dpsSimulator.ts` and its charge-manipulation tests for the authoritative
+> semantics.
+
 ## Sim assumptions (provided by user)
 
 These bound which triggers are modelable and how:
@@ -167,6 +174,11 @@ and the charged round resets to 0 (line 248). So net accumulation toward the nex
 fire is: active round = `1 + bonus + ally`; charged round = `bonus + ally` (the
 reset happens before this block runs, so post-fire rounds still bank bonus/ally
 charges — consistent with the "every round" decision).
+
+> **Superseded (post-launch correction):** as noted at the top of this spec, the
+> shipped simulator gates this block on `action === 'active'` (charged rounds
+> bank nothing) and caps the total:
+> `charges = Math.min(charges + bonusCharges + allyChargePerRound, chargeCount)`.
 
 Charges accumulate **fractionally** for a precise average cadence (e.g. a
 self-crit gain at 70% crit contributes 0.7/round). `roundData.charges` is

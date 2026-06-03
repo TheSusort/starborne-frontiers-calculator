@@ -266,7 +266,7 @@ export const Select: React.FC<Props> = ({
                                 onMouseEnter={() => setShowHelpTooltip(true)}
                                 onMouseLeave={() => setShowHelpTooltip(false)}
                             >
-                                <InfoIcon className="text-sm text-theme-text-secondary h-8 w-8 p-2" />
+                                <InfoIcon className="text-sm text-theme-text-secondary h-5 w-5 p-0.5" />
                             </div>
                             {tooltip}
                         </>

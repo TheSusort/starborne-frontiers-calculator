@@ -1,4 +1,5 @@
 import { AffinityName } from './ship';
+import type { ShipSkills } from './abilities';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
@@ -15,7 +16,10 @@ export type ConditionalCondition =
     | 'enemy-buff' // manual
     | 'adjacent-ally' // manual
     | 'enemy-adjacent' // manual
-    | 'enemy-destroyed'; // manual
+    | 'enemy-destroyed' // manual
+    | 'always' // unconditional / always-true under sim assumptions (charge gains)
+    | 'self-crit' // derivable from crit rate (charge gains)
+    | 'enemy-type'; // derivable from the global enemy-type input (charge gains)
 
 export interface ConditionalDamage {
     pct: number; // per-unit bonus % added to the skill multiplier
@@ -23,6 +27,17 @@ export interface ConditionalDamage {
     derivable: boolean; // true → count from sim state; false → manual
     manualCount?: number; // used when !derivable (default 1)
     cap?: number; // optional total-bonus ceiling ("up to 100%")
+    requiredEnemyType?: EnemyBaseClass; // for 'enemy-type' conditions (e.g. bonus vs Supporters)
+}
+
+export type EnemyBaseClass = 'Attacker' | 'Defender' | 'Debuffer' | 'Supporter';
+
+export interface ChargeGain {
+    amount: number; // charges per trigger (e.g. 1, 2)
+    condition: ConditionalCondition;
+    derivable: boolean; // true → read sim state; false → use manualCount
+    manualCount?: number; // used when !derivable (default 1)
+    requiredEnemyType?: EnemyBaseClass; // only for condition 'enemy-type'
 }
 
 export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {
@@ -32,6 +47,9 @@ export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> 
     'adjacent-ally': 'per adjacent ally',
     'enemy-adjacent': 'per unit adjacent to the enemy',
     'enemy-destroyed': 'per destroyed enemy',
+    always: 'every round',
+    'self-crit': 'on critical hit',
+    'enemy-type': 'when enemy matches type',
 };
 
 export interface Buff {
@@ -97,6 +115,8 @@ export interface SelectedGameBuff {
     // For accumulating stackable buffs: how stacks are gained over rounds.
     // When set, `stacks` is the rate (stacks per trigger), not the total.
     stackTrigger?: StackTrigger;
+    // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
+    application?: 'inflict' | 'apply';
 }
 
 export interface DPSShipConfig {
@@ -109,29 +129,12 @@ export interface DPSShipConfig {
     defensePenetration: number;
     hacking?: number;
     affinity?: AffinityName;
-    activeMultiplier: number;
-    chargedMultiplier: number;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
-    activeSecondary?: SecondaryDamage;
-    chargedSecondary?: SecondaryDamage;
-    activeConditional?: ConditionalDamage;
-    chargedConditional?: ConditionalDamage;
     chargeCount: number;
     startCharged: boolean;
-    autoFilledFields?: Set<
-        | 'activeMultiplier'
-        | 'chargedMultiplier'
-        | 'hacking'
-        | 'activeSecondary'
-        | 'chargedSecondary'
-        | 'activeConditional'
-        | 'chargedConditional'
-    >;
-    activeDoTs: DoTApplicationConfig;
-    chargedDoTs: DoTApplicationConfig;
-    buffs: SelectedGameBuff[];
-    enemyDebuffs: SelectedGameBuff[];
+    allyChargePerRound?: number;
+    shipSkills: ShipSkills;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -142,8 +145,6 @@ export type DPSShipConfigUpdateableField =
     | 'defensePenetration'
     | 'hacking'
     | 'affinity'
-    | 'activeMultiplier'
-    | 'chargedMultiplier'
     | 'chargeCount'
     | 'defence'
     | 'hp';

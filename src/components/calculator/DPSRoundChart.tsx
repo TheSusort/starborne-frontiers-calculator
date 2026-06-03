@@ -20,8 +20,17 @@ interface ShipSimResult {
 interface DPSRoundChartProps {
     ships: ShipSimResult[];
     rounds: number;
+    /** Enemy HP pool (combat settings) — marks the round each ship's cumulative damage empties it. */
+    enemyHp?: number;
     height?: number;
 }
+
+/** 1-based round in which cumulative damage first reaches the enemy HP pool, or null. */
+const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
+    if (!enemyHp || enemyHp <= 0) return null;
+    const idx = ship.result.rounds.findIndex((r) => r.cumulativeDamage >= enemyHp);
+    return idx === -1 ? null : idx + 1;
+};
 
 interface ChartDataPoint {
     round: number;
@@ -38,12 +47,23 @@ interface CustomTooltipProps {
     }>;
     label?: number;
     shipMap: Map<string, ShipSimResult>;
+    enemyHp?: number;
 }
 
-const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, shipMap }) => {
+const RoundTooltip: React.FC<CustomTooltipProps> = ({
+    active,
+    payload,
+    label,
+    shipMap,
+    enemyHp,
+}) => {
     if (!active || !payload || !label) return null;
 
-    const sorted = [...payload].sort((a, b) => b.value - a.value);
+    const roundDamageFor = (dataKey: string) =>
+        shipMap.get(dataKey)?.result.rounds[label - 1]?.totalRoundDamage ?? 0;
+    const sorted = [...payload].sort(
+        (a, b) => roundDamageFor(b.dataKey) - roundDamageFor(a.dataKey)
+    );
 
     return (
         <div className="bg-dark-lighter p-2 border border-dark-border text-white text-sm">
@@ -51,14 +71,33 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
             {sorted.map((entry) => {
                 const ship = shipMap.get(entry.dataKey);
                 const roundData = ship?.result.rounds[label - 1];
+                const roundDamage = roundData?.totalRoundDamage ?? 0;
                 return (
                     <div key={entry.dataKey} className="mb-1">
                         <p style={{ color: entry.color }} className="font-medium">
-                            {entry.name}: {entry.value.toLocaleString()}
+                            {entry.name}: {roundDamage.toLocaleString()}
                             {roundData?.action === 'charged' && (
                                 <span className="ml-1 text-yellow-400 text-xs">Charged</span>
                             )}
+                            {roundData?.didCrit && (
+                                <span className="ml-1 text-red-400 text-xs">Crit</span>
+                            )}
                         </p>
+                        {roundData && roundData.chargeCount > 0 && (
+                            <p className="text-xs text-yellow-400 pl-2">
+                                {roundData.action === 'charged'
+                                    ? `Consumed ${roundData.chargeCount} charges`
+                                    : `${roundData.charges} / ${roundData.chargeCount} charges`}
+                            </p>
+                        )}
+                        {roundData && (
+                            <p className="text-xs text-theme-text-secondary pl-2">
+                                Enemy HP: {roundData.enemyHpPct}%
+                                {ship && killRoundFor(ship, enemyHp) === label && (
+                                    <span className="ml-1 text-red-400">reaches 0 this round</span>
+                                )}
+                            </p>
+                        )}
                         {roundData && (
                             <div className="text-xs text-theme-text-secondary pl-2">
                                 <span>Direct: {roundData.directDamage.toLocaleString()}</span>
@@ -72,13 +111,16 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                                         Inf: {roundData.infernoDamage.toLocaleString()}
                                     </span>
                                 )}
-                                {roundData.bombDamage > 0 && (
+                                {roundData.detonationDamage > 0 && (
                                     <span className="ml-2" style={{ color: '#e74c3c' }}>
-                                        Bomb: {roundData.bombDamage.toLocaleString()}
+                                        Detonation: {roundData.detonationDamage.toLocaleString()}
                                     </span>
                                 )}
                             </div>
                         )}
+                        <p className="text-xs text-theme-text-secondary pl-2">
+                            Total: {entry.value.toLocaleString()}
+                        </p>
                     </div>
                 );
             })}
@@ -86,7 +128,12 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
     );
 };
 
-export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, height = 400 }) => {
+export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
+    ships,
+    rounds,
+    enemyHp,
+    height = 400,
+}) => {
     const colors = useThemeColors();
     const [hoveredRound, setHoveredRound] = useState<number | null>(null);
 
@@ -148,9 +195,10 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
                             }}
                             tick={{ fill: colors.text }}
                         />
-                        <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
+                        <Tooltip content={<RoundTooltip shipMap={shipMap} enemyHp={enemyHp} />} />
                         {ships.map((ship, i) => {
                             const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                            const killRound = killRoundFor(ship, enemyHp);
                             return (
                                 <Line
                                     key={ship.id}
@@ -159,6 +207,31 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
                                     name={ship.name}
                                     stroke={color}
                                     {...chartLineDefaults(color)}
+                                    // Kill marker: a ringed dot on the round this ship's cumulative
+                                    // damage empties the enemy HP pool (no dot elsewhere).
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    dot={(props: any) =>
+                                        killRound !== null && props.index === killRound - 1 ? (
+                                            <g key={`${ship.id}-kill`}>
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={7}
+                                                    fill="none"
+                                                    stroke={color}
+                                                    strokeWidth={2}
+                                                />
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={3}
+                                                    fill={color}
+                                                />
+                                            </g>
+                                        ) : (
+                                            <g key={`${ship.id}-${props.index}`} />
+                                        )
+                                    }
                                 />
                             );
                         })}
