@@ -1758,4 +1758,53 @@ describe('simulateDPS', () => {
             expect(result.rounds.every((r) => r.directDamage === 10000)).toBe(true);
         });
     });
+
+    describe('deterministic debuff landing', () => {
+        it('50% landing chance lands DoTs on exactly half the rounds, evenly spaced', () => {
+            // hacking 150 vs security 100 → 50% landing chance
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                activeMultiplier: 100,
+                chargeCount: 0,
+                enemyDefense: 0,
+                hacking: 150,
+                enemySecurity: 100,
+                rounds: 10,
+                activeDoTs: [{ id: 'd', type: 'corrosion', tier: 6, stacks: 1, duration: 1 }],
+            });
+            const landedRounds = result.rounds.map((r) => r.dotsLanded);
+            // back-loaded accumulator at rate 0.5: lands on even rounds
+            expect(landedRounds).toEqual([
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+            ]);
+        });
+
+        it('is reproducible: two identical runs give identical totals', () => {
+            const input = {
+                ...baseInput,
+                attack: 10000,
+                crit: 37,
+                critDamage: 150,
+                activeMultiplier: 100,
+                chargeCount: 0,
+                enemyDefense: 0,
+                hacking: 173,
+                enemySecurity: 100,
+                rounds: 30,
+            };
+            expect(simulateDPS(input).summary).toEqual(simulateDPS(input).summary);
+        });
+    });
 });

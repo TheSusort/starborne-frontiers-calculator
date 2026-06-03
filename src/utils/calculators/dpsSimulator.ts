@@ -260,6 +260,8 @@ function runSinglePass(params: {
     // of how the charge cadence aligns with the crit schedule (no aliasing).
     const activeCritGate = makeRateGate();
     const chargedCritGate = makeRateGate();
+    const debuffLandingGate = makeRateGate();
+    const extendChanceGate = makeRateGate();
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
@@ -312,7 +314,7 @@ function runSinglePass(params: {
         let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
             calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 
-        const roundDebuffLanded = Math.random() < debuffLandingChance;
+        const roundDebuffLanded = debuffLandingGate(debuffLandingChance);
         // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
         // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
         // -25 only on a disadvantage matchup.
@@ -470,15 +472,15 @@ function runSinglePass(params: {
         // applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
         // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
         // conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
-        // (Valerian) rolls min(1, critPower/100). Sourced from BOTH the firing skill and the
+        // (Valerian) fires at exactly critPowerFactor frequency via the deterministic
+        // extendChanceGate schedule. Sourced from BOTH the firing skill and the
         // always-active passive slot (Valerian's extension is a passive).
-        // Note: Math.random here will be replaced by a deterministic gate in a later task.
         for (const ab of [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])]) {
             if (ab.config.type !== 'extend-dot') continue;
             if (!conditionsMet(ab.conditions, ctx)) continue;
             if (ab.config.chanceFromCritPower) {
                 const critPowerFactor = Math.min(1, effectiveCritDamage / 100);
-                if (Math.random() >= critPowerFactor) continue;
+                if (!extendChanceGate(critPowerFactor)) continue;
             }
             for (const e of corrosionEntries) e.remainingRounds += ab.config.turns;
             for (const e of infernoEntries) e.remainingRounds += ab.config.turns;
