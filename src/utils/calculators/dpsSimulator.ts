@@ -24,6 +24,7 @@ import {
     modifierTotalsFromAbilities,
     gateFiringAbilities,
 } from '../abilities/applyAbilities';
+import { ActiveDoTStack, PendingBomb, PendingAccumulator } from '../combat/state';
 import { makeRateGate } from './rateAccumulator';
 import {
     toSimBuffs,
@@ -126,27 +127,6 @@ export interface DPSSimulationSummary {
 export interface DPSSimulationResult {
     rounds: RoundData[];
     summary: DPSSimulationSummary;
-}
-
-interface ActiveDoTStack {
-    stacks: number;
-    tier: number;
-    remainingRounds: number;
-}
-
-interface PendingBomb {
-    countdown: number;
-    damagePerStack: number;
-    stacks: number;
-    tier: number;
-}
-
-// Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
-// is active, then detonates for `pct`% of the accumulated total when it expires.
-interface PendingAccumulator {
-    roundsRemaining: number;
-    pct: number;
-    accumulated: number;
 }
 
 export interface ActiveDoTState {
