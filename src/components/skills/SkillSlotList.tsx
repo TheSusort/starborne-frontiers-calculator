@@ -37,7 +37,7 @@ export const SkillSlotList: React.FC<Props> = ({ shipSkills, hasPassive, ship, o
     };
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-2 mb-4">
             {slots.map((slot) => {
                 const skill = findSkill(slot);
                 const count = skill?.abilities.length ?? 0;

@@ -40,6 +40,26 @@ interface ShipConfigCardProps {
     enemySecurity: number;
 }
 
+/**
+ * Compact labelled group inside the config card. `aside` renders flush-right in the
+ * header row (used for the affinity matchup badge). Children are evenly spaced.
+ */
+const Section: React.FC<{
+    title: string;
+    aside?: React.ReactNode;
+    children: React.ReactNode;
+}> = ({ title, aside, children }) => (
+    <div>
+        <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                {title}
+            </span>
+            {aside}
+        </div>
+        <div className="space-y-3">{children}</div>
+    </div>
+);
+
 export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     config,
     isBest,
@@ -71,74 +91,73 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     const affinityMatchup = getAffinityMatchup(config.affinity, enemyAffinity);
     const affinityBadge =
         affinityMatchup === 'advantage' ? (
-            <span className="text-sm text-green-400 ml-2">Advantage</span>
+            <span className="text-xs font-medium text-green-400">Advantage</span>
         ) : affinityMatchup === 'disadvantage' ? (
-            <span className="text-sm text-red-400 ml-2">Disadvantage</span>
+            <span className="text-xs font-medium text-red-400">Disadvantage</span>
         ) : null;
 
     return (
         <div className={`p-4 bg-dark border ${isBest ? 'border-primary' : 'border-dark-border'}`}>
-            <div className="mb-4">
+            {/* Header: ship picker + editable name + remove */}
+            <div className="space-y-3">
                 <ShipSelector
                     selected={selectedShip ?? null}
                     onSelect={onSelectShip}
                     variant="compact"
                 />
-            </div>
-            <div className="flex justify-between items-center mb-4">
-                <Input
-                    value={config.name}
-                    onChange={(e) => onUpdate('name', e.target.value)}
-                    className="font-bold"
-                />
-                <Button variant="danger" onClick={onRemove} aria-label="Remove ship">
-                    <CloseIcon />
-                </Button>
+                <div className="flex items-center justify-between gap-2">
+                    <Input
+                        value={config.name}
+                        onChange={(e) => onUpdate('name', e.target.value)}
+                        className="font-bold"
+                    />
+                    <Button variant="danger" onClick={onRemove} aria-label="Remove ship">
+                        <CloseIcon />
+                    </Button>
+                </div>
             </div>
 
-            <div className="space-y-4">
-                <div className="flex gap-4">
-                    <Input
-                        label="Attack"
-                        type="number"
-                        value={config.attack}
-                        onChange={(e) => onUpdate('attack', parseInt(e.target.value) || 0)}
-                    />
-                </div>
-                <div className="flex gap-4">
-                    <Input
-                        label="Crit Rate (%)"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={config.crit}
-                        onChange={(e) => onUpdate('crit', parseInt(e.target.value) || 0)}
-                    />
-                    <Input
-                        label="Crit Damage (%)"
-                        type="number"
-                        min="0"
-                        value={config.critDamage}
-                        onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
-                    />
-                </div>
-                <div className="flex gap-4">
-                    <Input
-                        label="Defense Penetration (%)"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={config.defensePenetration}
-                        onChange={(e) =>
-                            onUpdate('defensePenetration', parseInt(e.target.value) || 0)
-                        }
-                    />
-                </div>
+            <div className="mt-4 space-y-4">
+                <Section title="Stats">
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Attack"
+                            type="number"
+                            value={config.attack}
+                            onChange={(e) => onUpdate('attack', parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Defense Penetration (%)"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={config.defensePenetration}
+                            onChange={(e) =>
+                                onUpdate('defensePenetration', parseInt(e.target.value) || 0)
+                            }
+                        />
+                        <Input
+                            label="Crit Rate (%)"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={config.crit}
+                            onChange={(e) => onUpdate('crit', parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Crit Damage (%)"
+                            type="number"
+                            min="0"
+                            value={config.critDamage}
+                            onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
+                        />
+                    </div>
+                </Section>
 
                 <Button
                     variant="link"
                     onClick={() => setOpenAdvanced((v) => !v)}
-                    className="w-full flex justify-between items-center mt-4"
+                    className="w-full flex justify-between items-center"
                 >
                     <span className="flex items-center gap-2">
                         <ChevronDownIcon
@@ -149,96 +168,108 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                 </Button>
 
                 <CollapsibleForm isVisible={openAdvanced}>
-                    <div className="flex items-center gap-2 mb-4 relative">
-                        <Select
-                            label="Affinity"
-                            value={config.affinity ?? 'antimatter'}
-                            onChange={(v) =>
-                                onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
-                            }
-                            options={[
-                                { value: 'antimatter', label: 'Antimatter' },
-                                { value: 'thermal', label: 'Thermal' },
-                                { value: 'chemical', label: 'Chemical' },
-                                { value: 'electric', label: 'Electric' },
-                            ]}
-                            className="flex-1"
-                        />
-                        <div className="absolute left-[43px] top-[-2px]">{affinityBadge}</div>
-                    </div>
+                    <div className="space-y-4">
+                        <Section title="Affinity" aside={affinityBadge}>
+                            <Select
+                                value={config.affinity ?? 'antimatter'}
+                                onChange={(v) =>
+                                    onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
+                                }
+                                options={[
+                                    { value: 'antimatter', label: 'Antimatter' },
+                                    { value: 'thermal', label: 'Thermal' },
+                                    { value: 'chemical', label: 'Chemical' },
+                                    { value: 'electric', label: 'Electric' },
+                                ]}
+                                className="w-full"
+                            />
+                        </Section>
 
-                    <div className="grid grid-cols-2 gap-4 mb-4 items-end">
-                        <Input
-                            label="Charge Count"
-                            type="number"
-                            min="0"
-                            value={config.chargeCount}
-                            onChange={(e) => onUpdate('chargeCount', parseInt(e.target.value) || 0)}
-                        />
-                        <div>
+                        <Section title="Charge">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Charge Count"
+                                    type="number"
+                                    min="0"
+                                    value={config.chargeCount}
+                                    onChange={(e) =>
+                                        onUpdate('chargeCount', parseInt(e.target.value) || 0)
+                                    }
+                                />
+                                <Input
+                                    label="Ally charges / round"
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={config.allyChargePerRound ?? 0}
+                                    helpLabel="from supporters (e.g. Castor, Liberator)"
+                                    onChange={(e) =>
+                                        onAllyChargeChange(parseFloat(e.target.value) || 0)
+                                    }
+                                />
+                            </div>
                             <Checkbox
                                 id={`start-charged-${config.id}`}
                                 label="Start Charged"
                                 checked={config.startCharged}
                                 onChange={onStartChargedChange}
                             />
-                        </div>
-                    </div>
+                        </Section>
 
-                    <div className="mb-4">
-                        <Input
-                            label="Hacking"
-                            type="number"
-                            min="0"
-                            value={config.hacking ?? 200}
-                            onChange={(e) => onUpdate('hacking', parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-xs text-theme-text-secondary mt-1">
-                            Landing:{' '}
-                            {Math.min(100, Math.max(0, (config.hacking ?? 200) - enemySecurity))}%
-                            vs enemy
-                        </p>
-                    </div>
+                        <Section title="Debuff Landing">
+                            <div>
+                                <Input
+                                    label="Hacking"
+                                    type="number"
+                                    min="0"
+                                    value={config.hacking ?? 200}
+                                    onChange={(e) =>
+                                        onUpdate('hacking', parseInt(e.target.value) || 0)
+                                    }
+                                />
+                                <p className="text-xs text-theme-text-secondary mt-1">
+                                    Landing:{' '}
+                                    {Math.min(
+                                        100,
+                                        Math.max(0, (config.hacking ?? 200) - enemySecurity)
+                                    )}
+                                    % vs enemy
+                                </p>
+                            </div>
+                        </Section>
 
-                    <div className="flex gap-4 mb-4">
-                        <Input
-                            label="Defense (source)"
-                            type="number"
-                            min="0"
-                            value={config.defence}
-                            onChange={(e) => onUpdate('defence', parseInt(e.target.value) || 0)}
-                            helpLabel="source stat for Defense-based damage"
-                        />
-                        <Input
-                            label="HP (source)"
-                            type="number"
-                            min="0"
-                            value={config.hp}
-                            onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
-                            helpLabel="source stat for HP-based damage"
-                        />
-                    </div>
+                        <Section title="Damage Sources">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Defense"
+                                    type="number"
+                                    min="0"
+                                    value={config.defence}
+                                    onChange={(e) =>
+                                        onUpdate('defence', parseInt(e.target.value) || 0)
+                                    }
+                                    helpLabel="source stat for Defense-based damage"
+                                />
+                                <Input
+                                    label="HP"
+                                    type="number"
+                                    min="0"
+                                    value={config.hp}
+                                    onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                                    helpLabel="source stat for HP-based damage"
+                                />
+                            </div>
+                        </Section>
 
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
-                        Skills
+                        <Section title="Skills">
+                            <SkillSlotList
+                                shipSkills={config.shipSkills}
+                                hasPassive={hasPassive}
+                                ship={selectedShip}
+                                onChange={onShipSkillsChange}
+                            />
+                        </Section>
                     </div>
-                    <SkillSlotList
-                        shipSkills={config.shipSkills}
-                        hasPassive={hasPassive}
-                        ship={selectedShip}
-                        onChange={onShipSkillsChange}
-                    />
-
-                    <Input
-                        label="Ally charges / round"
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={config.allyChargePerRound ?? 0}
-                        helpLabel="from supporters (e.g. Castor, Liberator)"
-                        onChange={(e) => onAllyChargeChange(parseFloat(e.target.value) || 0)}
-                        className="mt-4"
-                    />
                 </CollapsibleForm>
 
                 {simResult && (

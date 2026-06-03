@@ -29,7 +29,7 @@ export const Input = forwardRef<HTMLInputElement, Props>(
             <div className="space-y-1 grow">
                 {label && (
                     <label
-                        className={`flex text-sm font-medium items-center gap-2 justify-between mt-2 ${labelClassName}`}
+                        className={`flex text-sm font-medium items-center gap-2 justify-between ${labelClassName}`}
                         htmlFor={id}
                     >
                         {label}
