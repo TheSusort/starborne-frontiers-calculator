@@ -175,6 +175,11 @@ fire is: active round = `1 + bonus + ally`; charged round = `bonus + ally` (the
 reset happens before this block runs, so post-fire rounds still bank bonus/ally
 charges — consistent with the "every round" decision).
 
+> **Superseded (post-launch correction):** as noted at the top of this spec, the
+> shipped simulator gates this block on `action === 'active'` (charged rounds
+> bank nothing) and caps the total:
+> `charges = Math.min(charges + bonusCharges + allyChargePerRound, chargeCount)`.
+
 Charges accumulate **fractionally** for a precise average cadence (e.g. a
 self-crit gain at 70% crit contributes 0.7/round). `roundData.charges` is
 rounded only for display. The `charges >= chargeCount` threshold check is
