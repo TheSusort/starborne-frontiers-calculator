@@ -635,6 +635,64 @@ describe('dpsGoldenParity', () => {
         },
     }));
 
+    // Scenario 15: ability buff feeds modifier gate (coupling lock)
+    // A timed self-buff (Overdrive, +20% attack) is applied by the active skill each round.
+    // A passive modifier (+25% outgoingDamage) is gated on the self-buff 'Overdrive' being active.
+    // Round-1 verification: base no-buff directDamage = 7410 (multiplier 150, BASE stats).
+    // With Overdrive (+20% attack): effectiveAttack = 15000 × 1.20 = 18000
+    // With outgoingDamage modifier (+25%): damage × 1.25
+    // Expected round-1 directDamage ≈ 7410 × 1.20 × 1.25 ≈ 11115 (non-crit)
+    snap('ability buff feeds modifier gate (coupling lock)', () => {
+        const shipSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Overdrive',
+                                parsedEffects: { attack: 20 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            conditions: [
+                                {
+                                    subject: 'self-buff',
+                                    derivable: true,
+                                    buffName: 'Overdrive',
+                                },
+                            ],
+                            config: {
+                                type: 'modifier',
+                                channel: 'outgoingDamage',
+                                value: 25,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return {
+            ...BASE,
+            chargeCount: 0,
+            shipSkills,
+        };
+    });
+
     // Scenario 14: KNOWN-DIFF conditional buff (updates in Task 7)
     // Active self-buff gated on enemy-debuff ≥ 2; active also applies corrosion each round.
     // Today the static gate neutralizes the threshold → buff always on.

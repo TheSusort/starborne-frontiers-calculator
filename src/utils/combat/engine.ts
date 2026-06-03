@@ -49,6 +49,8 @@ import { CombatEventBus } from './events';
 // a SelectedGameBuff so the existing buff-fold helpers apply (effect × stacks). The payload's
 // own stacks (current count for accumulating; configured stacks otherwise) become the buff stacks.
 function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff {
+    // NOTE: the derived id `ability-${buffName}` is non-unique by design for duplicate buffNames
+    // (only summed by stat downstream, never deduped by id).
     return {
         id: `ability-${payload.buffName}`,
         buffName: payload.buffName,
@@ -635,12 +637,12 @@ export function runCombat(input: CombatEngineInput): {
             .timedAbilityStatuses('self')
             .map((s) => s.active.buffName);
 
-        // (a) Pre-application gate context. effectiveCritRate uses the scheduled crit buff
-        // only (modifiers/ability buffs not yet folded), and NO roundCrit — buff gates use
-        // the probability tier like modifierCtx. NOTE: a self-crit-gated buff therefore
-        // resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
+        // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
+        // the scheduled crit buff only (modifiers/ability buffs not yet folded), and NO roundCrit
+        // — buff gates use the probability tier like modifierCtx. NOTE: a self-crit-gated buff
+        // therefore resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
         // non-zero — intended "live-subject, satisfiable" behaviour, not a bug.
-        const gateCtx = buildRoundContext({
+        const preDebuffGateCtx = buildRoundContext({
             selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
             landedEnemyDebuffCount: scheduledEnemy.landedEnemyDebuffs.length,
             corrosionEntryCount: corrosionEntries.length,
@@ -654,16 +656,16 @@ export function runCombat(input: CombatEngineInput): {
         // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
         for (const status of timedEnemyBySlot) {
             if (status.sourceSlot !== action) continue;
-            if (!conditionsMet(status.conditions, gateCtx)) continue;
+            if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
             statusEngine.applyTimedAbilityStatus(r, status);
         }
 
         // Enemy-side ability statuses active this round (timed in-window + auras +
-        // accumulating), gated vs gateCtx. They join the SAME per-round landing re-roll
-        // as scheduled debuffs (invariant 3), with application respected.
+        // accumulating), gated vs preDebuffGateCtx. They join the SAME per-round landing
+        // re-roll as scheduled debuffs (invariant 3), with application respected.
         const enemyAbilityStatuses: ActiveAbilityStatus[] = [
             ...statusEngine.timedAbilityStatuses('enemy'),
-            ...statusEngine.activeAbilityStatuses('enemy', gateCtx),
+            ...statusEngine.activeAbilityStatuses('enemy', preDebuffGateCtx),
         ];
         const landedAbilityEnemy: ActiveBuff[] = [];
         const resistedAbilityEnemy: ActiveBuff[] = [];
@@ -703,9 +705,9 @@ export function runCombat(input: CombatEngineInput): {
         const { enemyDefenseModifier, incomingDamageModifier } =
             toEnemyModifiers(roundEnemyDebuffs);
 
-        // (c) Recount with ability debuffs landed → gateCtx2.
-        // (d) Gate + apply this round's firing-skill TIMED self buff abilities vs gateCtx2.
-        const gateCtx2 = buildRoundContext({
+        // (c) Recount with ability debuffs landed → postDebuffGateCtx.
+        // (d) Gate + apply this round's firing-skill TIMED self buff abilities vs postDebuffGateCtx.
+        const postDebuffGateCtx = buildRoundContext({
             selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
             landedEnemyDebuffCount: landedEnemyDebuffs.length,
             corrosionEntryCount: corrosionEntries.length,
@@ -717,16 +719,16 @@ export function runCombat(input: CombatEngineInput): {
         });
         for (const status of timedSelfBySlot) {
             if (status.sourceSlot !== action) continue;
-            if (!conditionsMet(status.conditions, gateCtx2)) continue;
+            if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
             statusEngine.applyTimedAbilityStatus(r, status);
         }
 
         // (e) Effective self ability statuses this round (timed in-window + auras +
-        // accumulating), gated vs gateCtx2. Fold their payloads into the self totals
+        // accumulating), gated vs postDebuffGateCtx. Fold their payloads into the self totals
         // exactly where scheduled buffs fold (toSimBuffs semantics).
         const selfAbilityStatuses: ActiveAbilityStatus[] = [
             ...statusEngine.timedAbilityStatuses('self'),
-            ...statusEngine.activeAbilityStatuses('self', gateCtx2),
+            ...statusEngine.activeAbilityStatuses('self', postDebuffGateCtx),
         ];
         const abilitySelfEffects = selfAbilityStatuses.map((s) => payloadToSelectedBuff(s.payload));
         const abilitySelfTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
