@@ -85,7 +85,6 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                         </p>
                         {roundData && roundData.chargeCount > 0 && (
                             <p className="text-xs text-yellow-400 pl-2">
-                                ⚡{' '}
                                 {roundData.action === 'charged'
                                     ? `Consumed ${roundData.chargeCount} charges`
                                     : `${roundData.charges} / ${roundData.chargeCount} charges`}
