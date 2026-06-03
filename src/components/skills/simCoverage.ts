@@ -29,4 +29,4 @@ export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
 
 export const NOT_SIMULATED_NOTE = 'Not simulated in the DPS calculator yet.';
 export const PASSIVE_NOOP_WARNING =
-    'Not simulated on the passive slot - the DPS calculator only reads this ability type from the active and charged skills.';
+    'Not simulated on the passive slot — the DPS calculator only reads this ability type from the active and charged skills.';
