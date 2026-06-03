@@ -8,6 +8,10 @@ export interface ConditionContext {
     enemyDebuffCount: number;
     enemyType?: EnemyBaseClass;
     effectiveCritRate: number; // 0..100
+    /** This round's binary crit outcome from the deterministic schedule. When set,
+     *  'self-crit' evaluates 1/0; when undefined (e.g. modifierCtx — see the two-tier
+     *  note in the spec), it falls back to effectiveCritRate/100 as a probability. */
+    roundCrit?: boolean;
     adjacentAllyCount: number;
     enemyAdjacentCount: number;
     enemyDestroyedCount: number;
@@ -39,8 +43,9 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return (cond.negate ? !matches : matches) ? 1 : 0;
         }
         case 'self-crit':
-            // Returns probability 0..1 (effectiveCritRate / 100); used as expected-value multiplier.
-            // As a gate (> 0), any crit chance counts as "met"; as a scaler, weights by probability.
+            // Binary when the round's deterministic crit outcome is known; otherwise
+            // the legacy probability (0..1) used as gate (>0) and expected-value scaler.
+            if (ctx.roundCrit !== undefined) return ctx.roundCrit ? 1 : 0;
             return ctx.effectiveCritRate / 100;
         case 'adjacent-ally':
             return ctx.adjacentAllyCount;

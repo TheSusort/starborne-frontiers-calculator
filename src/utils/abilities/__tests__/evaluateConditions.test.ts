@@ -277,3 +277,16 @@ describe('scaledBonus', () => {
         expect(scaledBonus(dmg([], undefined), ctx())).toBe(0);
     });
 });
+
+describe('binary roundCrit', () => {
+    it('self-crit returns 1 when roundCrit is true, 0 when false', () => {
+        const cond = { subject: 'self-crit' as const, derivable: true };
+        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70, roundCrit: true }))).toBe(1);
+        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70, roundCrit: false }))).toBe(0);
+    });
+
+    it('self-crit falls back to probability when roundCrit is undefined', () => {
+        const cond = { subject: 'self-crit' as const, derivable: true };
+        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70 }))).toBe(0.7);
+    });
+});

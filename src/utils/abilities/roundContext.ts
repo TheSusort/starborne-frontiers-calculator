@@ -6,8 +6,9 @@ import { ConditionContext } from './evaluateConditions';
  *
  * `enemyDebuffCount` uses ENTRY-ARRAY LENGTHS (active DoT entries / pending bombs),
  * NOT total stacks — matching the inline conditional/charge logic it replaces.
- * The remaining fields are DPS-assumption defaults (single target at full HP,
- * no self-debuffs / enemy-buffs / adjacency).
+ * The remaining fields are DPS-assumption defaults: self HP is fixed at 100 (the sim
+ * never takes damage); enemy HP is caller-derived (`enemyHpPct`, default 100);
+ * no self-debuffs / enemy-buffs / adjacency.
  */
 export function buildRoundContext(state: {
     selfBuffNames: string[];
@@ -17,6 +18,9 @@ export function buildRoundContext(state: {
     bombCount: number; // = pendingBombs.length
     effectiveCritRate: number; // 0..100
     enemyType?: EnemyBaseClass;
+    roundCrit?: boolean;
+    /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Default 100. */
+    enemyHpPct?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -34,6 +38,7 @@ export function buildRoundContext(state: {
         enemyAdjacentCount: 0,
         enemyDestroyedCount: 0,
         selfHpPct: 100,
-        enemyHpPct: 100,
+        enemyHpPct: state.enemyHpPct ?? 100,
+        ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

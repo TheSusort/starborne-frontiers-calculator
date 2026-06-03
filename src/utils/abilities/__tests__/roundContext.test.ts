@@ -58,4 +58,20 @@ describe('buildRoundContext', () => {
         });
         expect(ctx.enemyType).toBeUndefined();
     });
+
+    it('threads roundCrit and enemyHpPct through, defaulting enemyHpPct to 100', () => {
+        const base = {
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 50,
+        };
+        expect(buildRoundContext(base).enemyHpPct).toBe(100);
+        expect(buildRoundContext(base).roundCrit).toBeUndefined();
+        const ctx = buildRoundContext({ ...base, roundCrit: true, enemyHpPct: 40 });
+        expect(ctx.roundCrit).toBe(true);
+        expect(ctx.enemyHpPct).toBe(40);
+    });
 });
