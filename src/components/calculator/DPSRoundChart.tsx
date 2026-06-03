@@ -20,8 +20,17 @@ interface ShipSimResult {
 interface DPSRoundChartProps {
     ships: ShipSimResult[];
     rounds: number;
+    /** Enemy HP pool (combat settings) — marks the round each ship's cumulative damage empties it. */
+    enemyHp?: number;
     height?: number;
 }
+
+/** 1-based round in which cumulative damage first reaches the enemy HP pool, or null. */
+const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
+    if (!enemyHp || enemyHp <= 0) return null;
+    const idx = ship.result.rounds.findIndex((r) => r.cumulativeDamage >= enemyHp);
+    return idx === -1 ? null : idx + 1;
+};
 
 interface ChartDataPoint {
     round: number;
@@ -38,9 +47,16 @@ interface CustomTooltipProps {
     }>;
     label?: number;
     shipMap: Map<string, ShipSimResult>;
+    enemyHp?: number;
 }
 
-const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, shipMap }) => {
+const RoundTooltip: React.FC<CustomTooltipProps> = ({
+    active,
+    payload,
+    label,
+    shipMap,
+    enemyHp,
+}) => {
     if (!active || !payload || !label) return null;
 
     const roundDamageFor = (dataKey: string) =>
@@ -78,6 +94,11 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                         {roundData && (
                             <p className="text-xs text-theme-text-secondary pl-2">
                                 Enemy HP: {roundData.enemyHpPct}%
+                                {ship && killRoundFor(ship, enemyHp) === label && (
+                                    <span className="ml-1 text-red-400">
+                                        💀 reaches 0 this round
+                                    </span>
+                                )}
                             </p>
                         )}
                         {roundData && (
@@ -110,7 +131,12 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
     );
 };
 
-export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, height = 400 }) => {
+export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
+    ships,
+    rounds,
+    enemyHp,
+    height = 400,
+}) => {
     const colors = useThemeColors();
     const [hoveredRound, setHoveredRound] = useState<number | null>(null);
 
@@ -172,9 +198,10 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
                             }}
                             tick={{ fill: colors.text }}
                         />
-                        <Tooltip content={<RoundTooltip shipMap={shipMap} />} />
+                        <Tooltip content={<RoundTooltip shipMap={shipMap} enemyHp={enemyHp} />} />
                         {ships.map((ship, i) => {
                             const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                            const killRound = killRoundFor(ship, enemyHp);
                             return (
                                 <Line
                                     key={ship.id}
@@ -183,6 +210,31 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({ ships, rounds, hei
                                     name={ship.name}
                                     stroke={color}
                                     {...chartLineDefaults(color)}
+                                    // Kill marker: a ringed dot on the round this ship's cumulative
+                                    // damage empties the enemy HP pool (no dot elsewhere).
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    dot={(props: any) =>
+                                        killRound !== null && props.index === killRound - 1 ? (
+                                            <g key={`${ship.id}-kill`}>
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={7}
+                                                    fill="none"
+                                                    stroke={color}
+                                                    strokeWidth={2}
+                                                />
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={3}
+                                                    fill={color}
+                                                />
+                                            </g>
+                                        ) : (
+                                            <g key={`${ship.id}-${props.index}`} />
+                                        )
+                                    }
                                 />
                             );
                         })}

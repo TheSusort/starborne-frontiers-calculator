@@ -525,6 +525,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 }))
                                 .filter((s) => s.result)}
                             rounds={rounds}
+                            enemyHp={enemyHp}
                         />
                     </div>
 
