@@ -35,7 +35,7 @@
 
 ---
 
-### Task 1: `makeRateGate` accumulator
+## Task 1: `makeRateGate` accumulator
 
 **Files:**
 - Create: `src/utils/calculators/rateAccumulator.ts`
@@ -148,7 +148,7 @@ git commit -m "feat: deterministic rate-gate accumulator for sim event schedulin
 
 ---
 
-### Task 2: Condition plumbing — binary `roundCrit` + derived `enemyHpPct`
+## Task 2: Condition plumbing — binary `roundCrit` + derived `enemyHpPct`
 
 **Files:**
 - Modify: `src/utils/abilities/evaluateConditions.ts` (ConditionContext, `self-crit` branch)
@@ -254,7 +254,7 @@ git commit -m "feat: binary roundCrit + derived enemyHpPct in condition context"
 
 ---
 
-### Task 3: `gateFiringAbilities` — ordered hard gate with same-cast DoT overlay
+## Task 3: `gateFiringAbilities` — ordered hard gate with same-cast DoT overlay
 
 **Files:**
 - Modify: `src/utils/abilities/applyAbilities.ts`
@@ -401,7 +401,7 @@ git commit -m "feat: ordered hard condition gate for firing-skill payload abilit
 
 ---
 
-### Task 4: Sim — deterministic per-stream crit replaces expected value
+## Task 4: Sim — deterministic per-stream crit replaces expected value
 
 **Files:**
 - Modify: `src/utils/calculators/dpsSimulator.ts`
@@ -583,7 +583,7 @@ git commit -m "feat: deterministic per-stream crit schedule replaces expected-va
 
 ---
 
-### Task 5: Sim — determinize debuff landing + extend chance (zero `Math.random`)
+## Task 5: Sim — determinize debuff landing + extend chance (zero `Math.random`)
 
 **Files:**
 - Modify: `src/utils/calculators/dpsSimulator.ts`
@@ -649,7 +649,7 @@ git commit -m "feat: deterministic debuff landing + extend chance — zero Math.
 
 ---
 
-### Task 6: Sim — wire ordered hard gating + derived enemy HP
+## Task 6: Sim — wire ordered hard gating + derived enemy HP
 
 **Files:**
 - Modify: `src/utils/calculators/dpsSimulator.ts`
@@ -840,7 +840,7 @@ git commit -m "feat: hard-gate payload ability conditions + derived enemy HP in 
 
 ---
 
-### Task 7: Chart — crit badge in the round tooltip
+## Task 7: Chart — crit badge in the round tooltip
 
 **Files:**
 - Modify: `src/components/calculator/DPSRoundChart.tsx:62-66`
@@ -872,7 +872,7 @@ git commit -m "feat: crit badge in DPS round chart tooltip"
 
 ---
 
-### Task 8: Parser — emit abilities in skill-text order
+## Task 8: Parser — emit abilities in skill-text order
 
 **Files:**
 - Modify: `src/utils/abilities/buildShipAbilities.ts`
@@ -950,7 +950,7 @@ git commit -m "feat: emit parsed abilities in skill-text order (game execution o
 
 ---
 
-### Task 9: Editor — ability reorder buttons
+## Task 9: Editor — ability reorder buttons
 
 **Files:**
 - Modify: `src/components/skills/SkillEditorModal.tsx:76-133`
@@ -1039,7 +1039,7 @@ git commit -m "feat: reorder abilities in skill editor (execution order now sim-
 
 ---
 
-### Task 10: Docs, changelog, coverage doc, live verify
+## Task 10: Docs, changelog, coverage doc, live verify
 
 **Files:**
 - Modify: `src/pages/DocumentationPage.tsx` (DPS section)
@@ -1060,7 +1060,7 @@ In `DocumentationPage.tsx` DPS section and the DPS page's "About the Simulation"
 
 Add to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` (plain English, user-facing), e.g.:
 
-```
+```text
 DPS simulator overhaul: crits now follow a deterministic per-round schedule instead of an averaged multiplier (crit rounds shown in the chart), ability conditions actually gate damage/DoTs/detonations, enemy HP drops as damage accumulates so "below X% HP" effects kick in mid-fight, and results are fully reproducible run-to-run. Skill abilities now execute in skill-text order and can be reordered in the editor.
 ```
 
@@ -1082,7 +1082,7 @@ git commit -m "docs: deterministic crit + hard gating documentation and changelo
 
 ---
 
-### Task 11: Final integration check
+## Task 11: Final integration check
 
 - [ ] **Step 1:** `npm test` — full suite green (note count vs the 855 baseline; growth expected).
 - [ ] **Step 2:** `npm run lint` — zero warnings (max-warnings: 0).

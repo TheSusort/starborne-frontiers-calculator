@@ -738,6 +738,19 @@ describe('buildShipAbilities', () => {
             expect(types.indexOf('dot')).toBeLessThan(types.indexOf('damage'));
         });
 
+        it('anchors damage at ITS tag, not an earlier non-damage <unit-damage> tag', () => {
+            // A leading defense-penetration tag must not pull the damage ability's
+            // position ahead of a DoT that the text places before the damage.
+            const s = ship({
+                activeSkillText:
+                    'This Unit has <unit-damage>20% defense penetration</unit-damage>, inflicts 2 <unit-skill>Corrosion II</unit-skill> for 2 turns, then deals <unit-damage>90% damage</unit-damage>.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const types = active.abilities.map((a) => a.type);
+            expect(types.indexOf('dot')).toBeGreaterThanOrEqual(0);
+            expect(types.indexOf('dot')).toBeLessThan(types.indexOf('damage'));
+        });
+
         it('keeps damage first when it precedes the DoT in text', () => {
             const s = ship({
                 activeSkillText:

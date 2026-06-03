@@ -519,7 +519,14 @@ function abilitiesFromText(text: string): PositionedAbility[] {
     const out: PositionedAbility[] = [];
 
     const mult = parseSkillDamage(text);
-    const damagePos = text.search(/<unit-damage>/i);
+    // Anchor at the tag carrying THIS multiplier — the first <unit-damage> tag in the
+    // row may be something else entirely (e.g. "20% defense penetration" before the
+    // damage), which would wrongly sort the damage ahead of a dot the text puts first.
+    const escNum = (n: number) => String(n).replace('.', '\\.');
+    const damageTagPos = text.search(
+        new RegExp(`<unit-damage>\\s*${escNum(mult)}%\\s*damage`, 'i')
+    );
+    const damagePos = damageTagPos >= 0 ? damageTagPos : text.search(/<unit-damage>/i);
     if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
@@ -544,11 +551,16 @@ function abilitiesFromText(text: string): PositionedAbility[] {
 
     const sec = parseSecondaryDamage(text);
     if (sec) {
-        // Position of the SECOND <unit-damage> tag (the one carrying the secondary %).
+        // Anchor at the tag carrying the secondary % (value-targeted, like damage above);
+        // fall back to the second <unit-damage> tag, then the first.
+        const secTagIdx = text.search(
+            new RegExp(`<unit-damage>(?:damage equal to\\s*)?${escNum(sec.pct)}%`, 'i')
+        );
         const firstDmgTag = '<unit-damage>';
         const firstIdx = text.search(/<unit-damage>/i);
-        const secondIdx =
+        const fallbackIdx =
             firstIdx >= 0 ? text.indexOf(firstDmgTag, firstIdx + firstDmgTag.length) : -1;
+        const secondIdx = secTagIdx >= 0 ? secTagIdx : fallbackIdx;
         out.push({
             ability: {
                 id: nextId(),
