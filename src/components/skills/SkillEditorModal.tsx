@@ -87,6 +87,14 @@ export const SkillEditorModal: React.FC<Props> = ({
         });
     };
 
+    const handleAbilityMove = (index: number, direction: -1 | 1) => {
+        const target = index + direction;
+        if (target < 0 || target >= currentSkill.abilities.length) return;
+        const abilities = [...currentSkill.abilities];
+        [abilities[index], abilities[target]] = [abilities[target], abilities[index]];
+        onChange({ ...currentSkill, abilities });
+    };
+
     const handlePick = (type: AbilityType) => {
         onChange({
             ...currentSkill,
@@ -129,6 +137,12 @@ export const SkillEditorModal: React.FC<Props> = ({
                         ability={ability}
                         onChange={(updated) => handleAbilityChange(index, updated)}
                         onRemove={() => handleAbilityRemove(index)}
+                        onMoveUp={index > 0 ? () => handleAbilityMove(index, -1) : undefined}
+                        onMoveDown={
+                            index < currentSkill.abilities.length - 1
+                                ? () => handleAbilityMove(index, 1)
+                                : undefined
+                        }
                     />
                 ))}
 

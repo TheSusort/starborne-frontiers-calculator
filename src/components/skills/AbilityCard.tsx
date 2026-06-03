@@ -11,6 +11,7 @@ import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
 import { Button } from '../ui/Button';
+import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
 import { ConditionRow } from './ConditionRow';
 
@@ -18,6 +19,9 @@ interface Props {
     ability: Ability;
     onChange: (ability: Ability) => void;
     onRemove: () => void;
+    /** Move this ability up/down in the skill's execution order; undefined at the ends. */
+    onMoveUp?: () => void;
+    onMoveDown?: () => void;
 }
 
 const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
@@ -102,7 +106,13 @@ const toDuration = (raw: string): number | 'recurring' => {
     return isNaN(n) ? 0 : n;
 };
 
-export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) => {
+export const AbilityCard: React.FC<Props> = ({
+    ability,
+    onChange,
+    onRemove,
+    onMoveUp,
+    onMoveDown,
+}) => {
     const updateConfig = (config: AbilityConfig) => onChange({ ...ability, config });
 
     // "Scales per condition": per-unit bonus × the count from conditions[conditionIndex],
@@ -488,9 +498,36 @@ export const AbilityCard: React.FC<Props> = ({ ability, onChange, onRemove }) =>
         <div className="card space-y-3">
             <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold">{ABILITY_TYPE_LABELS[ability.type]}</h4>
-                <Button variant="danger" size="xs" onClick={onRemove} aria-label="Remove ability">
-                    ×
-                </Button>
+                <div className="flex items-center gap-1">
+                    {onMoveUp && (
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={onMoveUp}
+                            aria-label="Move ability up"
+                        >
+                            <ChevronUpIcon />
+                        </Button>
+                    )}
+                    {onMoveDown && (
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={onMoveDown}
+                            aria-label="Move ability down"
+                        >
+                            <ChevronDownIcon />
+                        </Button>
+                    )}
+                    <Button
+                        variant="danger"
+                        size="xs"
+                        onClick={onRemove}
+                        aria-label="Remove ability"
+                    >
+                        ×
+                    </Button>
+                </div>
             </div>
 
             <Select
