@@ -24,7 +24,7 @@ import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
+import { GEAR_SETS, SHIP_TYPES, ShipTypeName, getLimitStatLabel } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
@@ -44,7 +44,7 @@ import {
     AUTOGEAR_INITIAL_TUTORIAL,
     AUTOGEAR_RESULTS_TUTORIAL,
 } from '../../constants/tutorialSteps';
-import { BaseStats } from '../../types/stats';
+import { BaseStats, LimitableStat } from '../../types/stats';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
@@ -60,7 +60,7 @@ import {
 import { getEmptySlotCount, hasEmptySlots } from '../../utils/ship/missingGear';
 
 interface UnmetPriority {
-    stat: string;
+    stat: LimitableStat;
     current: number;
     target: number;
     type: 'min' | 'max';
@@ -1272,7 +1272,7 @@ export const AutogearPage: React.FC = () => {
                                                                 key={index}
                                                                 className="text-yellow-100"
                                                             >
-                                                                {priority.stat}:{' '}
+                                                                {getLimitStatLabel(priority.stat)}:{' '}
                                                                 {priority.current.toFixed(1)}{' '}
                                                                 {priority.type === 'min'
                                                                     ? '<'
