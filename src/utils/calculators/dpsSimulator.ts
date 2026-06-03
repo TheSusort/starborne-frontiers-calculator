@@ -1,4 +1,4 @@
-import { calculateCritMultiplier, calculateDamageReduction } from '../autogear/priorityScore';
+import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import {
@@ -23,6 +23,7 @@ import {
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
+import { makeRateGate } from './rateAccumulator';
 import {
     toSimBuffs,
     toEnemyModifiers,
@@ -87,6 +88,8 @@ export interface RoundData {
     charges: number;
     /** Charges required to fire the charged skill; 0 when the ship has no charged skill. */
     chargeCount: number;
+    /** This round's deterministic binary crit outcome (per-stream schedule). */
+    didCrit: boolean;
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
@@ -251,6 +254,12 @@ function runSinglePass(params: {
     // All mutable state declared fresh on every call
     let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
+    // Deterministic event gates — replace Math.random / expected-value math so
+    // identical inputs always produce identical output. Crit uses one gate PER
+    // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
+    // of how the charge cadence aligns with the crit schedule (no aliasing).
+    const activeCritGate = makeRateGate();
+    const chargedCritGate = makeRateGate();
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
@@ -366,17 +375,13 @@ function runSinglePass(params: {
         const effectiveAttack = attack * (1 + attackBuff / 100);
         const effectiveCrit = cappedCrit(critBuff);
         const effectiveCritDamage = critDamage + critDamageBuff;
-        const critMultiplier = calculateCritMultiplier({
-            attack: effectiveAttack,
-            crit: effectiveCrit,
-            critDamage: effectiveCritDamage,
-            hp: 0,
-            defence: 0,
-            hacking: 0,
-            security: 0,
-            speed: 0,
-            healModifier: 0,
-        });
+        // This round's binary crit outcome. A noCrit attack cannot crit and consumes
+        // no crit chance (the gate does not advance). Decided AFTER the modifier
+        // fold-in so the schedule uses the final effective crit rate; modifierCtx
+        // above deliberately keeps the probability-based estimate (see spec).
+        const roundCrit = damageNoCrit
+            ? false
+            : (action === 'charged' ? chargedCritGate : activeCritGate)(effectiveCrit / 100);
         const effectivePen =
             defensePenetration + defensePenetrationBuff + modTotals.defensePenetration;
         const effectiveDefense =
@@ -410,6 +415,7 @@ function runSinglePass(params: {
             bombCount: pendingBombs.length,
             effectiveCritRate: effectiveCrit,
             enemyType,
+            roundCrit,
         });
 
         // Conditional scaling bonus, folded additively into the skill multiplier.
@@ -432,7 +438,7 @@ function runSinglePass(params: {
                 // AND/OR groups), not just the first.
                 if (!conditionsMet(ability.conditions, ctx)) continue;
                 // A thresholded gate contributes the flat amount once; an unthresholded
-                // count/probability condition scales it (self-crit expected value, per-count
+                // count/probability condition scales it (binary self-crit, per-count
                 // subjects). No condition → flat amount.
                 const primary = ability.conditions[0];
                 const scale =
@@ -447,9 +453,9 @@ function runSinglePass(params: {
         const preCritDamage =
             effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) +
             secondaryStatValue;
-        // A "cannot critically hit" attack applies no crit multiplier to its damage; the
-        // crit value still informs self-crit condition gates (effectiveCrit), just not this hit.
-        const damageCritMultiplier = damageNoCrit ? 1 : critMultiplier;
+        // A "cannot critically hit" attack forces roundCrit false (decided at the gate),
+        // so this multiplier alone carries the crit effect.
+        const damageCritMultiplier = roundCrit ? 1 + effectiveCritDamage / 100 : 1;
         const postDefenseFactor =
             damageCritMultiplier *
             (1 - damageReduction / 100) *
@@ -463,18 +469,16 @@ function runSinglePass(params: {
         // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
         // applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
         // excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
-        // conditions; a `chanceFromCritPower` extension (Valerian) rolls min(1, critPower/100),
-        // multiplied by the crit rate when also self-crit-gated. Sourced from BOTH the firing
-        // skill and the always-active passive slot (Valerian's extension is a passive).
+        // conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
+        // (Valerian) rolls min(1, critPower/100). Sourced from BOTH the firing skill and the
+        // always-active passive slot (Valerian's extension is a passive).
+        // Note: Math.random here will be replaced by a deterministic gate in a later task.
         for (const ab of [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])]) {
             if (ab.config.type !== 'extend-dot') continue;
-            if (!conditionsMet(ab.conditions, modifierCtx)) continue;
+            if (!conditionsMet(ab.conditions, ctx)) continue;
             if (ab.config.chanceFromCritPower) {
                 const critPowerFactor = Math.min(1, effectiveCritDamage / 100);
-                const critGate = ab.conditions.some((c) => c.subject === 'self-crit')
-                    ? effectiveCrit / 100
-                    : 1;
-                if (Math.random() >= critGate * critPowerFactor) continue;
+                if (Math.random() >= critPowerFactor) continue;
             }
             for (const e of corrosionEntries) e.remainingRounds += ab.config.turns;
             for (const e of infernoEntries) e.remainingRounds += ab.config.turns;
@@ -613,6 +617,7 @@ function runSinglePass(params: {
             action,
             charges: Math.round(charges),
             chargeCount: hasChargedSkill ? chargeCount : 0,
+            didCrit: roundCrit,
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),

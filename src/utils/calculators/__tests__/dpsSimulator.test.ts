@@ -578,9 +578,15 @@ describe('simulateDPS', () => {
                 affinityCritCap: 75,
                 affinityCritPenalty: 25,
             });
-            // effectiveCrit = min(75, 100-25) = 75; critMult = 1 + 0.75*150/100 = 2.125
-            // directDamage = 15000 * 2.125 * 0.75 = 23906.25; total ≈ 71719 (±1 rounding)
-            expect(Math.abs(result.summary.totalDamage - 71719)).toBeLessThanOrEqual(1);
+            // effectiveCrit = min(75, 100-25) = 75; critDamage = 150.
+            // Deterministic schedule (3 rounds): acc starts at 0; fires when acc >= 1.
+            //   Round 1: acc = 0.75 → no crit → dmg = 15000 * 1.0 * 0.75 = 11250
+            //   Round 2: acc = 1.50 → crit! acc=0.50 → dmg = 15000 * 2.5 * 0.75 = 28125
+            //   Round 3: acc = 1.25 → crit! acc=0.25 → dmg = 15000 * 2.5 * 0.75 = 28125
+            //   Total = 67500
+            // (Previously this tested the expected-value formula 2.125× which has been
+            //  replaced by the per-stream deterministic schedule — re-pinned intentionally.)
+            expect(result.summary.totalDamage).toBe(67500);
         });
 
         it('zero modifier (default) leaves damage unchanged', () => {
@@ -1653,6 +1659,103 @@ describe('simulateDPS', () => {
             // No-crit damage equals the same attack with crit rate 0 (crit multiplier 1×).
             const crit0 = simulateDPS({ ...baseInput, crit: 0, shipSkills: damage() });
             expect(noCrit.rounds[0].directDamage).toBe(crit0.rounds[0].directDamage);
+        });
+    });
+
+    describe('deterministic crit schedule', () => {
+        it('crit 50 / critDamage 100 doubles damage on exactly half the active rounds', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 50,
+                critDamage: 100,
+                activeMultiplier: 100,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 10,
+            });
+            const damages = result.rounds.map((r) => r.directDamage);
+            // accumulator: rounds 2,4,6,8,10 crit (acc reaches 1 on even rounds)
+            expect(result.rounds.map((r) => r.didCrit)).toEqual([
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+            ]);
+            expect(damages.filter((d) => d === 20000)).toHaveLength(5);
+            expect(damages.filter((d) => d === 10000)).toHaveLength(5);
+        });
+
+        it('charged hits crit at the crit rate regardless of cadence (per-stream, no aliasing)', () => {
+            // 50% crit + charged every 2nd round: with a single accumulator the charged
+            // hit would ALWAYS or NEVER crit; per-stream guarantees half do.
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 50,
+                critDamage: 100,
+                activeMultiplier: 100,
+                chargedMultiplier: 300,
+                chargeCount: 1,
+                enemyDefense: 0,
+                rounds: 12,
+            });
+            const charged = result.rounds.filter((r) => r.action === 'charged');
+            expect(charged.length).toBeGreaterThanOrEqual(5);
+            const crits = charged.filter((r) => r.didCrit).length;
+            expect(crits).toBe(Math.floor(charged.length / 2));
+        });
+
+        it('noCrit damage never crits and consumes no crit charge', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 100,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 4,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                {
+                                    id: 'd1',
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    conditions: [],
+                                    config: { type: 'damage', multiplier: 100, noCrit: true },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            });
+            expect(result.rounds.every((r) => !r.didCrit)).toBe(true);
+            expect(result.rounds.every((r) => r.directDamage === 10000)).toBe(true);
+        });
+
+        it('crit 100 / critDamage 0 stays multiplier 1 (existing convention unchanged)', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                activeMultiplier: 100,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 3,
+            });
+            expect(result.rounds.every((r) => r.didCrit)).toBe(true);
+            expect(result.rounds.every((r) => r.directDamage === 10000)).toBe(true);
         });
     });
 });
