@@ -443,11 +443,16 @@ interface PositionedAbility {
 
 const MAX_POS = Number.MAX_SAFE_INTEGER;
 
+// NOTE on anchor precision: only the relative order of `dot` vs later gated payload
+// abilities is sim-meaningful (the gateFiringAbilities overlay). Keyword anchors for
+// charge/extend/modifiers are heuristics that may land on an earlier mention of the
+// word (e.g. "removes 1 charge ... adds 1 charge") — cosmetic editor-order only.
+
 function abilitiesFromText(text: string): PositionedAbility[] {
     // Build the list in construction order first (so out[0]?.type === 'damage' checks work
     // for condition/scaling attachment). Positions are computed in parallel and applied
     // at the END via a single stable sort — so construction order never leaks into the result.
-    const out: Array<{ ability: Ability; pos: number }> = [];
+    const out: PositionedAbility[] = [];
 
     const mult = parseSkillDamage(text);
     const damagePos = text.search(/<unit-damage>/i);
