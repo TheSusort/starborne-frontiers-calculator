@@ -1,4 +1,4 @@
-import { BaseStats } from '../../types/stats';
+import { BaseStats, LimitableStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import { STAT_NORMALIZERS, ShipTypeName, GEAR_SETS } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
@@ -22,6 +22,17 @@ export function calculateEffectiveHP(
     const effectiveHpFromDefense = hp * (100 / (100 - defenseReduction));
     // Apply damageReduction stat (from gear/refits) as a separate multiplier
     return effectiveHpFromDefense * (1 + damageReductionPercent / 100);
+}
+
+/**
+ * Resolve the value to compare against a stat limit. Base stats pass through;
+ * derived stats (effectiveHp) are computed from the build's stats on the fly.
+ */
+export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): number {
+    if (stat === 'effectiveHp') {
+        return calculateEffectiveHP(stats.hp, stats.defence, stats.damageReduction ?? 0);
+    }
+    return stats[stat] || 0;
 }
 
 // Defense penetration lookup table with known values at 15k defense
@@ -337,7 +348,7 @@ function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): nu
     let totalScore = 0;
     const orderMultipliers = getOrderMultipliers(priorities.length);
     priorities.forEach((priority, index) => {
-        const statValue = stats[priority.stat] || 0;
+        const statValue = resolveLimitStatValue(stats, priority.stat);
         const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
         const normalizedValue = statValue / normalizer;
         const orderMultiplier = orderMultipliers[index];
@@ -355,7 +366,7 @@ export function calculateHardViolation(stats: BaseStats, priorities: StatPriorit
     let violation = 0;
     for (const p of priorities) {
         if (!p.hardRequirement) continue;
-        const value = stats[p.stat] || 0;
+        const value = resolveLimitStatValue(stats, p.stat);
         if (p.minLimit && value < p.minLimit) {
             violation += (p.minLimit - value) / p.minLimit;
         }
@@ -381,7 +392,7 @@ export function calculatePriorityScore(
 
     // Calculate penalties based on min/max limits
     for (const priority of priorities) {
-        const statValue = stats[priority.stat] || 0;
+        const statValue = resolveLimitStatValue(stats, priority.stat);
 
         if (priority.minLimit) {
             if (statValue < priority.minLimit) {

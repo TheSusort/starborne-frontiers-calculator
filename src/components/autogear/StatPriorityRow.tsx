@@ -9,6 +9,7 @@ import {
     Tooltip,
 } from '../ui';
 import { StatPriority } from '../../types/autogear';
+import { StatName } from '../../types/stats';
 import { STATS } from '../../constants';
 
 interface StatPriorityRowProps {
@@ -70,7 +71,7 @@ export const StatPriorityRow: React.FC<StatPriorityRowProps> = ({
                 )}
             </div>
             <span>
-                {STATS[priority.stat].label}
+                {STATS[priority.stat as StatName]?.label ?? priority.stat}
                 {priority.minLimit !== undefined && (
                     <>
                         {' ('}

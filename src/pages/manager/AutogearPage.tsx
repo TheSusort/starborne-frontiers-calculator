@@ -21,6 +21,7 @@ import {
     HardRequirementViolation,
 } from '../../utils/autogear/AutogearStrategy';
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
+import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, SHIP_TYPES, ShipTypeName } from '../../constants';
@@ -897,7 +898,7 @@ export const AutogearPage: React.FC = () => {
             // Hard-flagged priorities are surfaced in the GearSuggestions banner, not here.
             if (priority.hardRequirement) return;
 
-            const currentValue = stats[priority.stat] || 0;
+            const currentValue = resolveLimitStatValue(stats, priority.stat);
 
             if (priority.minLimit && currentValue < priority.minLimit) {
                 unmet.push({

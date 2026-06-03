@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { calculatePriorityScore } from '../priorityScore';
+import {
+    calculatePriorityScore,
+    resolveLimitStatValue,
+    calculateHardViolation,
+    calculateEffectiveHP,
+} from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
-import { SetPriority } from '../../../types/autogear';
+import { SetPriority, StatPriority } from '../../../types/autogear';
 
 const stats: BaseStats = {
     hp: 50000,
@@ -108,5 +113,50 @@ describe('calculatePriorityScore — implant set requirements', () => {
         const clean = calculatePriorityScore(stats, [], 'ATTACKER', {}, [], [], false, 0);
         // Gear requirement is unsatisfied — penalty should fire even though implant count is present
         expect(penalised).toBeLessThan(clean);
+    });
+});
+
+describe('resolveLimitStatValue', () => {
+    it('passes base stats through unchanged', () => {
+        expect(resolveLimitStatValue(stats, 'hp')).toBe(stats.hp);
+        expect(resolveLimitStatValue(stats, 'defence')).toBe(stats.defence);
+    });
+
+    it('resolves effectiveHp via calculateEffectiveHP', () => {
+        expect(resolveLimitStatValue(stats, 'effectiveHp')).toBeCloseTo(
+            calculateEffectiveHP(stats.hp, stats.defence, stats.damageReduction ?? 0),
+            5
+        );
+    });
+
+    it('does not produce NaN/Infinity when defence is 0', () => {
+        const zeroDef: typeof stats = { ...stats, defence: 0 };
+        const ehp = resolveLimitStatValue(zeroDef, 'effectiveHp');
+        expect(Number.isFinite(ehp)).toBe(true);
+        expect(ehp).toBeGreaterThan(0);
+    });
+});
+
+describe('effectiveHp as a limit', () => {
+    it('reports a hard violation when effectiveHp is below an unreachable min', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'effectiveHp', minLimit: 100_000_000, hardRequirement: true, weight: 1 },
+        ];
+        expect(calculateHardViolation(stats, priorities)).toBeGreaterThan(0);
+    });
+
+    it('reports no hard violation when effectiveHp min is met', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'effectiveHp', minLimit: 1, hardRequirement: true, weight: 1 },
+        ];
+        expect(calculateHardViolation(stats, priorities)).toBe(0);
+    });
+
+    it('applies a soft penalty when an effectiveHp min limit is missed', () => {
+        const unmet: StatPriority[] = [{ stat: 'effectiveHp', minLimit: 100_000_000, weight: 1 }];
+        const met: StatPriority[] = [{ stat: 'effectiveHp', minLimit: 1, weight: 1 }];
+        const scoreUnmet = calculatePriorityScore(stats, unmet, 'DEFENDER');
+        const scoreMet = calculatePriorityScore(stats, met, 'DEFENDER');
+        expect(scoreUnmet).toBeLessThan(scoreMet);
     });
 });

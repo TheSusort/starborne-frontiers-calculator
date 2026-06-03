@@ -134,5 +134,6 @@ export const STAT_NORMALIZERS: Record<string, number> = {
     critChance: 25, // Normalize around 25%
     critDamage: 50, // Normalize around 50%
     speed: 100, // Normalize around 100
+    effectiveHp: 30000, // effectiveHP runs ~1.3-5x raw hp; normalize above hp's 10k
     // Add other stats as needed
 };

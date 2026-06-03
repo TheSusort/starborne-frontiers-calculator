@@ -18,6 +18,7 @@ import {
     applyAdditiveBonuses,
     calculateMultiplierFactor,
     calculateHardViolation,
+    resolveLimitStatValue,
 } from './priorityScore';
 
 // Re-export calculatePriorityScore so existing imports from this module continue to work
@@ -30,6 +31,7 @@ export {
     applyAdditiveBonuses,
     calculateMultiplierFactor,
     calculateHardViolation,
+    resolveLimitStatValue,
 };
 
 // Exported for testing only.

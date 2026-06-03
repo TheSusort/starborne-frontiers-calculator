@@ -80,7 +80,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                                 {priority.maxLimit && (
                                     <span>{'max ' + priority.maxLimit}</span>
                                 )}{' '}
-                                {STATS[priority.stat]?.label || priority.stat}
+                                {STATS[priority.stat as StatName]?.label || priority.stat}
                                 {priority.hardRequirement && <span> (strict)</span>}
                             </span>
                         ))}
