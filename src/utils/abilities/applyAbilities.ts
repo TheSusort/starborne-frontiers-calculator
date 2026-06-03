@@ -34,7 +34,11 @@ export function modifierTotalsFromAbilities(
     };
     for (const ability of abilities) {
         if (ability.type !== 'modifier' || ability.config.type !== 'modifier') continue;
-        if (!conditionsMet(ability.conditions, ctx)) continue;
+        // Bare scaling-source conditions scale, never gate (see gateConditions). For
+        // parser-emitted pure-scaling modifiers (value 0) this is outcome-identical
+        // (gate-off vs 0+0); it matters for editor-built flat-value + scaling modifiers,
+        // where the flat part applies unconditionally.
+        if (!conditionsMet(gateConditions(ability), ctx)) continue;
         // `isMultiplicative` is intentionally ignored: these deltas are summed into the
         // same additive-percentage buff totals as the buff path (calculateBuffTotals).
         // Revisit if a flat or true-multiplicative modifier is ever introduced.
@@ -146,14 +150,36 @@ export function detonationsFromSkill(
 }
 
 /**
+ * The conditions that act as GATES for an ability: all of them EXCEPT a bare
+ * scaling-source condition — the one at `scaling.conditionIndex` with no explicit
+ * `countComparator`. That condition exists to SCALE the bonus (scaledBonus reads
+ * its raw count); the base effect fires regardless. Meiying: "dealing 190% damage,
+ * and when attacking a Supporter, it additionally deals 90%" — the 190% hits
+ * everyone, only the +90% is Supporter-gated. A scaling condition WITH a
+ * countComparator (e.g. "if the enemy has 3+ debuffs…") is deliberately both
+ * scaler and gate (the count-threshold invariant: comparator gates, raw count
+ * scales). Note: removing the scaling condition from an anyOf OR-run could in
+ * principle reshape groups, but parser-emitted scaling conditions are always
+ * single and the editor's scaling hardcodes conditions[0].
+ */
+function gateConditions(ability: Ability): Ability['conditions'] {
+    const idx = ability.scaling?.conditionIndex;
+    if (idx == null) return ability.conditions;
+    const scalingCond = ability.conditions[idx];
+    if (!scalingCond || scalingCond.countComparator != null) return ability.conditions;
+    return ability.conditions.filter((_, i) => i !== idx);
+}
+
+/**
  * Hard condition gate for the firing skill's payload abilities, walked in ARRAY
  * ORDER (the parser emits in skill-text order — the game's execution order).
- * An ability whose conditions fail contributes nothing this round (dropped from
- * the returned skill). A kept `dot` ability increments an enemy-debuff overlay
- * (+1 ENTRY, matching the sim's entry-count semantics) so LATER abilities in the
- * same cast see it — "Inflicts 2 Corrosion. Deals 90% +30% per debuff" resolves
- * like the game. `ctxFor` records each ability's positional context so scaling
- * (scaledBonus) uses the counts as of that ability's position.
+ * An ability whose GATE conditions fail contributes nothing this round (dropped
+ * from the returned skill); a bare scaling-source condition only scales, never
+ * gates (see gateConditions). A kept `dot` ability increments an enemy-debuff
+ * overlay (+1 ENTRY, matching the sim's entry-count semantics) so LATER abilities
+ * in the same cast see it — "Inflicts 2 Corrosion. Deals 90% +30% per debuff"
+ * resolves like the game. `ctxFor` records each ability's positional context so
+ * scaling (scaledBonus) uses the counts as of that ability's position.
  *
  * Covers the firing-skill payload path only; modifier and extend-dot abilities
  * keep their own firing+passive gating, and buff/debuff abilities gate statically
@@ -173,7 +199,7 @@ export function gateFiringAbilities(
                 ? { ...baseCtx, enemyDebuffCount: baseCtx.enemyDebuffCount + overlay }
                 : baseCtx;
         ctxFor.set(ability.id, ctx);
-        if (!conditionsMet(ability.conditions, ctx)) continue;
+        if (!conditionsMet(gateConditions(ability), ctx)) continue;
         kept.push(ability);
         if (ability.config.type === 'dot') overlay += 1;
     }

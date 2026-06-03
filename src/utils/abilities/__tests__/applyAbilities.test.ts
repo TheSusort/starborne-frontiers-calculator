@@ -463,4 +463,59 @@ describe('gateFiringAbilities', () => {
             gateFiringAbilities(skill, { ...baseCtx, enemyDebuffCount: 2 }).gatedSkill!.abilities
         ).toHaveLength(1);
     });
+
+    it('a bare scaling-source condition does NOT gate (scaler only)', () => {
+        // Meiying shape: base damage + "additionally deals X% vs Supporters" — the
+        // enemy-type condition only scales the bonus; the base hit fires regardless.
+        const ability: Ability = {
+            ...dmg('a', [
+                { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Supporter' },
+            ]),
+            scaling: { conditionIndex: 0, perUnit: 90 },
+        };
+        const skill: Skill = { slot: 'active', abilities: [ability] };
+        // enemy-type mismatch (no enemyType in ctx → condition evaluates 0) → still KEPT
+        expect(gateFiringAbilities(skill, baseCtx).gatedSkill!.abilities).toHaveLength(1);
+    });
+
+    it('a scaling-source condition WITH a countComparator still gates', () => {
+        // Explicit threshold marks the condition as deliberately gate+scaler.
+        const ability: Ability = {
+            ...dmg('a', [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 2,
+                },
+            ]),
+            scaling: { conditionIndex: 0, perUnit: 10 },
+        };
+        const skill: Skill = { slot: 'active', abilities: [ability] };
+        expect(
+            gateFiringAbilities(skill, { ...baseCtx, enemyDebuffCount: 1 }).gatedSkill!.abilities
+        ).toHaveLength(0);
+        expect(
+            gateFiringAbilities(skill, { ...baseCtx, enemyDebuffCount: 3 }).gatedSkill!.abilities
+        ).toHaveLength(1);
+    });
+
+    it('non-scaling conditions on a scaled ability still gate', () => {
+        // scaling refers to conditions[0]; conditions[1] is an independent hard gate.
+        const ability: Ability = {
+            ...dmg('a', [
+                { subject: 'enemy-debuff', derivable: true },
+                { subject: 'self-buff', derivable: true, buffName: 'Stealth' },
+            ]),
+            scaling: { conditionIndex: 0, perUnit: 20 },
+        };
+        const skill: Skill = { slot: 'active', abilities: [ability] };
+        // Stealth missing → gated off despite the scaling condition being exempt
+        expect(gateFiringAbilities(skill, baseCtx).gatedSkill!.abilities).toHaveLength(0);
+        // Stealth present → kept (scaling condition at count 0 does not gate)
+        expect(
+            gateFiringAbilities(skill, { ...baseCtx, selfBuffNames: ['Stealth'] }).gatedSkill!
+                .abilities
+        ).toHaveLength(1);
+    });
 });

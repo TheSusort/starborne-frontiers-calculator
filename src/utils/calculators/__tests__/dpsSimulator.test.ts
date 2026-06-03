@@ -1133,16 +1133,14 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: 'c', type: 'corrosion', tier: 3, stacks: 1, duration: 10 }],
                 activeConditional: { pct: 20, condition: 'enemy-debuff', derivable: true },
             });
-            // Scaling conditions are now hard GATES (Task 6): an enemy-debuff scaling
-            // condition with count 0 fails the gate, so round 1 (no prior-round DoT
-            // entries) is zeroed entirely — not just the +0% conditional slice. The
-            // flat adapter emits the same-cast dot AFTER the damage ability, so it does
-            // not feed round 1's overlay either. Rounds 2-3 still pass (count 1, then 2).
-            // round 1: count 0 → GATED OFF → 0; round 2: count 1 → 1200; round 3: count 2 → 1400
-            expect(result.rounds[0].directDamage).toBe(0);
+            // A bare scaling-source condition SCALES but does not GATE (Meiying fix):
+            // round 1 (count 0) deals the base 1000 with +0% bonus — the hit itself
+            // always fires; only the per-debuff bonus is conditional.
+            // round 1: 1000 + 0; round 2: count 1 → 1200; round 3: count 2 → 1400
+            expect(result.rounds[0].directDamage).toBe(1000);
             expect(result.rounds[1].directDamage).toBe(1200);
             expect(result.rounds[2].directDamage).toBe(1400);
-            // conditional slice: round 1 gated off (0) + 200 + 400 = 600 (unchanged total)
+            // conditional slice: 0 + 200 + 400 = 600
             expect(result.summary.totalConditionalDamage).toBe(600);
         });
     });
@@ -2057,6 +2055,54 @@ describe('simulateDPS', () => {
             // corrosion keeps ticking (nonzero from round 2, once round-1 stacks tick).
             expect(result.rounds.every((r) => r.detonationDamage === 0)).toBe(true);
             expect(result.rounds[0].activeCorrosionStacks).toBeGreaterThan(0);
+        });
+
+        it('a scaling-source condition does NOT gate the base damage (Meiying)', () => {
+            // "dealing 190% damage, and when attacking a Supporter, it additionally deals
+            // 90% damage" — the +90% is Supporter-only, but the 190% base hits everyone.
+            const meiyingSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'd',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [
+                                    {
+                                        subject: 'enemy-type',
+                                        derivable: true,
+                                        requiredEnemyType: 'Supporter',
+                                    },
+                                ],
+                                scaling: { conditionIndex: 0, perUnit: 90 },
+                                config: { type: 'damage', multiplier: 190 },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const base = {
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 0,
+                rounds: 2,
+                shipSkills: meiyingSkills,
+            };
+            // Non-Supporter enemy: base 190% fires, +90% bonus does not.
+            const vsAttacker = simulateDPS({ ...base, enemyType: 'Attacker' });
+            expect(vsAttacker.rounds[0].directDamage).toBe(19000);
+            // Unknown enemy type (the page default): same — base damage fires.
+            const vsUnknown = simulateDPS({ ...base, enemyType: undefined });
+            expect(vsUnknown.rounds[0].directDamage).toBe(19000);
+            // Supporter: base + bonus.
+            const vsSupporter = simulateDPS({ ...base, enemyType: 'Supporter' });
+            expect(vsSupporter.rounds[0].directDamage).toBe(28000);
         });
     });
 });

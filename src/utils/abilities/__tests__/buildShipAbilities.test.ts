@@ -746,4 +746,41 @@ describe('buildShipAbilities', () => {
             expect(types.indexOf('damage')).toBeLessThan(types.indexOf('dot'));
         });
     });
+
+    describe('Meiying (enemy-type flat bonus as scaling, not gate)', () => {
+        const meiying = ship({
+            activeSkillText:
+                "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, dealing <unit-damage>190% damage</unit-damage>, and when attacking a Supporter, it additionally deals <unit-damage>90%</unit-damage> damage.",
+            chargeSkillText:
+                "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, dealing <unit-damage>240% damage</unit-damage> and inflicting <unit-skill>Stasis</unit-skill> for 1 turn. When attacking a Supporter, it deals an additional <unit-damage>115% damage</unit-damage>.",
+            chargeSkillCharge: 2,
+        });
+
+        it('active: damage 190 with a Supporter scaling condition (perUnit 90)', () => {
+            const { slots } = buildShipAbilities(meiying);
+            const dmg = abilityOfType(slot(slots, 'active')!.abilities, 'damage');
+            expect(dmg).toMatchObject({
+                config: { type: 'damage', multiplier: 190 },
+                scaling: { conditionIndex: 0, perUnit: 90 },
+            });
+            expect(dmg!.conditions[0]).toMatchObject({
+                subject: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: 'Supporter',
+            });
+        });
+
+        it('charged: damage 240 with a Supporter scaling condition (perUnit 115)', () => {
+            const { slots } = buildShipAbilities(meiying);
+            const dmg = abilityOfType(slot(slots, 'charged')!.abilities, 'damage');
+            expect(dmg).toMatchObject({
+                config: { type: 'damage', multiplier: 240 },
+                scaling: { conditionIndex: 0, perUnit: 115 },
+            });
+            expect(dmg!.conditions[0]).toMatchObject({
+                subject: 'enemy-type',
+                requiredEnemyType: 'Supporter',
+            });
+        });
+    });
 });
