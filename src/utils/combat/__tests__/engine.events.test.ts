@@ -204,4 +204,68 @@ describe('runCombat event emission', () => {
         // It must NOT also land.
         expect(events.some((e) => e.type === 'debuff-applied')).toBe(false);
     });
+
+    it('emits buff-applied when a timed self-buff ability is applied on its source slot', () => {
+        // A ship with a timed self-buff (Attack Up, 2 rounds) on the active slot.
+        // chargeCount 3, not startCharged → active rounds 1,2,3 then charged round 4.
+        // Each active round the buff either applies fresh (round 1) or re-applies (rounds 2,3
+        // if the window expired) / upserts. The engine emits buff-applied whenever
+        // applyTimedAbilityStatus is called (i.e. each round the slot fires and gate passes).
+        const timedSelfBuffSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                stacks: 1,
+                                parsedEffects: { attack: 20 },
+                                isStackable: false,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+            ],
+        });
+
+        const { events } = collect(
+            baseInput({
+                shipSkills: timedSelfBuffSkills(),
+                numRounds: 6,
+            })
+        );
+
+        const buffApplied = events.filter((e) => e.type === 'buff-applied');
+        // buff-applied must fire at least once (active slot fires on rounds 1, 2, 3 in a
+        // chargeCount-3 no-startCharged cadence — at least round 1 must apply).
+        expect(buffApplied.length).toBeGreaterThan(0);
+
+        for (const e of buffApplied) {
+            if (e.type !== 'buff-applied') throw new Error('unreachable');
+            expect(e.buffName).toBe('Attack Up');
+            expect(e.actorId).toBe('attacker');
+            expect(typeof e.duration).toBe('number');
+            expect(e.duration).toBe(2);
+        }
+
+        // buff-applied must only fire on active rounds (the source slot is 'active').
+        // chargeCount 3, not startCharged → round 4 is charged, rounds 1-3 and 5-6 active.
+        const activeRounds = new Set([1, 2, 3, 5, 6]);
+        for (const e of buffApplied) {
+            if (e.type !== 'buff-applied') throw new Error('unreachable');
+            expect(activeRounds.has(e.round)).toBe(true);
+        }
+    });
 });

@@ -721,6 +721,13 @@ export function runCombat(input: CombatEngineInput): {
             if (status.sourceSlot !== action) continue;
             if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
             statusEngine.applyTimedAbilityStatus(r, status);
+            bus?.emit({
+                type: 'buff-applied',
+                actorId: 'attacker',
+                round: r,
+                buffName: status.payload.buffName,
+                duration: status.duration as number,
+            });
         }
 
         // (e) Effective self ability statuses this round (timed in-window + auras +

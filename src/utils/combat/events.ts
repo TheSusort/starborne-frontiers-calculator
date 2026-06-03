@@ -34,6 +34,7 @@ export type CombatEvent =
           buffName: string;
           duration: number | 'recurring';
       }
+    /** Phase 1: declared but intentionally unemitted — reserved for Phase 2's owner post-turn expiry. */
     | { type: 'buff-expired'; actorId: string; round: number; buffName: string }
     | { type: 'debuff-applied'; targetId: string; round: number; buffName: string }
     | { type: 'debuff-resisted'; targetId: string; round: number; buffName: string }

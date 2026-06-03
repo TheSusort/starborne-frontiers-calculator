@@ -169,8 +169,10 @@ configure it and it looks like it works, but it does nothing".
 > Tier 1 (text-order emission from parser) and Tier 2 (order-aware gating overlay +
 > editor reorder buttons) are shipped; Tier 3 (reactive event dispatch) is still deferred.
 >
-> **Shipped 2026-06-03 (combat-engine Phase 1, PR #76):**
+> **Shipped 2026-06-03 (Phase 0, PR #76 — feat/editor-noop-guardrails):**
 > - Item 1: Editor guardrails (no-op type warnings, passive-slot DoT/charge/detonate validation).
+>
+> **Shipped 2026-06-03 (combat-engine Phase 1, this branch — feat/combat-engine-core):**
 > - Item 2: Dynamic per-round buff/debuff gating via the combat engine — timed: at application;
 >   aura/accumulating: per-round effect inclusion; live-subject rule. Crocus/Nuqtu/APEX threshold
 >   buffs now switch on/off live.
@@ -183,11 +185,11 @@ configure it and it looks like it works, but it does nothing".
 >   the next round as a pre-turn step, equivalent but diverges once multiple actors are in play).
 > - Reactive triggers (`on-crit`, `on-attacked`, Phase 3).
 
-1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76)* — config
-   fields rendered and "not simulated" labels added for heal/shield/cleanse/purge/control; passive
-   slot warns on `dot`/`charge`/`detonate` (silent no-ops).
-2. **Dynamic per-round buff gating** *(shipped 2026-06-03, PR #76 — combat-engine Phase 1)* — see
-   §5 above.
+1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
+   feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
+   heal/shield/cleanse/purge/control; passive slot warns on `dot`/`charge`/`detonate` (silent no-ops).
+2. **Dynamic per-round buff gating** *(shipped 2026-06-03, this branch — combat-engine Phase 1,
+   feat/combat-engine-core)* — see §5 above.
 3. **Passive-slot sourcing audit** — extend firing+passive sourcing to `charge` (charge
    auras) and `detonate`/`dot` if any ship's passive carries them; audit
    `ship-skills.csv` first.
