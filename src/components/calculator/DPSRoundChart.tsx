@@ -76,6 +76,11 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({ active, payload, label, sh
                             </p>
                         )}
                         {roundData && (
+                            <p className="text-xs text-theme-text-secondary pl-2">
+                                Enemy HP: {roundData.enemyHpPct}%
+                            </p>
+                        )}
+                        {roundData && (
                             <div className="text-xs text-theme-text-secondary pl-2">
                                 <span>Direct: {roundData.directDamage.toLocaleString()}</span>
                                 {roundData.corrosionDamage > 0 && (

@@ -91,6 +91,9 @@ export interface RoundData {
     chargeCount: number;
     /** This round's deterministic binary crit outcome (per-stream schedule). */
     didCrit: boolean;
+    /** Enemy HP% ENTERING this round (100 → 0), derived from cumulative damage vs the
+     *  enemy HP pool — the value hp-threshold conditions are gated against. */
+    enemyHpPct: number;
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
@@ -637,6 +640,7 @@ function runSinglePass(params: {
             charges: Math.round(charges),
             chargeCount: hasChargedSkill ? chargeCount : 0,
             didCrit: roundCrit,
+            enemyHpPct: Math.round(enemyHpPct),
             directDamage: Math.round(directDamage),
             corrosionDamage: Math.round(corrosionDamage),
             infernoDamage: Math.round(infernoDamage),

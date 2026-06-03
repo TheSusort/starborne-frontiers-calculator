@@ -1899,6 +1899,9 @@ describe('simulateDPS', () => {
             });
             const damages = result.rounds.map((r) => r.directDamage);
             expect(damages).toEqual([10000, 10000, 10000, 15000, 15000, 15000]);
+            // Entering-round enemy HP% (drives the gate, surfaced in the chart tooltip):
+            // 100, 75, 50, 25, then floored at 0 once cumulative (45k) exceeds the 40k pool.
+            expect(result.rounds.map((r) => r.enemyHpPct)).toEqual([100, 75, 50, 25, 0, 0]);
         });
 
         it('a fresh same-cast dot satisfies a LATER damage gate but not an EARLIER one (text order)', () => {
