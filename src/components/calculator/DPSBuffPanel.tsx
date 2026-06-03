@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveDoTState, RoundData } from '../../utils/calculators/dpsSimulator';
-import { ActiveBuff } from '../../utils/calculators/buffTimeline';
+import { ActiveBuff } from '../../utils/combat/statusEngine';
 import { DoTApplicationEntry, DoTType } from '../../types/calculator';
 
 interface DPSBuffPanelProps {
