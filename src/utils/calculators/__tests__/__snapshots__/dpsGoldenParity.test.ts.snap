@@ -26,7 +26,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -75,7 +75,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -124,7 +124,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -173,7 +173,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -222,7 +222,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -271,7 +271,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -320,7 +320,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -369,7 +369,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -418,7 +418,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -467,7 +467,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -516,7 +516,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -565,7 +565,7 @@ exports[`dpsGoldenParity > KNOWN-DIFF conditional buff (updates in Task 7) 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g51",
+          "id": "g3",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -2303,7 +2303,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2347,7 +2347,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2391,7 +2391,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2429,7 +2429,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g21",
+          "id": "g5",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2473,7 +2473,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2517,7 +2517,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2561,7 +2561,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2599,7 +2599,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g21",
+          "id": "g5",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2643,7 +2643,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2687,7 +2687,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2731,7 +2731,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g18",
+          "id": "g2",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2769,7 +2769,7 @@ exports[`dpsGoldenParity > detonate + reapply 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g21",
+          "id": "g5",
           "stacks": 2,
           "tier": 8,
           "type": "inferno",
@@ -2830,14 +2830,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -2887,14 +2887,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -2944,14 +2944,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -2995,7 +2995,7 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g10",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -3039,14 +3039,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3096,14 +3096,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3153,14 +3153,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3204,7 +3204,7 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g10",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -3248,14 +3248,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3305,14 +3305,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3362,14 +3362,14 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g7",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g8",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3413,7 +3413,7 @@ exports[`dpsGoldenParity > dots all types 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g10",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -3474,14 +3474,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3531,14 +3531,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3594,14 +3594,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3657,7 +3657,7 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g15",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -3725,14 +3725,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3806,14 +3806,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3893,14 +3893,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -3980,7 +3980,7 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g15",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -4072,14 +4072,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4177,14 +4177,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4288,14 +4288,14 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g12",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g13",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4399,7 +4399,7 @@ exports[`dpsGoldenParity > extend-dot passive with crit-power chance 1`] = `
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g15",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -4767,14 +4767,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4838,14 +4838,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4904,14 +4904,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -4964,7 +4964,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g43",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -5017,14 +5017,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5088,14 +5088,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5159,14 +5159,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5219,7 +5219,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g43",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -5272,14 +5272,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5338,14 +5338,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5409,14 +5409,14 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g40",
+          "id": "g2",
           "stacks": 2,
           "tier": 5,
           "type": "corrosion",
         },
         {
           "duration": 2,
-          "id": "g41",
+          "id": "g3",
           "stacks": 1,
           "tier": 120,
           "type": "bomb",
@@ -5474,7 +5474,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
       "appliedDoTs": [
         {
           "duration": 2,
-          "id": "g43",
+          "id": "g5",
           "stacks": 3,
           "tier": 8,
           "type": "inferno",
@@ -5529,7 +5529,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5573,7 +5573,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5617,7 +5617,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5661,7 +5661,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5705,7 +5705,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5749,7 +5749,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5793,7 +5793,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5837,7 +5837,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5881,7 +5881,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5925,7 +5925,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -5969,7 +5969,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",
@@ -6013,7 +6013,7 @@ exports[`dpsGoldenParity > modifiers flat + scaling + hp-threshold 1`] = `
       "appliedDoTs": [
         {
           "duration": 3,
-          "id": "g29",
+          "id": "g2",
           "stacks": 1,
           "tier": 5,
           "type": "corrosion",

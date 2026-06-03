@@ -65,26 +65,29 @@ const BASE: DPSSimulationInput = {
     hp: 30000,
 };
 
-const snap = (name: string, input: DPSSimulationInput) =>
-    it(name, () => expect(simulateDPS(input)).toMatchSnapshot());
+const snap = (name: string, mkInput: () => DPSSimulationInput) =>
+    it(name, () => {
+        idCounter = 0;
+        expect(simulateDPS(mkInput())).toMatchSnapshot();
+    });
 
 describe('dpsGoldenParity', () => {
     // Scenario 1: plain damage — no charged skill, simple active-only
-    snap('plain damage', {
+    snap('plain damage', () => ({
         ...BASE,
         chargeCount: 0,
         shipSkills: damageSkills(150),
-    });
+    }));
 
     // Scenario 2: charged cadence + startCharged
-    snap('charged cadence + startCharged', {
+    snap('charged cadence + startCharged', () => ({
         ...BASE,
         startCharged: true,
         shipSkills: damageSkills(120, 300),
-    });
+    }));
 
     // Scenario 3: multi-hit noCrit
-    snap('multi-hit noCrit', {
+    snap('multi-hit noCrit', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -105,10 +108,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 4: dots all types
-    snap('dots all types', {
+    snap('dots all types', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -156,10 +159,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 5: extend-dot passive with crit-power chance
-    snap('extend-dot passive with crit-power chance', {
+    snap('extend-dot passive with crit-power chance', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -216,10 +219,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 6: detonate + reapply
-    snap('detonate + reapply', {
+    snap('detonate + reapply', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -261,10 +264,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 7: accumulate-detonate
-    snap('accumulate-detonate', {
+    snap('accumulate-detonate', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -286,11 +289,11 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 8: charge gain + enemy-type condition
     // 'Defender' is a valid EnemyBaseClass member (see src/types/calculator.ts line 33)
-    snap('charge gain + enemy-type condition', {
+    snap('charge gain + enemy-type condition', () => ({
         ...BASE,
         enemyType: 'Defender',
         allyChargePerRound: 0.5,
@@ -321,10 +324,10 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 9: modifiers flat + scaling + hp-threshold
-    snap('modifiers flat + scaling + hp-threshold', {
+    snap('modifiers flat + scaling + hp-threshold', () => ({
         ...BASE,
         enemyHp: 100000,
         shipSkills: {
@@ -392,11 +395,11 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 10: ability buffs/debuffs unconditioned
     // Mirrors page wiring: pass through configShipSkillsToSimInputs and spread into selfBuffs/enemyDebuffs
-    (() => {
+    snap('ability buffs/debuffs unconditioned', () => {
         const shipSkills: ShipSkills = {
             slots: [
                 {
@@ -474,16 +477,16 @@ describe('dpsGoldenParity', () => {
             ],
         };
         const converted = configShipSkillsToSimInputs(shipSkills);
-        snap('ability buffs/debuffs unconditioned', {
+        return {
             ...BASE,
             shipSkills,
             selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
             enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
-        });
-    })();
+        };
+    });
 
     // Scenario 11: manual + team buffs with static defPen/dot path
-    snap('manual + team buffs with static defPen/dot path', {
+    snap('manual + team buffs with static defPen/dot path', () => ({
         ...BASE,
         shipSkills: {
             slots: [
@@ -559,10 +562,10 @@ describe('dpsGoldenParity', () => {
                 sourceStartCharged: true,
             }),
         ],
-    });
+    }));
 
     // Scenario 12: affinity disadvantage + apply debuff
-    (() => {
+    snap('affinity disadvantage + apply debuff', () => {
         const shipSkills: ShipSkills = {
             slots: [
                 {
@@ -594,7 +597,7 @@ describe('dpsGoldenParity', () => {
             ],
         };
         const converted = configShipSkillsToSimInputs(shipSkills);
-        snap('affinity disadvantage + apply debuff', {
+        return {
             ...BASE,
             affinityDamageModifier: -25,
             affinityCritCap: 75,
@@ -602,11 +605,11 @@ describe('dpsGoldenParity', () => {
             shipSkills,
             selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
             enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
-        });
-    })();
+        };
+    });
 
     // Scenario 13: judge passive gated damage
-    snap('judge passive gated damage', {
+    snap('judge passive gated damage', () => ({
         ...BASE,
         enemyHp: 80000,
         shipSkills: {
@@ -636,13 +639,13 @@ describe('dpsGoldenParity', () => {
                 },
             ],
         },
-    });
+    }));
 
     // Scenario 14: KNOWN-DIFF conditional buff (updates in Task 7)
     // Active self-buff gated on enemy-debuff ≥ 3; active also applies corrosion each round.
     // Today the static gate neutralizes the threshold → buff always on.
     // After Task 7, the buff switches on only when live debuff count reaches 3.
-    (() => {
+    snap('KNOWN-DIFF conditional buff (updates in Task 7)', () => {
         const shipSkills: ShipSkills = {
             slots: [
                 {
@@ -686,12 +689,12 @@ describe('dpsGoldenParity', () => {
             ],
         };
         const converted = configShipSkillsToSimInputs(shipSkills);
-        snap('KNOWN-DIFF conditional buff (updates in Task 7)', {
+        return {
             ...BASE,
             chargeCount: 0,
             shipSkills,
             selfBuffs: [...BASE.selfBuffs, ...converted.selfBuffs],
             enemyDebuffs: [...BASE.enemyDebuffs, ...converted.enemyDebuffs],
-        });
-    })();
+        };
+    });
 });
