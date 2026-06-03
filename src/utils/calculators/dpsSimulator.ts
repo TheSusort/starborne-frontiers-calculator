@@ -8,14 +8,14 @@ import {
     SelectedGameBuff,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
+import type { ActiveBuff } from '../combat/statusEngine';
+import { runCombat } from '../combat/engine';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill, damageInputsFromSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
-import { runCombat } from '../combat/engine';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
 export type { ActiveBuff } from '../combat/statusEngine';
-import type { ActiveBuff } from '../combat/statusEngine';
 
 export interface DPSSimulationInput {
     attack: number;

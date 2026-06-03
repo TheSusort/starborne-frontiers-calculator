@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEventBus, CombatEvent } from '../events';
+import { createEventBus } from '../events';
 
 describe('createEventBus', () => {
     it('dispatches to listeners of the matching type in registration order', () => {
