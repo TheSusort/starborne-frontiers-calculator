@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { createStatusEngine } from '../statusEngine';
+import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { ConditionContext } from '../../abilities/evaluateConditions';
 
 function makeBuff(id: string, overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: {}, isStackable: false, ...overrides };
@@ -264,7 +265,7 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
         });
     });
 
-    it('per-round accumulating buff is absent from snapshot until round 1', () => {
+    it('per-round accumulating buff appears from round 1 with stacks tracking the round number', () => {
         // Confirm it doesn't appear at stacks=0 (before first increment)
         const buff = makeAccumBuff('Overload', 'per-round');
         const result = runTimeline([buff], [], 2, false, 3);
@@ -331,9 +332,9 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
             totalRounds: 3,
         });
         expect(eng.step(1)).toBeDefined();
-        // skipping round 2 → must throw
-        expect(() => eng.step(3)).toThrow();
-        // repeating a round → must throw
+        // skipping round 2 → must throw with the expected-round message
+        expect(() => eng.step(3)).toThrow(/expected round 2/);
+        // repeating a round → must throw with the expected-round message
         const eng2 = createStatusEngine({
             selfBuffs: [],
             enemyDebuffs: [],
@@ -342,6 +343,159 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
             totalRounds: 3,
         });
         eng2.step(1);
-        expect(() => eng2.step(1)).toThrow();
+        expect(() => eng2.step(1)).toThrow(/expected round 2/);
+    });
+});
+
+describe('createStatusEngine — ability statuses (Task 6)', () => {
+    it('timed ability status applied round 2 (duration 2) is visible rounds 2-3, gone round 4', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 5,
+        });
+        const status: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 2,
+            conditions: [],
+            kind: 'timed',
+        };
+        eng.registerAbilityStatuses([status]);
+
+        eng.step(1);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+
+        eng.step(2);
+        eng.applyTimedAbilityStatus(2, status);
+        expect(eng.timedAbilityStatuses('self').map((s) => s.payload.buffName)).toEqual([
+            'Attack Up',
+        ]);
+
+        eng.step(3);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1); // still within window
+
+        eng.step(4);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0); // expired
+    });
+
+    it('tier precedence: a lower-tier ability status does not displace an applied higher tier', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 3,
+        });
+        const tierTwo: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up II', stacks: 1, parsedEffects: { attack: 40 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 3,
+            conditions: [],
+            kind: 'timed',
+        };
+        const tierOne: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 3,
+            conditions: [],
+            kind: 'timed',
+        };
+        eng.registerAbilityStatuses([tierTwo, tierOne]);
+        eng.step(1);
+        eng.applyTimedAbilityStatus(1, tierTwo);
+        eng.applyTimedAbilityStatus(1, tierOne); // same family, lower tier → ignored
+        const active = eng.timedAbilityStatuses('self');
+        expect(active.map((s) => s.payload.buffName)).toEqual(['Attack Up II']);
+    });
+
+    it('accumulating ability status stacks per-active and excludes from snapshot at 0', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 4,
+        });
+        const accum: RegisteredAbilityStatus = {
+            payload: { buffName: 'Momentum', stacks: 1, parsedEffects: { critDamage: 10 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 'recurring',
+            conditions: [],
+            kind: 'accumulating',
+            maxStacks: 5,
+            stackTrigger: 'per-active',
+        };
+        eng.registerAbilityStatuses([accum]);
+        const baseCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+        // chargeCount=2, startCharged=false → active r1,r2, charged r3, active r4
+        eng.step(1);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(1);
+        eng.step(2);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        eng.step(3); // charged → no increment
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        const r4 = eng.step(4);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(3);
+        // It must NOT leak into the scheduled snapshot (engine appends it separately).
+        expect(r4.activeSelfBuffs).toEqual([]);
+    });
+
+    it('aura ability status is included only when its conditions pass', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        const aura: RegisteredAbilityStatus = {
+            payload: { buffName: 'Focus', stacks: 1, parsedEffects: { crit: 15 } },
+            side: 'self',
+            sourceSlot: 'passive',
+            duration: 'recurring',
+            conditions: [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 1,
+                },
+            ],
+            kind: 'aura',
+        };
+        eng.registerAbilityStatuses([aura]);
+        const ctx = (debuffCount: number): ConditionContext => ({
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: debuffCount,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        });
+        eng.step(1);
+        expect(eng.activeAbilityStatuses('self', ctx(0))).toHaveLength(0);
+        expect(eng.activeAbilityStatuses('self', ctx(2))).toHaveLength(1);
     });
 });

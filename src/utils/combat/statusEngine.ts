@@ -1,4 +1,6 @@
-import { SelectedGameBuff } from '../../types/calculator';
+import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
+import { Condition, SkillSlot } from '../../types/abilities';
+import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { computeChargeSchedule } from './chargeSchedule';
 
 export interface ActiveBuff {
@@ -15,10 +17,55 @@ export interface StatusEngineInput {
     totalRounds: number;
 }
 
+/** Effect payload of an ability-sourced status, folded into the round totals by the engine. */
+export interface AbilityStatusPayload {
+    buffName: string;
+    stacks: number;
+    parsedEffects: ParsedBuffEffects;
+    application?: 'inflict' | 'apply';
+}
+
+/**
+ * A buff/debuff ability registered with the status engine for in-loop application.
+ * `kind` classifies how it is gated and scheduled:
+ *  - accumulating: registered into the accumulating maps; stacks accumulate per
+ *    trigger (never gated); effect inclusion is aura-gated per round.
+ *  - aura: recurring/passive; effect inclusion is gated per round against the round ctx.
+ *  - timed: finite duration; gated AT APPLICATION when the source slot fires, then runs
+ *    its full window unconditionally (familyKey/tier upsert shared with scheduled statuses).
+ */
+export interface RegisteredAbilityStatus {
+    payload: AbilityStatusPayload;
+    side: 'self' | 'enemy';
+    sourceSlot: SkillSlot;
+    duration: number | 'recurring' | undefined;
+    /** Already live-gated by the caller (see abilityStatusGating.liveGateConditions). */
+    conditions: Condition[];
+    kind: 'accumulating' | 'aura' | 'timed';
+    maxStacks?: number;
+    stackTrigger?: StackTrigger;
+}
+
+/** An ability status active this round, paired with its payload for effect folding. */
+export interface ActiveAbilityStatus {
+    payload: AbilityStatusPayload;
+    active: ActiveBuff;
+}
+
 export interface StatusEngine {
     /** Advance to round r (1-based, strictly sequential) and return the round's
      *  active lists — same contents as the old computeBuffTimeline entry. */
     step(round: number): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
+    /** Register all buff/debuff abilities once at creation (classified by `kind`). */
+    registerAbilityStatuses(statuses: RegisteredAbilityStatus[]): void;
+    /** Apply a firing skill's TIMED ability status for this round; the engine passes
+     *  only those whose application gate passed. Reuses the familyKey/tier upsert. */
+    applyTimedAbilityStatus(round: number, status: RegisteredAbilityStatus): void;
+    /** Aura + accumulating ability statuses whose conditions pass `ctx` this round,
+     *  with payloads, for effect folding and snapshot inclusion. */
+    activeAbilityStatuses(side: 'self' | 'enemy', ctx: ConditionContext): ActiveAbilityStatus[];
+    /** Timed ability statuses currently in the maps (payload-carrying), for effect folding. */
+    timedAbilityStatuses(side: 'self' | 'enemy'): ActiveAbilityStatus[];
 }
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
@@ -53,6 +100,8 @@ interface BuffState {
     buffName: string;
     turnsRemaining: number;
     tier: number;
+    /** Present for ability-sourced timed statuses; folded into round totals by the engine. */
+    payload?: AbilityStatusPayload;
 }
 
 interface AccumulatingState {
@@ -61,6 +110,9 @@ interface AccumulatingState {
     maxStacks: number | undefined;
     rate: number;
     trigger: 'per-round' | 'per-active' | 'per-charge';
+    /** Present for ability-sourced accumulating statuses (payload + aura-gate conditions). */
+    payload?: AbilityStatusPayload;
+    conditions?: Condition[];
 }
 
 /**
@@ -133,6 +185,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     const selfMap = new Map<string, BuffState>();
     const enemyMap = new Map<string, BuffState>();
+
+    // Ability-sourced aura statuses (recurring/passive): held with their (already
+    // live-gated) conditions; effect inclusion is re-evaluated per round.
+    const auraSelf: RegisteredAbilityStatus[] = [];
+    const auraEnemy: RegisteredAbilityStatus[] = [];
 
     let lastRound = 0;
 
@@ -214,41 +271,141 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const enemyAlwaysSnap = [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map(
             (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
         );
-        // Accumulating buffs: include only when stacks > 0
+        // Accumulating buffs: include only when stacks > 0. Ability-sourced accumulating
+        // statuses (payload-carrying) are excluded here — the engine collects them via
+        // activeAbilityStatuses and appends them to the round lists after scheduled ones.
         const selfAccumSnap = [...accumSelfMap.values()]
-            .filter((s) => s.stacks > 0)
+            .filter((s) => s.stacks > 0 && !s.payload)
             .map((s) => ({
                 buffName: s.buffName,
                 turnsRemaining: 'recurring' as const,
                 stacks: s.stacks,
             }));
         const enemyAccumSnap = [...accumEnemyMap.values()]
-            .filter((s) => s.stacks > 0)
+            .filter((s) => s.stacks > 0 && !s.payload)
             .map((s) => ({
                 buffName: s.buffName,
                 turnsRemaining: 'recurring' as const,
                 stacks: s.stacks,
             }));
 
+        // Timed scheduled statuses. Ability-sourced timed statuses (payload-carrying)
+        // live in the same maps but are excluded here — the engine appends them via
+        // timedAbilityStatuses after scheduled ones.
         return {
             activeSelfBuffs: [
                 ...selfAlwaysSnap,
                 ...selfAccumSnap,
-                ...[...selfMap.values()].map((s) => ({
-                    buffName: s.buffName,
-                    turnsRemaining: s.turnsRemaining,
-                })),
+                ...[...selfMap.values()]
+                    .filter((s) => !s.payload)
+                    .map((s) => ({
+                        buffName: s.buffName,
+                        turnsRemaining: s.turnsRemaining,
+                    })),
             ],
             activeEnemyDebuffs: [
                 ...enemyAlwaysSnap,
                 ...enemyAccumSnap,
-                ...[...enemyMap.values()].map((s) => ({
-                    buffName: s.buffName,
-                    turnsRemaining: s.turnsRemaining,
-                })),
+                ...[...enemyMap.values()]
+                    .filter((s) => !s.payload)
+                    .map((s) => ({
+                        buffName: s.buffName,
+                        turnsRemaining: s.turnsRemaining,
+                    })),
             ],
         };
     };
 
-    return { step };
+    // --- Ability-status API (Task 6) ---
+
+    const registerAbilityStatuses = (statuses: RegisteredAbilityStatus[]): void => {
+        // Registered AFTER scheduled entries so list-order parity is preserved.
+        for (const s of statuses) {
+            if (s.kind === 'accumulating') {
+                const map = s.side === 'self' ? accumSelfMap : accumEnemyMap;
+                // Ability accumulating statuses join the accumulating machinery with a
+                // payload + (live-gated) conditions for per-round aura gating of effects.
+                map.set(s.payload.buffName, {
+                    buffName: s.payload.buffName,
+                    stacks: 0,
+                    maxStacks: s.maxStacks,
+                    rate: s.payload.stacks,
+                    trigger: s.stackTrigger!,
+                    payload: s.payload,
+                    conditions: s.conditions,
+                });
+            } else if (s.kind === 'aura') {
+                (s.side === 'self' ? auraSelf : auraEnemy).push(s);
+            }
+            // timed statuses are applied lazily via applyTimedAbilityStatus when their
+            // source slot fires and the application gate passes.
+        }
+    };
+
+    const applyTimedAbilityStatus = (round: number, status: RegisteredAbilityStatus): void => {
+        if (round !== lastRound) {
+            throw new Error(
+                `StatusEngine.applyTimedAbilityStatus called for round ${round}, but the engine is at round ${lastRound}`
+            );
+        }
+        if (typeof status.duration !== 'number') return;
+        const map = status.side === 'self' ? selfMap : enemyMap;
+        const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
+        const existing = map.get(familyKey);
+        if (existing && existing.tier > tier) return;
+        map.set(familyKey, {
+            buffName: status.payload.buffName,
+            turnsRemaining: status.duration,
+            tier,
+            payload: status.payload,
+        });
+    };
+
+    const activeAbilityStatuses = (
+        side: 'self' | 'enemy',
+        ctx: ConditionContext
+    ): ActiveAbilityStatus[] => {
+        const out: ActiveAbilityStatus[] = [];
+        // Auras: effect included only when their (live-gated) conditions pass this round.
+        for (const a of side === 'self' ? auraSelf : auraEnemy) {
+            if (!conditionsMet(a.conditions, ctx)) continue;
+            out.push({
+                payload: a.payload,
+                active: { buffName: a.payload.buffName, turnsRemaining: 'recurring' },
+            });
+        }
+        // Accumulating ability statuses: included when stacks > 0 AND conditions pass.
+        const accumMap = side === 'self' ? accumSelfMap : accumEnemyMap;
+        for (const s of accumMap.values()) {
+            if (!s.payload) continue;
+            if (s.stacks <= 0) continue;
+            if (s.conditions && !conditionsMet(s.conditions, ctx)) continue;
+            out.push({
+                payload: { ...s.payload, stacks: s.stacks },
+                active: { buffName: s.buffName, turnsRemaining: 'recurring', stacks: s.stacks },
+            });
+        }
+        return out;
+    };
+
+    const timedAbilityStatuses = (side: 'self' | 'enemy'): ActiveAbilityStatus[] => {
+        const map = side === 'self' ? selfMap : enemyMap;
+        const out: ActiveAbilityStatus[] = [];
+        for (const s of map.values()) {
+            if (!s.payload) continue;
+            out.push({
+                payload: s.payload,
+                active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
+            });
+        }
+        return out;
+    };
+
+    return {
+        step,
+        registerAbilityStatuses,
+        applyTimedAbilityStatus,
+        activeAbilityStatuses,
+        timedAbilityStatuses,
+    };
 }
