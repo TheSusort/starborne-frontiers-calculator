@@ -182,8 +182,9 @@ function gateConditions(ability: Ability): Ability['conditions'] {
  * scaling (scaledBonus) uses the counts as of that ability's position.
  *
  * Covers the firing-skill payload path only; modifier and extend-dot abilities
- * keep their own firing+passive gating, and buff/debuff abilities gate statically
- * at conversion (see buffAbilityConverters).
+ * keep their own firing+passive gating. Buff/debuff abilities gate dynamically in
+ * the combat engine (src/utils/combat/engine.ts + abilityStatusGating.ts) — timed
+ * at application, auras per-round — not statically at conversion.
  */
 export function gateFiringAbilities(
     skill: Skill | undefined,

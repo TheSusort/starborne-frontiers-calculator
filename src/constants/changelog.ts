@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'DPS enemy HP now declines as damage accumulates: "below X% HP" execute-style effects kick in mid-fight, HP-proportional bonuses track the live value (Akula\'s "up to 30% based on current HP" decays; Tithonus\' missing-HP bonus ramps up), the chart tooltip shows the enemy\'s remaining HP% and charge progress per round, and each ship\'s line is marked where its damage empties the enemy HP pool.',
     'Many DPS skill auto-fill fixes: conditions are scoped to their own sentence (no more leaking across abbreviation periods like "Inc.", onto recurring per-turn grants, or onto the wrong ability), Judge\'s HP-gated damage and Nayra\'s end-of-tag Defense damage parse correctly, Shield-gain text is no longer read as bonus damage, and threshold-gated charge gains no longer fire early.',
     'Autogear: you can now set a minimum (or maximum) Effective HP as a stat limit — handy when you care about overall survivability rather than tuning HP and Defense separately. Works as a soft limit or a hard requirement like any other stat.',
+    'DPS calculator: conditional buffs and debuffs from ship skills now switch on and off based on live combat state (enemy debuff count, enemy HP, and similar conditions) instead of being always-on or always-off.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

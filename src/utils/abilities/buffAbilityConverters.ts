@@ -71,9 +71,12 @@ export function selectedBuffToAbility(buff: SelectedGameBuff, target: AbilityTar
     };
 }
 
-// Static context for the include/exclude gate. Derivable-dynamic counts default to
-// "satisfiable" so only enemy-type mismatch or a manual toggle (count 0) excludes a buff.
-// (An enemy-buff-BY-NAME condition evaluates to 0 here, so mark such conditions
+// Static context for the include/exclude gate. This gate now serves ONLY the page preview
+// path (configShipSkillsToSimInputs → DPS page buff-totals display); in the sim,
+// buff/debuff abilities are gated dynamically per round by the combat engine
+// (src/utils/combat/abilityStatusGating.ts:liveGateConditions). Derivable-dynamic counts
+// default to "satisfiable" so only enemy-type mismatch or a manual toggle (count 0) excludes
+// a buff. (An enemy-buff-BY-NAME condition evaluates to 0 here, so mark such conditions
 // non-derivable/manual in the editor to gate them — documented limitation.)
 export function buildStaticBuffContext(opts: { enemyType?: EnemyBaseClass }): ConditionContext {
     return {
@@ -91,12 +94,13 @@ export function buildStaticBuffContext(opts: { enemyType?: EnemyBaseClass }): Co
     };
 }
 
-// For the schedule-time include/exclude gate, a DERIVABLE count-threshold gate is
+// For the page-preview include/exclude gate, a DERIVABLE count-threshold gate is
 // satisfiable in principle (some real per-round count meets it), so it shouldn't be
 // excluded by the placeholder sentinel counts in buildStaticBuffContext. Neutralize
-// it to an "always" condition for this check; the real per-round threshold still
-// applies wherever the ability is re-evaluated dynamically (e.g. modifiers in
-// applyAbilities). Manual (non-derivable) thresholds keep literal gating.
+// it to an "always" condition for this check. Manual (non-derivable) thresholds keep
+// literal gating. In the sim this static gate is superseded by liveGateConditions
+// (src/utils/combat/abilityStatusGating.ts), which neutralizes a wider set of
+// non-derivable subjects and evaluates dynamically per round.
 function staticGateConditions(conditions: Condition[]): Condition[] {
     return conditions.map((c) =>
         c.derivable && c.countComparator != null
