@@ -1,6 +1,7 @@
 # Skill Model Coverage: Parser/Editor vs DPS Simulation
 
 > Living document. Last audited **2026-06-03** on branch `feat/skill-ability-editor`.
+> Updated **2026-06-03** after the deterministic-crit + hard-gating ship (spec 2026-06-03-deterministic-crit-and-hard-gating-design.md).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -18,15 +19,15 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 
 | Type | Parser auto-fills | Editor fields | Sim consumes | Conditions gate in sim | Scaling in sim | Slots consulted by sim |
 |---|---|---|---|---|---|---|
-| `damage` | ✅ multiplier, `hits`, `noCrit`, scaling+cap, hp-threshold & enemy-effect & ally-gates as conditions | ✅ all incl. scaling | ✅ | ❌ **GAP — conditions never gate damage** (only `scaledBonus` scaling is read; `dpsSimulator.ts:420`) | ✅ `scaledBonus` on `conditions[scaling.conditionIndex]` | firing only |
-| `additional-damage` | ✅ `parseSecondaryDamage` (hp/def %) | ✅ | ✅ | ❌ **GAP — conditions ignored** (`secondaryFromSkill`, `applyAbilities.ts:106`) | ❌ | firing only |
+| `damage` | ✅ multiplier, `hits`, `noCrit`, scaling+cap, hp-threshold & enemy-effect & ally-gates as conditions | ✅ all incl. scaling | ✅ | ✅ `gateFiringAbilities` gates whole ability; `scaledBonus` scaling also gates zero-count conditions | ✅ `scaledBonus` on `conditions[scaling.conditionIndex]` | firing only |
+| `additional-damage` | ✅ `parseSecondaryDamage` (hp/def %) | ✅ | ✅ | ✅ `gateFiringAbilities` (`applyAbilities.ts`) | ❌ | firing only |
 | `modifier` | ✅ `parseModifiers` (outgoingDamage, critDamage, defPen flat + for-each scaling) | ⚠️ all except `isMultiplicative` (hidden, no-op) | ✅ | ✅ per-round, full `conditionsMet` (`applyAbilities.ts:37`) | ✅ | **firing + passive** |
 | `buff` | ✅ via `buildSkillBuffAutoFill` + `detectGrantConditions` | ✅ (stacks, duration; `stackTrigger`/`maxStacks` come from picker, not directly editable) | ✅ via static conversion → `SelectedGameBuff` → `computeBuffTimeline` | ⚠️ **static gate only** at conversion time; never re-evaluated per round (`buffAbilityConverters.ts:117`) | stacks (accumulating via `stackTrigger`) | all slots (routed by `skillSource`) |
 | `debuff` | ✅ same + `application` (inflict/apply) | ✅ | ✅ (landing roll: hacking vs security for inflict; affinity for apply) | ⚠️ static gate only | stacks | all slots |
-| `dot` | ✅ `buildDoTAutoFill` (active/charged slots only — never passive) | ✅ (duration finite only) | ✅ Step 3, gated by hacking landing roll | ❌ conditions ignored (`dotsFromSkill`) | ❌ | firing only |
+| `dot` | ✅ `buildDoTAutoFill` (active/charged slots only — never passive) | ✅ (duration finite only) | ✅ Step 3, gated by hacking landing roll | ✅ `gateFiringAbilities` (`dotsFromSkill`) | ❌ | firing only |
 | `extend-dot` | ✅ `parseExtendDoT` + `parseCritPowerExtend` | ✅ | ✅ Step 2.9 (corrosion+inferno, not bombs) | ✅ per-round `conditionsMet` (`dpsSimulator.ts:471`) + `chanceFromCritPower` probability | — | **firing + passive** (Valerian fix) |
-| `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ❌ conditions ignored | ❌ | firing only |
-| `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ❌ conditions ignored | ❌ | firing only |
+| `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
+| `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ per-round `conditionsMet` (`dpsSimulator.ts:433`); un-thresholded conditions also scale by expected value | expected-value via `evaluateCondition` | firing only |
 | `heal` | ❌ never emitted | ❌ **type pickable but NO config fields rendered** (label-only in `AbilityCard`) | ❌ **not consumed** | — | — | — |
 | `shield` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
@@ -35,20 +36,17 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 
 ### Headline gaps (parsed + editable, but sim silently ignores)
 
-1. **Damage-ability condition gates.** The parser attaches hp-threshold gates
-   ("deals X% to enemies below 50% HP"), enemy-effect gates ("to enemies afflicted with
-   Corrosion"), and ally-event gates to the `damage` ability's `conditions` — and the
-   editor lets users add/edit them — but `runSinglePass` reads only
-   `scalingAbility → scaledBonus`. A condition without a scaling rule does nothing.
-2. **Conditions on `additional-damage`, `dot`, `detonate-dot`, `accumulate-detonate`** —
-   same story: editable, never evaluated.
-3. **heal/shield/cleanse/purge/control** — exist in the model and type picker, have no
+1. **heal/shield/cleanse/purge/control** — exist in the model and type picker, have no
    editor fields and no sim consumption. (Expected: these are the Healing-calc /
    combat-sim seams.)
 
 ---
 
 ## 2. Condition-subject matrix
+
+**The sim is zero-RNG.** All probabilistic outcomes — crits, debuff/DoT landing, DoT
+extension chances — use deterministic fractional-accumulator schedules. Identical inputs
+always produce identical round-by-round results.
 
 Real counts come from `buildRoundContext` (`roundContext.ts:12-39`), built twice per
 round (as `modifierCtx` and `ctx`), both **before Step-3 DoT application**.
@@ -62,8 +60,8 @@ round (as `modifierCtx` and `ctx`), both **before Step-3 DoT application**.
 | `enemy-buff` | ✅ (Taunt, Stealth, count gates) | `enemyBuffNames: []` | **always 0** | ❌ manual only |
 | `enemy-debuff` | ✅ | landed debuffs + DoT entries — **name-agnostic, `buffName` ignored** (`evaluateConditions.ts:31-35`) | real | ✅ |
 | `enemy-type` | ✅ (incl. negation, anyOf OR-lists) | global page-level `enemyType` | real | ✅ |
-| `self-crit` | ✅ | `effectiveCritRate / 100` (probability, expected-value) | real | ✅ |
-| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct` / `enemyHpPct` | **fixed 100** → `above` gates always pass, `below` gates **always fail** | ⚠️ constant — a parsed "below X% HP" gate would zero an ability *if* gates were honored (see §1 gap) |
+| `self-crit` | ✅ | binary per-round outcome from deterministic crit schedule (in payload ctx); `effectiveCritRate / 100` probability in modifier ctx | real | ✅ |
+| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct` fixed 100; `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self fixed 100, enemy live | ✅ enemy HP-threshold gates now switch mid-fight; self remains fixed |
 | `adjacent-ally` | ✅ (for-each scaling) | `adjacentAllyCount` | **0** | ❌ manual only |
 | `enemy-adjacent` | ✅ (charge classifier) | `enemyAdjacentCount` | **0** | ❌ manual only |
 | `enemy-destroyed` | ✅ (for-each, Judge) | `enemyDestroyedCount` | **0** | ❌ manual only |
@@ -145,38 +143,35 @@ buff/charge-aura), source it from firing + passive.
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
 
-Ordered by (user surprise × implementation cost). Items 1–3 are "the editor lets you
+Ordered by (user surprise × implementation cost). Item 1 is "the editor lets you
 configure it and it looks like it works, but it does nothing".
 
-1. **Honor condition gates on `damage`** — `conditionsMet(damage.conditions, ctx)`
-   before applying multiplier (decide: hard gate to 0 vs expected-value weighting for
-   probabilistic subjects like `self-crit`). Unlocks already-parsed hp-threshold gates
-   and "damage to enemies afflicted with X" gates. Prereq: decide hp-threshold realism
-   (see #6) or gates like "below 50% HP" will hard-zero damage under the fixed
-   `enemyHpPct: 100` assumption.
-2. **Honor condition gates on `additional-damage`, `dot`, `detonate-dot`,
-   `accumulate-detonate`** — same `conditionsMet` call against `ctx`/`modifierCtx`;
-   small, mechanical.
-3. **Editor fields + validation for the no-op types** — either render config fields for
+> **Shipped 2026-06-03:** condition gates on `damage`/`additional-damage`/`dot`/
+> `detonate-dot`/`accumulate-detonate` (formerly items 1–2), and HP-threshold realism
+> for the enemy HP dimension (formerly item 6), are all shipped. Ability ordering:
+> Tier 1 (text-order emission from parser) and Tier 2 (order-aware gating overlay +
+> editor reorder buttons) are shipped; Tier 3 (reactive event dispatch) is still deferred.
+
+1. **Editor fields + validation for the no-op types** — either render config fields for
    heal/shield/cleanse/purge/control (and visibly mark them "not simulated in DPS"), or
    hide them from the DPS editor's type picker until a calc consumes them. Also: warn or
    block `dot`/`charge`/`detonate` on the passive slot (silent no-ops today).
-4. **Dynamic per-round buff gating** (deferred from Phase 3b) — re-evaluate buff/debuff
+2. **Dynamic per-round buff gating** (deferred from Phase 3b) — re-evaluate buff/debuff
    conditions per round instead of static include/exclude. Needs a condition-aware
    timeline (or per-round filtering of `activeSelfBuffs` by their source ability's
    conditions). The biggest correctness win for ships like Crocus/Nuqtu/APEX
    (threshold-gated buffs).
-5. **Passive-slot sourcing audit** — extend firing+passive sourcing to `charge` (charge
+3. **Passive-slot sourcing audit** — extend firing+passive sourcing to `charge` (charge
    auras) and `detonate`/`dot` if any ship's passive carries them; audit
    `ship-skills.csv` first.
-6. **HP-threshold realism** — replace the constant `selfHpPct/enemyHpPct = 100` with a
-   model (configurable enemy-HP%, or a declining curve over rounds) so `below` gates and
-   execute-style damage become meaningful.
-7. **`trigger` field** — reactive events (`on-crit`, `on-attacked`, …) need an event
+4. **Self HP-threshold realism** — `selfHpPct` is still fixed at 100. A declining
+   self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
+   self-execute-style gates meaningful.
+5. **`trigger` field** — reactive events (`on-crit`, `on-attacked`, …) need an event
    dispatch inside the round loop. Largest lift; prerequisite for cleanse/control
    modeling and the future combat sim. Until then, keep modeling reactives as manual
    condition toggles.
-8. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
+6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
 
 ---
 

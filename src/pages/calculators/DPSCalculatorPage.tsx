@@ -613,12 +613,37 @@ const DPSCalculatorPage: React.FC = () => {
                             </span>{' '}
                             chance to land, where affinityMult is ×1.25 for advantage, ×0.75 for
                             disadvantage, or ×1 for neutral. At the defaults (hacking 200, security
-                            100) debuffs always land. Each simulation is a single stochastic run —
-                            rounds where the roll fails show no DoT or debuff damage, while rounds
-                            where it lands show full effect. The chart reflects one realistic
-                            playthrough rather than a smoothed average. Conditional buffs and
-                            debuffs (e.g. &quot;on kill&quot;, &quot;when enemy has 3+
-                            debuffs&quot;) are treated as always active for simplicity.
+                            100) debuffs always land.
+                        </p>
+                        <p className="mt-2">
+                            <strong>Fully deterministic.</strong> The simulation contains no
+                            randomness — identical inputs always produce identical results. Crits
+                            are decided round-by-round using a fractional-accumulator schedule at
+                            the ship&apos;s effective crit rate, with separate schedules for active
+                            and charged hits (preventing cadence aliasing). Rounds that crit show a{' '}
+                            <strong>Crit</strong> badge in the chart tooltip. Attacks marked
+                            &quot;cannot critically hit&quot; never crit and consume no crit chance.
+                            Debuff/DoT landing and chance-based DoT extensions use the same
+                            deterministic schedule approach.
+                        </p>
+                        <p className="mt-2">
+                            <strong>Hard condition gates.</strong> Conditions on damage, stat-based
+                            bonus damage, DoTs, detonations, and accumulate-and-detonate abilities
+                            gate strictly — if a condition is not met in a given round, that
+                            component contributes zero damage. Scaling conditions (e.g. &quot;+X%
+                            per enemy debuff&quot;) deal no damage when the count is zero.
+                        </p>
+                        <p className="mt-2">
+                            <strong>Derived enemy HP.</strong> Enemy HP percentage declines as
+                            cumulative damage accumulates against the configured enemy HP pool, so
+                            execute-style &quot;below X% HP&quot; gates switch on at the correct
+                            round mid-fight rather than always passing or always failing.
+                        </p>
+                        <p className="mt-2">
+                            <strong>Execution order.</strong> Abilities within a skill fire in the
+                            order they appear in the skill text, matching in-game execution. A DoT
+                            inflicted early in a skill can therefore satisfy a later ability&apos;s
+                            &quot;enemy has a debuff&quot; condition in the same round.
                         </p>
                     </div>
                 </div>
