@@ -2060,6 +2060,81 @@ describe('simulateDPS', () => {
             expect(result.rounds[0].activeCorrosionStacks).toBeGreaterThan(0);
         });
 
+        it('per-buff defPen modifier counts live timeline buffs and equals flat pen (Thresh)', () => {
+            // Thresh R2 passive: "gains 7.5% defense penetration for each buff it has,
+            // up to a max of 45%". The count is the round's active self-buffs from the
+            // buff timeline — proven by equivalence with a flat defensePenetration input.
+            const threshSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'a',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 240 },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            {
+                                id: 'pen',
+                                type: 'modifier',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [{ subject: 'self-buff', derivable: true }],
+                                scaling: { conditionIndex: 0, perUnit: 7.5, cap: 45 },
+                                config: {
+                                    type: 'modifier',
+                                    channel: 'defensePenetration',
+                                    value: 0,
+                                    isMultiplicative: false,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const base = {
+                ...baseInput,
+                attack: 10000,
+                crit: 100,
+                critDamage: 0,
+                chargeCount: 0,
+                enemyDefense: 12000, // nonzero so penetration matters
+                rounds: 4,
+                shipSkills: threshSkills,
+            };
+            const buffs = (n: number) =>
+                Array.from({ length: n }, (_, i) => makeAlwaysBuff(`b${i}`, {}));
+            const withPen = (pen: number) =>
+                simulateDPS({
+                    ...base,
+                    shipSkills: {
+                        slots: [threshSkills.slots[0]], // damage only, no modifier
+                    },
+                    defensePenetration: pen,
+                }).summary.totalDamage;
+
+            // 0 buffs → no pen; 2 buffs → 15; 8 buffs → capped at 45 (not 60)
+            expect(simulateDPS({ ...base, selfBuffs: buffs(0) }).summary.totalDamage).toBe(
+                withPen(0)
+            );
+            expect(simulateDPS({ ...base, selfBuffs: buffs(2) }).summary.totalDamage).toBe(
+                withPen(15)
+            );
+            expect(simulateDPS({ ...base, selfBuffs: buffs(8) }).summary.totalDamage).toBe(
+                withPen(45)
+            );
+            // sanity: pen actually changes the outcome
+            expect(withPen(15)).toBeGreaterThan(withPen(0));
+        });
+
         it('HP-proportional modifier shrinks as the enemy pool depletes (Akula)', () => {
             // Akula passive: "+up to 30% outgoing damage based on the target's CURRENT
             // HP%" → modifier scaling 0.3/HP-point, cap 30, on enemy-hp-pct.
