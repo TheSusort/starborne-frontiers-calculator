@@ -124,8 +124,11 @@ Walks the firing skill's abilities **in array order**, maintaining an overlay on
 All existing extractors (`damageInputsFromSkill`, `secondaryFromSkill`,
 `dotsFromSkill`, `detonationsFromSkill`, `accumulatorsFromSkill`,
 `chargeAbilitiesFromSkill`) run **unchanged** on `gatedSkill`. The charge loop's
-own `conditionsMet` check becomes redundant (gating already filtered) and may be
-removed.
+own `conditionsMet` check becomes redundant (gating already filtered) and is
+**removed** — but its *scaling* logic is preserved: an un-thresholded primary
+condition still scales the charge amount by `evaluateCondition` (now binary for
+self-crit), and that path is NOT replaced by `gateFiringAbilities` (which only
+gates). Subtle trap: gate ≠ scale.
 
 **Invariants preserved:**
 
@@ -223,8 +226,8 @@ in array order; order is now sim-meaningful.
 ## Testing
 
 - **`rateAccumulator.test.ts`**: exact frequency (0.7 over 10 → 7, evenly
-  spaced), rate 1 → always, rate 0 → never, varying rates, float drift
-  (0.1 × 10 → exactly 1), clamping.
+  spaced), rate 1 → always, rate 0.999 → still fires every call (EPS sanity),
+  rate 0 → never, varying rates, float drift (0.1 × 10 → exactly 1), clamping.
 - **`gateFiringAbilities`**: drops failing abilities; overlay makes a fresh dot
   visible to later gates but not earlier ones; threshold comparators honored;
   `ctxFor` positional scaling counts.
