@@ -69,12 +69,20 @@ export function createActor(
  * degenerates to "attacker acts every round" (enemy speed 0) — the scaffolding
  * exists so Phase 2 only has to add actors, not restructure the loop.
  *
- * Callers must include at least one actor with speed > 0; otherwise this function
- * will loop infinitely.
+ * Callers must include at least one actor with speed > 0; otherwise no actor's
+ * meter ever advances. A hard tick cap converts that all-zero-speed hang into a
+ * debuggable error rather than an infinite loop.
  */
 export function selectNextActor(actors: CombatActor[]): CombatActor {
     const eligible = () => actors.filter((a) => a.turnMeter >= 1000);
+    let ticks = 0;
     while (eligible().length === 0) {
+        if (++ticks > 10000) {
+            throw new Error(
+                'selectNextActor: no actor reached the turn meter after 10000 ticks — ' +
+                    'at least one actor must have speed > 0.'
+            );
+        }
         for (const a of actors) a.turnMeter += a.stats.speed;
     }
     return eligible().reduce((best, a) => (a.turnMeter > best.turnMeter ? a : best));

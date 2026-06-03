@@ -91,4 +91,10 @@ describe('selectNextActor', () => {
         const selected = selectNextActor([fast, slow]);
         expect(selected.id).toBe('fast');
     });
+
+    it('throws (not hangs) when every actor has speed 0', () => {
+        const a = createActor({ id: 'a', side: 'player', stats: { ...baseStats, speed: 0 } });
+        const b = createActor({ id: 'b', side: 'enemy', stats: { ...baseStats, speed: 0 } });
+        expect(() => selectNextActor([a, b])).toThrow(/10000 ticks/);
+    });
 });
