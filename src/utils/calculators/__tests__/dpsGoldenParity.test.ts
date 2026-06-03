@@ -636,9 +636,10 @@ describe('dpsGoldenParity', () => {
     }));
 
     // Scenario 14: KNOWN-DIFF conditional buff (updates in Task 7)
-    // Active self-buff gated on enemy-debuff ≥ 3; active also applies corrosion each round.
+    // Active self-buff gated on enemy-debuff ≥ 2; active also applies corrosion each round.
     // Today the static gate neutralizes the threshold → buff always on.
-    // After Task 7, the buff switches on only when live debuff count reaches 3.
+    // After Task 7, the buff switches on only when live debuff count reaches 2
+    // (count is 0 entering round 1, 1 entering round 2, 2 entering round 3 → flip ON at round 3).
     snap('KNOWN-DIFF conditional buff (updates in Task 7)', () => {
         const shipSkills: ShipSkills = {
             slots: [
@@ -646,7 +647,7 @@ describe('dpsGoldenParity', () => {
                     slot: 'active',
                     abilities: [
                         ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
-                        // Self-buff conditionally gated on enemy having ≥3 debuffs
+                        // Self-buff conditionally gated on enemy having ≥2 debuffs
                         ab({
                             type: 'buff',
                             target: 'self',
@@ -655,7 +656,7 @@ describe('dpsGoldenParity', () => {
                                     subject: 'enemy-debuff',
                                     derivable: true,
                                     countComparator: 'gte',
-                                    countThreshold: 3,
+                                    countThreshold: 2,
                                 },
                             ],
                             config: {
@@ -667,7 +668,7 @@ describe('dpsGoldenParity', () => {
                                 duration: 2,
                             },
                         }),
-                        // Corrosion applied each active round — debuff count ramps 0→3+ as entries accumulate
+                        // Corrosion applied each active round — debuff count ramps 0→2+ as entries accumulate
                         ab({
                             type: 'dot',
                             config: {
