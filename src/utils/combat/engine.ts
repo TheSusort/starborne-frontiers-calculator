@@ -516,9 +516,6 @@ export function runCombat(input: CombatEngineInput): {
     const statusEngine = createStatusEngine({
         selfBuffs,
         enemyDebuffs,
-        chargeCount: hasChargedSkill ? chargeCount : 0,
-        startCharged,
-        totalRounds: numRounds,
     });
 
     // Register the attacker's own buff/debuff abilities for in-loop application with
@@ -619,6 +616,10 @@ export function runCombat(input: CombatEngineInput): {
     let lastAttackerCtx: AttackerRoundCtx | undefined;
 
     for (let r = 1; r <= numRounds; r++) {
+        // Advance the status engine's round counter (per-round accumulating stacks
+        // tick here, before any turn fires). Sources notify via sourceFired in turn.
+        statusEngine.beginRound(r);
+
         const queue = buildTurnQueue([attacker, enemy]); // [attacker, enemy] for now; team actors join later
 
         // --- Round-scoped accumulators / row fields, shared by the turn blocks and the
@@ -677,10 +678,13 @@ export function runCombat(input: CombatEngineInput): {
                 // read the wrong flag — not representable from skill text today.
                 const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
-                // Per-round buff totals from the status engine. step(r) snapshots the round's
-                // active statuses WITHOUT decrementing; the decrement lives in each owner's
-                // Post Turn (statusEngine.decrementSide, called after this actor's turn block).
-                const entry = statusEngine.step(r);
+                // Per-round buff totals from the status engine. The attacker notifies the
+                // engine of its REAL fired slot this round (action-fed: scheduled timed
+                // buffs key off the actual cadence, not a predicted schedule), then we read
+                // the snapshot. No decrement here — that lives in each owner's Post Turn
+                // (statusEngine.decrementSide, called after this actor's turn block).
+                statusEngine.sourceFired('attacker', action === 'charged' ? 'charge' : 'active', r);
+                const entry = statusEngine.snapshot();
 
                 // Effective crit rate from a given crit-buff total, clamped by affinity.
                 const cappedCrit = (critBuffTotal: number) =>

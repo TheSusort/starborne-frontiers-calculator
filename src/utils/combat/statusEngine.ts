@@ -1,7 +1,6 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
-import { computeChargeSchedule } from './chargeSchedule';
 
 export interface ActiveBuff {
     buffName: string;
@@ -12,9 +11,6 @@ export interface ActiveBuff {
 export interface StatusEngineInput {
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
-    chargeCount: number;
-    startCharged: boolean;
-    totalRounds: number;
 }
 
 /** Effect payload of an ability-sourced status, folded into the round totals by the engine. */
@@ -53,9 +49,19 @@ export interface ActiveAbilityStatus {
 }
 
 export interface StatusEngine {
-    /** Advance to round r (1-based, strictly sequential) and return the round's
-     *  active lists — same contents as the old computeBuffTimeline entry. */
-    step(round: number): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
+    /** Advance the round counter (strictly sequential, 1-based). Increments
+     *  per-round accumulating stacks. Call once at the top of each round, before
+     *  any turns. */
+    beginRound(round: number): void;
+    /** Notification that a source actually fired a slot this round. 'attacker'
+     *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
+     *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded;
+     *  team actor ids join in a later task). Applies timed scheduled buffs keyed
+     *  to (sourceId, slot) and increments per-active/per-charge accumulating
+     *  stacks when sourceId === 'attacker'. */
+    sourceFired(sourceId: string, slot: 'active' | 'charge', round: number): void;
+    /** The round's active lists (was step()'s return). Pure read. */
+    snapshot(): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
     /** Owner Post-Turn: decrement ALL timed statuses on this side — including ones
      *  applied earlier in this same turn (spec: same-turn decrement rule; skipping
      *  same-turn applications would ADD a round). Returns expired buff names so the
@@ -121,15 +127,16 @@ interface AccumulatingState {
 }
 
 /**
- * Incremental status machine — ports computeBuffTimeline's semantics exactly,
- * exposed as per-round stepping instead of a precomputed array. Everything that
- * was loop-preamble in computeBuffTimeline is closure state here; the loop body
- * becomes step(r).
+ * Incremental, ACTION-FED status machine. The engine drives it per round:
+ * `beginRound(r)` advances the counter and increments per-round accumulating
+ * stacks; `sourceFired(sourceId, slot, r)` applies timed scheduled buffs when a
+ * source actually acts (and increments per-active/per-charge stacks for the
+ * attacker); `snapshot()` reads the round's active lists; `decrementSide` runs
+ * in each owner's Post Turn. It predicts nothing — cadences are reported, not
+ * computed (the old computeChargeSchedule path is retired).
  */
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
-    const { selfBuffs, enemyDebuffs, chargeCount, startCharged, totalRounds } = input;
-
-    const chargedSet = new Set(computeChargeSchedule(chargeCount, startCharged, totalRounds));
+    const { selfBuffs, enemyDebuffs } = input;
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
@@ -162,32 +169,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         });
     }
 
-    // Pre-compute charged sets for each unique source schedule among timed enemy debuffs.
-    // Enemy debuffs fire on the APPLIER's schedule, not the current ship's schedule.
-    // Falls back to the current ship's chargedSet when no source schedule is stored.
-    const sourceScheduleCache = new Map<string, Set<number>>();
-    const getSourceChargedSet = (buff: {
-        sourceChargeCount?: number;
-        sourceStartCharged?: boolean;
-    }): Set<number> => {
-        if (buff.sourceChargeCount === undefined || buff.sourceStartCharged === undefined)
-            return chargedSet;
-        const key = `${buff.sourceChargeCount}-${buff.sourceStartCharged}`;
-        if (!sourceScheduleCache.has(key)) {
-            sourceScheduleCache.set(
-                key,
-                new Set(
-                    computeChargeSchedule(
-                        buff.sourceChargeCount,
-                        buff.sourceStartCharged,
-                        totalRounds
-                    )
-                )
-            );
-        }
-        return sourceScheduleCache.get(key)!;
-    };
-
     const selfMap = new Map<string, BuffState>();
     const enemyMap = new Map<string, BuffState>();
 
@@ -198,20 +179,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     let lastRound = 0;
 
-    const step = (
-        r: number
-    ): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] } => {
+    // beginRound: advance the round counter (strictly sequential) and apply the
+    // per-round accumulating increment. Per-round stacks tick once at round top,
+    // independent of any source firing. Called before any turns — preserving the
+    // old step()'s ordering of "per-round accum BEFORE timed upserts".
+    const beginRound = (r: number): void => {
         if (r !== lastRound + 1) {
             throw new Error(
-                `StatusEngine.step called out of sequence: expected round ${lastRound + 1}, got ${r}`
-            );
-        }
-        if (r > totalRounds) {
-            // The charge schedule (and cached source schedules) were computed for
-            // totalRounds; beyond it chargedSet lookups would silently read as
-            // 'active' rounds. Fail loudly instead.
-            throw new Error(
-                `StatusEngine.step called for round ${r}, beyond totalRounds ${totalRounds}`
+                `StatusEngine.beginRound called out of sequence: expected round ${lastRound + 1}, got ${r}`
             );
         }
         lastRound = r;
@@ -219,16 +194,54 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // (Decrement+expire moved out to decrementSide, called from each owner's
         //  Post Turn in the engine — see the StatusEngine.decrementSide doc comment.)
 
-        // Step 1: Determine skill fired this round
-        const skillFired: 'active' | 'charge' = chargedSet.has(r) ? 'charge' : 'active';
+        const incrementPerRound = (map: Map<string, AccumulatingState>) => {
+            for (const state of map.values()) {
+                if (state.trigger !== 'per-round') continue;
+                state.stacks =
+                    state.maxStacks !== undefined
+                        ? Math.min(state.stacks + state.rate, state.maxStacks)
+                        : state.stacks + state.rate;
+            }
+        };
+        incrementPerRound(accumSelfMap);
+        incrementPerRound(accumEnemyMap);
+    };
 
-        // Step 1a: Increment accumulating stacks
-        const incrementAccum = (map: Map<string, AccumulatingState>) => {
+    const upsertBuff = (buff: SelectedGameBuff, map: Map<string, BuffState>) => {
+        if (typeof buff.skillDuration !== 'number') return;
+        const { familyKey, tier } = deriveFamilyKey(buff.buffName);
+        const existing = map.get(familyKey);
+        if (existing && existing.tier > tier) return;
+        map.set(familyKey, {
+            buffName: buff.buffName,
+            turnsRemaining: buff.skillDuration,
+            tier,
+        });
+    };
+
+    // sourceFired: a source actually fired a slot this round. For 'attacker' this
+    // increments per-active/per-charge accumulating stacks (BEFORE the timed upserts,
+    // preserving the old step() ordering) and upserts timed scheduled buffs whose
+    // skillSource matches the fired slot.
+    //
+    // LEGACY RULE: in this task ALL scheduled buffs (merged manual + team arrays)
+    // ride the ATTACKER's real cadence. Per-buff sourceChargeCount/sourceStartCharged
+    // are IGNORED — superseded by real team turns in the teamActors task. Other
+    // sourceIds are a no-op for now (team actors arrive next).
+    const sourceFired = (sourceId: string, slot: 'active' | 'charge', round: number): void => {
+        if (round !== lastRound) {
+            throw new Error(
+                `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
+            );
+        }
+        if (sourceId !== 'attacker') return;
+
+        // Per-active/per-charge accumulating stacks tick on the matching slot.
+        const incrementSlot = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
                 const fires =
-                    state.trigger === 'per-round' ||
-                    (state.trigger === 'per-active' && skillFired === 'active') ||
-                    (state.trigger === 'per-charge' && skillFired === 'charge');
+                    (state.trigger === 'per-active' && slot === 'active') ||
+                    (state.trigger === 'per-charge' && slot === 'charge');
                 if (fires) {
                     state.stacks =
                         state.maxStacks !== undefined
@@ -237,34 +250,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 }
             }
         };
-        incrementAccum(accumSelfMap);
-        incrementAccum(accumEnemyMap);
+        incrementSlot(accumSelfMap);
+        incrementSlot(accumEnemyMap);
 
-        // Step 2: Apply timed buffs — self-buffs use this ship's schedule;
-        // enemy debuffs use the applier's stored source schedule.
-        const upsertBuff = (buff: SelectedGameBuff, map: Map<string, BuffState>) => {
-            if (typeof buff.skillDuration !== 'number') return;
-            const { familyKey, tier } = deriveFamilyKey(buff.buffName);
-            const existing = map.get(familyKey);
-            if (existing && existing.tier > tier) return;
-            map.set(familyKey, {
-                buffName: buff.buffName,
-                turnsRemaining: buff.skillDuration,
-                tier,
-            });
-        };
-
+        // Timed scheduled buffs whose skillSource matches the fired slot. Both self
+        // and enemy ride the attacker's cadence (legacy rule above).
         for (const buff of timedSelf) {
-            if (buff.skillSource === skillFired) upsertBuff(buff, selfMap);
+            if (buff.skillSource === slot) upsertBuff(buff, selfMap);
         }
         for (const buff of timedEnemy) {
-            const sourceSkillFired: 'active' | 'charge' = getSourceChargedSet(buff).has(r)
-                ? 'charge'
-                : 'active';
-            if (buff.skillSource === sourceSkillFired) upsertBuff(buff, enemyMap);
+            if (buff.skillSource === slot) upsertBuff(buff, enemyMap);
         }
+    };
 
-        // Step 3: Snapshot — always-active buffs injected as 'recurring'
+    // snapshot: the round's active lists (was step()'s return). Pure read.
+    const snapshot = (): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] } => {
+        // Always-active buffs injected as 'recurring'.
         // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects
         const selfAlwaysSnap = [...new Map(alwaysSelf.map((b) => [b.buffName, b])).values()].map(
             (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
@@ -364,7 +365,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const applyTimedAbilityStatus = (round: number, status: RegisteredAbilityStatus): void => {
         if (round < 1) {
             // lastRound initializes to 0, so the equality check alone would accept
-            // round 0 before the first step(). Rounds are 1-based.
+            // round 0 before the first beginRound call. Rounds are 1-based.
             throw new Error(
                 `StatusEngine.applyTimedAbilityStatus called for round ${round}; rounds are 1-based`
             );
@@ -428,7 +429,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     return {
-        step,
+        beginRound,
+        sourceFired,
+        snapshot,
         decrementSide,
         registerAbilityStatuses,
         applyTimedAbilityStatus,

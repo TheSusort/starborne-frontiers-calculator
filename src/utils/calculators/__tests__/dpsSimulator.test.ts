@@ -261,6 +261,78 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('scheduled charge-slot buffs follow real bonus-charge cadence', () => {
+        // A charge aura on the ACTIVE slot accelerates the cadence: active rounds bank
+        // 1 (cadence) + 1 (bonus), capped at chargeCount=3, so charged fires on rounds
+        // 3/6/9 (the REAL cadence) instead of computeChargeSchedule's synthetic 4/8/12.
+        // A scheduled charge-slot self-buff must ride that REAL cadence (action-fed).
+        const skillsWithActiveCharge = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'active-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 150 },
+                        },
+                        {
+                            id: 'active-charge',
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'charge', amount: 1 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'charged-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 350 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('scheduled charge-slot buff follows the real bonus-charge cadence', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 9,
+                shipSkills: skillsWithActiveCharge(),
+                selfBuffs: [
+                    {
+                        id: 'b',
+                        buffName: 'Attack Up II',
+                        stacks: 1,
+                        isStackable: false,
+                        parsedEffects: { attack: 20 },
+                        skillSource: 'charge',
+                        skillDuration: 1,
+                    },
+                ],
+            });
+            // Real charged round 3 → buff present; synthetic round 4 → buff absent.
+            expect(result.rounds[2].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Attack Up II'
+            );
+            expect(result.rounds[3].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Attack Up II'
+            );
+        });
+    });
+
     describe('actor speeds', () => {
         const corrosionSkills: ShipSkills = {
             slots: [
@@ -854,8 +926,12 @@ describe('simulateDPS', () => {
             expect(round3Buffs.some((ab) => ab.buffName === 'Power Surge')).toBe(true);
         });
 
-        it('charge-scoped enemy debuff fires on the source ship charge rounds', () => {
-            // sourceChargeCount=2, sourceStartCharged=false → charge rounds are 3, 6
+        it('charge-scoped enemy debuff fires on the ATTACKER charge rounds (legacy rule; source schedule ignored)', () => {
+            // The fixture's sourceChargeCount=2/sourceStartCharged=false happens to
+            // COINCIDE with the attacker's own cadence (chargeCount 2 → charged rounds
+            // 3, 6) — intentional, confirming the attacker-cadence legacy rule yields
+            // the right rounds. Divergent cadences are probed in statusEngine.test.ts
+            // ("LEGACY RULE" tests).
             const chargeScopeDebuff: SelectedGameBuff = {
                 id: 'cs1',
                 buffName: 'Armor Pierce',
