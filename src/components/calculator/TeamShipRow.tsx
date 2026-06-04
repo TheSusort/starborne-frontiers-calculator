@@ -100,14 +100,18 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                             type="number"
                             min="0"
                             value={config.speed}
-                            onChange={(e) => onSpeedChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) =>
+                                onSpeedChange(Math.max(0, parseInt(e.target.value) || 0))
+                            }
                         />
                         <Input
                             label="Charge count"
                             type="number"
                             min="0"
                             value={config.chargeCount}
-                            onChange={(e) => onChargeCountChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) =>
+                                onChargeCountChange(Math.max(0, parseInt(e.target.value) || 0))
+                            }
                         />
                     </div>
 

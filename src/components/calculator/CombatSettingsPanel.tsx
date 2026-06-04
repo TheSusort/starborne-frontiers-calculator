@@ -112,7 +112,9 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                         type="number"
                         min="0"
                         value={enemySpeed}
-                        onChange={(e) => onEnemySpeedChange(parseInt(e.target.value) || 0)}
+                        onChange={(e) =>
+                            onEnemySpeedChange(Math.max(0, parseInt(e.target.value) || 0))
+                        }
                     />
                     <Input
                         label="Rounds"

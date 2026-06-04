@@ -157,7 +157,9 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             type="number"
                             min="0"
                             value={config.speed}
-                            onChange={(e) => onUpdate('speed', parseInt(e.target.value) || 0)}
+                            onChange={(e) =>
+                                onUpdate('speed', Math.max(0, parseInt(e.target.value) || 0))
+                            }
                         />
                     </div>
                 </Section>
