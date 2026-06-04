@@ -122,17 +122,19 @@ function resolveSelfBuffTotals(args: {
     return calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 }
 
-// Per-round enemy-debuff expansion with landing logic. 'apply' (affinity-based)
-// debuffs land unless the attacker is at an affinity disadvantage; everything else
-// is gated by the precomputed hacking-vs-security landing roll. Returns the
-// expanded effect list plus the landed/resisted ActiveBuff partitions. The landing
-// roll is passed in (already drawn from debuffLandingGate at the loop's sequence
-// point) so no stateful gate is called inside the helper.
+// Per-round RECURRING/always enemy-debuff expansion with landing logic (Task 7).
+// TIMED enemy applications are gated ONCE at application time (the status-engine hook
+// and the ability loop below), so they are NOT re-rolled here — only the recurring/aura
+// subset is, mirroring their conceptual per-round re-application. 'apply' (affinity-based)
+// debuffs land unless the attacker is at an affinity disadvantage; everything else draws
+// the hacking-vs-security landing roll. The roll is a LAZY getter (`roundDebuffLanded`)
+// so the single per-round gate draw is taken only when a non-'apply' recurring debuff is
+// present (and is memoized across all round consumers — recurring fold + DoT landing).
 function resolveEnemyDebuffs(args: {
     activeEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
     affinityDisadvantage: boolean;
-    roundDebuffLanded: boolean;
+    roundDebuffLanded: () => boolean;
     emitResisted: (buffName: string) => void;
     emitApplied: (buffName: string) => void;
 }): {
@@ -148,7 +150,7 @@ function resolveEnemyDebuffs(args: {
         // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
         // hacking-vs-security landing roll.
         const isApply = bufs.some((b) => b.application === 'apply');
-        const lands = isApply ? !args.affinityDisadvantage : args.roundDebuffLanded;
+        const lands = isApply ? !args.affinityDisadvantage : args.roundDebuffLanded();
         if (!lands) {
             resistedEnemyDebuffs.push(ab);
             args.emitResisted(ab.buffName);
@@ -159,6 +161,25 @@ function resolveEnemyDebuffs(args: {
         return expandBuffs(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs };
+}
+
+// Per-round fold for TIMED scheduled enemy statuses currently in the status map. They
+// drew their landing roll ONCE at application (status-engine hook) and persist their full
+// window with no re-roll, so here they are unconditionally landed: expand their effects
+// and report them as landed. No gate draw, no resist partition.
+function foldTimedEnemyDebuffs(args: {
+    timedEnemyDebuffs: ActiveBuff[];
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+    emitApplied: (buffName: string) => void;
+}): { roundEnemyDebuffs: SelectedGameBuff[]; landedEnemyDebuffs: ActiveBuff[] } {
+    const landedEnemyDebuffs: ActiveBuff[] = [];
+    const roundEnemyDebuffs = args.timedEnemyDebuffs.flatMap((ab) => {
+        const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
+        landedEnemyDebuffs.push(ab);
+        args.emitApplied(ab.buffName);
+        return expandBuffs(ab, bufs);
+    });
+    return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
 
 // Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
@@ -512,10 +533,35 @@ export function runCombat(input: CombatEngineInput): {
         },
     });
 
+    // Deterministic event gates — replace Math.random / expected-value math so
+    // identical inputs always produce identical output. Crit uses one gate PER
+    // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
+    // of how the charge cadence aligns with the crit schedule (no aliasing).
+    // Declared BEFORE the status engine so the landing hook can close over the
+    // debuff-landing gate (Task 7 — timed enemy applications draw it once).
+    const activeCritGate = makeRateGate();
+    const chargedCritGate = makeRateGate();
+    const debuffLandingGate = makeRateGate();
+    const extendChanceGate = makeRateGate();
+
+    // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
+    // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
+    // -25 only on a disadvantage matchup. Constant for the whole run.
+    const affinityDisadvantage = affinityDamageModifier < 0;
+
+    // Landing decision for a TIMED enemy application (drawn ONCE at application time):
+    // 'apply' (affinity-based) → lands unless at an affinity disadvantage, no gate draw;
+    // 'inflict' (and unmarked) → draws the hacking-vs-security landing gate. Threaded
+    // into the status engine for scheduled timed enemy upserts (sourceFired) and reused
+    // by the engine for ability-sourced timed enemy applications below.
+    const landsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
+        application === 'apply' ? !affinityDisadvantage : debuffLandingGate(debuffLandingChance);
+
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
         selfBuffs,
         enemyDebuffs,
+        landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
     });
 
     // Register the attacker's own buff/debuff abilities for in-loop application with
@@ -585,14 +631,6 @@ export function runCombat(input: CombatEngineInput): {
     // All mutable state declared fresh on every call
     let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
-    // Deterministic event gates — replace Math.random / expected-value math so
-    // identical inputs always produce identical output. Crit uses one gate PER
-    // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
-    // of how the charge cadence aligns with the crit schedule (no aliasing).
-    const activeCritGate = makeRateGate();
-    const chargedCritGate = makeRateGate();
-    const debuffLandingGate = makeRateGate();
-    const extendChanceGate = makeRateGate();
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
@@ -683,7 +721,13 @@ export function runCombat(input: CombatEngineInput): {
                 // buffs key off the actual cadence, not a predicted schedule), then we read
                 // the snapshot. No decrement here — that lives in each owner's Post Turn
                 // (statusEngine.decrementSide, called after this actor's turn block).
-                statusEngine.sourceFired('attacker', action === 'charged' ? 'charge' : 'active', r);
+                // sourceFired returns the buffNames of any TIMED enemy applications the
+                // landing hook rejected this round (drawn once at application — Task 7).
+                const { resistedEnemy: resistedScheduledTimedNames } = statusEngine.sourceFired(
+                    'attacker',
+                    action === 'charged' ? 'charge' : 'active',
+                    r
+                );
                 const entry = statusEngine.snapshot();
 
                 // Effective crit rate from a given crit-buff total, clamped by affinity.
@@ -710,32 +754,81 @@ export function runCombat(input: CombatEngineInput): {
                     selfBuffLookup,
                 });
 
-                const roundDebuffLanded = debuffLandingGate(debuffLandingChance);
-                // Affinity-based ('apply') debuffs always hit EXCEPT at an affinity disadvantage,
-                // where they are resisted (combat-system.md hit-check). affinityDamageModifier is
-                // -25 only on a disadvantage matchup.
-                const affinityDisadvantage = affinityDamageModifier < 0;
-                // Step-2 scheduled-debuff landing runs first, unchanged.
-                const scheduledEnemy = resolveEnemyDebuffs({
-                    activeEnemyDebuffs: entry.activeEnemyDebuffs,
+                // Per-round landing roll, drawn ONCE and memoized across this round's
+                // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
+                // single draw is taken only when something actually needs it — TIMED
+                // applications gate at application time and do NOT re-draw here, so a
+                // round with no recurring/aura enemy content and no DoTs takes no draw
+                // (preserving the deterministic schedule for application-only fixtures).
+                let roundDebuffLandedValue: boolean | undefined;
+                const roundDebuffLanded = (): boolean => {
+                    if (roundDebuffLandedValue === undefined) {
+                        roundDebuffLandedValue = debuffLandingGate(debuffLandingChance);
+                    }
+                    return roundDebuffLandedValue;
+                };
+
+                const emitDebuffResisted = (buffName: string) =>
+                    bus?.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
+                const emitDebuffApplied = (buffName: string) =>
+                    bus?.emit({ type: 'debuff-applied', targetId: enemy.id, round: r, buffName });
+
+                // Partition the scheduled-status snapshot. TIMED scheduled statuses (numeric
+                // turnsRemaining) already drew their landing roll at application — fold them
+                // unconditionally. RECURRING/always/accumulating statuses ('recurring') are
+                // conceptually re-applied each round — re-roll them via resolveEnemyDebuffs.
+                const recurringEnemySnap = entry.activeEnemyDebuffs.filter(
+                    (ab) => ab.turnsRemaining === 'recurring'
+                );
+                const timedEnemySnap = entry.activeEnemyDebuffs.filter(
+                    (ab) => ab.turnsRemaining !== 'recurring'
+                );
+                const recurringEnemy = resolveEnemyDebuffs({
+                    activeEnemyDebuffs: recurringEnemySnap,
                     enemyDebuffLookup,
                     affinityDisadvantage,
                     roundDebuffLanded,
-                    emitResisted: (buffName) =>
-                        bus?.emit({
-                            type: 'debuff-resisted',
-                            targetId: enemy.id,
-                            round: r,
-                            buffName,
-                        }),
-                    emitApplied: (buffName) =>
-                        bus?.emit({
-                            type: 'debuff-applied',
-                            targetId: enemy.id,
-                            round: r,
-                            buffName,
-                        }),
+                    emitResisted: emitDebuffResisted,
+                    emitApplied: emitDebuffApplied,
                 });
+                const timedScheduledEnemy = foldTimedEnemyDebuffs({
+                    timedEnemyDebuffs: timedEnemySnap,
+                    enemyDebuffLookup,
+                    emitApplied: emitDebuffApplied,
+                });
+                // Scheduled timed applications the landing hook rejected this round: synthesize
+                // a resisted ActiveBuff carrying the would-be duration (skillDuration) and emit.
+                const resistedScheduledTimed: ActiveBuff[] = resistedScheduledTimedNames.map(
+                    (buffName) => {
+                        emitDebuffResisted(buffName);
+                        const lookup = enemyDebuffLookup.get(buffName) ?? [];
+                        const dur = lookup.find(
+                            (b) => typeof b.skillDuration === 'number'
+                        )?.skillDuration;
+                        return {
+                            buffName,
+                            turnsRemaining: typeof dur === 'number' ? dur : 1,
+                        };
+                    }
+                );
+                // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
+                // accum first, then timed — matching the original snapshot() iteration order
+                // (alwaysSnap, accumSnap, timed map) so the all-landing golden fixtures keep
+                // byte-identical list ordering.
+                const scheduledEnemy = {
+                    roundEnemyDebuffs: [
+                        ...recurringEnemy.roundEnemyDebuffs,
+                        ...timedScheduledEnemy.roundEnemyDebuffs,
+                    ],
+                    landedEnemyDebuffs: [
+                        ...recurringEnemy.landedEnemyDebuffs,
+                        ...timedScheduledEnemy.landedEnemyDebuffs,
+                    ],
+                    resistedEnemyDebuffs: [
+                        ...recurringEnemy.resistedEnemyDebuffs,
+                        ...resistedScheduledTimed,
+                    ],
+                };
 
                 // --- In-loop ability statuses with live condition gating (Task 6) ---
                 // Single forward pass (spec determinism rule): build a pre-application gate
@@ -766,44 +859,58 @@ export function runCombat(input: CombatEngineInput): {
                 });
 
                 // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
+                // Each application that passes its condition gate draws the landing decision
+                // ONCE here (Task 7): 'apply' → lands unless affinity-disadvantaged (no draw);
+                // otherwise draws the hacking-vs-security gate. Resisted → the apply is SKIPPED
+                // (no status stored), recorded resisted with its would-be duration, and emitted.
+                const resistedAbilityTimedEnemy: ActiveBuff[] = [];
                 for (const status of timedEnemyBySlot) {
                     if (status.sourceSlot !== action) continue;
                     if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
-                    statusEngine.applyTimedAbilityStatus(r, status);
+                    if (landsTimedEnemyApplication(status.payload.application)) {
+                        statusEngine.applyTimedAbilityStatus(r, status);
+                    } else {
+                        resistedAbilityTimedEnemy.push({
+                            buffName: status.payload.buffName,
+                            turnsRemaining:
+                                typeof status.duration === 'number' ? status.duration : 1,
+                        });
+                        emitDebuffResisted(status.payload.buffName);
+                    }
                 }
 
-                // Enemy-side ability statuses active this round (timed in-window + auras +
-                // accumulating), gated vs preDebuffGateCtx. They join the SAME per-round landing
-                // re-roll as scheduled debuffs (invariant 3), with application respected.
-                const enemyAbilityStatuses: ActiveAbilityStatus[] = [
-                    ...statusEngine.timedAbilityStatuses('enemy'),
-                    ...statusEngine.activeAbilityStatuses('enemy', preDebuffGateCtx),
-                ];
+                // Enemy-side ability statuses active this round, split by kind (Task 7):
+                //  - TIMED (timedAbilityStatuses): already gated at application above; they
+                //    persist their window unconditionally → folded WITHOUT a landing re-roll.
+                //  - aura/accumulating (activeAbilityStatuses): conceptually re-applied each
+                //    round → KEEP the per-round landing re-roll, with application respected.
+                const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy');
+                const recurringAbilityEnemy = statusEngine.activeAbilityStatuses(
+                    'enemy',
+                    preDebuffGateCtx
+                );
                 const landedAbilityEnemy: ActiveBuff[] = [];
-                const resistedAbilityEnemy: ActiveBuff[] = [];
+                const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
                 const abilityEnemyEffects: SelectedGameBuff[] = [];
-                for (const s of enemyAbilityStatuses) {
+                // Timed ability statuses: unconditionally landed (gated at application).
+                for (const s of timedAbilityEnemy) {
+                    landedAbilityEnemy.push(s.active);
+                    abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));
+                    emitDebuffApplied(s.payload.buffName);
+                }
+                // Aura/accumulating ability statuses: per-round landing re-roll.
+                for (const s of recurringAbilityEnemy) {
                     const sb = payloadToSelectedBuff(s.payload);
                     const isApply = sb.application === 'apply';
-                    const lands = isApply ? !affinityDisadvantage : roundDebuffLanded;
+                    const lands = isApply ? !affinityDisadvantage : roundDebuffLanded();
                     if (!lands) {
                         resistedAbilityEnemy.push(s.active);
-                        bus?.emit({
-                            type: 'debuff-resisted',
-                            targetId: enemy.id,
-                            round: r,
-                            buffName: s.payload.buffName,
-                        });
+                        emitDebuffResisted(s.payload.buffName);
                         continue;
                     }
                     landedAbilityEnemy.push(s.active);
                     abilityEnemyEffects.push(sb);
-                    bus?.emit({
-                        type: 'debuff-applied',
-                        targetId: enemy.id,
-                        round: r,
-                        buffName: s.payload.buffName,
-                    });
+                    emitDebuffApplied(s.payload.buffName);
                 }
 
                 // Combined landed enemy debuffs (scheduled + ability) drive modifiers and counts.
@@ -1089,8 +1196,12 @@ export function runCombat(input: CombatEngineInput): {
                     pendingBombs,
                 });
 
-                // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll)
-                dotsLanded = roundDebuffLanded;
+                // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
+                // DoTs gate at application: draw the shared per-round roll only when there are
+                // DoTs to apply this round (memoized — shares the recurring partition's single
+                // draw). With nothing to apply, dotsLanded is vacuously true (no draw taken),
+                // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
+                dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
                 if (dotsLanded) {
                     applyNewDoTs({
                         dotsConfig,

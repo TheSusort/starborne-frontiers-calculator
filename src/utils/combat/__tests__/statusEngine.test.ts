@@ -526,6 +526,89 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
     });
 });
 
+describe('landsTimedEnemyApplication hook (Task 7)', () => {
+    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty', () => {
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('hook returning false skips the upsert and returns the buffName in resistedEnemy', () => {
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [debuff],
+            landsTimedEnemyApplication: (b) => b.buffName !== 'Def Down',
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        // The application was rejected → no status stored, buffName reported resisted.
+        expect(result).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
+    });
+
+    it('hook gates per-buff: lands one timed enemy debuff while rejecting another', () => {
+        const landed = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const rejected = makeBuff('Armor Break', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [landed, rejected],
+            landsTimedEnemyApplication: (b) => b.buffName === 'Def Down',
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: ['Armor Break'] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('a rejected re-application does NOT clear the existing in-window status (persistence)', () => {
+        // Land on round 1 (hook true), then reject the round-2 re-application (hook false):
+        // the round-1 status must persist its window, not be cleared by the rejected upsert.
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 3 });
+        let lands = true;
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [debuff],
+            landsTimedEnemyApplication: () => lands,
+        });
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1); // lands → turnsRemaining 3
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 3 },
+        ]);
+        eng.decrementSide('enemy'); // 3 → 2
+
+        lands = false;
+        eng.beginRound(2);
+        const r2 = eng.sourceFired('attacker', 'active', 2); // rejected → must NOT clear
+        expect(r2).toEqual({ resistedEnemy: ['Def Down'] });
+        // The round-1 status still in window (turnsRemaining 2).
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('the hook does not gate self buffs — only timed enemy upserts', () => {
+        const selfBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [selfBuff],
+            enemyDebuffs: [],
+            landsTimedEnemyApplication: () => false, // would reject everything if it applied to self
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
+    });
+});
+
 describe('decrementSide (owner Post-Turn decrement)', () => {
     it('decrements and expires a scheduled timed status, reporting its buffName', () => {
         // chargeCount=0 → every round is active. Self buff fires each active round, 2t.

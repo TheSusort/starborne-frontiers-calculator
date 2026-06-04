@@ -11,6 +11,12 @@ export interface ActiveBuff {
 export interface StatusEngineInput {
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
+    /** Landing decision for a TIMED enemy upsert, drawn ONCE at application time
+     *  (Task 7). The engine owns the gate + affinity rule and threads it here. When
+     *  it returns false the upsert is SKIPPED (no status stored, the existing one is
+     *  not cleared) and the buffName is collected into sourceFired's `resistedEnemy`.
+     *  Optional — defaulting to "always lands" keeps the unit tests gate-free. */
+    landsTimedEnemyApplication?: (buff: SelectedGameBuff) => boolean;
 }
 
 /** Effect payload of an ability-sourced status, folded into the round totals by the engine. */
@@ -58,8 +64,14 @@ export interface StatusEngine {
      *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded;
      *  team actor ids join in a later task). Applies timed scheduled buffs keyed
      *  to (sourceId, slot) and increments per-active/per-charge accumulating
-     *  stacks when sourceId === 'attacker'. */
-    sourceFired(sourceId: string, slot: 'active' | 'charge', round: number): void;
+     *  stacks when sourceId === 'attacker'. Returns the buffNames of any TIMED enemy
+     *  upserts the landing hook rejected this call (`resistedEnemy`), so the engine
+     *  can emit debuff-resisted and record them in the round's resisted list. */
+    sourceFired(
+        sourceId: string,
+        slot: 'active' | 'charge',
+        round: number
+    ): { resistedEnemy: string[] };
     /** The round's active lists (was step()'s return). Pure read. */
     snapshot(): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
     /** Owner Post-Turn: decrement ALL timed statuses on this side — including ones
@@ -137,6 +149,9 @@ interface AccumulatingState {
  */
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
+    // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
+    // tests simple. The engine supplies the real hacking/affinity decision.
+    const landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
@@ -228,13 +243,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // ride the ATTACKER's real cadence. Per-buff sourceChargeCount/sourceStartCharged
     // are IGNORED — superseded by real team turns in the teamActors task. Other
     // sourceIds are a no-op for now (team actors arrive next).
-    const sourceFired = (sourceId: string, slot: 'active' | 'charge', round: number): void => {
+    const sourceFired = (
+        sourceId: string,
+        slot: 'active' | 'charge',
+        round: number
+    ): { resistedEnemy: string[] } => {
         if (round !== lastRound) {
             throw new Error(
                 `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
-        if (sourceId !== 'attacker') return;
+        if (sourceId !== 'attacker') return { resistedEnemy: [] };
 
         // Per-active/per-charge accumulating stacks tick on the matching slot.
         const incrementSlot = (map: Map<string, AccumulatingState>) => {
@@ -258,9 +277,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const buff of timedSelf) {
             if (buff.skillSource === slot) upsertBuff(buff, selfMap);
         }
+        // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
+        // application is NOT upserted (the existing in-window status is untouched) and
+        // its buffName is collected so the engine can emit debuff-resisted + record it.
+        const resistedEnemy: string[] = [];
         for (const buff of timedEnemy) {
-            if (buff.skillSource === slot) upsertBuff(buff, enemyMap);
+            if (buff.skillSource !== slot) continue;
+            if (typeof buff.skillDuration !== 'number') continue;
+            if (!landsTimedEnemyApplication(buff)) {
+                resistedEnemy.push(buff.buffName);
+                continue;
+            }
+            upsertBuff(buff, enemyMap);
         }
+        return { resistedEnemy };
     };
 
     // snapshot: the round's active lists (was step()'s return). Pure read.

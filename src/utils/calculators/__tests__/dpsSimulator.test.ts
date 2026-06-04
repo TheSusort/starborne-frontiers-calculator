@@ -2592,4 +2592,132 @@ describe('simulateDPS', () => {
             expect(vsSupporter.rounds[0].directDamage).toBe(28000);
         });
     });
+
+    describe('debuff landing persistence', () => {
+        // Phase 2 semantics: a TIMED enemy-side debuff draws the deterministic landing
+        // gate ONCE at the moment of application. Landed → it persists its FULL window
+        // with no further rolls (so it never blinks off mid-window). Resisted → the
+        // application is SKIPPED (no status stored, the existing one is NOT cleared),
+        // recorded in resistedEnemyDebuffs; a later re-application draws fresh.
+        //
+        // hacking 150 / security 100 (neutral affinity) → landing chance 0.5.
+        // The shared debuffLandingGate is a back-loaded fractional accumulator: at rate
+        // 0.5 the draw sequence is [resist, land, resist, land, resist, ...] (the first
+        // draw resists). The fixture has NO recurring enemy debuffs and NO DoTs, so the
+        // per-round recurring draw is skipped — the ONLY gate draws are the one timed
+        // APPLICATION event per round. The schedule is therefore trivially round-aligned:
+        //   R1 draw#1 → RESIST   R2 draw#2 → LAND   R3 draw#3 → RESIST
+        //   R4 draw#4 → LAND     R5 draw#5 → RESIST
+        const timedDebuffFixture = (rounds: number) => ({
+            attack: 15000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 10000,
+            enemyHp: 5_000_000, // large pool so HP% never affects anything
+            rounds,
+            selfBuffs: [] as SelectedGameBuff[],
+            // Scheduled timed enemy debuff: active-sourced, 2-turn window, re-applied each
+            // active round. skillSource 'active' + numeric skillDuration → timed-scheduled,
+            // upserted via sourceFired and gated by the landing hook (Task 7).
+            enemyDebuffs: [
+                {
+                    id: 'armor-pierce',
+                    buffName: 'Armor Pierce',
+                    stacks: 1,
+                    parsedEffects: { defense: -20 },
+                    isStackable: false,
+                    skillSource: 'active' as const,
+                    skillDuration: 2,
+                    application: 'inflict' as const,
+                },
+            ] as SelectedGameBuff[],
+            hacking: 150,
+            enemySecurity: 100,
+        });
+
+        const hasDebuff = (round: { activeEnemyDebuffs: { buffName: string }[] }) =>
+            round.activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce');
+        const wasResisted = (round: { resistedEnemyDebuffs: { buffName: string }[] }) =>
+            round.resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce');
+
+        it('a landed timed debuff persists its full window; a resisted re-application does not clear it', () => {
+            const result = simulateDPS(timedDebuffFixture(5));
+
+            // Draw schedule (rate 0.5, one timed-application draw per round):
+            //  R1 #1 resist → not applied → resisted recorded, ABSENT from active.
+            //  R2 #2 LAND   → applied (turnsRemaining 2) → PRESENT.
+            //  R3 #3 resist → skipped (does NOT clear the R2 status, still in-window) →
+            //                 PERSISTENCE: PRESENT, and the resisted re-application recorded.
+            //                 Post-R3 decrement expires it (R2 status: 2 → 1 → 0).
+            //  R4 #4 LAND   → applied fresh (turnsRemaining 2) → PRESENT.
+            //  R5 #5 resist → skipped (R4 status still in-window) → PERSISTENCE: PRESENT,
+            //                 resisted re-application recorded.
+            expect(hasDebuff(result.rounds[0])).toBe(false); // R1
+            expect(hasDebuff(result.rounds[1])).toBe(true); // R2 landed
+            expect(hasDebuff(result.rounds[2])).toBe(true); // R3 persists (resisted re-app)
+            expect(hasDebuff(result.rounds[3])).toBe(true); // R4 landed fresh
+            expect(hasDebuff(result.rounds[4])).toBe(true); // R5 persists (resisted re-app)
+
+            // Resisted re-applications are recorded on the rounds where a draw resisted:
+            // R1 (no prior status), R3 and R5 (re-application while the window persists).
+            expect(wasResisted(result.rounds[0])).toBe(true); // R1
+            expect(wasResisted(result.rounds[1])).toBe(false); // R2 landed
+            expect(wasResisted(result.rounds[2])).toBe(true); // R3
+            expect(wasResisted(result.rounds[3])).toBe(false); // R4 landed
+            expect(wasResisted(result.rounds[4])).toBe(true); // R5
+
+            // The resisted entry carries the would-be duration (turnsRemaining 2).
+            const r1Resisted = result.rounds[0].resistedEnemyDebuffs.find(
+                (ab) => ab.buffName === 'Armor Pierce'
+            );
+            expect(r1Resisted?.turnsRemaining).toBe(2);
+        });
+
+        it('a debuff resisted at its only application never appears in any round', () => {
+            // Fire the timed debuff exactly ONCE, on round 1: a charged skill that starts
+            // charged with a chargeCount so high it never re-charges. The debuff is
+            // charge-sourced, so it is only attempted on the single round-1 charged turn.
+            // Draw #1 (rate 0.5) resists → the debuff never lands and never appears.
+            const result = simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 100,
+                chargeCount: 99, // never re-reaches the threshold after the round-1 charged turn
+                startCharged: true, // fire charged on round 1 only
+                enemyDefense: 10000,
+                enemyHp: 5_000_000,
+                rounds: 5,
+                selfBuffs: [] as SelectedGameBuff[],
+                enemyDebuffs: [
+                    {
+                        id: 'armor-pierce',
+                        buffName: 'Armor Pierce',
+                        stacks: 1,
+                        parsedEffects: { defense: -20 },
+                        isStackable: false,
+                        skillSource: 'charge' as const,
+                        skillDuration: 2,
+                        application: 'inflict' as const,
+                    },
+                ] as SelectedGameBuff[],
+                hacking: 150,
+                enemySecurity: 100,
+            });
+
+            // Round 1 is the only charged turn → the only application attempt → draw #1
+            // resists. The debuff never lands in any round, but is recorded resisted on R1.
+            expect(result.rounds[0].action).toBe('charged');
+            expect(result.rounds.slice(1).every((r) => r.action === 'active')).toBe(true);
+            expect(result.rounds.every((r) => !hasDebuff(r))).toBe(true);
+            expect(wasResisted(result.rounds[0])).toBe(true);
+            // No re-application on later rounds (charge-sourced, never re-fires) → no
+            // further resisted records either.
+            expect(result.rounds.slice(1).every((r) => !wasResisted(r))).toBe(true);
+        });
+    });
 });
