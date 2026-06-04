@@ -588,6 +588,13 @@ export function detectGrantConditions(
         return [{ subject: 'enemy-debuff', derivable: true }];
     }
 
+    // 4b. "when an enemy gets/is buffed" — a reactive enemy-buff trigger (Nuqtu's
+    // Terran Bolster III). Manual, matching Amartya/Panon's Taunt-style enemy-buff
+    // conditions: the single-ship sim derives no enemy buffs, so the user toggles it.
+    if (/\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b/i.test(low)) {
+        return [{ subject: 'enemy-buff', derivable: false }];
+    }
+
     // 5. Taunt / Provoke targeting status (reactive → manual "assume active")
     const statuses: string[] = [];
     if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
