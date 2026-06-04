@@ -3,6 +3,7 @@ import { Ship } from '../../types/ship';
 import { TeamShipConfig, SelectedGameBuff } from '../../types/calculator';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
+import { Input } from '../ui/Input';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { CloseIcon } from '../ui';
@@ -16,6 +17,8 @@ interface TeamShipRowProps {
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
+    onSpeedChange: (speed: number) => void;
+    onChargeCountChange: (chargeCount: number) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onEnemyDebuffsChange: (debuffs: SelectedGameBuff[]) => void;
 }
@@ -25,6 +28,8 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     onRemove,
     onSelectShip,
     onStartChargedChange,
+    onSpeedChange,
+    onChargeCountChange,
     onBuffsChange,
     onEnemyDebuffsChange,
 }) => {
@@ -87,6 +92,24 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                             </CollapsibleForm>
                         </>
                     )}
+
+                    {/* Turn-order controls */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="Speed"
+                            type="number"
+                            min="0"
+                            value={config.speed}
+                            onChange={(e) => onSpeedChange(parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Charge count"
+                            type="number"
+                            min="0"
+                            value={config.chargeCount}
+                            onChange={(e) => onChargeCountChange(parseInt(e.target.value) || 0)}
+                        />
+                    </div>
 
                     {/* Start Charged */}
                     <Checkbox

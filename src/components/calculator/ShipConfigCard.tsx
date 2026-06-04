@@ -152,6 +152,13 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             value={config.critDamage}
                             onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
                         />
+                        <Input
+                            label="Speed"
+                            type="number"
+                            min="0"
+                            value={config.speed}
+                            onChange={(e) => onUpdate('speed', parseInt(e.target.value) || 0)}
+                        />
                     </div>
                 </Section>
 

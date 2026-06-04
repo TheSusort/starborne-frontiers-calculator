@@ -41,24 +41,27 @@ const DPSCalculatorPage: React.FC = () => {
     const shipInitialized = useRef(false);
     const nextTeamIdRef = useRef(2);
 
+    // Shared final-stats derivation for ship selection (attacker config, team slots,
+    // URL-seeded initial config) — one calculateTotalStats pattern, three call sites.
+    const shipFinalStats = (ship: Ship) => {
+        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
+        return calculateTotalStats(
+            ship.baseStats,
+            ship.equipment || {},
+            getGearPiece,
+            ship.refits,
+            ship.implants,
+            engineeringStats,
+            ship.id
+        ).final;
+    };
+
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                const engineeringStats = ship.type
-                    ? getEngineeringStatsForShipType(ship.type)
-                    : undefined;
-                const statsBreakdown = calculateTotalStats(
-                    ship.baseStats,
-                    ship.equipment || {},
-                    getGearPiece,
-                    ship.refits,
-                    ship.implants,
-                    engineeringStats,
-                    ship.id
-                );
-                const final = statsBreakdown.final;
+                const final = shipFinalStats(ship);
                 return {
                     configs: [
                         {
@@ -72,6 +75,7 @@ const DPSCalculatorPage: React.FC = () => {
                             hacking: Math.round(final.hacking ?? 200),
                             defence: Math.round(final.defence ?? 0),
                             hp: Math.round(final.hp ?? 0),
+                            speed: Math.round(final.speed ?? 100),
                             allyChargePerRound: 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             affinity: ship.affinity,
@@ -101,6 +105,7 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: 200,
                     defence: 0,
                     hp: 0,
+                    speed: 100,
                     chargeCount: 0,
                     startCharged: false,
                     allyChargePerRound: 0,
@@ -117,13 +122,21 @@ const DPSCalculatorPage: React.FC = () => {
     const [enemyDefense, setEnemyDefense] = useState(10000);
     const [enemyHp, setEnemyHp] = useState(500000);
     const [enemySecurity, setEnemySecurity] = useState(100);
+    const [enemySpeed, setEnemySpeed] = useState(50);
     const [enemyType, setEnemyType] = useState<EnemyBaseClass | undefined>(undefined);
     const [rounds, setRounds] = useState(20);
     const [viewMode, setViewMode] = useState<'table' | 'heatmap'>('heatmap');
     const [attackerBuffs, setAttackerBuffs] = useState<SelectedGameBuff[]>([]);
     const [enemyBuffs, setEnemyBuffs] = useState<SelectedGameBuff[]>([]);
     const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([
-        { id: 'team-1', buffs: [], enemyDebuffs: [], startCharged: false },
+        {
+            id: 'team-1',
+            buffs: [],
+            enemyDebuffs: [],
+            startCharged: false,
+            speed: 100,
+            chargeCount: 0,
+        },
     ]);
     const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
     const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
@@ -139,11 +152,16 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
 
-    const teamEnemyDebuffs = useMemo(
+    const teamActors = useMemo(
         () =>
-            teamShips.flatMap((t) =>
-                t.enemyDebuffs.map((d) => ({ ...d, sourceStartCharged: t.startCharged }))
-            ),
+            teamShips.map((t) => ({
+                id: t.id,
+                speed: t.speed,
+                chargeCount: t.chargeCount,
+                startCharged: t.startCharged,
+                selfBuffs: t.buffs,
+                enemyDebuffs: t.enemyDebuffs,
+            })),
         [teamShips]
     );
 
@@ -225,14 +243,17 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: config.hacking ?? 200,
                     defence: config.defence,
                     hp: config.hp,
+                    speed: config.speed,
                     chargeCount: config.chargeCount,
                     shipSkills: config.shipSkills,
                     enemyDefense,
                     enemyHp,
                     enemySecurity,
+                    enemySpeed,
+                    teamActors,
                     rounds,
-                    selfBuffs: [...attackerBuffs, ...teamAttackerBuffs],
-                    enemyDebuffs: [...enemyBuffs, ...teamEnemyDebuffs],
+                    selfBuffs: attackerBuffs,
+                    enemyDebuffs: enemyBuffs,
                     startCharged: config.startCharged,
                     affinityDamageModifier: damageModifier,
                     affinityCritCap: critCap,
@@ -248,13 +269,13 @@ const DPSCalculatorPage: React.FC = () => {
         enemyDefense,
         enemyHp,
         enemySecurity,
+        enemySpeed,
         enemyType,
         rounds,
         attackerBuffs,
         enemyBuffs,
         enemyAffinity,
-        teamAttackerBuffs,
-        teamEnemyDebuffs,
+        teamActors,
     ]);
 
     const addConfig = () => {
@@ -271,6 +292,7 @@ const DPSCalculatorPage: React.FC = () => {
                 hacking: 200,
                 defence: 0,
                 hp: 0,
+                speed: 100,
                 chargeCount: 0,
                 startCharged: false,
                 allyChargePerRound: 0,
@@ -294,6 +316,7 @@ const DPSCalculatorPage: React.FC = () => {
                         hacking: 200,
                         defence: 0,
                         hp: 0,
+                        speed: 100,
                         chargeCount: 0,
                         startCharged: false,
                         allyChargePerRound: 0,
@@ -323,17 +346,7 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        const statsBreakdown = calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        );
-        const final = statsBreakdown.final;
+        const final = shipFinalStats(ship);
 
         setConfigs((prev) =>
             prev.map((c) => {
@@ -349,6 +362,7 @@ const DPSCalculatorPage: React.FC = () => {
                     hacking: Math.round(final.hacking ?? 200),
                     defence: Math.round(final.defence ?? 0),
                     hp: Math.round(final.hp ?? 0),
+                    speed: Math.round(final.speed ?? 100),
                     allyChargePerRound: c.allyChargePerRound ?? 0,
                     // Reset (not carry over) when the new ship has no charge metadata —
                     // a stale threshold from the previous ship would mis-pace the sim.
@@ -376,13 +390,25 @@ const DPSCalculatorPage: React.FC = () => {
     const addTeamShip = () => {
         if (teamShips.length >= 4) return;
         const id = `team-${nextTeamIdRef.current++}`;
-        setTeamShips((prev) => [...prev, { id, buffs: [], enemyDebuffs: [], startCharged: false }]);
+        setTeamShips((prev) => [
+            ...prev,
+            { id, buffs: [], enemyDebuffs: [], startCharged: false, speed: 100, chargeCount: 0 },
+        ]);
     };
 
     const removeTeamShip = (id: string) => {
         setTeamShips((prev) => {
             if (prev.length <= 1)
-                return [{ id: prev[0].id, buffs: [], enemyDebuffs: [], startCharged: false }];
+                return [
+                    {
+                        id: prev[0].id,
+                        buffs: [],
+                        enemyDebuffs: [],
+                        startCharged: false,
+                        speed: 100,
+                        chargeCount: 0,
+                    },
+                ];
             return prev.filter((t) => t.id !== id);
         });
     };
@@ -396,6 +422,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.secondPassiveSkillText,
             ship.thirdPassiveSkillText,
         ]);
+        const final = shipFinalStats(ship);
         setTeamShips((prev) =>
             prev.map((t) => {
                 if (t.id !== id) return t;
@@ -403,6 +430,8 @@ const DPSCalculatorPage: React.FC = () => {
                     ...t,
                     shipId: ship.id,
                     startCharged,
+                    speed: Math.round(final.speed ?? 100),
+                    chargeCount: ship.chargeSkillCharge ?? 0,
                     buffs: mergeAutoFill(t.buffs, selfBuffs),
                     enemyDebuffs: mergeAutoFill(t.enemyDebuffs, newEnemyDebuffs),
                 };
@@ -463,12 +492,18 @@ const DPSCalculatorPage: React.FC = () => {
                         onEnemyAffinityChange={setEnemyAffinity}
                         enemySecurity={enemySecurity}
                         onEnemySecurityChange={setEnemySecurity}
+                        enemySpeed={enemySpeed}
+                        onEnemySpeedChange={setEnemySpeed}
                         teamShips={teamShips}
                         onAddTeamShip={addTeamShip}
                         onRemoveTeamShip={removeTeamShip}
                         onSelectTeamShip={selectShipForTeamSlot}
                         onTeamShipStartChargedChange={(id, checked) =>
                             updateTeamShip(id, { startCharged: checked })
+                        }
+                        onTeamShipSpeedChange={(id, speed) => updateTeamShip(id, { speed })}
+                        onTeamShipChargeCountChange={(id, chargeCount) =>
+                            updateTeamShip(id, { chargeCount })
                         }
                         onTeamShipBuffsChange={(id, buffs) => updateTeamShip(id, { buffs })}
                         onTeamShipEnemyDebuffsChange={(id, debuffs) =>

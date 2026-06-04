@@ -110,7 +110,9 @@ export interface SelectedGameBuff {
     skillDuration?: number | 'recurring' | null;
     // For auto-filled enemy debuffs: the charge schedule of the ship that applies this debuff.
     // Used so the debuff fires on the applier's schedule, not the simulated ship's schedule.
+    /** @deprecated Superseded by per-team-actor chargeCount/startCharged (TeamActorInput); ignored by the action-fed status engine. */
     sourceChargeCount?: number;
+    /** @deprecated Superseded by per-team-actor chargeCount/startCharged (TeamActorInput); ignored by the action-fed status engine. */
     sourceStartCharged?: boolean;
     // For accumulating stackable buffs: how stacks are gained over rounds.
     // When set, `stacks` is the rate (stacks per trigger), not the total.
@@ -131,6 +133,7 @@ export interface DPSShipConfig {
     affinity?: AffinityName;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
+    speed: number; // turn-order speed; auto-filled from ship stats
     chargeCount: number;
     startCharged: boolean;
     allyChargePerRound?: number;
@@ -147,7 +150,8 @@ export type DPSShipConfigUpdateableField =
     | 'affinity'
     | 'chargeCount'
     | 'defence'
-    | 'hp';
+    | 'hp'
+    | 'speed';
 
 export interface AttackerBuffTotals {
     attackBuff: number;
@@ -214,6 +218,8 @@ export interface TeamShipConfig {
     buffs: SelectedGameBuff[]; // parsed self/team buffs → merge into global attackerBuffs
     enemyDebuffs: SelectedGameBuff[]; // parsed enemy debuffs  → merge into global enemyBuffs
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
+    speed: number; // turn-order speed; auto-filled from ship stats
+    chargeCount: number; // charge threshold; auto-filled from skill rows
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing

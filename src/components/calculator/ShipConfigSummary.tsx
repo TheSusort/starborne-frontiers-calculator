@@ -2,7 +2,7 @@ import React from 'react';
 import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
-import { damageInputsFromSkill, selectFiringSkill } from '../../utils/abilities/applyAbilities';
+import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
 
 interface ShipConfigSummaryProps {
     config: DPSShipConfig;
@@ -42,7 +42,10 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
         healModifier: 0,
     });
 
-    const chargedDmg = damageInputsFromSkill(selectFiringSkill(config.shipSkills, 'charged'));
+    const chargedSkill = selectFiringSkill(config.shipSkills, 'charged');
+    // Mirror the adapter's hasChargedSkill rule: the charged slot "fires" when it carries ANY
+    // ability (damage or pure utility), not only when it has a damage multiplier.
+    const hasChargedSkill = (chargedSkill?.abilities.length ?? 0) > 0;
 
     const comparedToBestPercentage =
         bestTotalDamage !== undefined && bestTotalDamage !== 0 && !isBest
@@ -67,7 +70,7 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
                     {simResult.summary.totalDamage.toLocaleString()}
                 </span>
             </div>
-            {chargedDmg.multiplier > 0 && config.chargeCount > 0 && (
+            {hasChargedSkill && config.chargeCount > 0 && (
                 <div className="flex justify-between mb-2">
                     <span className="text-theme-text-secondary">Charged skill fires:</span>
                     <span>

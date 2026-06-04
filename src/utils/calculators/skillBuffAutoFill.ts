@@ -17,6 +17,9 @@ export interface SkillBuffAutoFill {
 
 export function buildSkillBuffAutoFill(ship: Ship): SkillBuffAutoFill {
     const effects = parseAllSkillEffects(ship);
+    // sourceChargeCount/sourceStartCharged are deprecated (ignored by the action-fed
+    // status engine — per-team-actor chargeCount/startCharged via TeamActorInput are
+    // authoritative). Still stamped here until the auto-fill shape is refactored.
     const sourceChargeCount = ship.chargeSkillCharge ?? 0;
     const sourceStartCharged = detectFullyCharged([
         ship.activeSkillText,

@@ -31,7 +31,8 @@ export function buildDefaultShipSkills(): ShipSkills {
 // applies them in-loop with dynamic condition gating. NOTE: sourceChargeCount/
 // sourceStartCharged are not reconstructed (not on the buff config) — correct for
 // single-attacker DPS, where the timeline falls back to the attacker's own charged set;
-// team debuffs flow through the unchanged global teamEnemyDebuffs path.
+// team debuffs flow through the teamActors input (TeamActorInput), re-timed onto each
+// team actor's own turns.
 export function configShipSkillsToSimInputs(
     shipSkills: ShipSkills,
     enemyType?: EnemyBaseClass

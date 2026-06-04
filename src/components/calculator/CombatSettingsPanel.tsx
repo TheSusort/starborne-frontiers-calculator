@@ -18,6 +18,8 @@ interface CombatSettingsPanelProps {
     onEnemyHpChange: (v: number) => void;
     enemySecurity: number;
     onEnemySecurityChange: (v: number) => void;
+    enemySpeed: number;
+    onEnemySpeedChange: (v: number) => void;
     rounds: number;
     onRoundsChange: (v: number) => void;
     attackerBuffs: SelectedGameBuff[];
@@ -31,6 +33,8 @@ interface CombatSettingsPanelProps {
     onRemoveTeamShip: (id: string) => void;
     onSelectTeamShip: (id: string, ship: Ship) => void;
     onTeamShipStartChargedChange: (id: string, checked: boolean) => void;
+    onTeamShipSpeedChange: (id: string, speed: number) => void;
+    onTeamShipChargeCountChange: (id: string, chargeCount: number) => void;
     onTeamShipBuffsChange: (id: string, buffs: SelectedGameBuff[]) => void;
     onTeamShipEnemyDebuffsChange: (id: string, debuffs: SelectedGameBuff[]) => void;
     enemyType?: EnemyBaseClass;
@@ -46,6 +50,8 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onEnemyHpChange,
     enemySecurity,
     onEnemySecurityChange,
+    enemySpeed,
+    onEnemySpeedChange,
     rounds,
     onRoundsChange,
     attackerBuffs,
@@ -59,6 +65,8 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onRemoveTeamShip,
     onSelectTeamShip,
     onTeamShipStartChargedChange,
+    onTeamShipSpeedChange,
+    onTeamShipChargeCountChange,
     onTeamShipBuffsChange,
     onTeamShipEnemyDebuffsChange,
     enemyType,
@@ -98,6 +106,13 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                         min="0"
                         value={enemySecurity}
                         onChange={(e) => onEnemySecurityChange(parseInt(e.target.value) || 0)}
+                    />
+                    <Input
+                        label="Enemy Speed"
+                        type="number"
+                        min="0"
+                        value={enemySpeed}
+                        onChange={(e) => onEnemySpeedChange(parseInt(e.target.value) || 0)}
                     />
                     <Input
                         label="Rounds"
@@ -178,6 +193,10 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                                 onSelectShip={(ship) => onSelectTeamShip(ts.id, ship)}
                                 onStartChargedChange={(checked) =>
                                     onTeamShipStartChargedChange(ts.id, checked)
+                                }
+                                onSpeedChange={(speed) => onTeamShipSpeedChange(ts.id, speed)}
+                                onChargeCountChange={(chargeCount) =>
+                                    onTeamShipChargeCountChange(ts.id, chargeCount)
                                 }
                                 onBuffsChange={(buffs) => onTeamShipBuffsChange(ts.id, buffs)}
                                 onEnemyDebuffsChange={(debuffs) =>
