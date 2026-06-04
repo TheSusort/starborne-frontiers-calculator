@@ -1229,6 +1229,14 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
+    it('classifies "when an enemy gets buffed" as a manual enemy-buff trigger — Nuqtu', () => {
+        const text =
+            'This Unit <unit-aid>Cleanses 1</unit-aid> debuff from itself (once per round) and gains <unit-skill>Terran Bolster III</unit-skill> for 1 turn when an enemy gets buffed.';
+        expect(detectGrantConditions(text, 'Terran Bolster III')).toEqual([
+            { subject: 'enemy-buff', derivable: false },
+        ]);
+    });
+
     it('does not classify a reactive "when critically hit" clause', () => {
         const text = 'When this Unit is critically hit, it gains Attack Up II.';
         expect(detectGrantConditions(text, 'Attack Up II')).toEqual([]);

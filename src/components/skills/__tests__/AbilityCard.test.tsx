@@ -102,6 +102,28 @@ describe('AbilityCard', () => {
                 screen.queryByText(/not simulated on the passive slot/i)
             ).not.toBeInTheDocument();
         });
+
+        it('does not warn for a charge ability on the passive slot (simulated since charge-aura sourcing)', () => {
+            const charge: Ability = {
+                id: 'a3',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            };
+            render(
+                <AbilityCard
+                    ability={charge}
+                    slot="passive"
+                    onChange={() => {}}
+                    onRemove={() => {}}
+                />
+            );
+            expect(
+                screen.queryByText(/not simulated on the passive slot/i)
+            ).not.toBeInTheDocument();
+        });
     });
 
     it('reconstructs picker value from config.buffName and shows selected buff', () => {

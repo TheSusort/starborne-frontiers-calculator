@@ -177,6 +177,90 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('passive charge abilities', () => {
+        // Charge aura on the passive slot (Hermes/Asphodel/Hemlock/Oleander/Cobalt
+        // pattern): sourced on ACTIVE rounds alongside the firing skill's charge
+        // abilities, same gate/scale semantics, capped at chargeCount.
+        const skillsWithPassiveCharge = (chargeConditions: Condition[]): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'active-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 150 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'charged-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 350 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        {
+                            id: 'passive-charge',
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: chargeConditions,
+                            config: { type: 'charge', amount: 1 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('accelerates the charged cadence (unconditional passive charge)', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 6,
+                shipSkills: skillsWithPassiveCharge([]),
+            });
+            // Active rounds bank 1 (cadence) + 1 (passive aura), capped at 3:
+            // r1 active (1+1=2), r2 active (3, cap), r3 CHARGED — was r4 before.
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[0].charges).toBe(2);
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[1].charges).toBe(3);
+            expect(result.rounds[2].action).toBe('charged');
+            expect(result.rounds[2].charges).toBe(0);
+            // Cadence repeats: r4-r5 active, r6 charged.
+            expect(result.rounds[5].action).toBe('charged');
+        });
+
+        it('a condition-gated passive charge contributes nothing when the condition fails', () => {
+            // self-crit-scaled charge (Asphodel pattern) with crit 0: roundCrit is
+            // always false, so the passive contributes 0 — original cadence (r4 charged).
+            const result = simulateDPS({
+                ...baseInput,
+                crit: 0,
+                chargeCount: 3,
+                rounds: 4,
+                shipSkills: skillsWithPassiveCharge([{ subject: 'self-crit', derivable: true }]),
+            });
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[2].action).toBe('active');
+            expect(result.rounds[3].action).toBe('charged');
+        });
+    });
+
     describe('corrosion', () => {
         it('accumulates stacks with expiry based on duration', () => {
             const result = simulateDPS({

@@ -170,7 +170,7 @@ const TRIGGER_RE =
 // manually). When a clause is gated ONLY by one of these, an ungated buff is expected — skip it
 // so the report highlights gaps we could actually close.
 const INTENTIONAL_REACTIVE_RE =
-    /\b(directly )?(damaged|attacked|hit)\b|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp (drops|falls|is) below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets (buffed|debuffed)|cleansing|critically hit by/i;
+    /\b(directly )?(damaged|attacked|hit)\b|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp (drops|falls|is) below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets debuffed|cleansing|critically hit by/i;
 
 /** The sentence/clause of `plain` mentioning `name` (split on . ; and br-derived spaces). */
 function clauseFor(plain: string, name: string): string {

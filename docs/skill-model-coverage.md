@@ -30,7 +30,7 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 | `extend-dot` | ✅ `parseExtendDoT` + `parseCritPowerExtend` | ✅ | ✅ Step 2.9 (corrosion+inferno, not bombs) | ✅ per-round `conditionsMet` against the payload ctx (binary self-crit) + deterministic `chanceFromCritPower` schedule | — | **firing + passive** (Valerian fix) |
 | `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ✅ `gateFiringAbilities` | ❌ | firing only |
-| `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ `gateFiringAbilities`; un-thresholded conditions also scale (binary self-crit, per-count subjects) | per-count / binary self-crit via `evaluateCondition` (positional ctx) | firing only |
+| `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ `gateFiringAbilities`; un-thresholded conditions also scale (binary self-crit, per-count subjects) | per-count / binary self-crit via `evaluateCondition` (positional ctx) | **firing + passive** |
 | `heal` | ❌ never emitted | ❌ **type pickable but NO config fields rendered** (label-only in `AbilityCard`) | ❌ **not consumed** | — | — | — |
 | `shield` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
 | `cleanse` / `purge` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
@@ -112,7 +112,7 @@ forgetting this silently drops passive-sourced abilities (the Valerian extend-do
 | `damageInputsFromSkill` | firing **+ passive** — the passive slot's damage ability is gated per round and added as an extra hit (Judge's start-of-round 60% vs <50% HP). Passive `additional-damage`/`secondary` still firing-only (no known ship). |
 | `secondaryFromSkill` | firing only |
 | `dotsFromSkill` | firing only — **a `dot` added to the passive slot in the editor is a silent no-op** (parser never emits passive DoTs, but the editor allows it) |
-| `chargeAbilitiesFromSkill` | firing only (active rounds only by design) |
+| `chargeAbilitiesFromSkill` | firing **+ passive** ✅ (active rounds only by design; both pre-gated via `gateFiringAbilities`) |
 | `detonationsFromSkill` / `accumulatorsFromSkill` | firing only |
 
 **Rule when adding a mechanic:** if it can live on a passive (extend/detonate/modifier/
@@ -187,12 +187,15 @@ configure it and it looks like it works, but it does nothing".
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
-   heal/shield/cleanse/purge/control; passive slot warns on `dot`/`charge`/`detonate` (silent no-ops).
+   heal/shield/cleanse/purge/control; passive slot warns on `dot`/`detonate` (silent no-ops;
+   `charge` was dropped from the warning set 2026-06-04 when passive charge auras became sourced).
 2. **Dynamic per-round buff gating** *(shipped 2026-06-03, this branch — combat-engine Phase 1,
    feat/combat-engine-core)* — see §5 above.
-3. **Passive-slot sourcing audit** — extend firing+passive sourcing to `charge` (charge
-   auras) and `detonate`/`dot` if any ship's passive carries them; audit
-   `ship-skills.csv` first.
+3. **Passive-slot sourcing audit** — *(charge auras shipped 2026-06-04,
+   feat/combat-engine-followups: the 2026-06-04 audit over `ship-skills.csv` found 5
+   passive charge auras — Hermes, Asphodel, Hemlock, Oleander, Cobalt — now sourced
+   firing + passive on active rounds.)* Remaining: `detonate`/`dot` on passives if any
+   ship ever carries them (none known today).
 4. **Self HP-threshold realism** — `selfHpPct` is still fixed at 100. A declining
    self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
    self-execute-style gates meaningful.

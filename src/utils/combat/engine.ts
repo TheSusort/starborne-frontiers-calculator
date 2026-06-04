@@ -189,6 +189,29 @@ function extendDoTs(args: {
     }
 }
 
+// Charge gain from a GATED skill's charge abilities. Gating already happened in
+// gateFiringAbilities (full AND/OR + thresholds) — for the firing skill via
+// gatedSkill and for the passive slot via gatedPassive. A thresholded gate
+// contributes the flat amount once; an unthresholded count/probability condition
+// still SCALES it (binary self-crit, per-count subjects). No condition → flat amount.
+function chargeGainFromSkill(args: {
+    gatedSkill: Skill | undefined;
+    ctxFor: Map<string, ConditionContext>;
+    fallbackCtx: ConditionContext;
+}): number {
+    let gain = 0;
+    for (const ability of chargeAbilitiesFromSkill(args.gatedSkill)) {
+        if (ability.config.type !== 'charge') continue;
+        const primary = ability.conditions[0];
+        const scale =
+            !primary || primary.countComparator != null
+                ? 1
+                : evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx);
+        gain += scale * ability.config.amount;
+    }
+    return gain;
+}
+
 // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
 // damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
 // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
@@ -886,23 +909,19 @@ export function runCombat(input: CombatEngineInput): {
         // Charge manipulation: charges only accumulate on ACTIVE rounds. A charged
         // round fires the charged skill, which consumes all charges (reset to 0 at
         // the top of the loop) — nothing banks toward the next charge on that round.
-        // Self + ally gains are added here and the total is capped at chargeCount,
-        // since charges never exceed what the charged skill requires.
+        // Sourced from the firing skill AND the always-active passive slot (charge
+        // auras: Hermes/Asphodel/Hemlock/Oleander/Cobalt) — both pre-gated by
+        // gateFiringAbilities with their positional contexts. Self + ally gains are
+        // added here and the total is capped at chargeCount, since charges never
+        // exceed what the charged skill requires.
         if (hasChargedSkill && action === 'active') {
-            let bonusCharges = 0;
-            for (const ability of chargeAbilitiesFromSkill(gatedSkill)) {
-                if (ability.config.type !== 'charge') continue;
-                // Gating already happened in gateFiringAbilities (full AND/OR + thresholds).
-                // A thresholded gate contributes the flat amount once; an unthresholded
-                // count/probability condition still SCALES it (binary self-crit, per-count
-                // subjects). No condition → flat amount.
-                const primary = ability.conditions[0];
-                const scale =
-                    !primary || primary.countComparator != null
-                        ? 1
-                        : evaluateCondition(primary, ctxFor.get(ability.id) ?? ctx);
-                bonusCharges += scale * ability.config.amount;
-            }
+            const bonusCharges =
+                chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx }) +
+                chargeGainFromSkill({
+                    gatedSkill: gatedPassive,
+                    ctxFor: passiveCtxFor,
+                    fallbackCtx: ctx,
+                });
             charges = Math.min(charges + bonusCharges + (allyChargePerRound ?? 0), chargeCount);
         }
 

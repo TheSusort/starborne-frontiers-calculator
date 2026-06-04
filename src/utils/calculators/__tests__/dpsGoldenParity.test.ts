@@ -749,4 +749,27 @@ describe('dpsGoldenParity', () => {
             shipSkills,
         };
     });
+
+    // Scenario 16: passive charge aura — a charge ability on the passive slot
+    // accelerates the charged cadence on active rounds (Hermes/Cobalt pattern).
+    // Locks the firing+passive charge sourcing shipped in the follow-ups PR.
+    // Cadence: r1 active → charges 2 (1 cadence + 1 aura), r2 active → 3 (cap),
+    // r3 charged → 0; repeats every 3 rounds (charged on r3/r6/r9/r12, was r4/r8/r12).
+    snap('passive charge aura accelerates charged cadence', () => ({
+        ...BASE,
+        shipSkills: damageSkills(150, 320, {
+            slots: [
+                {
+                    slot: 'passive' as const,
+                    abilities: [
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+            ],
+        }),
+    }));
 });
