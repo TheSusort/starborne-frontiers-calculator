@@ -56,6 +56,11 @@ export interface StatusEngine {
     /** Advance to round r (1-based, strictly sequential) and return the round's
      *  active lists — same contents as the old computeBuffTimeline entry. */
     step(round: number): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
+    /** Owner Post-Turn: decrement ALL timed statuses on this side — including ones
+     *  applied earlier in this same turn (spec: same-turn decrement rule; skipping
+     *  same-turn applications would ADD a round). Returns expired buff names so the
+     *  engine can emit buff-expired. */
+    decrementSide(side: 'self' | 'enemy'): { expired: string[] };
     /** Register all buff/debuff abilities once at creation (classified by `kind`). */
     registerAbilityStatuses(statuses: RegisteredAbilityStatus[]): void;
     /** Apply a firing skill's TIMED ability status for this round; the engine passes
@@ -211,25 +216,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
         lastRound = r;
 
-        // Step 1: Decrement and expire
-        const selfExpired: string[] = [];
-        for (const [key, s] of selfMap) {
-            s.turnsRemaining -= 1;
-            if (s.turnsRemaining <= 0) selfExpired.push(key);
-        }
-        selfExpired.forEach((k) => selfMap.delete(k));
+        // (Decrement+expire moved out to decrementSide, called from each owner's
+        //  Post Turn in the engine — see the StatusEngine.decrementSide doc comment.)
 
-        const enemyExpired: string[] = [];
-        for (const [key, s] of enemyMap) {
-            s.turnsRemaining -= 1;
-            if (s.turnsRemaining <= 0) enemyExpired.push(key);
-        }
-        enemyExpired.forEach((k) => enemyMap.delete(k));
-
-        // Step 2: Determine skill fired this round
+        // Step 1: Determine skill fired this round
         const skillFired: 'active' | 'charge' = chargedSet.has(r) ? 'charge' : 'active';
 
-        // Step 2b: Increment accumulating stacks
+        // Step 1a: Increment accumulating stacks
         const incrementAccum = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
                 const fires =
@@ -247,7 +240,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         incrementAccum(accumSelfMap);
         incrementAccum(accumEnemyMap);
 
-        // Step 3: Apply timed buffs — self-buffs use this ship's schedule;
+        // Step 2: Apply timed buffs — self-buffs use this ship's schedule;
         // enemy debuffs use the applier's stored source schedule.
         const upsertBuff = (buff: SelectedGameBuff, map: Map<string, BuffState>) => {
             if (typeof buff.skillDuration !== 'number') return;
@@ -271,7 +264,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             if (buff.skillSource === sourceSkillFired) upsertBuff(buff, enemyMap);
         }
 
-        // Step 4: Snapshot — always-active buffs injected as 'recurring'
+        // Step 3: Snapshot — always-active buffs injected as 'recurring'
         // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects
         const selfAlwaysSnap = [...new Map(alwaysSelf.map((b) => [b.buffName, b])).values()].map(
             (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
@@ -322,6 +315,24 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     })),
             ],
         };
+    };
+
+    // Owner Post-Turn decrement: the status CARRIER decrements ALL its timed statuses
+    // by one turn, INCLUDING ones applied earlier in this same turn (same-turn decrement
+    // rule — skipping same-turn applications would ADD a round). Expired
+    // statuses are removed and their stored buffName reported so the engine emits
+    // buff-expired. Ability-sourced timed statuses live in the same map and decrement here.
+    const decrementSide = (side: 'self' | 'enemy'): { expired: string[] } => {
+        const map = side === 'self' ? selfMap : enemyMap;
+        const expired: string[] = [];
+        for (const [key, s] of map) {
+            s.turnsRemaining -= 1;
+            if (s.turnsRemaining <= 0) {
+                expired.push(s.buffName);
+                map.delete(key);
+            }
+        }
+        return { expired };
     };
 
     // --- Ability-status API (Task 6) ---
@@ -418,6 +429,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     return {
         step,
+        decrementSide,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

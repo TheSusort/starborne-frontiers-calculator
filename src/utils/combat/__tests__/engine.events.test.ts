@@ -281,3 +281,133 @@ describe('runCombat event emission', () => {
         }
     });
 });
+
+describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () => {
+    // Plain single-active-skill cadence (no charge) so a scheduled timed buff fires
+    // exactly when we want and we can read its window off the round data.
+    const plainSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } })],
+            },
+        ],
+    });
+
+    it('2-turn timed self-buff applied round 1 is present rounds 1-2 only and expires round 2', () => {
+        // Self-buff with skillSource 'charge' + startCharged + a large chargeCount: it
+        // fires round 1 and never again (the charge never re-banks). Duration 2 means
+        // the buff is present rounds 1-2 and expires at the attacker's round-2 Post Turn.
+        const buff: SelectedGameBuff = {
+            id: 's1',
+            buffName: 'Attack Up',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 20 },
+            skillSource: 'charge',
+            skillDuration: 2,
+        };
+        const { events, result } = collect(
+            baseInput({
+                shipSkills: plainSkills(),
+                selfBuffs: [buff],
+                // startCharged → round 1 is charged (buff fires); chargeCount 99 → never charges
+                // again, so the buff is applied exactly once, in round 1.
+                hasChargedSkill: true,
+                startCharged: true,
+                chargeCount: 99,
+                numRounds: 5,
+            })
+        );
+
+        const present = (round: number) =>
+            result.rounds
+                .find((r) => r.round === round)!
+                .activeSelfBuffs.some((b) => b.buffName === 'Attack Up');
+        expect(present(1)).toBe(true); // applied round 1
+        expect(present(2)).toBe(true); // still within the 2-turn window
+        expect(present(3)).toBe(false); // expired at the attacker's round-2 Post Turn
+
+        // buff-expired fires once, at round 2, on the attacker (the self-buff carrier).
+        const expired = events.filter((e) => e.type === 'buff-expired');
+        expect(expired).toHaveLength(1);
+        const e = expired[0];
+        if (e.type !== 'buff-expired') throw new Error('unreachable');
+        expect(e).toMatchObject({ actorId: 'attacker', round: 2, buffName: 'Attack Up' });
+    });
+
+    it('duration-1 self-buff re-applied every round expires every round', () => {
+        // Active source, 1-turn duration, fires every (active) round. Applied each round at the
+        // attacker turn, decremented to 0 at that same round's attacker Post Turn → expires every
+        // round and is re-applied next round.
+        const buff: SelectedGameBuff = {
+            id: 's1',
+            buffName: 'Attack Up',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 20 },
+            skillSource: 'active',
+            skillDuration: 1,
+        };
+        const numRounds = 4;
+        const { events } = collect(
+            baseInput({
+                shipSkills: plainSkills(),
+                selfBuffs: [buff],
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds,
+            })
+        );
+        const expiredRounds = events
+            .filter((e) => e.type === 'buff-expired')
+            .map((e) => (e.type === 'buff-expired' ? e.round : 0));
+        // One expiry per round, every round.
+        expect(expiredRounds).toEqual([1, 2, 3, 4]);
+    });
+
+    // The same 2-turn enemy debuff, applied once in round 1, observed via the buff-expired
+    // round it reports — the cleanest observable for the fast-enemy +1 window. The debuff is
+    // applied in the attacker's round-1 turn; the enemy (its carrier) decrements it at its own
+    // Post Turn. At default speeds the enemy acts AFTER the attacker, so the first decrement is
+    // round 1 → expiry round 2. With a faster enemy the round-1 enemy turn already passed when
+    // the attacker applies it, so the first decrement is round 2 → expiry round 3 (the +1).
+    const oneShotEnemyDebuff = (enemySpeed?: number) => {
+        const debuff: SelectedGameBuff = {
+            id: 'd1',
+            buffName: 'Def Down',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -20 },
+            skillSource: 'charge',
+            skillDuration: 2,
+        };
+        const { events } = collect(
+            baseInput({
+                shipSkills: plainSkills(),
+                enemyDebuffs: [debuff],
+                // startCharged → round 1 is charged (debuff fires); chargeCount 99 → never charges
+                // again, so the debuff is applied exactly once, in round 1.
+                hasChargedSkill: true,
+                startCharged: true,
+                chargeCount: 99,
+                enemySpeed,
+                numRounds: 5,
+            })
+        );
+        const expired = events.filter((e) => e.type === 'buff-expired');
+        expect(expired).toHaveLength(1);
+        const e = expired[0];
+        if (e.type !== 'buff-expired') throw new Error('unreachable');
+        expect(e).toMatchObject({ actorId: 'enemy', buffName: 'Def Down' });
+        return e.round;
+    };
+
+    it('default speed: a 2-turn enemy debuff applied round 1 expires round 2', () => {
+        expect(oneShotEnemyDebuff()).toBe(2);
+    });
+
+    it('fast enemy (enemySpeed 150): the same debuff expires one round later (round 3, the +1 KNOWN-DIFF)', () => {
+        expect(oneShotEnemyDebuff(150)).toBe(3);
+    });
+});

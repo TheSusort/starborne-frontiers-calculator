@@ -677,10 +677,9 @@ export function runCombat(input: CombatEngineInput): {
                 // read the wrong flag — not representable from skill text today.
                 const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
-                // Per-round buff totals from the status engine. step(r) decrements status at
-                // the TOP of round r exactly like the old timeline[r-1] read — equivalent to a
-                // post-turn decrement of round r-1 and parity-identical. Phase 2 moves this
-                // decrement into the owner's Post Turn.
+                // Per-round buff totals from the status engine. step(r) snapshots the round's
+                // active statuses WITHOUT decrementing; the decrement lives in each owner's
+                // Post Turn (statusEngine.decrementSide, called after this actor's turn block).
                 const entry = statusEngine.step(r);
 
                 // Effective crit rate from a given crit-buff total, clamped by affinity.
@@ -1154,6 +1153,16 @@ export function runCombat(input: CombatEngineInput): {
                         pendingAccumulators,
                         directDamage: ctxDirect,
                     });
+                }
+            }
+
+            // Post Turn (combat-system.md section 4): the status CARRIER decrements.
+            // Self statuses live on the attacker; enemy debuffs on the enemy. Team
+            // actors carry no statuses in Phase 2 (their grants sit on the attacker).
+            if (actor.kind === 'attacker' || actor.kind === 'enemy') {
+                const side = actor.kind === 'attacker' ? 'self' : 'enemy';
+                for (const buffName of statusEngine.decrementSide(side).expired) {
+                    bus?.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
             }
 
