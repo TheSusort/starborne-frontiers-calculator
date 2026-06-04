@@ -29,4 +29,9 @@ describe('AbilityTypePicker', () => {
         expect(screen.getByText('Damage', { selector: 'span' })).toBeInTheDocument();
         expect(screen.getByText('Utility')).toBeInTheDocument();
     });
+
+    it('marks the Utility category as not simulated in DPS', () => {
+        render(<AbilityTypePicker onPick={() => {}} />);
+        expect(screen.getByText(/not simulated in the dps calculator/i)).toBeInTheDocument();
+    });
 });

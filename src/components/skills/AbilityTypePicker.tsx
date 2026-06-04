@@ -1,6 +1,7 @@
 import React from 'react';
 import { AbilityType } from '../../types/abilities';
 import { Button } from '../ui/Button';
+import { NOT_SIMULATED_NOTE } from './simCoverage';
 
 interface Props {
     onPick: (type: AbilityType) => void;
@@ -24,7 +25,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     control: 'Control',
 };
 
-const CATEGORIES: { label: string; types: AbilityType[] }[] = [
+const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
     { label: 'Damage', types: ['damage', 'additional-damage'] },
     {
         label: 'Modify',
@@ -39,7 +40,11 @@ const CATEGORIES: { label: string; types: AbilityType[] }[] = [
         ],
     },
     { label: 'Charge', types: ['charge'] },
-    { label: 'Utility', types: ['heal', 'shield', 'cleanse', 'purge', 'control'] },
+    {
+        label: 'Utility',
+        types: ['heal', 'shield', 'cleanse', 'purge', 'control'],
+        note: NOT_SIMULATED_NOTE,
+    },
 ];
 
 export const AbilityTypePicker: React.FC<Props> = ({ onPick }) => (
@@ -49,6 +54,9 @@ export const AbilityTypePicker: React.FC<Props> = ({ onPick }) => (
                 <span className="text-xs font-semibold uppercase text-theme-text-secondary">
                     {category.label}
                 </span>
+                {category.note && (
+                    <p className="text-xs text-theme-text-secondary">{category.note}</p>
+                )}
                 <div className="flex flex-wrap gap-2">
                     {category.types.map((type) => (
                         <Button

@@ -5,6 +5,7 @@ import {
     AbilityTarget,
     Condition,
     ModifierChannel,
+    SkillSlot,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { Select } from '../ui/Select';
@@ -13,6 +14,12 @@ import { Checkbox } from '../ui/Checkbox';
 import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
+import {
+    NOT_SIMULATED_TYPES,
+    PASSIVE_NOOP_TYPES,
+    NOT_SIMULATED_NOTE,
+    PASSIVE_NOOP_WARNING,
+} from './simCoverage';
 import { ConditionRow } from './ConditionRow';
 
 interface Props {
@@ -22,6 +29,8 @@ interface Props {
     /** Move this ability up/down in the skill's execution order; undefined at the ends. */
     onMoveUp?: () => void;
     onMoveDown?: () => void;
+    /** Slot this ability lives in; enables slot-specific sim-coverage warnings. */
+    slot?: SkillSlot;
 }
 
 const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
@@ -113,6 +122,7 @@ export const AbilityCard: React.FC<Props> = ({
     onRemove,
     onMoveUp,
     onMoveDown,
+    slot,
 }) => {
     const updateConfig = (config: AbilityConfig) => onChange({ ...ability, config });
 
@@ -477,7 +487,9 @@ export const AbilityCard: React.FC<Props> = ({
             default:
                 return (
                     <p className="text-xs text-theme-text-secondary">
-                        No editable fields for this ability type.
+                        {NOT_SIMULATED_TYPES.has(ability.type)
+                            ? NOT_SIMULATED_NOTE
+                            : 'No editable fields for this ability type.'}
                     </p>
                 );
         }
@@ -534,6 +546,10 @@ export const AbilityCard: React.FC<Props> = ({
                     </Button>
                 </div>
             </div>
+
+            {slot === 'passive' && PASSIVE_NOOP_TYPES.has(ability.type) && (
+                <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
+            )}
 
             <Select
                 label="Target"
