@@ -3,6 +3,7 @@ import {
     createActor,
     selectNextActor,
     buildTurnQueue,
+    orderByTurnPriority,
     ActorStats,
     CombatActor,
     TURN_METER_THRESHOLD,
@@ -205,5 +206,35 @@ describe('buildTurnQueue', () => {
         const input = [actor('attacker', 'attacker', 100), actor('t1', 'team', 140)];
         buildTurnQueue(input);
         expect(input.map((a) => a.id)).toEqual(['attacker', 't1']);
+    });
+});
+
+describe('orderByTurnPriority', () => {
+    it('orders generic entries by speed descending', () => {
+        const ordered = orderByTurnPriority([
+            { name: 'Attacker', speed: 100, side: 'player' as const },
+            { name: 'Grif', speed: 140, side: 'player' as const },
+            { name: 'Enemy', speed: 120, side: 'enemy' as const },
+        ]);
+        expect(ordered.map((o) => o.name)).toEqual(['Grif', 'Enemy', 'Attacker']);
+    });
+
+    it('breaks ties: team before attacker (input order), player before enemy', () => {
+        const ordered = orderByTurnPriority([
+            { name: 'Grif', speed: 100, side: 'player' as const },
+            { name: 'Thresh', speed: 100, side: 'player' as const },
+            { name: 'Attacker', speed: 100, side: 'player' as const },
+            { name: 'Enemy', speed: 100, side: 'enemy' as const },
+        ]);
+        expect(ordered.map((o) => o.name)).toEqual(['Grif', 'Thresh', 'Attacker', 'Enemy']);
+    });
+
+    it('does not mutate the input array', () => {
+        const input = [
+            { name: 'Attacker', speed: 100, side: 'player' as const },
+            { name: 'Grif', speed: 140, side: 'player' as const },
+        ];
+        orderByTurnPriority(input);
+        expect(input.map((o) => o.name)).toEqual(['Attacker', 'Grif']);
     });
 });

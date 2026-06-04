@@ -3,6 +3,13 @@ import { DPSShipConfig, AttackerBuffTotals } from '../../types/calculator';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { calculateCritMultiplier } from '../../utils/autogear/scoring';
 import { selectFiringSkill } from '../../utils/abilities/applyAbilities';
+import { orderByTurnPriority } from '../../utils/combat/state';
+
+/** Display-ready team actor: resolved name + turn-order speed. */
+export interface TurnOrderTeamActor {
+    name: string;
+    speed: number;
+}
 
 interface ShipConfigSummaryProps {
     config: DPSShipConfig;
@@ -13,6 +20,8 @@ interface ShipConfigSummaryProps {
     attackerBuffTotals: AttackerBuffTotals;
     bestTotalDamage: number | undefined;
     bestVsSecondPercentage: number | null;
+    teamActors: TurnOrderTeamActor[];
+    enemySpeed: number;
 }
 
 export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
@@ -24,7 +33,18 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
     attackerBuffTotals,
     bestTotalDamage,
     bestVsSecondPercentage,
+    teamActors,
+    enemySpeed,
 }) => {
+    // Build the round's actor order with the engine's exact tiebreak rule. Input order
+    // mirrors buildTurnQueue's caller contract: team actors, then the attacker, then the
+    // enemy — so equal speeds resolve team → attacker → enemy.
+    const turnOrder = orderByTurnPriority([
+        ...teamActors.map((t) => ({ name: t.name, speed: t.speed, side: 'player' as const })),
+        { name: config.name, speed: config.speed, side: 'player' as const },
+        { name: 'Enemy', speed: enemySpeed, side: 'enemy' as const },
+    ]);
+
     const hasDoTs =
         simResult.summary.totalCorrosionDamage > 0 ||
         simResult.summary.totalInfernoDamage > 0 ||
@@ -54,6 +74,25 @@ export const ShipConfigSummary: React.FC<ShipConfigSummaryProps> = ({
 
     return (
         <div className="mt-4 pt-4 border-t border-dark-border">
+            <div className="mb-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-primary">
+                    Turn Order
+                </span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                    {turnOrder.map((actor, i) => (
+                        <span
+                            key={`${actor.name}-${i}`}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-dark-lighter ${
+                                actor.side === 'enemy' ? 'text-red-400' : 'text-theme-text-primary'
+                            }`}
+                        >
+                            <span className="text-theme-text-secondary">{i + 1}</span>
+                            <span className="font-medium">{actor.name}</span>
+                            <span className="text-theme-text-secondary">{actor.speed}</span>
+                        </span>
+                    ))}
+                </div>
+            </div>
             <div className="flex justify-between mb-2">
                 <span className="text-theme-text-secondary">Crit Multiplier:</span>
                 <span>{critMultiplier.toFixed(2)}x</span>

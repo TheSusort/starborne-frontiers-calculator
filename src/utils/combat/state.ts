@@ -126,13 +126,27 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
  * (spec: "once per round, speed = order"); extra-turn effects are a later-phase seam.
  */
 export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
-    return [...actors]
-        .map((a, i) => ({ a, i }))
+    return orderByTurnPriority(
+        actors.map((a) => ({ actor: a, speed: a.stats.speed, side: a.side }))
+    ).map((w) => w.actor);
+}
+
+/**
+ * Turn-order comparator core, shared by the engine (buildTurnQueue) and UI displays.
+ * Speed DESC; player side before enemy; then input order (caller lists team actors
+ * before the attacker for the team-first default). Returns a new array; does not
+ * mutate the input.
+ */
+export function orderByTurnPriority<T extends { speed: number; side: 'player' | 'enemy' }>(
+    items: T[]
+): T[] {
+    return [...items]
+        .map((item, i) => ({ item, i }))
         .sort((x, y) => {
-            if (y.a.stats.speed !== x.a.stats.speed) return y.a.stats.speed - x.a.stats.speed;
-            const sideRank = (s: CombatActor) => (s.side === 'player' ? 0 : 1);
-            if (sideRank(x.a) !== sideRank(y.a)) return sideRank(x.a) - sideRank(y.a);
+            if (y.item.speed !== x.item.speed) return y.item.speed - x.item.speed;
+            const sideRank = (s: { side: 'player' | 'enemy' }) => (s.side === 'player' ? 0 : 1);
+            if (sideRank(x.item) !== sideRank(y.item)) return sideRank(x.item) - sideRank(y.item);
             return x.i - y.i;
         })
-        .map((x) => x.a);
+        .map((x) => x.item);
 }

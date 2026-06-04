@@ -19,7 +19,7 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
-import { ShipConfigSummary } from './ShipConfigSummary';
+import { ShipConfigSummary, TurnOrderTeamActor } from './ShipConfigSummary';
 
 interface ShipConfigCardProps {
     config: DPSShipConfig;
@@ -38,6 +38,8 @@ interface ShipConfigCardProps {
     onAllyChargeChange: (value: number) => void;
     enemyAffinity: AffinityName;
     enemySecurity: number;
+    teamActors: TurnOrderTeamActor[];
+    enemySpeed: number;
 }
 
 /**
@@ -77,6 +79,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
     onAllyChargeChange,
     enemyAffinity,
     enemySecurity,
+    teamActors,
+    enemySpeed,
 }) => {
     const [openAdvanced, setOpenAdvanced] = useState(false);
     const { getShipById } = useShips();
@@ -292,6 +296,8 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         attackerBuffTotals={attackerBuffTotals}
                         bestTotalDamage={bestTotalDamage}
                         bestVsSecondPercentage={bestVsSecondPercentage}
+                        teamActors={teamActors}
+                        enemySpeed={enemySpeed}
                     />
                 )}
             </div>

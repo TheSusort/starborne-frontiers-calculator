@@ -152,6 +152,18 @@ const DPSCalculatorPage: React.FC = () => {
 
     const teamAttackerBuffs = useMemo(() => teamShips.flatMap((t) => t.buffs), [teamShips]);
 
+    // Display-ready team actors for the per-config turn-order strip: resolved ship name
+    // (fallback "Team N") + turn-order speed. Listed in team order so the shared
+    // orderByTurnPriority tiebreak resolves team → attacker → enemy at equal speeds.
+    const teamTurnOrderActors = useMemo(
+        () =>
+            teamShips.map((t, i) => ({
+                name: (t.shipId && getShipById(t.shipId)?.name) || `Team ${i + 1}`,
+                speed: t.speed,
+            })),
+        [teamShips, getShipById]
+    );
+
     const teamActors = useMemo(
         () =>
             teamShips.map((t) => ({
@@ -523,6 +535,8 @@ const DPSCalculatorPage: React.FC = () => {
                                 isBest={bestConfig?.id === config.id}
                                 enemyAffinity={enemyAffinity}
                                 enemySecurity={enemySecurity}
+                                teamActors={teamTurnOrderActors}
+                                enemySpeed={enemySpeed}
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestTotalDamage={bestTotalDamage}
