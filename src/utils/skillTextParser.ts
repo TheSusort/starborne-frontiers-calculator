@@ -652,7 +652,7 @@ const CRIT_POWER_EXTEND_RE =
  */
 export function parseCritPowerExtend(
     text: string | null | undefined
-): { turns: number; condition: Condition; scope?: 'active' | 'inflicted' } | null {
+): { turns: number; condition: Condition; scope: 'active' | 'inflicted' } | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     const m = CRIT_POWER_EXTEND_RE.exec(plain);

@@ -1341,20 +1341,24 @@ export function runCombat(input: CombatEngineInput): {
 
                 // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
                 // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
-                // No-op when the landing roll failed (no new entries were appended).
-                extendInflictedDoTs({
-                    abilities: [
-                        ...(firingSkill?.abilities ?? []),
-                        ...(passiveSkill?.abilities ?? []),
-                    ],
-                    ctx,
-                    effectiveCritDamage,
-                    extendChanceGate,
-                    corrosionEntries,
-                    infernoEntries,
-                    corrosionEntriesBefore,
-                    infernoEntriesBefore,
-                });
+                // Guarded by dotsLanded (like applyNewDoTs/applyAccumulators): when the
+                // landing roll failed nothing was appended, and skipping the call keeps
+                // the deterministic extendChanceGate schedule free of phantom draws.
+                if (dotsLanded) {
+                    extendInflictedDoTs({
+                        abilities: [
+                            ...(firingSkill?.abilities ?? []),
+                            ...(passiveSkill?.abilities ?? []),
+                        ],
+                        ctx,
+                        effectiveCritDamage,
+                        extendChanceGate,
+                        corrosionEntries,
+                        infernoEntries,
+                        corrosionEntriesBefore,
+                        infernoEntriesBefore,
+                    });
+                }
 
                 if (dotsLanded) {
                     applyAccumulators({ gatedSkill, pendingAccumulators });

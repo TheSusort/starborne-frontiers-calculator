@@ -350,7 +350,7 @@ export const AbilityCard: React.FC<Props> = ({
                         />
                         <Select
                             label="Scope"
-                            helpLabel="All active DoTs grows every standing Corrosion/Inferno. Only DoTs from this cast grows just the ones this skill applies this turn (e.g. Valerian's newly applied Corrosion)."
+                            helpLabel="All active DoTs grow every standing Corrosion/Inferno; Only DoTs from this cast grow only the ones this skill applies this turn (e.g. Valerian's newly applied Corrosion)."
                             value={config.scope ?? 'active'}
                             options={EXTEND_DOT_SCOPE_OPTIONS}
                             onChange={(value) =>
