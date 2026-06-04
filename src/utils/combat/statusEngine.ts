@@ -76,8 +76,9 @@ export interface StatusEngine {
     beginRound(round: number): void;
     /** Notification that a source actually fired a slot this round. 'attacker'
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
-     *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded;
-     *  team actor ids join in a later task). Applies timed scheduled buffs keyed
+     *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded by
+     *  per-team-actor cadence); team actor ids carry their own timed sets via
+     *  `teamSources`; unregistered ids no-op. Applies timed scheduled buffs keyed
      *  to (sourceId, slot) and increments per-active/per-charge accumulating
      *  stacks when sourceId === 'attacker'. Returns the buffNames of any TIMED enemy
      *  upserts the landing hook rejected this call (`resistedEnemy`), so the engine
