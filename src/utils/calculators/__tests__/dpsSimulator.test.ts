@@ -1900,6 +1900,87 @@ describe('simulateDPS', () => {
             expect(withExtend.summary.totalDamage).toBe(noExtend.summary.totalDamage);
         });
 
+        it("inflicted-scope extension grows ONLY this cast's newest Corrosion (Valerian)", () => {
+            // Attacker applies 1 Corrosion (3-turn duration) every round + a PASSIVE
+            // extend-dot {turns:1, scope:'inflicted', chanceFromCritPower:false} gated by a
+            // self-crit condition. crit 100 → the self-crit condition is always met, so the
+            // newest entry each round gets +1; older standing entries are untouched.
+            //
+            // Round structure (default speed): attacker applies, then enemy ticks+expires;
+            // activeDoTStates is read post-tick (post-expire). Entries tracked by application
+            // round A(r1), B(r2), C(r3). Apply at remainingRounds=3, +1 on the newest only,
+            // then expireStacks subtracts 1 at the enemy's turn:
+            //   R1: apply A(3) → extend A→4 → expire A→3.                  states: [A:3]
+            //   R2: apply B(3) → extend B→4 (A untouched=3) → expire A→2,B→3. states: [A:2, B:3]
+            //   R3: apply C(3) → extend C→4 (A=2,B=3 untouched) → expire A→1,B→2,C→3.
+            //                                                        states: [A:1, B:2, C:3]
+            const corrosion = dotAbility('cd', 'corrosion', 9, 3);
+            const inflictedExtend: Ability = {
+                id: 'ie',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, scope: 'inflicted' },
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                crit: 100,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                        { slot: 'passive', abilities: [inflictedExtend] },
+                    ],
+                },
+            });
+            const ticks = (i: number) =>
+                result.rounds[i].activeDoTStates
+                    .filter((s) => s.type === 'corrosion')
+                    .map((s) => s.ticksRemaining);
+            expect(ticks(0)).toEqual([3]);
+            expect(ticks(1)).toEqual([2, 3]);
+            expect(ticks(2)).toEqual([1, 2, 3]);
+        });
+
+        it('active-scope extension grows EVERY standing Corrosion each round (contrast)', () => {
+            // Same setup but scope 'active' (Provider semantics): every standing entry +1
+            // before the new one applies (Step 2.9, pre-application — so the just-applied
+            // entry is NOT extended this round but is each later round).
+            //   R1: extend(none) → apply A(3) → expire A→2.                states: [A:2]
+            //   R2: extend A→3 → apply B(3) → expire A→2,B→2.              states: [A:2, B:2]
+            //   R3: extend A→3,B→3 → apply C(3) → expire A→2,B→2,C→2.      states: [A:2, B:2, C:2]
+            const corrosion = dotAbility('cd', 'corrosion', 9, 3);
+            const activeExtend: Ability = {
+                id: 'ae',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, scope: 'active' },
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                crit: 100,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                        { slot: 'passive', abilities: [activeExtend] },
+                    ],
+                },
+            });
+            const ticks = (i: number) =>
+                result.rounds[i].activeDoTStates
+                    .filter((s) => s.type === 'corrosion')
+                    .map((s) => s.ticksRemaining);
+            expect(ticks(0)).toEqual([2]);
+            expect(ticks(1)).toEqual([2, 2]);
+            expect(ticks(2)).toEqual([2, 2, 2]);
+        });
+
         it('detonate-dot consumes active Inferno and pays it out as detonation damage', () => {
             const inferno = dotAbility('id', 'inferno', 15, 3);
             const detonate: Ability = {

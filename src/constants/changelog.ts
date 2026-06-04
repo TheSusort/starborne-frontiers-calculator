@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "DPS Calculator: team support ships and the enemy now take real speed-ordered turns — team buffs land when the ship actually acts (set each ship's Speed in Combat Settings), debuffs that land persist their full duration, and charged skills without damage now fire and apply their effects.",
     'DPS Calculator: a shorter same-tier buff no longer cuts a longer one short — when two ships apply the same buff (e.g. Attack Up III), the new copy only replaces it if it is a higher tier or lasts longer; otherwise the stronger/longer buff keeps its full duration.',
     "DPS Calculator: each ship config now shows a Turn Order strip — the round's actor order (team ships, the attacker, and the enemy) sorted by speed, so you can see at a glance who acts first.",
+    "DPS Calculator: Valerian's crit extension now extends only the newly applied Corrosion, not every active DoT — matching the in-game wording.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

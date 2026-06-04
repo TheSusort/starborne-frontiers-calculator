@@ -679,6 +679,15 @@ describe('parseExtendDoT', () => {
         expect(parseExtendDoT(text)).toBe(1);
     });
 
+    it('Provider-style extend has no inflicted scope (parseCritPowerExtend returns active)', () => {
+        // Provider's extend-all clause must NOT carry the 'inflicted' scope: it has no
+        // crit-power chance, so parseCritPowerExtend returns null and the ability stays
+        // scope 'active' via parseExtendDoT.
+        const text =
+            'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.';
+        expect(parseCritPowerExtend(text)).toBeNull();
+    });
+
     it('parses a multi-turn extension and the "(DoT)" abbreviation', () => {
         expect(parseExtendDoT('extends all Damage Over Time (DoT) effects by 2 turns.')).toBe(2);
     });
@@ -697,21 +706,24 @@ describe('parseExtendDoT', () => {
 });
 
 describe('parseCritPowerExtend', () => {
-    it('parses Valerian self-crit extension (chance = crit power)', () => {
+    it('parses Valerian self-crit extension with inflicted scope (chance = crit power)', () => {
+        // Valerian's EXACT refit-active third passive text (docs/ship-skills.csv).
         const text =
-            'After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied Corrosion is extended by 1 turn, with the extension chance equal to the Critical Power.';
+            'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to an enemy, including damage from damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.';
         expect(parseCritPowerExtend(text)).toEqual({
             turns: 1,
             condition: { subject: 'self-crit', derivable: true },
+            scope: 'inflicted',
         });
     });
 
-    it('parses Belladonna ally-triggered extension as ally-inflicts-debuff', () => {
+    it('parses Belladonna ally-triggered extension as ally-inflicts-debuff (inflicted scope)', () => {
         const text =
             'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert it. Upon converting Corrosion, this Unit extends the newly applied Acidic Decay status for 1 turn, with the chance to equal to its crit power.';
         expect(parseCritPowerExtend(text)).toEqual({
             turns: 1,
             condition: { subject: 'ally-inflicts-debuff', derivable: false },
+            scope: 'inflicted',
         });
     });
 

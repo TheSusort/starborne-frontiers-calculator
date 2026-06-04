@@ -658,7 +658,12 @@ function abilitiesFromText(text: string): PositionedAbility[] {
                 target: 'enemy',
                 trigger: 'on-cast',
                 conditions: [critExtend.condition],
-                config: { type: 'extend-dot', turns: critExtend.turns, chanceFromCritPower: true },
+                config: {
+                    type: 'extend-dot',
+                    turns: critExtend.turns,
+                    chanceFromCritPower: true,
+                    scope: critExtend.scope,
+                },
                 autoFilled: true,
             },
             pos: critExtendPos >= 0 ? critExtendPos : MAX_POS,

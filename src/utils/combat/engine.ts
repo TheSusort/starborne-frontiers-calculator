@@ -206,14 +206,15 @@ function foldTimedEnemyDebuffs(args: {
     return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
 
-// Step 2.9: Extend active ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
-// applied BEFORE this round's new DoTs so only pre-existing ones grow. Bombs are
-// excluded (delaying a one-shot detonation adds nothing). Each ability is gated by its
-// conditions (using ctx with binary roundCrit); a `chanceFromCritPower` extension
-// (Valerian) fires at exactly critPowerFactor frequency via the deterministic
-// extendChanceGate schedule. Sourced from BOTH the firing skill and the
-// always-active passive slot (Valerian's extension is a passive). The stateful gate is
-// passed in and called at the same sequence point as the original inline loop.
+// Step 2.9: Extend ACTIVE-scope ticking DoTs (Corrosion/Inferno) by extend-dot abilities —
+// applied BEFORE this round's new DoTs so only pre-existing ones grow (Provider's
+// "extends active Damage Over Time effects"). Bombs are excluded (delaying a one-shot
+// detonation adds nothing). Each ability is gated by its conditions (using ctx with binary
+// roundCrit); a `chanceFromCritPower` extension fires at exactly critPowerFactor frequency
+// via the deterministic extendChanceGate schedule. Sourced from BOTH the firing skill and
+// the always-active passive slot. The stateful gate is passed in and called at the same
+// sequence point as the original inline loop. 'inflicted'-scope extensions are handled
+// separately AFTER applyNewDoTs (see extendInflictedDoTs).
 function extendDoTs(args: {
     abilities: Ability[];
     ctx: ConditionContext;
@@ -224,6 +225,7 @@ function extendDoTs(args: {
 }): void {
     for (const ab of args.abilities) {
         if (ab.config.type !== 'extend-dot') continue;
+        if (ab.config.scope === 'inflicted') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
         if (ab.config.chanceFromCritPower) {
             const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
@@ -231,6 +233,41 @@ function extendDoTs(args: {
         }
         for (const e of args.corrosionEntries) e.remainingRounds += ab.config.turns;
         for (const e of args.infernoEntries) e.remainingRounds += ab.config.turns;
+    }
+}
+
+// Step 3a: Extend INFLICTED-scope DoTs — runs AFTER applyNewDoTs, extending ONLY the
+// Corrosion/Inferno entries THIS cast just appended (Valerian's "the newly applied
+// Corrosion ... extended by 1 turn"). `*EntriesBefore` are the container lengths captured
+// before applyNewDoTs, so the slice from that index onward is exactly what landed this cast.
+// Bombs are excluded (matching extendDoTs). Gating is identical to extendDoTs: ability
+// conditions vs ctx (binary roundCrit), then extendChanceGate(critPowerFactor) for a
+// chanceFromCritPower extension. If the landing roll failed, applyNewDoTs was skipped and
+// the slice is empty — a natural no-op.
+function extendInflictedDoTs(args: {
+    abilities: Ability[];
+    ctx: ConditionContext;
+    effectiveCritDamage: number;
+    extendChanceGate: (rate: number) => boolean;
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    corrosionEntriesBefore: number;
+    infernoEntriesBefore: number;
+}): void {
+    for (const ab of args.abilities) {
+        if (ab.config.type !== 'extend-dot') continue;
+        if (ab.config.scope !== 'inflicted') continue;
+        if (!conditionsMet(ab.conditions, args.ctx)) continue;
+        if (ab.config.chanceFromCritPower) {
+            const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
+            if (!args.extendChanceGate(critPowerFactor)) continue;
+        }
+        for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
+            args.corrosionEntries[i].remainingRounds += ab.config.turns;
+        }
+        for (let i = args.infernoEntriesBefore; i < args.infernoEntries.length; i++) {
+            args.infernoEntries[i].remainingRounds += ab.config.turns;
+        }
     }
 }
 
@@ -1280,6 +1317,10 @@ export function runCombat(input: CombatEngineInput): {
                 // draw). With nothing to apply, dotsLanded is vacuously true (no draw taken),
                 // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
                 dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
+                // Capture pre-application lengths so 'inflicted'-scope extensions touch only
+                // the entries this cast adds below (the slice from these indices onward).
+                const corrosionEntriesBefore = corrosionEntries.length;
+                const infernoEntriesBefore = infernoEntries.length;
                 if (dotsLanded) {
                     applyNewDoTs({
                         dotsConfig,
@@ -1297,6 +1338,23 @@ export function runCombat(input: CombatEngineInput): {
                             }),
                     });
                 }
+
+                // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
+                // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
+                // No-op when the landing roll failed (no new entries were appended).
+                extendInflictedDoTs({
+                    abilities: [
+                        ...(firingSkill?.abilities ?? []),
+                        ...(passiveSkill?.abilities ?? []),
+                    ],
+                    ctx,
+                    effectiveCritDamage,
+                    extendChanceGate,
+                    corrosionEntries,
+                    infernoEntries,
+                    corrosionEntriesBefore,
+                    infernoEntriesBefore,
+                });
 
                 if (dotsLanded) {
                     applyAccumulators({ gatedSkill, pendingAccumulators });
