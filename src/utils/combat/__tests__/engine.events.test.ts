@@ -91,26 +91,38 @@ const collect = (input: CombatEngineInput) => {
 };
 
 describe('runCombat event emission', () => {
-    it('emits one turn-started/turn-ended pair per round, in order', () => {
+    it('emits one started/ended pair per actor turn (attacker then enemy), in order', () => {
         const { events, result } = collect(baseInput());
         const rounds = result.rounds.length;
 
         const turnEvents = events.filter(
             (e) => e.type === 'turn-started' || e.type === 'turn-ended'
         );
-        // Exactly 2 per round
-        expect(turnEvents.length).toBe(rounds * 2);
+        // Phase 2: each round runs the attacker turn then the enemy turn, each emitting a
+        // started/ended pair → 4 turn events per round (rounds * 2 turns * 2 events).
+        expect(turnEvents.length).toBe(rounds * 4);
 
-        // Order: started(1), ended(1), started(2), ended(2), ...
+        // Order per round: attacker started, attacker ended, enemy started, enemy ended.
         for (let r = 1; r <= rounds; r++) {
-            const started = turnEvents[(r - 1) * 2];
-            const ended = turnEvents[(r - 1) * 2 + 1];
-            expect(started.type).toBe('turn-started');
-            expect(started.round).toBe(r);
-            expect(started.actorId).toBe('attacker');
-            expect(ended.type).toBe('turn-ended');
-            expect(ended.round).toBe(r);
-            expect(ended.actorId).toBe('attacker');
+            const base = (r - 1) * 4;
+            const attStarted = turnEvents[base];
+            const attEnded = turnEvents[base + 1];
+            const enemyStarted = turnEvents[base + 2];
+            const enemyEnded = turnEvents[base + 3];
+
+            expect(attStarted.type).toBe('turn-started');
+            expect(attStarted.round).toBe(r);
+            expect(attStarted.actorId).toBe('attacker');
+            expect(attEnded.type).toBe('turn-ended');
+            expect(attEnded.round).toBe(r);
+            expect(attEnded.actorId).toBe('attacker');
+
+            expect(enemyStarted.type).toBe('turn-started');
+            expect(enemyStarted.round).toBe(r);
+            expect(enemyStarted.actorId).toBe('enemy');
+            expect(enemyEnded.type).toBe('turn-ended');
+            expect(enemyEnded.round).toBe(r);
+            expect(enemyEnded.actorId).toBe('enemy');
         }
     });
 
