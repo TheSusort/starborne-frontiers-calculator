@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.63.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: you can now set a minimum (or maximum) Effective HP as a stat limit — handy when you care about overall survivability rather than tuning HP and Defense separately. Works as a soft limit or a hard requirement like any other stat.',
     'Major DPS Calculator upgrade powered by skill-text parsing: ship skills are auto-parsed into editable abilities (damage, DoTs, buffs, debuffs, conditionals, charge mechanics) in a new ability editor, and the simulation models far more mechanics — conditional gates, deterministic crits, per-type debuff landing, declining enemy HP, detonations, and more.',
+    'DPS Calculator: charge gains on passive skills now feed the charged-skill cadence instead of being ignored — ships like Hermes, Asphodel, Hemlock, Oleander, and Cobalt reach their charged skill faster.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
