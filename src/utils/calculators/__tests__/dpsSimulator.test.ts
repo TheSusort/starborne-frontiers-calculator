@@ -2974,4 +2974,188 @@ describe('simulateDPS', () => {
             expect(hasResisted(4)).toBe(true);
         });
     });
+
+    describe('buff family overwrite rules', () => {
+        // Deterministic Thresh/Grif analogue (game-verified 2026-06-04):
+        //   Grif (team actor, speed 140 → acts before the attacker every round) grants
+        //   Attack Up III on his CHARGED skill (duration 3).
+        //   Thresh (attacker) grants himself Attack Up III on his own ACTIVE skill (duration 1).
+        // Same family, same tier: the new application wins only if it outlasts the remaining
+        // window. Thresh's 1-turn cast must NEVER clobber Grif's longer window, and the round
+        // they collide must fold exactly ONE 30% stack (not two).
+        const attackUpIII = (duration: number) => ({
+            id: `aiii-${duration}`,
+            type: 'buff' as const,
+            target: 'self' as const,
+            trigger: 'on-cast' as const,
+            conditions: [],
+            config: {
+                type: 'buff' as const,
+                buffName: 'Attack Up III',
+                parsedEffects: { attack: 30 },
+                stacks: 1,
+                isStackable: false,
+                duration,
+            },
+        });
+
+        // Attacker skills: a flat-damage active + the attacker's own Attack Up III (dur 1)
+        // active buff ability (Thresh's path). No charged skill (chargeCount 0).
+        const attackerSkills = (withOwnBuff: boolean): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 200 },
+                        },
+                        ...(withOwnBuff ? [attackUpIII(1)] : []),
+                    ],
+                },
+            ],
+        });
+
+        const base = {
+            attack: 15000,
+            crit: 0, // deterministic: directDamage scales purely with the buff fold
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 100_000_000, // never dies — keep damage scaling linear
+            rounds: 4,
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            hacking: 250,
+            enemySecurity: 100,
+        };
+
+        // Grif's team buff (Attack Up III). Helper lets us flip skillSource/cadence.
+        const grifBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+            id: 'grif-aiii',
+            buffName: 'Attack Up III',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 30 },
+            skillSource: 'active' as const,
+            skillDuration: 3,
+            ...overrides,
+        });
+
+        it('a same-tier 1-turn self buff never clobbers the team buff; collision folds ONE stack', () => {
+            // Grif re-applies Attack Up III (dur 3) on EVERY team turn (active slot, speed 140
+            // → before the attacker each round). The attacker re-applies its own Attack Up III
+            // (dur 1) every round (active slot). They collide every round.
+            //
+            // Trace (faster team applies into selfMap BEFORE the attacker's snapshot):
+            //   r1: team upserts AU III dur 3 → 3 remaining. Attacker snapshot sees it.
+            //       Attacker applies its own AU III dur 1: 1 <= 3 remaining, same tier → BLOCKED.
+            //       Fold sees the scheduled snapshot entry (one 30% stack) only. Post-turn 3→2.
+            //   r2: team upserts dur 3 (3 > 2 remaining → refresh). Snapshot 3. Attacker dur 1
+            //       blocked. One stack. Post-turn 3→2. (… repeats every round.)
+            // So the collision run must equal the control run (team buff only) in EVERY round —
+            // the attacker's 1-turn buff is always absorbed, contributing nothing extra.
+            const control = simulateDPS({
+                ...base,
+                shipSkills: attackerSkills(false),
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [grifBuff()],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+            const collision = simulateDPS({
+                ...base,
+                shipSkills: attackerSkills(true),
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [grifBuff()],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+
+            // Attack Up III present every round in the collision run.
+            for (const round of collision.rounds) {
+                expect(round.activeSelfBuffs.map((b) => b.buffName)).toContain('Attack Up III');
+            }
+            // Single 30% fold: collision === control in EVERY round (no double-count).
+            for (let i = 0; i < base.rounds; i++) {
+                expect(collision.rounds[i].directDamage).toBe(control.rounds[i].directDamage);
+            }
+        });
+
+        it('decay: a team buff applied ONCE keeps its full window despite a colliding 1-turn buff', () => {
+            // The user's exact decay scenario. Grif grants Attack Up III (dur 3) on his CHARGED
+            // skill, applied ONCE; a colliding 1-turn Attack Up III lands the SAME round only.
+            //
+            // To make the collision a true one-shot (so decay to absent is observable), the
+            // 1-turn buff is carried by a SECOND faster team actor whose charge fires only on
+            // round 1 — rather than the attacker's own active buff, which would re-apply every
+            // round and keep Attack Up III alive past Grif's window (that re-application case is
+            // covered by the first test). Both team actors are faster than the attacker, so
+            // both apply BEFORE the attacker's snapshot each round.
+            //
+            // Trace (team actors act before the attacker; attacker owner post-turn decrements
+            // self at round end):
+            //   r1: Grif charged → AU III dur 3 → 3 remaining. Collider charged → AU III dur 1:
+            //       1 <= 3 same tier → BLOCKED. Attacker snapshot sees AU III @3 (VISIBLE).
+            //       Post-turn 3→2.
+            //   r2: neither team source charges (banking). No application. Snapshot AU III @2
+            //       (VISIBLE). Post-turn 2→1.
+            //   r3: banking. Snapshot AU III @1 (VISIBLE). Post-turn 1→0 → EXPIRED.
+            //   r4: window elapsed; no re-application until each source's next charge (r5+).
+            //       Snapshot empty → ABSENT.
+            const result = simulateDPS({
+                ...base,
+                rounds: 4,
+                shipSkills: attackerSkills(false), // attacker carries NO own buff here
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        // chargeCount 4, startCharged true → charged turns at 1, 5, 9…
+                        // Within rounds 1-4 Grif fires charged ONLY on round 1.
+                        chargeCount: 4,
+                        startCharged: true,
+                        selfBuffs: [grifBuff({ skillSource: 'charge', skillDuration: 3 })],
+                        enemyDebuffs: [],
+                    },
+                    {
+                        id: 'collider',
+                        speed: 130, // still faster than the attacker (100)
+                        chargeCount: 4,
+                        startCharged: true, // charged only on round 1 within rounds 1-4
+                        selfBuffs: [grifBuff({ skillSource: 'charge', skillDuration: 1 })],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+
+            const present = (i: number) =>
+                result.rounds[i].activeSelfBuffs.map((b) => b.buffName).includes('Attack Up III');
+            // r1: applied dur 3 (remaining 3) — present.
+            expect(present(0)).toBe(true);
+            // r2: remaining 2 — present (the 1-turn collision was blocked, did NOT shorten it).
+            expect(present(1)).toBe(true);
+            // r3: remaining 1 — present.
+            expect(present(2)).toBe(true);
+            // r4: window elapsed (expired at end of r3); no re-application until r5 — absent.
+            expect(present(3)).toBe(false);
+        });
+    });
 });

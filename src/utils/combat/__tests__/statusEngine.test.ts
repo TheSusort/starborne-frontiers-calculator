@@ -524,6 +524,159 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
     });
 });
 
+describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
+    // Rule: a new application within a buff family (name minus the I/II/III tier suffix)
+    // wins only if (a) its tier is higher, or (b) same tier AND its duration > the existing
+    // entry's remaining turns. Otherwise it is blocked and the existing entry persists.
+    //
+    // Exercised on BOTH upsert sites: scheduled buffs (sourceFired → upsertBuff) and the
+    // attacker's own timed ability statuses (applyTimedAbilityStatus).
+
+    const timedAbility = (
+        buffName: string,
+        duration: number,
+        attack: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName, stacks: 1, parsedEffects: { attack } },
+        side: 'self',
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+    });
+
+    describe('scheduled sourceFired path (upsertBuff)', () => {
+        it('equal tier, existing remaining >= new duration → BLOCKED (existing untouched)', () => {
+            // Team source applies Attack Up III (dur 3) on round 1. Then the attacker source
+            // applies its own Attack Up III (dur 1) the same round. 1 <= 3 remaining → blocked.
+            const teamBuff = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 3 });
+            const attackerBuff = makeBuff('Attack Up III', {
+                skillSource: 'active',
+                skillDuration: 1,
+            });
+            const eng = createStatusEngine({
+                selfBuffs: [attackerBuff],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // applies dur 3
+            eng.sourceFired('attacker', 'active', 1); // dur 1, equal tier, 1 <= 3 → blocked
+            // Single entry retaining the team buff's window — NOT clobbered to 1.
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 3 },
+            ]);
+        });
+
+        it('equal tier, new duration > remaining → OVERWRITES (refresh)', () => {
+            // A 2-turn buff re-applied next round has 1 remaining → 2 > 1 → refreshes.
+            const buff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+            const eng = createStatusEngine({ selfBuffs: [buff], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.sourceFired('attacker', 'active', 1);
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up II', turnsRemaining: 2 },
+            ]);
+            eng.decrementSide('self'); // 2 → 1
+            eng.beginRound(2);
+            eng.sourceFired('attacker', 'active', 2); // 2 > 1 remaining → refresh
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up II', turnsRemaining: 2 },
+            ]);
+        });
+
+        it('higher tier → OVERWRITES regardless of remaining', () => {
+            const tierII = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 5 });
+            const tierIII = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 1 });
+            const eng = createStatusEngine({
+                selfBuffs: [tierIII],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [tierII], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // Attack Up II, dur 5
+            eng.sourceFired('attacker', 'active', 1); // Attack Up III, dur 1 — higher tier wins
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 1 },
+            ]);
+        });
+
+        it('lower tier → BLOCKED (existing higher tier stays)', () => {
+            const tierIII = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 2 });
+            const tierI = makeBuff('Attack Up I', { skillSource: 'active', skillDuration: 5 });
+            const eng = createStatusEngine({
+                selfBuffs: [tierI],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [tierIII], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // Attack Up III, dur 2
+            eng.sourceFired('attacker', 'active', 1); // Attack Up I, dur 5 — lower tier, blocked
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 2 },
+            ]);
+        });
+    });
+
+    describe('applyTimedAbilityStatus path', () => {
+        it('equal tier, existing remaining >= new duration → BLOCKED (existing payload/identity untouched)', () => {
+            const longer = timedAbility('Attack Up III', 3, 50);
+            const shorter = timedAbility('Attack Up III', 1, 30);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([longer, shorter]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, longer); // dur 3
+            eng.applyTimedAbilityStatus(1, shorter); // dur 1, equal tier, 1 <= 3 → blocked
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            // Identity + payload of the longer (existing) status preserved.
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 3 });
+            expect(active[0].payload.parsedEffects).toEqual({ attack: 50 });
+        });
+
+        it('equal tier, new duration > remaining → OVERWRITES (refresh)', () => {
+            const status = timedAbility('Attack Up II', 2, 40);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([status]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, status);
+            eng.decrementSide('self'); // 2 → 1
+            eng.beginRound(2);
+            eng.applyTimedAbilityStatus(2, status); // 2 > 1 remaining → refresh
+            expect(eng.timedAbilityStatuses('self')[0].active).toEqual({
+                buffName: 'Attack Up II',
+                turnsRemaining: 2,
+            });
+        });
+
+        it('higher tier → OVERWRITES regardless of remaining', () => {
+            const tierII = timedAbility('Attack Up II', 5, 40);
+            const tierIII = timedAbility('Attack Up III', 1, 50);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([tierII, tierIII]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, tierII); // dur 5
+            eng.applyTimedAbilityStatus(1, tierIII); // higher tier, dur 1 → wins
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 1 });
+        });
+
+        it('lower tier → BLOCKED (existing higher tier stays)', () => {
+            const tierIII = timedAbility('Attack Up III', 2, 50);
+            const tierI = timedAbility('Attack Up', 5, 30);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([tierIII, tierI]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, tierIII); // dur 2
+            eng.applyTimedAbilityStatus(1, tierI); // lower tier, dur 5 → blocked
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 2 });
+        });
+    });
+});
+
 describe('landsTimedEnemyApplication hook (Task 7)', () => {
     it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty', () => {
         const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });

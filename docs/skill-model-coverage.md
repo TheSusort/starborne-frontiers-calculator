@@ -150,6 +150,17 @@ buff/charge-aura), source it from firing + passive.
   round. If the roll fails the application is skipped entirely. Recurring/aura debuffs (and
   accumulating stacks) keep a per-round roll — they re-enter the active set each round and must
   land anew. This replaces the Phase-1 per-round re-roll for all timed debuffs.
+- **Same-family overwrite rule (game-verified 2026-06-04).** Within a buff family (the buff name
+  minus its `I`/`II`/`III` tier suffix), a new application overwrites the existing entry only if
+  (a) its tier is higher, or (b) the tier is equal AND the new cast's duration is longer than the
+  existing buff's remaining turns. Otherwise the application is skipped and the stronger/longer
+  buff persists. Enforced at BOTH `statusEngine.ts` upsert sites (`upsertBuff` for scheduled/team
+  buffs and `applyTimedAbilityStatus` for the attacker's own buff/debuff abilities) via the shared
+  `familyApplicationWins` helper. Same-source re-applications still refresh (after the post-turn
+  decrement a 2-turn buff has 1 remaining, and `2 > 1`). A landed-but-family-blocked application is
+  silently absorbed — it landed (the landing roll ran first), the stronger buff simply stays, and
+  it is NOT recorded as resisted nor folded into the round totals. (DoT families — Corrosion/
+  Inferno/Bomb — are exempt: each tier is its own entity and stacks independently.)
 - **Action-fed status engine — `computeChargeSchedule` retired (Phase 2).** The status engine
   is now driven by real `sourceFired` action events rather than a synthetic charge schedule.
   Scheduled charge-slot buffs follow the attacker's actual bonus-charge cadence (the old

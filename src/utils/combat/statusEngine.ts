@@ -124,6 +124,21 @@ function deriveFamilyKey(name: string): { familyKey: string; tier: number } {
     return { familyKey: name.slice(0, m.index), tier: TIER_VALUES[m[1]] };
 }
 
+/** Game rule (user-verified 2026-06-04): within a buff family, a new application wins only
+ *  if its tier is higher, or the tier is equal and the new cast outlasts the remaining
+ *  window. Otherwise the application is skipped — the stronger/longer buff stays. Note that
+ *  same-source re-applications still refresh: after the post-turn decrement a 2-turn buff
+ *  has 1 remaining, and 2 > 1 so the fresh 2-turn cast wins. */
+function familyApplicationWins(
+    existing: BuffState | undefined,
+    tier: number,
+    duration: number
+): boolean {
+    if (!existing) return true;
+    if (existing.tier !== tier) return existing.tier < tier;
+    return duration > existing.turnsRemaining;
+}
+
 function isAccumulating(buff: SelectedGameBuff): boolean {
     return !!buff.stackTrigger && buff.isStackable;
 }
@@ -282,7 +297,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (typeof buff.skillDuration !== 'number') return;
         const { familyKey, tier } = deriveFamilyKey(buff.buffName);
         const existing = map.get(familyKey);
-        if (existing && existing.tier > tier) return;
+        if (!familyApplicationWins(existing, tier, buff.skillDuration)) return;
         map.set(familyKey, {
             buffName: buff.buffName,
             turnsRemaining: buff.skillDuration,
@@ -473,7 +488,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const map = status.side === 'self' ? selfMap : enemyMap;
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
         const existing = map.get(familyKey);
-        if (existing && existing.tier > tier) return;
+        // A landed-but-family-blocked application is silently absorbed: the landing roll
+        // was already consumed by the caller's gate (the family rule runs AFTER the landing
+        // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
+        // buff simply persists and this entry never enters the timed-ability folding.
+        if (!familyApplicationWins(existing, tier, status.duration)) return;
         map.set(familyKey, {
             buffName: status.payload.buffName,
             turnsRemaining: status.duration,

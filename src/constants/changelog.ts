@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Major DPS Calculator upgrade powered by skill-text parsing: ship skills are auto-parsed into editable abilities (damage, DoTs, buffs, debuffs, conditionals, charge mechanics) in a new ability editor, and the simulation models far more mechanics — conditional gates, deterministic crits, per-type debuff landing, declining enemy HP, detonations, and more.',
     'DPS Calculator: charge gains on passive skills now feed the charged-skill cadence instead of being ignored — ships like Hermes, Asphodel, Hemlock, Oleander, and Cobalt reach their charged skill faster.',
     "DPS Calculator: team support ships and the enemy now take real speed-ordered turns — team buffs land when the ship actually acts (set each ship's Speed in Combat Settings), debuffs that land persist their full duration, and charged skills without damage now fire and apply their effects.",
+    'DPS Calculator: a shorter same-tier buff no longer cuts a longer one short — when two ships apply the same buff (e.g. Attack Up III), the new copy only replaces it if it is a higher tier or lasts longer; otherwise the stronger/longer buff keeps its full duration.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
