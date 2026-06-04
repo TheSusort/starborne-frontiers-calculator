@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { computeChargeSchedule, computeBuffTimeline } from '../buffTimeline';
+import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { ConditionContext } from '../../abilities/evaluateConditions';
 
 function makeBuff(id: string, overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: {}, isStackable: false, ...overrides };
@@ -22,49 +23,41 @@ function makeAccumBuff(
     };
 }
 
-describe('computeChargeSchedule', () => {
-    it('returns empty array for 0 rounds', () => {
-        expect(computeChargeSchedule(2, false, 0)).toEqual([]);
+// Adapter so the ported expectations stay identical to the old computeBuffTimeline ones.
+const runTimeline = (
+    selfBuffs: SelectedGameBuff[],
+    enemyDebuffs: SelectedGameBuff[],
+    chargeCount: number,
+    startCharged: boolean,
+    totalRounds: number
+) => {
+    const eng = createStatusEngine({
+        selfBuffs,
+        enemyDebuffs,
+        chargeCount,
+        startCharged,
+        totalRounds,
     });
+    return Array.from({ length: totalRounds }, (_, i) => ({ round: i + 1, ...eng.step(i + 1) }));
+};
 
-    it('returns empty array when chargeCount is 0', () => {
-        expect(computeChargeSchedule(0, false, 5)).toEqual([]);
-    });
-
-    it('startCharged=false, chargeCount=2: charged on rounds 3,6', () => {
-        expect(computeChargeSchedule(2, false, 6)).toEqual([3, 6]);
-    });
-
-    it('startCharged=true, chargeCount=2: charged on rounds 1,4,7', () => {
-        expect(computeChargeSchedule(2, true, 7)).toEqual([1, 4, 7]);
-    });
-
-    it('chargeCount=1, startCharged=false: charged on rounds 2,4,6', () => {
-        expect(computeChargeSchedule(1, false, 6)).toEqual([2, 4, 6]);
-    });
-
-    it('chargeCount=3, startCharged=false: charged on round 4,8', () => {
-        expect(computeChargeSchedule(3, false, 8)).toEqual([4, 8]);
-    });
-});
-
-describe('computeBuffTimeline', () => {
+describe('createStatusEngine (computeBuffTimeline parity)', () => {
     it('returns one entry per round with correct round numbers', () => {
-        const result = computeBuffTimeline([], [], 2, false, 3);
+        const result = runTimeline([], [], 2, false, 3);
         expect(result).toHaveLength(3);
         expect(result[0].round).toBe(1);
         expect(result[2].round).toBe(3);
     });
 
     it('no buffs → empty lists every round', () => {
-        const result = computeBuffTimeline([], [], 2, false, 2);
+        const result = runTimeline([], [], 2, false, 2);
         expect(result[0].activeSelfBuffs).toEqual([]);
         expect(result[0].activeEnemyDebuffs).toEqual([]);
     });
 
     it('always-active buff (no skillSource) appears every round as recurring', () => {
         const buff = makeBuff('Overload');
-        const result = computeBuffTimeline([buff], [], 2, false, 3);
+        const result = runTimeline([buff], [], 2, false, 3);
         result.forEach((entry) => {
             expect(entry.activeSelfBuffs).toEqual([
                 { buffName: 'Overload', turnsRemaining: 'recurring' },
@@ -74,7 +67,7 @@ describe('computeBuffTimeline', () => {
 
     it('passive buff appears every round as recurring', () => {
         const buff = makeBuff('Passive Atk', { skillSource: 'passive1' });
-        const result = computeBuffTimeline([buff], [], 2, false, 2);
+        const result = runTimeline([buff], [], 2, false, 2);
         expect(result[0].activeSelfBuffs[0]).toEqual({
             buffName: 'Passive Atk',
             turnsRemaining: 'recurring',
@@ -87,7 +80,7 @@ describe('computeBuffTimeline', () => {
 
     it('recurring-duration buff appears every round', () => {
         const buff = makeBuff('Speed Up', { skillSource: 'active', skillDuration: 'recurring' });
-        const result = computeBuffTimeline([buff], [], 2, false, 2);
+        const result = runTimeline([buff], [], 2, false, 2);
         expect(result[0].activeSelfBuffs[0]).toEqual({
             buffName: 'Speed Up',
             turnsRemaining: 'recurring',
@@ -101,7 +94,7 @@ describe('computeBuffTimeline', () => {
     it('active buff (1t) applies each active round and expires before the next', () => {
         // chargeCount=2: r1=active, r2=active, r3=charged, r4=active
         const buff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
-        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        const result = runTimeline([buff], [], 2, false, 4);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
         expect(result[1].activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
         expect(result[2].activeSelfBuffs).toEqual([]); // r3: charged, no active buff
@@ -111,7 +104,7 @@ describe('computeBuffTimeline', () => {
     it('charge buff applies on charge rounds only and decrements each round', () => {
         // chargeCount=2, startCharged=false: r3 and r6 are charged
         const buff = makeBuff('Crit Power', { skillSource: 'charge', skillDuration: 2 });
-        const result = computeBuffTimeline([buff], [], 2, false, 6);
+        const result = runTimeline([buff], [], 2, false, 6);
         expect(result[0].activeSelfBuffs).toEqual([]); // r1: no buff
         expect(result[1].activeSelfBuffs).toEqual([]); // r2: no buff
         expect(result[2].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 2 }]); // r3: charged
@@ -130,7 +123,7 @@ describe('computeBuffTimeline', () => {
             sourceChargeCount: 2,
             sourceStartCharged: false,
         });
-        const result = computeBuffTimeline([], [concentrateFire], 2, true, 3);
+        const result = runTimeline([], [concentrateFire], 2, true, 3);
         // Round 1: charge for Los, but active for Judge → CF fires
         expect(result[0].activeEnemyDebuffs).toEqual([
             { buffName: 'Concentrate Fire', turnsRemaining: 1 },
@@ -147,7 +140,7 @@ describe('computeBuffTimeline', () => {
         // No sourceChargeCount/sourceStartCharged → uses current ship's chargedSet
         // Current ship: startCharged=true, chargeCount=2 → Round 1 is charge
         const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
-        const result = computeBuffTimeline([], [debuff], 2, true, 1);
+        const result = runTimeline([], [debuff], 2, true, 1);
         // Round 1 is charge for current ship, active debuff does not fire
         expect(result[0].activeEnemyDebuffs).toEqual([]);
     });
@@ -155,7 +148,7 @@ describe('computeBuffTimeline', () => {
     it('enemy debuffs tracked separately', () => {
         const selfBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
         const enemyDebuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
-        const result = computeBuffTimeline([selfBuff], [enemyDebuff], 2, false, 1);
+        const result = runTimeline([selfBuff], [enemyDebuff], 2, false, 1);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
         expect(result[0].activeEnemyDebuffs).toEqual([{ buffName: 'Def Down', turnsRemaining: 1 }]);
     });
@@ -164,7 +157,7 @@ describe('computeBuffTimeline', () => {
         // Both applied on active; they are separate entities, neither overwrites the other
         const infernoI = makeBuff('Inferno I', { skillSource: 'active', skillDuration: 2 });
         const infernoII = makeBuff('Inferno II', { skillSource: 'active', skillDuration: 2 });
-        const result = computeBuffTimeline([], [infernoI, infernoII], 0, false, 1);
+        const result = runTimeline([], [infernoI, infernoII], 0, false, 1);
         expect(result[0].activeEnemyDebuffs).toHaveLength(2);
         expect(result[0].activeEnemyDebuffs).toEqual(
             expect.arrayContaining([
@@ -178,7 +171,7 @@ describe('computeBuffTimeline', () => {
         // Active: Attack Up I (1t), Charge: Attack Up III (2t), chargeCount=2
         const activeI = makeBuff('Attack Up I', { skillSource: 'active', skillDuration: 1 });
         const chargeIII = makeBuff('Attack Up III', { skillSource: 'charge', skillDuration: 2 });
-        const result = computeBuffTimeline([activeI, chargeIII], [], 2, false, 6);
+        const result = runTimeline([activeI, chargeIII], [], 2, false, 6);
         expect(result[0].activeSelfBuffs[0]).toMatchObject({ buffName: 'Attack Up I' });
         expect(result[1].activeSelfBuffs[0]).toMatchObject({ buffName: 'Attack Up I' });
         // r3: charged fires Attack Up III (tier 3 > tier 1) → replaces
@@ -203,7 +196,7 @@ describe('computeBuffTimeline', () => {
     it('same tier re-application refreshes duration', () => {
         // Active: Attack Up II (2t), chargeCount=2 → r1,r2 active; r3 charged; r4 active
         const buff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
-        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        const result = runTimeline([buff], [], 2, false, 4);
         // r1: applied fresh → 2
         expect(result[0].activeSelfBuffs[0]).toMatchObject({
             buffName: 'Attack Up II',
@@ -230,7 +223,7 @@ describe('computeBuffTimeline', () => {
         // Active fires every round (no charge configured), buff lasts 2 turns
         // Buff should never drop below 2 on active rounds — always refreshed before snapshot
         const buff = makeBuff('Out. Damage Up III', { skillSource: 'active', skillDuration: 2 });
-        const result = computeBuffTimeline([buff], [], 0, false, 5);
+        const result = runTimeline([buff], [], 0, false, 5);
         // All rounds: active fires every round, decrement then refresh → always 2
         result.forEach((entry) => {
             expect(entry.activeSelfBuffs[0]).toMatchObject({
@@ -242,13 +235,13 @@ describe('computeBuffTimeline', () => {
 
     it('startCharged=true fires charged on round 1', () => {
         const buff = makeBuff('Crit Power', { skillSource: 'charge', skillDuration: 1 });
-        const result = computeBuffTimeline([buff], [], 2, true, 1);
+        const result = runTimeline([buff], [], 2, true, 1);
         expect(result[0].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 1 }]);
     });
 
     it('per-round accumulating buff starts at 0 and increments every round', () => {
         const buff = makeAccumBuff('Overload', 'per-round', { maxStacks: 10 });
-        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        const result = runTimeline([buff], [], 2, false, 4);
         // Round 1: first increment → 1 stack
         expect(result[0].activeSelfBuffs[0]).toEqual({
             buffName: 'Overload',
@@ -272,10 +265,10 @@ describe('computeBuffTimeline', () => {
         });
     });
 
-    it('per-round accumulating buff is absent from snapshot until round 1', () => {
+    it('per-round accumulating buff appears from round 1 with stacks tracking the round number', () => {
         // Confirm it doesn't appear at stacks=0 (before first increment)
         const buff = makeAccumBuff('Overload', 'per-round');
-        const result = computeBuffTimeline([buff], [], 2, false, 3);
+        const result = runTimeline([buff], [], 2, false, 3);
         // All 3 rounds should show stacks ≥ 1 (incremented before snapshot)
         result.forEach((entry, i) => {
             expect(entry.activeSelfBuffs[0].stacks).toBe(i + 1);
@@ -284,7 +277,7 @@ describe('computeBuffTimeline', () => {
 
     it('per-round accumulating buff is capped at maxStacks', () => {
         const buff = makeAccumBuff('Overload', 'per-round', { maxStacks: 3 });
-        const result = computeBuffTimeline([buff], [], 2, false, 5);
+        const result = runTimeline([buff], [], 2, false, 5);
         expect(result[2].activeSelfBuffs[0].stacks).toBe(3);
         expect(result[3].activeSelfBuffs[0].stacks).toBe(3);
         expect(result[4].activeSelfBuffs[0].stacks).toBe(3);
@@ -293,7 +286,7 @@ describe('computeBuffTimeline', () => {
     it('per-active accumulating buff only increments on active rounds', () => {
         // chargeCount=2, startCharged=false: active r1,r2 then charged r3
         const buff = makeAccumBuff('Core Charge I', 'per-active', { maxStacks: 10 });
-        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        const result = runTimeline([buff], [], 2, false, 4);
         expect(result[0].activeSelfBuffs[0].stacks).toBe(1); // r1: active
         expect(result[1].activeSelfBuffs[0].stacks).toBe(2); // r2: active
         expect(result[2].activeSelfBuffs[0].stacks).toBe(2); // r3: charged — no increment
@@ -303,7 +296,7 @@ describe('computeBuffTimeline', () => {
     it('per-charge accumulating buff only increments on charge rounds', () => {
         // chargeCount=2, startCharged=false: charged r3, r6
         const buff = makeAccumBuff('Blast', 'per-charge', { maxStacks: 10 });
-        const result = computeBuffTimeline([buff], [], 2, false, 4);
+        const result = runTimeline([buff], [], 2, false, 4);
         // r1,r2: active — no increment; r3: charged → 1; r4: active → still 1
         expect(result[0].activeSelfBuffs).toEqual([]); // 0 stacks → excluded from snapshot
         expect(result[1].activeSelfBuffs).toEqual([]);
@@ -313,7 +306,7 @@ describe('computeBuffTimeline', () => {
 
     it('accumulating buff with rate > 1 increments by rate each trigger', () => {
         const buff = makeAccumBuff('Blast', 'per-round', { stacks: 2, maxStacks: 10 });
-        const result = computeBuffTimeline([buff], [], 2, false, 3);
+        const result = runTimeline([buff], [], 2, false, 3);
         expect(result[0].activeSelfBuffs[0].stacks).toBe(2);
         expect(result[1].activeSelfBuffs[0].stacks).toBe(4);
         expect(result[2].activeSelfBuffs[0].stacks).toBe(6);
@@ -322,11 +315,221 @@ describe('computeBuffTimeline', () => {
     it('deduplicates always-active buffs with the same buffName', () => {
         const buff1 = makeBuff('Overload');
         const buff2 = makeBuff('Overload'); // same name, different instance
-        const result = computeBuffTimeline([buff1, buff2], [], 2, false, 2);
+        const result = runTimeline([buff1, buff2], [], 2, false, 2);
         expect(result[0].activeSelfBuffs).toHaveLength(1);
         expect(result[0].activeSelfBuffs[0]).toEqual({
             buffName: 'Overload',
             turnsRemaining: 'recurring',
         });
+    });
+
+    it('throws when step is called out of sequence', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 3,
+        });
+        expect(eng.step(1)).toBeDefined();
+        // skipping round 2 → must throw with the expected-round message
+        expect(() => eng.step(3)).toThrow(/expected round 2/);
+        // repeating a round → must throw with the expected-round message
+        const eng2 = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 3,
+        });
+        eng2.step(1);
+        expect(() => eng2.step(1)).toThrow(/expected round 2/);
+    });
+
+    it('throws when step is called beyond totalRounds', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        eng.step(1);
+        eng.step(2);
+        // The charge schedule was computed for 2 rounds — round 3 must fail loudly.
+        expect(() => eng.step(3)).toThrow(/beyond totalRounds 2/);
+    });
+
+    it('rejects applyTimedAbilityStatus before the first step (round 0)', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        const status = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 10 } },
+            side: 'self' as const,
+            sourceSlot: 'active' as const,
+            duration: 2,
+            conditions: [],
+            kind: 'timed' as const,
+        };
+        // lastRound starts at 0 — the equality check alone would accept round 0.
+        expect(() => eng.applyTimedAbilityStatus(0, status)).toThrow(/rounds are 1-based/);
+    });
+});
+
+describe('createStatusEngine — ability statuses (Task 6)', () => {
+    it('timed ability status applied round 2 (duration 2) is visible rounds 2-3, gone round 4', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 5,
+        });
+        const status: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 2,
+            conditions: [],
+            kind: 'timed',
+        };
+        eng.registerAbilityStatuses([status]);
+
+        eng.step(1);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+
+        eng.step(2);
+        eng.applyTimedAbilityStatus(2, status);
+        expect(eng.timedAbilityStatuses('self').map((s) => s.payload.buffName)).toEqual([
+            'Attack Up',
+        ]);
+
+        eng.step(3);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1); // still within window
+
+        eng.step(4);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0); // expired
+    });
+
+    it('tier precedence: a lower-tier ability status does not displace an applied higher tier', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 3,
+        });
+        const tierTwo: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up II', stacks: 1, parsedEffects: { attack: 40 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 3,
+            conditions: [],
+            kind: 'timed',
+        };
+        const tierOne: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 3,
+            conditions: [],
+            kind: 'timed',
+        };
+        eng.registerAbilityStatuses([tierTwo, tierOne]);
+        eng.step(1);
+        eng.applyTimedAbilityStatus(1, tierTwo);
+        eng.applyTimedAbilityStatus(1, tierOne); // same family, lower tier → ignored
+        const active = eng.timedAbilityStatuses('self');
+        expect(active.map((s) => s.payload.buffName)).toEqual(['Attack Up II']);
+    });
+
+    it('accumulating ability status stacks per-active and excludes from snapshot at 0', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 4,
+        });
+        const accum: RegisteredAbilityStatus = {
+            payload: { buffName: 'Momentum', stacks: 1, parsedEffects: { critDamage: 10 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 'recurring',
+            conditions: [],
+            kind: 'accumulating',
+            maxStacks: 5,
+            stackTrigger: 'per-active',
+        };
+        eng.registerAbilityStatuses([accum]);
+        const baseCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+        // chargeCount=2, startCharged=false → active r1,r2, charged r3, active r4
+        eng.step(1);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(1);
+        eng.step(2);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        eng.step(3); // charged → no increment
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        const r4 = eng.step(4);
+        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(3);
+        // It must NOT leak into the scheduled snapshot (engine appends it separately).
+        expect(r4.activeSelfBuffs).toEqual([]);
+    });
+
+    it('aura ability status is included only when its conditions pass', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        const aura: RegisteredAbilityStatus = {
+            payload: { buffName: 'Focus', stacks: 1, parsedEffects: { crit: 15 } },
+            side: 'self',
+            sourceSlot: 'passive',
+            duration: 'recurring',
+            conditions: [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 1,
+                },
+            ],
+            kind: 'aura',
+        };
+        eng.registerAbilityStatuses([aura]);
+        const ctx = (debuffCount: number): ConditionContext => ({
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: debuffCount,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        });
+        eng.step(1);
+        expect(eng.activeAbilityStatuses('self', ctx(0))).toHaveLength(0);
+        expect(eng.activeAbilityStatuses('self', ctx(2))).toHaveLength(1);
     });
 });

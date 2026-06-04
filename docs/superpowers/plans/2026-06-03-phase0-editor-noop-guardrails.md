@@ -18,7 +18,7 @@
 
 ---
 
-### Task 1: Branch + shared sim-coverage constants
+## Task 1: Branch + shared sim-coverage constants
 
 **Files:**
 - Create: `src/components/skills/simCoverage.ts`
@@ -77,7 +77,7 @@ Expected: no errors.
 
 ---
 
-### Task 2: AbilityTypePicker — mark the Utility category
+## Task 2: AbilityTypePicker — mark the Utility category
 
 **Files:**
 - Modify: `src/components/skills/AbilityTypePicker.tsx`
@@ -127,7 +127,7 @@ git commit -m "feat: mark not-simulated ability types in the type picker"
 
 ---
 
-### Task 3: AbilityCard — not-simulated note + passive-slot warning
+## Task 3: AbilityCard — not-simulated note + passive-slot warning
 
 **Files:**
 - Modify: `src/components/skills/AbilityCard.tsx`
@@ -223,7 +223,7 @@ git commit -m "feat: sim-coverage notices on ability cards (not-simulated types,
 
 ---
 
-### Task 4: SkillEditorModal — thread the slot through
+## Task 4: SkillEditorModal — thread the slot through
 
 **Files:**
 - Modify: `src/components/skills/SkillEditorModal.tsx:134-147`
@@ -265,7 +265,7 @@ git commit -m "feat: thread slot into AbilityCard for passive-slot warnings"
 
 ---
 
-### Task 5: Changelog, full verification, PR
+## Task 5: Changelog, full verification, PR
 
 **Files:**
 - Modify: `src/constants/changelog.ts` (`UNRELEASED_CHANGES`, line 8)

@@ -2,14 +2,16 @@
 
 > Living document. Last audited **2026-06-03** on branch `feat/skill-ability-editor`.
 > Updated **2026-06-03** after the deterministic-crit + hard-gating ship (spec 2026-06-03-deterministic-crit-and-hard-gating-design.md).
+> Updated **2026-06-03** after the combat-engine Phase 1 ship (spec 2026-06-03-combat-engine-phase1-design.md).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
 
 **Pipeline:** `skillTextParser.ts` + `buildShipAbilities.ts` (auto-fill) → `ShipSkills`
 (`src/types/abilities.ts`) → editor (`src/components/skills/*`) → sim inputs
-(`configToSimInputs.ts`, `buffAbilityConverters.ts`) → `dpsSimulator.ts` +
-`applyAbilities.ts` / `evaluateConditions.ts` / `roundContext.ts` / `buffTimeline.ts`.
+(`configToSimInputs.ts`, `buffAbilityConverters.ts`) → `dpsSimulator.ts` (thin adapter
+over `runCombat`) + `applyAbilities.ts` / `evaluateConditions.ts` / `roundContext.ts` /
+`src/utils/combat/*` (`engine.ts`, `statusEngine.ts`, `abilityStatusGating.ts`).
 
 ---
 
@@ -22,8 +24,8 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 | `damage` | ✅ multiplier, `hits`, `noCrit`, scaling+cap, hp-threshold & enemy-effect & ally-gates as conditions | ✅ all incl. scaling | ✅ | ✅ `gateFiringAbilities` gates the ability — EXCEPT the bare scaling-source condition, which scales only (Meiying: base 190% hits everyone, +90% Supporter-only). A scaling condition WITH `countComparator` gates too. | ✅ `scaledBonus` on `conditions[scaling.conditionIndex]` | **firing + passive** (passive damage = gated extra hit, e.g. Judge) |
 | `additional-damage` | ✅ `parseSecondaryDamage` (hp/def %) | ✅ | ✅ | ✅ `gateFiringAbilities` (`applyAbilities.ts`) | ❌ | firing only |
 | `modifier` | ✅ `parseModifiers` (outgoingDamage, critDamage, defPen flat + for-each scaling) | ⚠️ all except `isMultiplicative` (hidden, no-op) | ✅ | ✅ per-round, full `conditionsMet` (`applyAbilities.ts:37`) | ✅ | **firing + passive** |
-| `buff` | ✅ via `buildSkillBuffAutoFill` + `detectGrantConditions` | ✅ (stacks, duration; `stackTrigger`/`maxStacks` come from picker, not directly editable) | ✅ via static conversion → `SelectedGameBuff` → `computeBuffTimeline` | ⚠️ **static gate only** at conversion time; never re-evaluated per round (`buffAbilityConverters.ts:117`) | stacks (accumulating via `stackTrigger`) | all slots (routed by `skillSource`) |
-| `debuff` | ✅ same + `application` (inflict/apply) | ✅ | ✅ (landing roll: hacking vs security for inflict; affinity for apply) | ⚠️ static gate only | stacks | all slots |
+| `buff` | ✅ via `buildSkillBuffAutoFill` + `detectGrantConditions` | ✅ (stacks, duration; `stackTrigger`/`maxStacks` come from picker, not directly editable) | ✅ via combat engine's status machinery (`statusEngine.ts`); `SelectedGameBuff` conversion remains **only** for the DPS page preview and manual/team picker paths | ✅ **dynamic** — timed: gated at application (each cast); aura/accumulating: per-round effect inclusion; live-subject rule: derivable conditions on non-derivable subjects neutralized to always; manual (non-derivable) thresholds keep literal gating (`abilityStatusGating.ts`) | stacks (accumulating via `stackTrigger`) | all slots (routed by `skillSource`) |
+| `debuff` | ✅ same + `application` (inflict/apply) | ✅ | ✅ (landing roll: hacking vs security for inflict; affinity for apply); flows directly into the combat engine's status machinery | ✅ **dynamic** — same gating rules as buff (timed at application; aura per-round; live-subject rule) | stacks | all slots |
 | `dot` | ✅ `buildDoTAutoFill` (active/charged slots only — never passive) | ✅ (duration finite only) | ✅ Step 3, gated by hacking landing roll | ✅ `gateFiringAbilities` (`dotsFromSkill`) | ❌ | firing only |
 | `extend-dot` | ✅ `parseExtendDoT` + `parseCritPowerExtend` | ✅ | ✅ Step 2.9 (corrosion+inferno, not bombs) | ✅ per-round `conditionsMet` against the payload ctx (binary self-crit) + deterministic `chanceFromCritPower` schedule | — | **firing + passive** (Valerian fix) |
 | `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
@@ -86,7 +88,7 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 | `Ability.target` | Editor exposes 5 values; sim only distinguishes self-vs-enemy when routing buff/debuff conversion. `ally`/`all-allies`/`all-enemies` have no distinct sim meaning (all-allies modifiers fold into self — correct for single-ship DPS). |
 | `modifier.isMultiplicative` | Deliberate no-op, documented in `applyAbilities.ts:38-40`; hidden in editor. |
 | `modifier.channel` `outgoingHeal` / `incomingDamage` | No DPS bucket — silently dropped (`applyAbilities.ts:68`). |
-| `buff/debuff.duration` `'recurring'` or `undefined` | Treated as permanent/always-active in the timeline (`buffTimeline.ts:52-60`). |
+| `buff/debuff.duration` `'recurring'` or `undefined` | Treated as permanent always-active aura in the status engine (included every round while its conditions pass). |
 | `buff/debuff.maxStacks` | Only caps **accumulating** buffs; ignored otherwise. |
 | `buff/debuff.stackTrigger` | Consumed by the timeline, but not directly editable (comes from the buff picker / parser). |
 | `Condition.buffName` on `enemy-debuff` | Ignored — enemy-debuff count is name-agnostic by design. |
@@ -106,7 +108,7 @@ forgetting this silently drops passive-sourced abilities (the Valerian extend-do
 |---|---|
 | `modifierTotalsFromAbilities` | firing **+ passive** ✅ |
 | extend-dot loop | firing **+ passive** ✅ |
-| buff/debuff (via timeline `skillSource`) | all slots ✅ |
+| buff/debuff (via status engine; `skillSource` routes scheduled buffs, ability statuses registered at engine creation) | all slots ✅ |
 | `damageInputsFromSkill` | firing **+ passive** — the passive slot's damage ability is gated per round and added as an extra hit (Judge's start-of-round 60% vs <50% HP). Passive `additional-damage`/`secondary` still firing-only (no known ship). |
 | `secondaryFromSkill` | firing only |
 | `dotsFromSkill` | firing only — **a `dot` added to the passive slot in the editor is a silent no-op** (parser never emits passive DoTs, but the editor allows it) |
@@ -118,27 +120,41 @@ buff/charge-aura), source it from firing + passive.
 
 ---
 
-## 5. Buff/debuff path: static gating semantics
+## 5. Buff/debuff path: in-loop application semantics (combat engine Phase 1)
 
-- Buff/debuff abilities never reach the sim directly. They are converted **once** (per
-  config+enemyType memo) by `buffAbilitiesToSelectedBuffs` → `SelectedGameBuff` →
-  `computeBuffTimeline` schedules them per round.
-- **Static gate:** `staticGateConditions` (`buffAbilityConverters.ts:100-105`) checks
-  `conditionsMet` against a **sentinel context** (presence counts = 1, "satisfiable in
-  principle"). Derivable count-threshold gates are neutralized to `always` so a literal
-  `gte 4` isn't wrongly compared against sentinel 1; **manual** thresholds keep literal
-  gating. Real excludes today: enemy-type mismatch and manual-off toggles.
-- **Once scheduled, conditions are never re-evaluated per round.** A "gain Attack Up
-  when enemy has ≥3 debuffs" buff is either always on the timeline or never — the
-  per-round debuff count doesn't gate it. (Modifier abilities DO re-evaluate per round;
-  that's the current workaround for condition-sensitive stat effects.)
-- **No-double-count invariant:** the sim reads only damage/additional/dot/extend/
-  detonate/accumulate/charge/modifier types from `shipSkills`; buff/debuff effects enter
-  only via the converted `SelectedGameBuff` arrays. Disjoint by construction.
-- Scheduling info (`skillSource`, `skillDuration`) is rebuilt at conversion (slot →
-  `skillSource`, `config.duration` → `skillDuration`). Feeding converter output that
-  lacks scheduling into `computeBuffTimeline` makes it permanent (over-counts) — known
-  trap.
+- **Buff/debuff abilities flow directly into the combat engine** (`src/utils/combat/engine.ts`
+  + `statusEngine.ts`). At engine creation, all buff/debuff abilities in `shipSkills.slots` are
+  registered with the status engine (classified as timed, aura, or accumulating). The static
+  `SelectedGameBuff` conversion path (`buffAbilitiesToSelectedBuffs`) now serves **only** the
+  DPS page preview (merged attacker buff totals display) and the manual/team buff pickers — it
+  is no longer the sim's source of truth.
+- **No-double-count invariant:** buff/debuff abilities enter the engine from `shipSkills`
+  directly; manual picker buffs and team-ship buffs remain `SelectedGameBuff` arrays and enter
+  via `selfBuffs`/`enemyDebuffs`. The two paths are disjoint by construction.
+- **Dynamic gating (live-subject rule):**
+  - *Timed* (finite `duration`): gated at application — each round the source slot fires, the
+    ability's (live-gated) conditions are evaluated against the current round context. If the
+    gate passes the status is applied for its window; if not, the cast is skipped. A later cast
+    of the same slot can still apply it if conditions later satisfy.
+  - *Aura* (`duration: 'recurring'`/`undefined`, or passive slot): held in an aura list; included
+    in each round's snapshot only when its conditions pass that round (can flicker on/off).
+  - *Accumulating* (`stackTrigger && isStackable`): stack accumulation is unconditional; per-round
+    effect inclusion is gated (aura rule).
+  - **Live-subject rule:** derivable conditions on subjects the Phase-1 sim cannot derive (e.g.
+    `adjacent-ally`, `enemy-buff`) are neutralized to `always`, preserving the old static gate's
+    "satisfiable in principle" semantics. Manual (non-derivable) thresholds keep literal gating
+    (`abilityStatusGating.ts:liveGateConditions`).
+- **Per-round landing re-roll retained** for ALL debuffs in Phase 1: debuff ability statuses join
+  the same per-round `debuffLandingGate` re-roll as scheduled debuffs. Application-time roll-with-
+  persistence is a Phase 2 correctness item.
+- **Charge-cadence quirk retained:** the status engine's charge schedule (`computeChargeSchedule`)
+  does not know about bonus charges from `charge` abilities, while the engine's real action cadence
+  does (exactly as the old timeline diverged from the sim). Not fixed — noted.
+- **Ability self-buffs visible to modifier gates:** after Phase 1, ability-sourced self-buff names
+  (timed + aura currently active) and ability-sourced crit totals are included in `modifierCtx`
+  (`selfBuffNames` + `effectiveCritRate`). This means a `modifier` ability gated on `self-buff X`
+  will correctly see a buff X that was applied by another ability in the same cast. Locked by
+  golden scenario 15.
 
 ---
 
@@ -152,16 +168,28 @@ configure it and it looks like it works, but it does nothing".
 > for the enemy HP dimension (formerly item 6), are all shipped. Ability ordering:
 > Tier 1 (text-order emission from parser) and Tier 2 (order-aware gating overlay +
 > editor reorder buttons) are shipped; Tier 3 (reactive event dispatch) is still deferred.
+>
+> **Shipped 2026-06-03 (Phase 0, PR #76 — feat/editor-noop-guardrails):**
+> - Item 1: Editor guardrails (no-op type warnings, passive-slot DoT/charge/detonate validation).
+>
+> **Shipped 2026-06-03 (combat-engine Phase 1, this branch — feat/combat-engine-core):**
+> - Item 2: Dynamic per-round buff/debuff gating via the combat engine — timed: at application;
+>   aura/accumulating: per-round effect inclusion; live-subject rule. Crocus/Nuqtu/APEX threshold
+>   buffs now switch on/off live.
+>
+> **Phase 2 pointers (not yet started):**
+> - Real actor turns: team ships and the enemy with speed/turn meter (Phase 2 combat engine).
+> - Application-time debuff landing with persistence (roll once on apply; persist or miss the full
+>   window rather than re-rolling every round).
+> - Post-turn duration decrement on the owner (currently status engine decrements at the top of
+>   the next round as a pre-turn step, equivalent but diverges once multiple actors are in play).
+> - Reactive triggers (`on-crit`, `on-attacked`, Phase 3).
 
-1. **Editor fields + validation for the no-op types** — either render config fields for
-   heal/shield/cleanse/purge/control (and visibly mark them "not simulated in DPS"), or
-   hide them from the DPS editor's type picker until a calc consumes them. Also: warn or
-   block `dot`/`charge`/`detonate` on the passive slot (silent no-ops today).
-2. **Dynamic per-round buff gating** (deferred from Phase 3b) — re-evaluate buff/debuff
-   conditions per round instead of static include/exclude. Needs a condition-aware
-   timeline (or per-round filtering of `activeSelfBuffs` by their source ability's
-   conditions). The biggest correctness win for ships like Crocus/Nuqtu/APEX
-   (threshold-gated buffs).
+1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
+   feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
+   heal/shield/cleanse/purge/control; passive slot warns on `dot`/`charge`/`detonate` (silent no-ops).
+2. **Dynamic per-round buff gating** *(shipped 2026-06-03, this branch — combat-engine Phase 1,
+   feat/combat-engine-core)* — see §5 above.
 3. **Passive-slot sourcing audit** — extend firing+passive sourcing to `charge` (charge
    auras) and `detonate`/`dot` if any ship's passive carries them; audit
    `ship-skills.csv` first.

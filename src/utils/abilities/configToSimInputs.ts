@@ -24,11 +24,14 @@ export function buildDefaultShipSkills(): ShipSkills {
     };
 }
 
-// Single seam for the page (memoize on shipSkills + enemyType). Converts buff/debuff
-// abilities → SelectedGameBuff[]. NOTE: sourceChargeCount/sourceStartCharged are not
-// reconstructed (not on the buff config) — correct for single-attacker DPS, where the
-// timeline falls back to the attacker's own charged set; team debuffs flow through the
-// unchanged global teamEnemyDebuffs path.
+// Single seam for the page preview (memoize on shipSkills + enemyType). Converts buff/
+// debuff abilities → SelectedGameBuff[] for display-only purposes (the merged attacker
+// buff totals panel). The sim no longer uses this output — buff/debuff abilities are read
+// from shipSkills directly by the combat engine (src/utils/combat/engine.ts), which
+// applies them in-loop with dynamic condition gating. NOTE: sourceChargeCount/
+// sourceStartCharged are not reconstructed (not on the buff config) — correct for
+// single-attacker DPS, where the timeline falls back to the attacker's own charged set;
+// team debuffs flow through the unchanged global teamEnemyDebuffs path.
 export function configShipSkillsToSimInputs(
     shipSkills: ShipSkills,
     enemyType?: EnemyBaseClass
