@@ -487,7 +487,9 @@ Build the charged slot with a single buff ability (`type: 'buff'`, finite durati
 - RECURRING/aura enemy statuses (alwaysEnemy, aura ability statuses, accumulating): keep the existing per-round roll exactly as is (`resolveEnemyDebuffs` / the ability-status block) — they are conceptually re-applied each round.
 - DoTs: already application-time (`dotsLanded` gates `applyNewDoTs`) — unchanged.
 
-- [ ] **Step 4: Run** full combat+calculators suites + golden → ZERO churn (all fixtures land at 100%, and at 100% the gate lands every draw regardless of how many draws happen). NOTE: one existing snapshot is literally named `KNOWN-DIFF conditional buff (updates in Task 7)` — that name is a PHASE 1 plan-numbering artifact (kept verbatim because it's the snapshot key). It has nothing to do with this task and must NOT churn. **Step 5: Commit** — `feat: debuff landing rolls once at application and persists`.
+- [ ] **Step 4: Run** full combat+calculators suites + golden. NOTE: one existing snapshot is literally named `KNOWN-DIFF conditional buff (updates in Task 7)` — that name is a PHASE 1 plan-numbering artifact (kept verbatim because it's the snapshot key). It has nothing to do with this task and must NOT churn. **Step 5: Commit** — `feat: debuff landing rolls once at application and persists`.
+
+> **EXECUTION CORRECTION (KD-3 revised):** the "all fixtures land at 100%" premise above was WRONG for scenario 12 (`affinity disadvantage + apply debuff`): its `affinityDamageModifier: -25` puts landing chance at 0.875 (`min(100, 250×0.75 − 100)/100`), and its charge-slot `apply` debuff is affinity-resisted at every application. Scenario 12 therefore churns — verified legitimate, hand-checked hunk by hunk: ZERO damage-number changes; `resistedEnemyDebuffs` drops the phantom re-resists on non-application rounds 5/9 (the core Task 7 semantic: resisted = recorded at application only); `dotsLanded` becomes vacuously `true` on no-DoT rounds (the per-round draw is now lazy). This is KD-3's real footprint: scenario 12, bookkeeping fields only.
 
 ---
 
@@ -646,7 +648,7 @@ In `simulateDPS(...)` (~line 220): add `speed: config.speed`, `enemySpeed`, `tea
 ### Task 12: Full verification + PR
 
 - [ ] **Step 1:** `npm run lint && npx tsc --noEmit && npx vitest run` — all green; vitest writes no snapshots.
-- [ ] **Step 2: Snapshot audit vs the branch base:** `git diff $(git merge-base main HEAD) --stat -- src/utils/calculators/__tests__/__snapshots__/` — expect: scenario 11 modified (KD-1, hand-verified in Task 5), scenario 17 added, nothing else. Re-verify scenario 11's diff one final time against the KD-1 description.
+- [ ] **Step 2: Snapshot audit vs the branch base:** `git diff $(git merge-base main HEAD) --stat -- src/utils/calculators/__tests__/__snapshots__/` — expect: scenario 11 modified (KD-1, hand-verified in Task 5), scenario 12 modified (KD-3 revised — see the Task 7 execution correction: bookkeeping fields only, zero damage changes), scenario 17 added, nothing else. Re-verify scenarios 11 and 12 one final time against their KD descriptions.
 - [ ] **Step 3: Memory/spec hygiene:** confirm the spec file is committed on the branch; update `docs/skill-model-coverage.md` already done in Task 11.
 - [ ] **Step 4: Push + PR:**
 

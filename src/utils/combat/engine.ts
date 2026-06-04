@@ -148,7 +148,9 @@ function resolveEnemyDebuffs(args: {
         const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
         // 'apply' = affinity-based: guaranteed unless the attacker is at an affinity
         // disadvantage. 'inflict' (and unmarked) = hacking-based: gated by the
-        // hacking-vs-security landing roll.
+        // hacking-vs-security landing roll. NOTE: application type is derived from
+        // the lookup because ActiveBuff does not carry it — if ActiveBuff ever gains
+        // an `application` field (e.g. team-sourced debuffs), prefer reading it there.
         const isApply = bufs.some((b) => b.application === 'apply');
         const lands = isApply ? !args.affinityDisadvantage : args.roundDebuffLanded();
         if (!lands) {
@@ -166,7 +168,10 @@ function resolveEnemyDebuffs(args: {
 // Per-round fold for TIMED scheduled enemy statuses currently in the status map. They
 // drew their landing roll ONCE at application (status-engine hook) and persist their full
 // window with no re-roll, so here they are unconditionally landed: expand their effects
-// and report them as landed. No gate draw, no resist partition.
+// and report them as landed. No gate draw, no resist partition. NOTE: emitApplied fires
+// every round the status is ACTIVE (matching the pre-Phase-2 per-round semantics of
+// `debuff-applied`), not just on the first-landing round — revisit if a listener ever
+// needs first-application-only (e.g. a `debuff-persisted` distinction in Phase 3).
 function foldTimedEnemyDebuffs(args: {
     timedEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
@@ -807,6 +812,9 @@ export function runCombat(input: CombatEngineInput): {
                         )?.skillDuration;
                         return {
                             buffName,
+                            // The `: 1` arm is unreachable today: only buffs with numeric
+                            // skillDuration enter the timed resist path (statusEngine's
+                            // sourceFired guard) — kept as a safe fallback, not a semantic.
                             turnsRemaining: typeof dur === 'number' ? dur : 1,
                         };
                     }
