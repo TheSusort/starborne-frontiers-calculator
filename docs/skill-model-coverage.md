@@ -251,6 +251,7 @@ Flat inputs that interact with abilities but live outside `ShipSkills`: base sta
 (attack/crit/critDamage/defence/hp/hacking/defensePenetration), `chargeCount` +
 `startCharged` + `allyChargePerRound`, global `enemyType`, `enemyDefense`/`enemyHp`/
 `enemySecurity`, affinity modifiers (damage/crit cap/crit penalty), global
-attacker/enemy buff pickers, and team-ship buff/debuff contributions (scheduled with
-`sourceStartCharged`). Modifier abilities fold additively into the same percentage
-buckets as buffs.
+attacker/enemy buff pickers, and team-ship buff/debuff contributions (driven by
+`teamActors` — each team actor's real turn cadence via its own `speed`/`chargeCount`/
+`startCharged`; the per-buff `sourceStartCharged` fields are deprecated). Modifier
+abilities fold additively into the same percentage buckets as buffs.

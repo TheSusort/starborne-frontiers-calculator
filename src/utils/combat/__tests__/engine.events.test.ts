@@ -126,6 +126,39 @@ describe('runCombat event emission', () => {
         }
     });
 
+    it('a faster enemy flips the per-round turn order (enemy then attacker)', () => {
+        const { events, result } = collect({ ...baseInput(), enemySpeed: 200 });
+        const rounds = result.rounds.length;
+
+        const turnEvents = events.filter(
+            (e) => e.type === 'turn-started' || e.type === 'turn-ended'
+        );
+        expect(turnEvents.length).toBe(rounds * 4);
+
+        // Order per round: enemy started, enemy ended, attacker started, attacker ended.
+        for (let r = 1; r <= rounds; r++) {
+            const base = (r - 1) * 4;
+            const enemyStarted = turnEvents[base];
+            const enemyEnded = turnEvents[base + 1];
+            const attStarted = turnEvents[base + 2];
+            const attEnded = turnEvents[base + 3];
+
+            expect(enemyStarted.type).toBe('turn-started');
+            expect(enemyStarted.round).toBe(r);
+            expect(enemyStarted.actorId).toBe('enemy');
+            expect(enemyEnded.type).toBe('turn-ended');
+            expect(enemyEnded.round).toBe(r);
+            expect(enemyEnded.actorId).toBe('enemy');
+
+            expect(attStarted.type).toBe('turn-started');
+            expect(attStarted.round).toBe(r);
+            expect(attStarted.actorId).toBe('attacker');
+            expect(attEnded.type).toBe('turn-ended');
+            expect(attEnded.round).toBe(r);
+            expect(attEnded.actorId).toBe('attacker');
+        }
+    });
+
     it('emits skill-fired slots matching the charge cadence', () => {
         const { events, result } = collect(baseInput());
         const skillFired = events.filter((e) => e.type === 'skill-fired');

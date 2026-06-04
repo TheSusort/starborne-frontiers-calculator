@@ -42,12 +42,12 @@
 
 ---
 
-### Task 0: Baseline
+## Task 0: Baseline
 
 - [ ] **Step 1: Confirm branch and baseline**
 
 ```bash
-git -C /Users/kennethsusort/PersonalProjects/starborne-frontiers-calculator checkout feat/combat-engine-phase2
+git checkout feat/combat-engine-phase2
 npx vitest run src/utils/calculators/__tests__/dpsGoldenParity.test.ts
 ```
 
@@ -55,7 +55,7 @@ Expected: 16 tests pass, zero snapshot writes. HEAD is the spec commit.
 
 ---
 
-### Task 1: Actor kinds + turn queue (state.ts)
+## Task 1: Actor kinds + turn queue (state.ts)
 
 **Files:**
 - Modify: `src/utils/combat/state.ts`
@@ -168,7 +168,7 @@ Then fix the two `createActor` call sites in `engine.ts` (add `kind: 'attacker'`
 
 ---
 
-### Task 2: Engine restructure — turn-queue rounds (the big move; ZERO churn)
+## Task 2: Engine restructure — turn-queue rounds (the big move; ZERO churn)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts`
@@ -234,7 +234,7 @@ Expected: ALL pass. Golden: 16 pass, ZERO snapshot writes. If any golden diff ap
 
 ---
 
-### Task 3: Speed inputs (engine + adapter, additive; ZERO churn)
+## Task 3: Speed inputs (engine + adapter, additive; ZERO churn)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (`CombatEngineInput` gains `speed?`, `enemySpeed?`)
@@ -285,7 +285,7 @@ Expected: ALL pass. Golden: 16 pass, ZERO snapshot writes. If any golden diff ap
 
 ---
 
-### Task 4: Owner Post-Turn decrement + `buff-expired` (ZERO churn at defaults)
+## Task 4: Owner Post-Turn decrement + `buff-expired` (ZERO churn at defaults)
 
 **Files:**
 - Modify: `src/utils/combat/statusEngine.ts` (decrement leaves `step`; new `decrementSide`)
@@ -350,7 +350,7 @@ Update the `events.ts` doc comment on `buff-expired` (no longer "declared but un
 
 ---
 
-### Task 5: Action-fed status engine (KD-1: scenario 11 churns, hand-verified)
+## Task 5: Action-fed status engine (KD-1: scenario 11 churns, hand-verified)
 
 **Files:**
 - Modify: `src/utils/combat/statusEngine.ts` (chargedSet/source schedules → `sourceFired`)
@@ -412,7 +412,7 @@ Expected: scenario 11 ("manual + team buffs with static defPen/dot path") FAILS 
 
 ---
 
-### Task 6: `hasChargedSkill` widening (ZERO churn)
+## Task 6: `hasChargedSkill` widening (ZERO churn)
 
 **Files:**
 - Modify: `src/utils/calculators/dpsSimulator.ts:160-161`
@@ -452,7 +452,7 @@ Build the charged slot with a single buff ability (`type: 'buff'`, finite durati
 
 ---
 
-### Task 7: Application-time debuff landing with persistence (ZERO churn at 100% landing)
+## Task 7: Application-time debuff landing with persistence (ZERO churn at 100% landing)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` + `src/utils/combat/statusEngine.ts`
@@ -493,7 +493,7 @@ Build the charged slot with a single buff ability (`type: 'buff'`, finite durati
 
 ---
 
-### Task 8: `teamActors` (new input + team turns + golden scenario 17)
+## Task 8: `teamActors` (new input + team turns + golden scenario 17)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts`, `src/utils/calculators/dpsSimulator.ts`, `src/types/calculator.ts`
@@ -561,7 +561,7 @@ Run WITHOUT `-u`: 1 written, existing 16 untouched (verify additions-only diff l
 
 ---
 
-### Task 9: `RegisteredAbilityStatus` discriminated union (type-only; ZERO behavior change)
+## Task 9: `RegisteredAbilityStatus` discriminated union (type-only; ZERO behavior change)
 
 **Files:**
 - Modify: `src/utils/combat/statusEngine.ts` (+ the constructor block in `engine.ts` that builds statuses, ~lines 476–517)
@@ -589,7 +589,7 @@ Update the engine's registration block to build the correct variant (the existin
 
 ---
 
-### Task 10: Page + UI wiring (speeds everywhere; page moves to `teamActors`)
+## Task 10: Page + UI wiring (speeds everywhere; page moves to `teamActors`)
 
 **Files:**
 - Modify: `src/types/calculator.ts` (`DPSShipConfig.speed: number`; `TeamShipConfig` gains `speed: number; chargeCount: number`; deprecation comments on `sourceChargeCount`/`sourceStartCharged`)
@@ -631,7 +631,7 @@ In `simulateDPS(...)` (~line 220): add `speed: config.speed`, `enemySpeed`, `tea
 
 ---
 
-### Task 11: Docs + changelog
+## Task 11: Docs + changelog
 
 **Files:**
 - Modify: `docs/skill-model-coverage.md` (§5 in-loop semantics: re-timed team buffs, owner post-turn decrement, landing persistence, action-fed cadence — rewrite the stale bullets; §6 Phase 2 pointers → shipped notes)
@@ -645,7 +645,7 @@ In `simulateDPS(...)` (~line 220): add `speed: config.speed`, `enemySpeed`, `tea
 
 ---
 
-### Task 12: Full verification + PR
+## Task 12: Full verification + PR
 
 - [ ] **Step 1:** `npm run lint && npx tsc --noEmit && npx vitest run` — all green; vitest writes no snapshots.
 - [ ] **Step 2: Snapshot audit vs the branch base:** `git diff $(git merge-base main HEAD) --stat -- src/utils/calculators/__tests__/__snapshots__/` — expect: scenario 11 modified (KD-1, hand-verified in Task 5), scenario 12 modified (KD-3 revised — see the Task 7 execution correction: bookkeeping fields only, zero damage changes), scenario 17 added, nothing else. Re-verify scenarios 11 and 12 one final time against their KD descriptions.
