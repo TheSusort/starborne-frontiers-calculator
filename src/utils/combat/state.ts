@@ -80,6 +80,9 @@ export const MAX_SELECTION_TICKS = 10000;
  * hang into a debuggable error rather than an infinite loop.
  */
 export function selectNextActor(actors: CombatActor[]): CombatActor {
+    if (actors.length === 0) {
+        throw new Error('selectNextActor: actors must not be empty');
+    }
     const eligible = () => actors.filter((a) => a.turnMeter >= TURN_METER_THRESHOLD);
     let ticks = 0;
     while (eligible().length === 0) {

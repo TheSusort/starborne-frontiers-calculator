@@ -693,10 +693,12 @@ describe('dpsGoldenParity', () => {
         };
     });
 
-    // Scenario 14: KNOWN-DIFF conditional buff (updates in Task 7)
+    // Scenario 14: KNOWN-DIFF conditional buff — captured pre-gating, updated by the
+    // dynamic-gating task (plan Task 6; the snap title's "Task 7" is the historical
+    // pre-renumbering name, kept verbatim because it is the snapshot key).
     // Active self-buff gated on enemy-debuff ≥ 2; active also applies corrosion each round.
-    // Today the static gate neutralizes the threshold → buff always on.
-    // After Task 7, the buff switches on only when live debuff count reaches 2
+    // Statically the gate neutralized the threshold → buff always on. With dynamic
+    // gating, the buff switches on only when the live debuff count reaches 2
     // (count is 0 entering round 1, 1 entering round 2, 2 entering round 3 → flip ON at round 3).
     snap('KNOWN-DIFF conditional buff (updates in Task 7)', () => {
         const shipSkills: ShipSkills = {

@@ -16,7 +16,7 @@
 
 ## Critical invariants (read before every task)
 
-1. **Golden parity.** Tasks 2–6 must not change any simulation number. The snapshot suite from Task 1 is the referee. Task 7 changes numbers ONLY for (a) condition-gated buff/debuff abilities, (b) ability-sourced buffs carrying `defensePenetration`/`dotDamage` effects (move from always-on static fold to per-round, which is more correct), and (c) buff-list ordering inside `RoundData` (set-equal, order may differ). Every other diff is a bug.
+1. **Golden parity.** Tasks 2–5 must not change any simulation number. The snapshot suite from Task 1 is the referee. Task 6 changes numbers ONLY for (a) condition-gated buff/debuff abilities, (b) ability-sourced buffs carrying `defensePenetration`/`dotDamage` effects (move from always-on static fold to per-round, which is more correct), and (c) buff-list ordering inside `RoundData` (set-equal, order may differ). Every other diff is a bug.
 2. **Zero-RNG stays.** `makeRateGate` accumulator gates (`rateAccumulator.ts`) are used exactly as today: `activeCritGate`, `chargedCritGate`, `debuffLandingGate`, `extendChanceGate` — same creation order, same call sites, same call ORDER within a round (the schedules are stateful; reordering calls changes outcomes).
 3. **Debuff landing stays per-round re-rolled** in Phase 1, for scheduled AND ability-sourced debuffs (today's semantics: timeline-active debuffs re-roll `debuffLandingGate` every round). Application-time-roll-with-persistence is a Phase 2 correctness item.
 4. **Charge cadence quirk preserved:** the status engine's charge schedule (`computeChargeSchedule`) does NOT know about bonus charges from `charge` abilities, while the engine's real action cadence does — exactly as today (timeline vs. sim divergence). Do not "fix" this; note it in docs.
@@ -107,7 +107,7 @@ Then one `snap(...)` per scenario. Cover (use the exact numbers shown; invent si
 11. `manual + team buffs with static defPen/dot path` — `selfBuffs`: manual buff `{id: 'm1', buffName: 'Pen Up', parsedEffects: {defensePenetration: 20, dotDamage: 15}}` (no skillSource → always-active) and a timed one `{id: 'm2', buffName: 'Attack Up', parsedEffects: {attack: 25}, skillSource: 'active', skillDuration: 2}`; `enemyDebuffs`: team debuff `{id: 't1', buffName: 'Vulnerable', parsedEffects: {incomingDamage: 20}, skillSource: 'charge', skillDuration: 2, sourceChargeCount: 4, sourceStartCharged: true}`. Skills: scenario 4's.
 12. `affinity disadvantage + apply debuff` — `affinityDamageModifier: -25, affinityCritCap: 75, affinityCritPenalty: 25`; enemy debuff via ability with `application: 'apply'` (converted as in scenario 10).
 13. `judge passive gated damage` — passive slot damage ability `{multiplier: 60}` with condition `{subject: 'hp-threshold', derivable: true, hpComparator: 'below', hpPercent: 50}`; active `150`.
-14. `KNOWN-DIFF conditional buff (updates in Task 7)` — active self-buff ability `{buffName: 'Attack Up', parsedEffects: {attack: 30}, duration: 2}` with condition `{subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 3}`, active also applies corrosion `{tier: 5, stacks: 1, duration: 3}` per round (debuff count ramps 0→3+ as entries accumulate); converted via `configShipSkillsToSimInputs` like scenario 10. Today the static gate neutralizes the threshold → buff always on; after Task 7 it switches on only when the live count reaches 3.
+14. `KNOWN-DIFF conditional buff (updates in Task 6)` — active self-buff ability `{buffName: 'Attack Up', parsedEffects: {attack: 30}, duration: 2}` with condition `{subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 3}`, active also applies corrosion `{tier: 5, stacks: 1, duration: 3}` per round (debuff count ramps 0→3+ as entries accumulate); converted via `configShipSkillsToSimInputs` like scenario 10. Today the static gate neutralizes the threshold → buff always on; after Task 6 it switches on only when the live count reaches 3.
 
 - [ ] **Step 3: Generate and eyeball the snapshots**
 
@@ -397,7 +397,7 @@ const runTimeline = (
 
 - [ ] **Step 3: Implement `src/utils/combat/statusEngine.ts`**
 
-API (Task 7 extends it with ability statuses — design the internals so categorized collections are appendable):
+API (Task 6 extends it with ability statuses — design the internals so categorized collections are appendable):
 
 ```typescript
 import { SelectedGameBuff } from '../../types/calculator';

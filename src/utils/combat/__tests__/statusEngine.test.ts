@@ -359,6 +359,26 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
         // The charge schedule was computed for 2 rounds — round 3 must fail loudly.
         expect(() => eng.step(3)).toThrow(/beyond totalRounds 2/);
     });
+
+    it('rejects applyTimedAbilityStatus before the first step (round 0)', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        const status = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 10 } },
+            side: 'self' as const,
+            sourceSlot: 'active' as const,
+            duration: 2,
+            conditions: [],
+            kind: 'timed' as const,
+        };
+        // lastRound starts at 0 — the equality check alone would accept round 0.
+        expect(() => eng.applyTimedAbilityStatus(0, status)).toThrow(/rounds are 1-based/);
+    });
 });
 
 describe('createStatusEngine — ability statuses (Task 6)', () => {

@@ -103,4 +103,8 @@ describe('selectNextActor', () => {
         const b = createActor({ id: 'b', side: 'enemy', stats: { ...baseStats, speed: 0 } });
         expect(() => selectNextActor([a, b])).toThrow(new RegExp(`${MAX_SELECTION_TICKS} ticks`));
     });
+
+    it('fails fast on an empty actor list', () => {
+        expect(() => selectNextActor([])).toThrow(/must not be empty/);
+    });
 });

@@ -351,6 +351,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     const applyTimedAbilityStatus = (round: number, status: RegisteredAbilityStatus): void => {
+        if (round < 1) {
+            // lastRound initializes to 0, so the equality check alone would accept
+            // round 0 before the first step(). Rounds are 1-based.
+            throw new Error(
+                `StatusEngine.applyTimedAbilityStatus called for round ${round}; rounds are 1-based`
+            );
+        }
         if (round !== lastRound) {
             throw new Error(
                 `StatusEngine.applyTimedAbilityStatus called for round ${round}, but the engine is at round ${lastRound}`
