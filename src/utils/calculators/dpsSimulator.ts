@@ -11,7 +11,7 @@ import { ShipSkills } from '../../types/abilities';
 import type { ActiveBuff } from '../combat/statusEngine';
 import { runCombat } from '../combat/engine';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
-import { selectFiringSkill, damageInputsFromSkill } from '../abilities/applyAbilities';
+import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
@@ -163,8 +163,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         []
     );
     const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
-    const chargedDamage = damageInputsFromSkill(selectFiringSkill(shipSkills, 'charged'));
-    const hasChargedSkill = chargeCount >= 1 && chargedDamage.multiplier > 0;
+    const chargedSkill = selectFiringSkill(shipSkills, 'charged');
+    // A charged skill "exists" when the slot carries ANY ability — damage or pure
+    // utility (buffs/debuffs). Utility charged skills bank charges and fire
+    // zero-damage charged turns whose statuses apply (spec: hasChargedSkill widening).
+    const hasChargedSkill = chargeCount >= 1 && (chargedSkill?.abilities.length ?? 0) > 0;
 
     const { rounds, rawTotals } = runCombat({
         attack,

@@ -136,7 +136,12 @@ describe('simulateDPS', () => {
             expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
         });
 
-        it('skips charging when an explicit charged damage ability has multiplier 0', () => {
+        // Phase 2 semantics: an explicit charged slot with a 0-multiplier damage ability
+        // now HAS an ability → the charged slot is non-empty → charged turns fire on cadence
+        // (dealing 0 direct damage). Previously this tested that such a ship stays on 'active'
+        // forever; that pre-Phase-2 behaviour was correct when hasChargedSkill required a
+        // positive multiplier, but the widened rule counts ANY ability in the charged slot.
+        it('an explicit 0-multiplier charged damage ability still fires charged turns (dealing 0)', () => {
             const shipSkills: ShipSkills = {
                 slots: [
                     {
@@ -173,7 +178,76 @@ describe('simulateDPS', () => {
                 rounds: 5,
                 shipSkills,
             });
-            expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
+            // Phase 2 semantics change: the pre-Phase-2 rule (multiplier > 0) kept this
+            // ship on 'active' forever; the widened rule (ANY charged-slot ability)
+            // fires charged turns on cadence — round 4 is a charged turn dealing 0.
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[2].action).toBe('active');
+            expect(result.rounds[3].action).toBe('charged');
+            // 0-multiplier damage ability → no direct damage on the charged turn
+            expect(result.rounds[3].directDamage).toBe(0);
+        });
+
+        it('a damage-less charged skill still fires on cadence and applies its buffs', () => {
+            // Utility charged slot: only a buff ability, no damage. Phase 2: hasChargedSkill
+            // widens to "charged slot carries ANY ability", so the ship banks charges and
+            // fires charged turns; the buff ability applies on those turns.
+            const shipSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'active-dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            {
+                                id: 'charged-buff',
+                                type: 'buff',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Attack Up II',
+                                    stacks: 1,
+                                    isStackable: false,
+                                    parsedEffects: { attack: 20 },
+                                    duration: 1,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 2,
+                rounds: 4,
+                shipSkills,
+            });
+            // chargeCount=2 → active r1, active r2, charged r3, active r4
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[2].action).toBe('charged');
+            // The buff ability applies on the charged turn
+            expect(
+                result.rounds[2].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
+            ).toBe(true);
+            // Duration 1 means it expires after the charged turn → not present on round 4
+            expect(
+                result.rounds[3].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
+            ).toBe(false);
         });
     });
 
