@@ -345,6 +345,20 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
         eng2.step(1);
         expect(() => eng2.step(1)).toThrow(/expected round 2/);
     });
+
+    it('throws when step is called beyond totalRounds', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 2,
+            startCharged: false,
+            totalRounds: 2,
+        });
+        eng.step(1);
+        eng.step(2);
+        // The charge schedule was computed for 2 rounds — round 3 must fail loudly.
+        expect(() => eng.step(3)).toThrow(/beyond totalRounds 2/);
+    });
 });
 
 describe('createStatusEngine — ability statuses (Task 6)', () => {

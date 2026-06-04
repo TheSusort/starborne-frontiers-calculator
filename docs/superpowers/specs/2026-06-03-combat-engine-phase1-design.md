@@ -158,10 +158,12 @@ firing+passive slot sourcing rules.
 `dot-applied` / `dot-ticked` / `dot-detonated` · `hp-changed` (target, old/new pct) ·
 `ship-destroyed`
 
-**Phase 1 behavior:** the engine emits all of these; the only consumer is the DPS
-adapter's round-log builder (deriving `RoundData` breakdowns from events where
-convenient; direct accumulation where simpler — emission is the contract, consumption is
-incremental). No ability-driven listeners yet.
+**Phase 1 behavior:** the engine emits all of these EXCEPT `buff-expired`, which is
+declared in the union but intentionally unemitted until Phase 2 moves duration expiry
+into the owner's Post Turn (see the doc note in `events.ts`) — consumers must not expect
+it in Phase 1. The only consumer is the DPS adapter's round-log builder (deriving
+`RoundData` breakdowns from events where convenient; direct accumulation where simpler —
+emission is the contract, consumption is incremental). No ability-driven listeners yet.
 
 **Contract for Phase 3:** listeners are registered per-combat (`bus.on(type, fn)`),
 synchronous, and deterministic (fixed registration order = fixed execution order).

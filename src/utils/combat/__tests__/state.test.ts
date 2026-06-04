@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { createActor, selectNextActor, ActorStats } from '../state';
+import {
+    createActor,
+    selectNextActor,
+    ActorStats,
+    TURN_METER_THRESHOLD,
+    MAX_SELECTION_TICKS,
+} from '../state';
 
 const baseStats: ActorStats = {
     attack: 10000,
@@ -38,7 +44,7 @@ describe('createActor', () => {
 });
 
 describe('selectNextActor', () => {
-    it('selects attacker (speed 100) over enemy (speed 0) after ticks reach 1000', () => {
+    it('selects attacker (speed 100) over enemy (speed 0) after ticks reach the threshold', () => {
         const attacker = createActor({
             id: 'attacker',
             side: 'player',
@@ -51,7 +57,7 @@ describe('selectNextActor', () => {
         });
         const selected = selectNextActor([attacker, enemy]);
         expect(selected.id).toBe('attacker');
-        expect(attacker.turnMeter).toBe(1000);
+        expect(attacker.turnMeter).toBe(TURN_METER_THRESHOLD);
         expect(enemy.turnMeter).toBe(0);
     });
 
@@ -74,7 +80,7 @@ describe('selectNextActor', () => {
         // Second selection
         const selected = selectNextActor([attacker, enemy]);
         expect(selected.id).toBe('attacker');
-        expect(attacker.turnMeter).toBe(1000);
+        expect(attacker.turnMeter).toBe(TURN_METER_THRESHOLD);
     });
 
     it('selects actor with highest meter when multiple are eligible', () => {
@@ -95,6 +101,6 @@ describe('selectNextActor', () => {
     it('throws (not hangs) when every actor has speed 0', () => {
         const a = createActor({ id: 'a', side: 'player', stats: { ...baseStats, speed: 0 } });
         const b = createActor({ id: 'b', side: 'enemy', stats: { ...baseStats, speed: 0 } });
-        expect(() => selectNextActor([a, b])).toThrow(/10000 ticks/);
+        expect(() => selectNextActor([a, b])).toThrow(new RegExp(`${MAX_SELECTION_TICKS} ticks`));
     });
 });

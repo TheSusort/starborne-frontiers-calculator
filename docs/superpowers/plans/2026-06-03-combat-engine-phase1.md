@@ -25,7 +25,7 @@
 
 ---
 
-### Task 1: Branch + golden parity snapshot suite
+## Task 1: Branch + golden parity snapshot suite
 
 **Files:**
 - Create: `src/utils/calculators/__tests__/dpsGoldenParity.test.ts`
@@ -123,7 +123,7 @@ git commit -m "test: golden parity snapshots for the DPS sim ahead of the combat
 
 ---
 
-### Task 2: Event bus
+## Task 2: Event bus
 
 **Files:**
 - Create: `src/utils/combat/events.ts`
@@ -246,7 +246,7 @@ git commit -m "feat: combat event bus (emit-only Phase 1 seam)"
 
 ---
 
-### Task 3: Combat state types + chargeSchedule relocation
+## Task 3: Combat state types + chargeSchedule relocation
 
 **Files:**
 - Create: `src/utils/combat/state.ts`
@@ -366,7 +366,7 @@ git commit -m "refactor: combat state types and chargeSchedule relocation (no be
 
 ---
 
-### Task 4: Status engine (incremental scheduled-status machine)
+## Task 4: Status engine (incremental scheduled-status machine)
 
 **Files:**
 - Create: `src/utils/combat/statusEngine.ts`
@@ -439,7 +439,7 @@ git commit -m "feat: incremental status engine (ports computeBuffTimeline semant
 
 ---
 
-### Task 5: Engine turn loop + DPS adapter (parity-locked relocation)
+## Task 5: Engine turn loop + DPS adapter (parity-locked relocation)
 
 **Files:**
 - Create: `src/utils/combat/engine.ts`
@@ -523,7 +523,7 @@ git commit -m "refactor: combat engine turn loop replaces runSinglePass; dpsSimu
 
 ---
 
-### Task 6: Ability-sourced statuses in-loop with live condition gating
+## Task 6: Ability-sourced statuses in-loop with live condition gating
 
 **Files:**
 - Modify: `src/utils/combat/statusEngine.ts` (ability-status registration + upsert API)
@@ -668,7 +668,7 @@ git commit -m "feat: dynamic per-round condition gating for buff/debuff abilitie
 
 ---
 
-### Task 7: Docs + changelog
+## Task 7: Docs + changelog
 
 **Files:**
 - Modify: `docs/skill-model-coverage.md`
@@ -693,7 +693,7 @@ git commit -m "feat: dynamic per-round condition gating for buff/debuff abilitie
 
 ---
 
-### Task 8: Full verification + PR
+## Task 8: Full verification + PR
 
 - [ ] **Step 1: Full local verification**
 

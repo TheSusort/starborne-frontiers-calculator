@@ -225,10 +225,14 @@ describe('dynamic per-round condition gating', () => {
         expect(rows[0].names).not.toContain('Predator');
         // After the first charged round (R3) applies a corrosion entry, later rounds see it.
         const onRounds = rows.filter((r) => r.names.includes('Predator')).map((r) => r.round);
-        const offRounds = rows.filter((r) => !r.names.includes('Predator')).map((r) => r.round);
-        // It flickers — at least one on AND one off after the first DoT.
         expect(onRounds.length).toBeGreaterThan(0);
-        expect(offRounds.length).toBeGreaterThan(0);
+        // True flicker: it must drop off again AFTER it first appeared (corrosion entries
+        // expire between charged rounds), not just be absent in the pre-DoT lead-in rounds.
+        const firstOnRound = Math.min(...onRounds);
+        const offRoundsAfterOn = rows.filter(
+            (r) => r.round > firstOnRound && !r.names.includes('Predator')
+        );
+        expect(offRoundsAfterOn.length).toBeGreaterThan(0);
     });
 
     it('4. timed window persists after the condition lapses', () => {

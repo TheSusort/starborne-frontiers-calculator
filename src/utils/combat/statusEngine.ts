@@ -201,6 +201,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 `StatusEngine.step called out of sequence: expected round ${lastRound + 1}, got ${r}`
             );
         }
+        if (r > totalRounds) {
+            // The charge schedule (and cached source schedules) were computed for
+            // totalRounds; beyond it chargedSet lookups would silently read as
+            // 'active' rounds. Fail loudly instead.
+            throw new Error(
+                `StatusEngine.step called for round ${r}, beyond totalRounds ${totalRounds}`
+            );
+        }
         lastRound = r;
 
         // Step 1: Decrement and expire
